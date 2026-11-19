@@ -95,7 +95,7 @@ case class CreateTableLikeCommand(
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
     // A view can hold a FILE without a qualifier, which a table cannot store.
-    TypeUtils.checkNoUnknownFileTypeInTableSchema(sourceTableDesc.schema)
+    TypeUtils.checkNoUnknownFileTypeWrite(sourceTableDesc.schema)
     val newProvider = if (provider.isDefined) {
       if (!DDLUtils.isHiveTable(provider)) {
         // check the validation of provider input, invalid provider will throw

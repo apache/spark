@@ -190,6 +190,30 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61886: a condition over a column that can fail is not combined ahead of a " +
+    "non-deterministic one") {
+    // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
+    // projection and the filter above them. A condition over either stays above, also when it
+    // reads a column that can not fail as well, while one over the non-deterministic `r`, which
+    // is computed on every row, or over `w`, an alias that can not fail, is combined.
+    val projected = testStringRelation
+      .select($"a", Cast($"e", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        Cast($"a", LongType).as("w"), Rand(1).as("r"))
+      .sample(0.0, 0.5, withReplacement = false, 1L)
+      .select($"a", $"i", IsNull($"i").as("j"), $"w", $"r")
+    val originalQuery = projected
+      .where($"a" > 0)
+      .where($"a" > 1)
+      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"i" > $"a" && $"w" > 0 && $"r" > 0.5)
+
+    val correctAnswer = projected
+      .where($"a" > 0 && $"a" > 1 && $"w" > 0 && $"r" > 0.5)
+      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"i" > $"a")
+      .analyze
+
+    comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
@@ -2021,6 +2045,28 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-61924: joins: do not push a condition that can fail ahead of a " +
+    "non-deterministic one") {
+    // The divisions and the addition are built in ANSI mode, where they can fail, and so can `q`
+    // and `p`, which the divisions compute. After `rand(0) > 0.1`, a condition that can fail by
+    // itself or reads `q` or `p` stays above the join. The addition over both sides is not moved
+    // into the join condition either, so the join has none. A condition over `a`, which can not
+    // fail, is pushed. So is a division written before `rand(0) > 0.1`.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val addOne = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI))
+    val left = testRelation.select($"a", $"b", divide($"a", $"b").as("q"))
+    val right = testRelation1.select($"d", divide($"d", Literal(2)).as("p"))
+    val originalQuery = left.join(right).where(divide($"a", $"b") > 1 && Rand(0) > 0.1 &&
+      divide($"b", $"a") > 1 && $"q" > 0 && $"p" > 0 && addOne === $"d" && $"a" > 1)
+
+    val correctAnswer = left.where(divide($"a", $"b") > 1 && $"a" > 1).join(right)
+      .where(Rand(0) > 0.1 && divide($"b", $"a") > 1 && $"q" > 0 && $"p" > 0 && addOne === $"d")
+      .analyze
+
+    comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
@@ -3430,6 +3476,18 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     val correctAnswer = x.where(IsNotNull($"x.e") && $"x.a" > 1).analyze
     comparePlans(Optimize.execute(queryWithoutRaiseError), correctAnswer)
+  }
+
+  test("SPARK-61927: do not push down a CHECK constraint through joins") {
+    val x = testStringRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // A CHECK constraint fails on a violating row, so it must not see the rows a join removes.
+    val check = CheckInvariant($"x.a" > 0, Seq("a" -> $"x.a"), "positive_a", "a > 0")
+    Seq(Inner, LeftAnti).foreach { joinType =>
+      val query = x.join(y, joinType, Some($"x.a" === $"y.d")).where(check).analyze
+      comparePlans(Optimize.execute(query), query)
+    }
   }
 
   test("push down deterministic predicate through BinBy") {

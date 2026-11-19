@@ -612,6 +612,32 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-61668: ShuffledHashJoin build metrics with and without whole-stage codegen") {
+    val leftDf = (1 to 20).map(i => (i % 7, i)).toDF("key", "value")
+    val rightDf = (1 to 10).map(i => (i % 5, i)).toDF("key2", "value2")
+    // An inner join, so that the build data size is only the size of the hashed relation, which
+    // both paths build from the same rows.
+    val buildMetrics = Seq(true, false).map { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val df = leftDf.join(rightDf.hint("shuffle_hash"), $"key" === $"key2")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+        assert(plan.exists {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) => true
+          case _ => false
+        } == codegen, plan)
+        val join = plan.collectFirst { case j: ShuffledHashJoinExec => j }.get
+        val buildTime = join.metrics("buildTime")
+        val buildDataSize = join.metrics("buildDataSize")
+        // A timing metric starts at -1, and a fast build can record 0 ms.
+        assert(!buildTime.isZero, s"codegen=$codegen")
+        assert(buildDataSize.value > 0, s"codegen=$codegen")
+        buildDataSize.value
+      }
+    }
+    assert(buildMetrics.distinct.length == 1, buildMetrics)
+  }
+
   test("BroadcastHashJoin(outer) metrics") {
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")

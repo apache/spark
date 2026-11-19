@@ -27,13 +27,13 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, RLike, ScalarSubquery, ScalaUDF}
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NullPropagation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
@@ -3232,6 +3232,52 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61704: ConstantPropagation does not propagate an EqualTo with a NULL literal " +
+      "under a NOT") {
+    // `NullPropagation` would turn `id = NULL` into a NULL literal first, so it is excluded. Under
+    // the `NOT`, `id = NULL` is NULL on every row, so a row passes only where the other conjunct is
+    // FALSE. Each condition gives the result that it gives with the default rules. The NULL is a
+    // `typedLit`: with `lit(null).cast("bigint")`, the first query returns the right rows also
+    // without this fix.
+    val df = spark.range(4, 7, 1, 1).toDF()
+    val nullLong = typedLit[java.lang.Long](null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> NullPropagation.ruleName) {
+      // Propagating the NULL made the condition TRUE for id 5 ...
+      checkAnswer(df.where(!($"id" === nullLong && ($"id" + 0 <=> 5))), Seq(Row(4L), Row(6L)))
+      // ... also from a projection below, as pushing the filter through the `Project` replaces
+      // `n` with the NULL, so that `ConstantPropagation` sees the same condition as above ...
+      checkAnswer(
+        df.select($"id", nullLong as "n").where(!($"id" === $"n" && ($"id" + 0 <=> 5)))
+          .select($"id"),
+        Seq(Row(4L), Row(6L)))
+      // ... and NULL for the ids 4 and 5.
+      checkAnswer(df.where(!($"id" === nullLong && $"id" > 5)), Seq(Row(4L), Row(5L)))
+      // The division runs on id 4 and fails, as it does with the default rules. Propagating the
+      // NULL folded it away, so that no row was returned.
+      val e = intercept[SparkArithmeticException] {
+        df.where(!($"id" === nullLong && lit(10L) / ($"id" - 4) > 0)).collect()
+      }
+      assert(e.getCondition === "DIVIDE_BY_ZERO")
+      // Outside a `NOT` it is still propagated, so the division over `id - 4` is folded with NULL
+      // and does not run, as before.
+      checkAnswer(df.where(lit(10L) / ($"id" - 4) > 0 && $"id" === nullLong), Seq.empty)
+    }
+  }
+
+  test("SPARK-61886: a filter condition over a column that can fail is not evaluated " +
+    "ahead of a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct of the outer filter is false on every row, so the `AND` short-circuit
+      // keeps `q`, a division by zero on id 3, from being evaluated.
+      val df = spark.range(0, 10, 1, 1).toDF()
+        .select($"id", (lit(10L) / ($"id" - 3)).as("q"))
+        .where($"id" >= 0)
+        .where(rand(10) * 10 > 100 && $"q" > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On
@@ -3272,6 +3318,64 @@ class DataFrameSuite extends SharedSparkSession
             Row(6L, null))
         }
       }
+    }
+  }
+
+  test("SPARK-61823: an inferred filter over a column that can fail is not evaluated " +
+    "ahead of the condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `id > 5` keeps `q`, a division by zero on id 3, from being evaluated, unless a filter
+      // `q > 0` inferred from `q = k AND k > 0` goes ahead of it. The non-deterministic `r` keeps
+      // the condition above the projection.
+      val df = spark.range(0, 10, 1, 1).toDF()
+        .select($"id", (lit(10L) / ($"id" - 3)).as("q"), $"id".cast("double").as("k"),
+          rand(2).as("r"))
+        .where($"id" > 5 && $"q" === $"k" && $"k" > 0)
+        .select($"id", $"r" >= 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
+  test("SPARK-61924: a filter condition that can fail is not pushed through a join ahead of " +
+    "a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct of the filter is false on every row, so the `AND` short-circuit keeps
+      // the division by zero on `l` = 3 from being evaluated.
+      val df = spark.range(0, 10, 1, 1).toDF("l")
+        .join(spark.range(0, 10, 1, 1).toDF("r"), $"l" === $"r")
+        .where(rand(10) * 10 > 100 && lit(10L) / ($"l" - 3) > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
+  test("SPARK-61921: an inferred filter over a column that can fail is not evaluated ahead of " +
+    "the condition through a limit, a sort, a join or an aggregate") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      // As in the SPARK-61823 test, `id > 5` keeps `q`, a division by zero on id 3, from being
+      // evaluated, unless a filter `q > 0` inferred from `q = k AND k > 0` goes ahead of it. Under
+      // whole-stage codegen, the limit, a sort that the physical plan removes and the broadcast
+      // hash join hand `q` on without computing it, and the aggregation computes its result `q`
+      // only when the filter first reads it.
+      def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
+      val projected =
+        df.select($"id", (lit(10L) / ($"id" - 3)).as("q"), $"id".cast("double").as("k"))
+      val condition = $"id" > 5 && $"q" === $"k" && $"k" > 0
+      checkAnswer(projected.limit(8).where(condition).select($"id"), Nil)
+      // The non-deterministic `r` keeps the condition above the sort and the join.
+      def withRand(child: DataFrame): DataFrame =
+        child.select($"id", $"q", $"k", rand(2).as("r")).where(condition).select($"id", $"r" >= 0)
+      // `range` outputs `id` in order, so the physical plan removes the sort.
+      checkAnswer(withRand(projected.orderBy($"id")), Nil)
+      checkAnswer(withRand(projected.join(broadcast(df.toDF("j")), $"id" === $"j")), Nil)
+      checkAnswer(
+        df.groupBy($"id")
+          .agg(max($"id").as("m"), (lit(10L) / (max($"id") - 3)).as("q"),
+            max($"id").cast("double").as("k"))
+          .where($"m" > 5 && $"q" === $"k" && $"k" > 0)
+          .select($"id"),
+        Nil)
     }
   }
 

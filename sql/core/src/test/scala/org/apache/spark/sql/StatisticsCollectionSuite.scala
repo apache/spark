@@ -727,6 +727,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-61724: CBO estimates joins and filters on analyzed TIMESTAMP_NTZ columns") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("ntz_cbo") {
+        // 100 rows of 10 values, from 2020-01-01 to 2020-01-10.
+        sql("CREATE TABLE ntz_cbo USING parquet AS SELECT " +
+          "make_timestamp_ntz(2020, 1, CAST(id % 10 AS INT) + 1, 0, 0, 0) AS k FROM range(100)")
+        sql("ANALYZE TABLE ntz_cbo COMPUTE STATISTICS FOR COLUMNS k")
+        def estimatedRows(query: String): Option[BigInt] =
+          sql(query).queryExecution.optimizedPlan.stats.rowCount
+        assert(estimatedRows("SELECT * FROM ntz_cbo a JOIN ntz_cbo b ON a.k = b.k")
+          .contains(BigInt(1000)))
+        // 8.5 of the 9 days between the min and the max.
+        assert(estimatedRows("SELECT * FROM ntz_cbo WHERE k > TIMESTAMP_NTZ'2020-01-01 12:00:00'")
+          .contains(BigInt(95)))
+        assert(estimatedRows(
+          """SELECT * FROM (SELECT k FROM ntz_cbo UNION ALL SELECT k FROM ntz_cbo) u
+            |JOIN ntz_cbo b ON u.k = b.k""".stripMargin).contains(BigInt(2000)))
+      }
+    }
+  }
+
   private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet

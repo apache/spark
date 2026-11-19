@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.ml
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, ExpressionEvalHelper, GenericInternalRow, If, Literal, UnsafeArrayData}
+import org.apache.spark.sql.types._
 
 class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val vectorSqlType = VectorDotProduct.vectorSqlType
@@ -118,6 +119,51 @@ class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(VectorDotProduct(denseValue, sparseOne), value)
       checkEvaluation(VectorDotProduct(sparseValue, denseOne), value)
       checkEvaluation(VectorDotProduct(sparseValue, sparseOne), value)
+    }
+  }
+
+  test("vector dot product rejects nullable indices and values elements") {
+    val valid = BoundReference(0, vectorSqlType, nullable = true)
+    for (index <- Seq(2, 3)) {
+      val field = vectorSqlType.fields(index)
+      val elementType = field.dataType.asInstanceOf[ArrayType].elementType
+      val invalidType = StructType(vectorSqlType.fields.updated(
+        index, field.copy(dataType = ArrayType(elementType, containsNull = true))))
+      val invalid = BoundReference(1, invalidType, nullable = true)
+      assert(VectorDotProduct(valid, invalid).checkInputDataTypes().isFailure)
+      assert(VectorDotProduct(invalid, valid).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("vector dot product rejects mismatched vector schemas") {
+    val valid = BoundReference(0, vectorSqlType, nullable = true)
+    val invalidTypes = Seq(
+      IntegerType,
+      StructType(vectorSqlType.fields.drop(1)),
+      vectorSqlType.add("extra", DoubleType),
+      StructType(vectorSqlType.fields.updated(0,
+        vectorSqlType.fields(0).copy(nullable = true))),
+      StructType(vectorSqlType.fields.updated(1, StructField("size", LongType))),
+      StructType(vectorSqlType.fields.updated(2,
+        StructField("indices", ArrayType(LongType, containsNull = false)))),
+      StructType(vectorSqlType.fields.updated(3,
+        StructField("values", ArrayType(FloatType, containsNull = false)))),
+      StructType(vectorSqlType.fields.updated(3,
+        vectorSqlType.fields(3).copy(name = "other"))))
+    for (invalidType <- invalidTypes) {
+      val invalid = BoundReference(1, invalidType, nullable = true)
+      assert(VectorDotProduct(valid, invalid).checkInputDataTypes().isFailure)
+      assert(VectorDotProduct(invalid, valid).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("vector dot product accepts compatible stricter field nullability") {
+    val stricterType = StructType(vectorSqlType.fields.map(_.copy(nullable = false)))
+    val vector = Literal(sparse(3, Array(0, 2), Array(1.0, 3.0)).value, stricterType)
+    val weights = dense(4.0, 5.0, 6.0)
+    for (expression <- Seq(VectorDotProduct(vector, weights), VectorDotProduct(weights, vector))) {
+      assert(expression.checkInputDataTypes().isSuccess)
+      checkEvaluation(expression, 22.0)
     }
   }
 

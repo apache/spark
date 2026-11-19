@@ -37,6 +37,7 @@ import org.apache.spark.sql.types.{AnyTimestampNanoType, BinaryType, BooleanType
   DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegralType,
   NullType, NumericType, StringType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.util.CompletionIterator
 
 /**
  * Performs an AS-OF join using sort-merge. Both sides are co-partitioned
@@ -106,6 +107,7 @@ case class SortMergeAsOfJoinExec(
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val taskResourceCleaners = TaskResourceCleaner.inStage(this)
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
@@ -113,11 +115,23 @@ case class SortMergeAsOfJoinExec(
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
     val numAsOfCursorTasks = longMetric("numAsOfCursorTasks")
     val useCursorScan = cursorScanEnabled
+    // Read the fields here, so that the closure below does not capture this node, and with it
+    // the whole child subtree, into every task.
+    val leftOutput = left.output
+    val rightOutput = right.output
+    val leftKeys = this.leftKeys
+    val rightKeys = this.rightKeys
+    val leftSortExprs = this.leftSortExprs
+    val rightSortExprs = this.rightSortExprs
+    val asOfCondition = this.asOfCondition
+    val joinType = this.joinType
+    val condition = this.condition
+    val direction = this.direction
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val scanner = new SortMergeAsOfJoinScanner(
         leftIter, rightIter,
-        left.output, right.output,
+        leftOutput, rightOutput,
         leftKeys, rightKeys,
         leftSortExprs, rightSortExprs,
         asOfCondition,
@@ -127,7 +141,10 @@ case class SortMergeAsOfJoinExec(
         useCursorScan, numAsOfCursorTasks
       )
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
-      scanner.iterator
+      // Like the generated join, release the sorters below once the left side is done, instead of
+      // holding their memory until the task completes.
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+        scanner.iterator, taskResourceCleaners.foreach(_.cleanupResources()))
     }
   }
 
@@ -191,7 +208,7 @@ case class SortMergeAsOfJoinExec(
     val skipUnmatched = if (joinType == LeftOuter) "" else s"if ($matched == null) continue;"
     val numOutput = metricTerm(ctx, "numOutputRows")
     val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
-    val thisPlan = ctx.addReferenceObj("plan", this)
+    val eagerCleanup = TaskResourceCleaner.genCleanupInStage(ctx, this)
 
     s"""
        |if (!$initJoin) {
@@ -207,7 +224,7 @@ case class SortMergeAsOfJoinExec(
        |  ${consume(ctx, leftVars ++ rightVars)}
        |  if (shouldStop()) return;
        |}
-       |$thisPlan.cleanupResources();
+       |$eagerCleanup
      """.stripMargin
   }
 

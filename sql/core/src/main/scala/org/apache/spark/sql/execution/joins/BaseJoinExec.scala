@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType}
+import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils, SparkPlan}
 
 /**
  * Holds common logic for join operators
@@ -53,6 +53,19 @@ trait BaseJoinExec extends BinaryExecNode {
          |${ExplainUtils.generateFieldString("Join type", joinType.toString)}
          |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
          |""".stripMargin
+    }
+  }
+
+  // `super.doCanonicalize()` keeps the join type as is, see `JoinType.canonicalized`.
+  override protected def doCanonicalize(): SparkPlan = {
+    val canonicalized = super.doCanonicalize()
+    joinType match {
+      case _: ExistenceJoin =>
+        canonicalized.makeCopy(canonicalized.productIterator.map {
+          case j: JoinType => j.canonicalized
+          case arg => arg.asInstanceOf[AnyRef]
+        }.toArray)
+      case _ => canonicalized
     }
   }
 }
