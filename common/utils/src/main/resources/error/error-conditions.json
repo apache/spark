@@ -9445,7 +9445,7 @@
     "subClass" : {
       "NOT_NULL" : {
         "message" : [
-          "setting NOT NULL. Use ALTER TABLE ... ALTER COLUMN ... SET NOT NULL instead."
+          "NOT NULL in the column definition. Use ALTER TABLE ... ALTER COLUMN ... SET NOT NULL instead."
         ]
       },
       "RENAME" : {

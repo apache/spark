@@ -2743,6 +2743,18 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment,
         start = 20,
         stop = 38))
+
+    val sql2 = "SELECT * FROM a.b.c TIMESTAMP AS OF col + INTERVAL 1 DAY"
+    val fragment2 = "TIMESTAMP AS OF col + INTERVAL 1 DAY"
+    checkError(
+      exception = parseException(sql2),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col + INTERVAL 1 DAY\""),
+      context = ExpectedContext(
+        fragment = fragment2,
+        start = 20,
+        stop = 55))
   }
 
   test("at syntax time travel") {
@@ -3083,6 +3095,17 @@ class PlanParserSuite extends AnalysisTest {
         fragment = "t CHANGES FROM TIMESTAMP col_name",
         start = 14,
         stop = 46))
+
+    val sqlEnd = "SELECT * FROM t CHANGES FROM TIMESTAMP '2026-01-01' TO TIMESTAMP col_name"
+    checkError(
+      exception = parseException(sqlEnd),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "t CHANGES FROM TIMESTAMP '2026-01-01' TO TIMESTAMP col_name",
+        start = 14,
+        stop = 72))
   }
 
   test("CHANGES clause - error: subquery in starting timestamp") {
