@@ -75,19 +75,21 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
   }
 
-  test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {
+  test("state value watermark column prefers the event time, then TIMESTAMP columns and casts") {
     val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
     val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
     val expiry = AttributeReference("expiry", TimestampType)()
     val leftNtz = AttributeReference("leftNtz", TimestampNTZType)()
     val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
-    def column(condition: Expression): Option[Attribute] =
+    def column(condition: Expression): Option[Expression] =
       StreamingJoinHelper.getStateValueWatermarkColumn(Seq(expiry, leftTime, leftNtz),
         AttributeSet(Seq(rightTime)), Some(condition), Some(10000L)).map(_._1)
     // expiry comes first in input order, but state format 4 probes by the event time.
     assert(column(expiry > rightTime && leftTime > rightTime) === Some(leftTime))
     assert(column(expiry > rightTime) === Some(expiry))
-    assert(column(Cast(leftNtz, TimestampType, Some("UTC")) > rightTime) === None)
+    val ntzCast = Cast(leftNtz, TimestampType, Some("UTC"))
+    assert(column(ntzCast > rightTime) === Some(ntzCast))
+    assert(column(ntzCast > rightTime && expiry > rightTime) === Some(expiry))
 
     // Among other TIMESTAMP columns, the first in input order wins.
     val deadline = AttributeReference("deadline", TimestampType)()

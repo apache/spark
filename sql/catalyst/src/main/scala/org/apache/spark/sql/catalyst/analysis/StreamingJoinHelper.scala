@@ -119,24 +119,30 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /**
    * Get the column that evicts the state of an input with its own watermark, with its state value
-   * watermark. That is the event time if the condition bounds it, and otherwise the first other
-   * TIMESTAMP column in input order that the condition bounds. Each column is solved on its own,
-   * so the cutoff applies to the column that the condition bounds.
+   * watermark. That is the event time if the condition bounds it, then the first other TIMESTAMP
+   * column in input order that the condition bounds, and then the first cast of another column
+   * to TIMESTAMP, such as a DATE column, that the condition bounds. Each column is solved on its
+   * own, so the cutoff applies to the column that the condition bounds. A cast is returned as it
+   * is in the condition, so eviction evaluates it with the same time zone.
    */
   def getStateValueWatermarkColumn(
       inputAttributes: Seq[Attribute],
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
-      eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+      eventWatermark: Option[Long]): Option[(Expression, Long)] = {
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
     val references = joinCondition.map(_.references).getOrElse(AttributeSet.empty)
     val candidates = eventTime.toSeq ++ inputAttributes.filter { a =>
       a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
         references.contains(a)
     }
-    candidates.iterator.flatMap { a =>
-      getStateValueWatermark(AttributeSet(a), attributesWithEventWatermark, joinCondition,
-        eventWatermark).map(a -> _)
+    val casts = joinCondition.toSeq.flatMap(_.collect {
+      case c @ Cast(a: Attribute, TimestampType, _, _)
+          if inputAttributes.exists(_.semanticEquals(a)) => c
+    })
+    (candidates ++ casts).iterator.flatMap { e =>
+      getStateValueWatermark(e.references, attributesWithEventWatermark, joinCondition,
+        eventWatermark).map(e -> _)
     }.nextOption()
   }
 

@@ -274,13 +274,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
             condition,
             watermark)
-        // The column that evicts this input, its cutoff, and whether the condition bounds that
-        // column. The legacy mode with a single global watermark keeps applying a cutoff on any
-        // column of this input to the event time. So does the default mode when the condition
-        // bounds no TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
-        // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
-        //  evicted by its event time with the cast column's cutoff, which can be too early.
-        def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
+        // The column or cast that evicts this input, its cutoff, and whether the condition bounds
+        // it. The legacy mode with a single global watermark keeps applying a cutoff on any column
+        // of this input to the event time. So does the default mode when the condition bounds no
+        // TIMESTAMP column or cast to TIMESTAMP, such as a bare LONG column.
+        def solve(watermark: Option[Long]): Option[(Expression, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
             StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
               AttributeSet(otherSideInputAttributes), condition, watermark)
