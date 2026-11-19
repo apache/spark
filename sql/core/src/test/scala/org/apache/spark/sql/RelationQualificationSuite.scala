@@ -230,13 +230,13 @@ class RelationQualificationSuite extends SharedSparkSession {
       sql("INSERT INTO session.order_probe_tbl VALUES (100)")
       sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS id")
       try {
-        // Default: prioritize system session temp (local view) before persistent schema `session`.
-        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
-        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
-          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+        // Default (persistentCatalogFirst=true): the persistent schema `session` wins.
+        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
         }
         // Back to default inside the same session after nested conf block.
-        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
       } finally {
         sql("DROP VIEW IF EXISTS order_probe_tbl")
       }

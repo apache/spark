@@ -202,10 +202,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       pythonUDFArrowFallbackOnUDT: Boolean): Boolean = {
     e.children match {
       case Seq(child: PythonUDF) =>
-        // The in-process evaluator accepts JVM expressions as inputs. Extract nested calls
-        // into separate operators instead of serializing a chain for a Python worker.
-        PythonUDF.chainsInWorker(e) &&
-          correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
+        correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
           e.elementwiseNestingDepth == child.elementwiseNestingDepth &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
@@ -353,7 +350,6 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
-                 | PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
               ArrowEvalPython(validUdfs, child.output, resultAttrs, child, evalType)
             case _ =>
