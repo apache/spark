@@ -2325,17 +2325,26 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   }
 
   /**
-   * A rule that binds procedures to the input types and rearranges arguments as needed.
+   * A rule that binds procedures to the input types and rearranges arguments as needed, and
+   * records the bound procedure in a [[ResolvedBoundProcedure]].
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute)
+      case c @ Call(ResolvedProcedure(catalog, ident, procedure), args, _)
           if args.forall(_.resolved) =>
-        val inputType = extractInputType(args)
-        val bound = unbound.bind(inputType)
-        validateParameterModes(bound)
-        val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
-        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
+        val boundProcedure = procedure match {
+          case unbound: UnboundProcedure => unbound.bind(extractInputType(args))
+          case bound: BoundProcedure => bound
+          case other =>
+            // A catalog can return null from `loadProcedure` for a procedure that does not exist.
+            val className = Option(other).map(_.getClass.getName).orNull
+            throw SparkException.internalError(s"Unsupported procedure: $className")
+        }
+        validateParameterModes(boundProcedure)
+        val rearrangedArgs = NamedParametersSupport.defaultRearrange(boundProcedure, args)
+        c.copy(
+          procedure = ResolvedBoundProcedure(catalog, ident, boundProcedure),
+          args = rearrangedArgs)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {

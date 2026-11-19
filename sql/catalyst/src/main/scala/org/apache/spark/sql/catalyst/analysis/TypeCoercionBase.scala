@@ -42,7 +42,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -72,7 +71,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    */
   object ProcedureArgumentCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.resolved =>
+      case c @ Call(ResolvedBoundProcedure(_, _, procedure), args, _) if c.resolved =>
         val expectedDataTypes = procedure.parameters.map(_.dataType)
         val coercedArgs = args.zip(expectedDataTypes).map {
           case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)
