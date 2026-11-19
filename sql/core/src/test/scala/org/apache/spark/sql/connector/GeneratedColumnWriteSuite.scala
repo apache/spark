@@ -448,6 +448,25 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-62110: generation expression comparing a CHAR column with a string literal") {
+    val tblName = "my_tab"
+    // A write pads 'OPEN' to the length of `status`, as it pads the stored value, unless the
+    // legacy config makes it store the value without padding.
+    Seq(false, true).foreach { legacy =>
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  id INT, status CHAR(10), is_open BOOLEAN GENERATED ALWAYS AS (status = 'OPEN')
+               |) USING foo""".stripMargin)
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString) {
+          sql(s"INSERT INTO testcat.$tblName(id, status) VALUES (1, 'OPEN')")
+          sql(s"INSERT INTO testcat.$tblName VALUES (2, 'OPEN', true)")
+          checkAnswer(sql(s"SELECT id, is_open FROM testcat.$tblName"),
+            Seq(Row(1, true), Row(2, true)))
+        }
+      }
+    }
+  }
+
   gridTest("SPARK-61495: invalid modeled literal values use SQL fallback when available")(
       Seq(true, false)) { hasSql =>
     val tblName = "my_tab"
