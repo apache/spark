@@ -1317,6 +1317,23 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE current_path qualifies a persistent function found on the path") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_g")
+      try {
+        sql("CREATE FUNCTION parse_sql_per_call_g.parse_sql_g() RETURNS INT RETURN 1")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT parse_sql_g() AS x', 'ANALYZE', " +
+            "current_path => 'system.builtin, spark_catalog.parse_sql_per_call_g')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "function_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_g", "parse_sql_g"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_g CASCADE")
+      }
+    }
+  }
+
   test("ANALYZE current_path orders a temp function before a builtin of the same name") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       spark.udf.register("upper", (s: String) => s.length)
@@ -1326,13 +1343,32 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
             "current_path => 'system.builtin, system.session')")
         assert(builtinFirst.head \ "select_list" === typedColumns("x" -> jsonString),
           builtinFirst)
+        assert(builtinFirst.head \ "function_references" === JArray(List(
+          ref("system", "builtin", "upper"))))
         val sessionFirst = evalCall(
           "SELECT parse_sql('SELECT upper(''a'') AS x', 'ANALYZE', " +
             "current_path => 'system.session, system.builtin')")
         assert(sessionFirst.head \ "select_list" === typedColumns("x" -> jsonInt),
           sessionFirst)
+        assert(sessionFirst.head \ "function_references" === JArray(List(
+          ref("system", "session", "upper"))))
       } finally {
         spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a temp view read by a temp view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_tv_base", "parse_sql_tv_outer") {
+        sql("CREATE TEMPORARY VIEW parse_sql_tv_base AS SELECT 1 AS a")
+        sql("CREATE TEMPORARY VIEW parse_sql_tv_outer AS SELECT * FROM parse_sql_tv_base")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT * FROM parse_sql_tv_outer; SELECT * FROM parse_sql_tv_base', " +
+            "'ANALYZE', relations => array(named_struct(" +
+            "'name', 'system.session.parse_sql_tv_base', 'schema', 'b STRING')))")
+        assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        assert(result(1) \ "select_list" === typedColumns("b" -> jsonString), result)
       }
     }
   }

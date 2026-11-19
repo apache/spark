@@ -212,7 +212,8 @@ object ParseSqlResult {
           case (ParseFailed(errorObj), _) => errorObj
           case (Parsed(plan), span) =>
             overlays match {
-              case scala.Left(e) => successJson(plan, None, Some(e), Some(scope), span)
+              case scala.Left(e) =>
+                inCallConf(callConf) { successJson(plan, None, Some(e), Some(scope), span) }
               case scala.Right((variables, relations, markers)) =>
                 // Caller-supplied overlays eclipse the real objects for this statement only.
                 val (analyzed, error) = SuppliedVariableRegistry.create(variables).runWith {
@@ -222,7 +223,8 @@ object ParseSqlResult {
                     }
                   }
                 }
-                successJson(plan, analyzed, error, Some(scope), span)
+                // Names are qualified under the conf the statement was analyzed with.
+                inCallConf(callConf) { successJson(plan, analyzed, error, Some(scope), span) }
             }
         }.toList)
       }
@@ -1236,22 +1238,18 @@ object ParseSqlResult {
       parts: Seq[String],
       scope: AnalysisScope): Seq[String] = {
     val catalog = scope.catalog
-    // Same order as FunctionResolution: `first` is session, builtin, persistent;
-    // `second` (default) is builtin, session, persistent; `last` is builtin, persistent, session.
-    val sessionOrder =
-      scope.session.sessionState.conf.getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
     def isTemp(name: String): Boolean =
       catalog.isTemporaryFunction(FunctionIdentifier(name))
-    // Persistent in the catalog the statement resolves names in, as FunctionResolution does.
-    def isPersistent(name: String): Boolean = {
-      val mgr = scope.catalogManager
-      mgr.currentCatalog match {
-        case _ if mgr.currentCatalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
-          catalog.isPersistentFunction(FunctionIdentifier(name))
-        case fc: FunctionCatalog =>
-          Try(fc.functionExists(Identifier.of(mgr.currentNamespace, name))).getOrElse(false)
-        case _ => false
-      }
+    def isPersistentIn(entry: Seq[String], name: String): Boolean = entry match {
+      case Seq(cat, db) if cat.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+        Try(catalog.isPersistentFunction(FunctionIdentifier(name, Some(db)))).getOrElse(false)
+      case cat +: ns if ns.nonEmpty && !cat.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+        Try(scope.catalogManager.catalog(cat)).toOption.exists {
+          case fc: FunctionCatalog =>
+            Try(fc.functionExists(Identifier.of(ns.toArray, name))).getOrElse(false)
+          case _ => false
+        }
+      case _ => false
     }
     def isBuiltin(name: String): Boolean = {
       val id = FunctionIdentifier(name)
@@ -1266,15 +1264,24 @@ object ParseSqlResult {
     }
     def builtinIdent(name: String): Seq[String] =
       FunctionRegistry.builtinFunctionIdentifier(name).nameParts
+    def isSystemEntry(entry: Seq[String], ns: String): Boolean = entry match {
+      case Seq(cat, n) => cat.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        n.equalsIgnoreCase(ns)
+      case _ => false
+    }
+    // An unqualified name takes the first entry of the statement's path that has it, as in
+    // FunctionResolution. Without SET PATH the path follows the session function order.
+    def onPath(name: String): Option[Seq[String]] =
+      scope.catalogManager.resolutionPathEntriesForAnalysis(None, Nil).iterator.collectFirst {
+        case e if isSystemEntry(e, CatalogManager.BUILTIN_NAMESPACE) &&
+            (isBuiltin(name) || isSessionBuiltin(name)) => builtinIdent(name)
+        case e if isSystemEntry(e, CatalogManager.SESSION_NAMESPACE) && isTemp(name) =>
+          sessionIdent(name)
+        case e if isPersistentIn(e, name) => e :+ name
+      }
     parts match {
-      case Seq(name) if sessionOrder == "first" && isTemp(name) =>
-        sessionIdent(name)
-      case Seq(name) if isBuiltin(name) || isSessionBuiltin(name) =>
-        builtinIdent(name)
-      case Seq(name) if sessionOrder == "last" && isPersistent(name) =>
-        qualifyWithCurrentNamespace(parts, scope)
-      case Seq(name) if isTemp(name) =>
-        sessionIdent(name)
+      case Seq(name) =>
+        onPath(name).getOrElse(qualifyWithCurrentNamespace(parts, scope))
       case Seq(ns, name) if isSystemNamespace(ns) =>
         Seq(CatalogManager.SYSTEM_CATALOG_NAME, ns.toLowerCase(Locale.ROOT), name)
       case Seq(cat, ns, name)
