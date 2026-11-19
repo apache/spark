@@ -1336,6 +1336,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |WHEN MATCHED THEN UPDATE SET salary = s.salary
            |WHEN NOT MATCHED THEN INSERT *
            |""".stripMargin)
+      // The named table is loaded with the write privileges of the statement.
+      assertLastTransactionWriteLoadOptions()
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(Row(1, 11, "hr"), Row(2, 200, "software"), Row(3, 31, "hr")))
@@ -1351,6 +1353,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |ON t.pk = s.pk
            |WHEN MATCHED THEN DELETE
            |""".stripMargin)
+      assertLastTransactionWriteLoadOptions()
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 200, "software") :: Nil)
     }
   }

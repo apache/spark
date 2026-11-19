@@ -1356,6 +1356,10 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       s"""WITH $target AS (TABLE $sourceNameAsString)
          |UPDATE $target SET salary = -1 WHERE pk IN (SELECT pk FROM $target WHERE salary = 10)
          |""".stripMargin)
+    // The named table is loaded with the write privileges of the statement. A target named by a
+    // non-literal IDENTIFIER clause, as below, is not known before the analysis, so the statement
+    // does not run in a transaction to check.
+    assertLastTransactionWriteLoadOptions()
     // The same holds for a target named by a non-literal IDENTIFIER clause.
     sql(
       s"""WITH $target AS (TABLE $sourceNameAsString)
@@ -1374,6 +1378,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       s"""WITH $target AS (SELECT * FROM $tableNameAsString WHERE dep = 'hr')
          |UPDATE $target AS t SET t.salary = t.salary + 1 WHERE t.pk IN (SELECT pk FROM $target)
          |""".stripMargin)
+    assertLastTransactionWriteLoadOptions()
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(Row(1, 0, "hr"), Row(2, -2, "software"), Row(3, 301, "hr")))

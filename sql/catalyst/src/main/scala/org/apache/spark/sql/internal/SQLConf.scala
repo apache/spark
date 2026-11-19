@@ -7605,9 +7605,12 @@ object SQLConf {
         "to a CTE of the same name in scope, as in Spark 4.3. A CTE whose body is a bare table " +
         "reference, such as `WITH t AS (TABLE other)`, then makes the statement modify the " +
         "table that the CTE reads instead of the table that the statement names, and Spark " +
-        "loads that table as a read, without the write privileges of the statement. Any other " +
-        "CTE body makes the statement fail. When false, the target of these statements is " +
-        "never resolved against a CTE, as the target of INSERT already is.")
+        "loads that table as a read, without the write privileges of the statement. With any " +
+        "other CTE body, UPDATE and MERGE fail. So does DELETE, unless the CTE body reduces to " +
+        "a plain scan of a table that supports deletes by filter or truncation, such as " +
+        "`SELECT * FROM other`: DELETE then deletes from or truncates that table using only its " +
+        "own condition. When false, the target of these statements is never resolved against a " +
+        "CTE, as the target of INSERT already is.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

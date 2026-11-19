@@ -1091,6 +1091,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
              |DELETE FROM $target WHERE pk IN (SELECT pk FROM $target WHERE salary = ${pk * 10})
              |""".stripMargin)
       }
+      // The named table is loaded with the write privileges of the statement.
+      assertLastTransactionWriteLoadOptions()
       checkAnswer(
         sql(s"SELECT pk FROM $tableNameAsString"),
         (pk + 1 to 5).map(Row(_)))
@@ -1104,6 +1106,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       s"""WITH $target AS (SELECT * FROM $tableNameAsString WHERE salary > 450)
          |DELETE FROM $target AS t WHERE t.pk IN (SELECT pk FROM $target)
          |""".stripMargin)
+    assertLastTransactionWriteLoadOptions()
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(4, 400, "software") :: Nil)
   }
 
