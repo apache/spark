@@ -1153,26 +1153,34 @@ class DataSourceV2DataFrameSuite
                  |  id INT,
                  |  d DATE DEFAULT CAST('today' AS DATE),
                  |  e DATE DEFAULT CAST('epoch' AS DATE),
-                 |  g DATE GENERATED ALWAYS AS (CAST('today' AS DATE))
+                 |  g DATE GENERATED ALWAYS AS (CAST('today' AS DATE)),
+                 |  f DATE DEFAULT CAST('epoch' AS DATE) + 1
                  |) USING foo""".stripMargin)
           val cols = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
           assert(cols(1).defaultValue().getExpression == null, ansi)
           assert(cols(2).defaultValue().getExpression == LiteralValue(0, DateType), ansi)
           assert(cols(3).columnGenerationExpression().getExpression == null, ansi)
+          assert(cols(4).defaultValue().getExpression == LiteralValue(1, DateType), ansi)
           sql(s"INSERT INTO $t (id) VALUES (1)")
           // The date can change between the INSERT and the SELECT.
           checkAnswer(
             sql(s"SELECT datediff(current_date(), d) IN (0, 1), e, " +
-              s"datediff(current_date(), g) IN (0, 1) FROM $t"),
-            Row(true, java.sql.Date.valueOf("1970-01-01"), true))
+              s"datediff(current_date(), g) IN (0, 1), f FROM $t"),
+            Row(true, java.sql.Date.valueOf("1970-01-01"), true,
+              java.sql.Date.valueOf("1970-01-02")))
           // ALTER TABLE builds the V2 expression of a new default value the same way. The test
-          // catalog drops it when it rebuilds an altered column, so check the change it receives.
+          // catalog drops it when it rebuilds an altered column, so check the changes it receives.
           val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
             sql(s"ALTER TABLE $t ALTER COLUMN e SET DEFAULT CAST('tomorrow' AS DATE)")
           }
           checkDefaultValues(
             alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
             Array(new DefaultValue("CAST('tomorrow' AS DATE)", null)))
+          val addExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+            sql(s"ALTER TABLE $t ADD COLUMN h DATE DEFAULT CAST('today' AS DATE)")
+          }
+          assert(addExec.changes.map(_.asInstanceOf[AddColumn].defaultValue().getExpression) ==
+            Seq(null), ansi)
         }
       }
     }

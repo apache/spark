@@ -707,9 +707,11 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
           }
         }
-        // 'epoch' has a fixed value, so the predicate compares with it, as with ALTER TABLE.
+        // 'epoch' has a fixed value, so the predicate compares with it, as with ALTER TABLE, also
+        // in an expression around it.
         Seq(
           ("d DATE", "d >= CAST('epoch' AS DATE)", "DATE'1970-01-01'", "DATE'1969-12-31'"),
+          ("d DATE", "d >= CAST('epoch' AS DATE) - 1", "DATE'1969-12-31'", "DATE'1969-12-30'"),
           ("d TIMESTAMP", "d >= 'epoch'", "TIMESTAMP'2020-01-01 00:00:00'",
             "TIMESTAMP'1960-01-01 00:00:00'"),
           ("d TIMESTAMP_NTZ(9)", "d >= CAST('epoch' AS TIMESTAMP_NTZ(9))",
