@@ -312,14 +312,11 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       e => canonicalizeDeterministic(e.asInstanceOf[PythonUDF]))
     def conditionOf(udf: PythonUDF): Option[Expression] =
       conditions.getOrElse(canonicalizeDeterministic(udf), None)
-    val udfs = udfs0.headOption.map(conditionOf) match {
-      case Some(first) =>
-        udfs0.filter { udf =>
-          val c = conditionOf(udf)
-          c.isDefined == first.isDefined && c.forall(_.semanticEquals(first.get))
-        }
-      case None => udfs0
-    }
+    def sameCondition(a: Option[Expression], b: Option[Expression]): Boolean =
+      a.isDefined == b.isDefined && a.forall(x => b.exists(_.semanticEquals(x)))
+    // The condition of the group is the first UDF's; the eval node below reuses this value.
+    val groupCondition = udfs0.headOption.flatMap(conditionOf)
+    val udfs = udfs0.filter(udf => sameCondition(conditionOf(udf), groupCondition))
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
@@ -348,8 +345,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
               evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
-          val evalCondition = udfs.headOption.flatMap(conditionOf)
-            .filter(_.references.subsetOf(child.outputSet))
+          val evalCondition = groupCondition.filter(_.references.subsetOf(child.outputSet))
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               if (validUdfs.exists(_.evalType != PythonEvalType.SQL_BATCHED_UDF)) {

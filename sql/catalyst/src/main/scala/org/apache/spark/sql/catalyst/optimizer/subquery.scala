@@ -985,10 +985,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             // result over zero rows) is lifted out of this branch by `ExtractPythonUDFs` /
             // `PlanExternalUDFs` and evaluated for every outer row, as it was in
             // DecorrelateInnerQuery before SPARK-61482, so it can fail on an outer row that has
-            // matching rows. Wrapping it in an `EvalOnlyWhen` marker here too, in CASE 2 and
-            // CASE 3 below, would evaluate it only for the rows that take that branch. CASE 3
-            // builds a `CaseWhen`, so dropping a then-redundant marker there would also need a
-            // `CaseWhen` case in the `SimplifyConditionals` rule that drops it from `If` today.
+            // matching rows. SPARK-61660 tracks evaluating it only for the rows that take this
+            // branch here too; see the SPARK-61482 PR discussion on whether to do that with an
+            // `EvalOnlyWhen` marker (CASE 3 builds a `CaseWhen`, which would also need a drop rule
+            // in `SimplifyConditionals`) or by reading `If` / `CaseWhen` branch conditions
+            // directly in `ExtractPythonUDFs` / `PlanExternalUDFs`.
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause
               val subqueryResultExpr =

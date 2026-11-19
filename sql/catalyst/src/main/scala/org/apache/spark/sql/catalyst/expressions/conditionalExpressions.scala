@@ -247,9 +247,10 @@ object EvalOnlyWhen {
       case EvalOnlyWhen(c, child) =>
         visit(c, cond)
         // A nested marker needs both conditions; keep it deterministic so the operator can
-        // re-evaluate it. If not, fall back to the outer condition (more rows, never fewer).
+        // re-evaluate it. `cond` is itself always None or deterministic, so a non-deterministic
+        // inner condition falls back to the outer one (more rows, never fewer).
         val inner = if (!c.deterministic) cond
-          else Some(cond.filter(_.deterministic).map(And(_, c)).getOrElse(c))
+          else Some(cond.map(And(_, c)).getOrElse(c))
         visit(child, inner)
       case u if isUDF(u) =>
         val k = key(u)

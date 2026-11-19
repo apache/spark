@@ -94,10 +94,15 @@ trait EvalPythonExec extends UnaryExecNode {
       val childOutput = child.output
       val passThrough = requiredChildOutput
       val results = resultAttrs
+      // The UDFs' results do not depend on the row when they are deterministic and their
+      // arguments have no references (as for a marked zero-row result); then the first evaluated
+      // row's results can be reused, which avoids buffering the skipped rows.
+      val resultIsConstant = ConditionalUDFEvaluation.resultIsRowIndependent(udfs)
       inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
         val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
         ConditionalUDFEvaluation(
-          iter, condition, childOutput, passThrough, results, TaskContext.get(), pipelined) {
+          iter, condition, childOutput, passThrough, results, TaskContext.get(), pipelined,
+          resultIsConstant) {
           rows => factory.createEvaluator().eval(index, rows)
         }
       }

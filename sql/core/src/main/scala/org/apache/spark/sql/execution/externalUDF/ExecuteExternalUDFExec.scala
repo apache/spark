@@ -175,9 +175,12 @@ case class ExecuteExternalUDFExec(
       }
       evalCondition match {
         case Some(condition) =>
+          // The result does not depend on the row when the UDF is deterministic and its
+          // arguments have no references, so the first evaluated row's result can be reused.
+          val resultIsConstant = ConditionalUDFEvaluation.resultIsRowIndependent(Seq(udf))
           ConditionalUDFEvaluation(
             input, condition, childOutput, childOutput, Seq(resultAttr), context,
-            lockFree = false)(evaluate)
+            lockFree = false, resultIsConstant = resultIsConstant)(evaluate)
         case None => evaluate(input)
       }
     }

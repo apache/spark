@@ -44,7 +44,8 @@ class ConditionalUDFEvaluationSuite extends SharedSparkSession {
   private def run(
       rows: Seq[(Int, Boolean)],
       numSlices: Int,
-      lockFree: Boolean = false)(
+      lockFree: Boolean = false,
+      resultIsConstant: Boolean = false)(
       evaluate: Iterator[InternalRow] => Iterator[InternalRow]): Seq[(Int, Option[Int])] = {
     val co = childOutput
     val pto = passThroughOutput
@@ -52,7 +53,8 @@ class ConditionalUDFEvaluationSuite extends SharedSparkSession {
     val cond = keep
     spark.sparkContext.parallelize(rows, numSlices).mapPartitions { it =>
       val input = it.map { case (v, k) => new GenericInternalRow(Array[Any](v, k)): InternalRow }
-      ConditionalUDFEvaluation(input, cond, co, pto, ro, TaskContext.get(), lockFree)(evaluate)
+      ConditionalUDFEvaluation(
+        input, cond, co, pto, ro, TaskContext.get(), lockFree, resultIsConstant)(evaluate)
         .map(out => (out.getInt(0), if (out.isNullAt(1)) None else Some(out.getInt(1))))
     }.collect().toSeq
   }
@@ -124,6 +126,51 @@ class ConditionalUDFEvaluationSuite extends SharedSparkSession {
       Seq((1, None), (2, None), (3, Some(30)), (4, None)))
     assert(evaluatorCalls.value == 1L)
     assert(evaluatedRows.value == 1L)
+  }
+
+  test("reuses the first evaluated result for every kept row when resultIsConstant") {
+    val sent = spark.sparkContext.longAccumulator("rows sent to evaluate")
+    val drained = spark.sparkContext.longAccumulator("times the evaluator was read to the end")
+    def countingEval(it: Iterator[InternalRow]): Iterator[InternalRow] = {
+      val base = ConditionalUDFEvaluationSuite.evalToTenX(it)
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = {
+          val h = base.hasNext
+          if (!h) drained.add(1L)
+          h
+        }
+        override def next(): InternalRow = { sent.add(1L); base.next() }
+      }
+    }
+    // evalToTenX returns v * 10; with reuse, every kept row gets the FIRST kept row's result
+    // (2 * 10 = 20), not its own, which pins that one result is reused.
+    val rows = Seq((1, false), (2, true), (3, false), (4, true), (5, true))
+    val out = run(rows, 1, resultIsConstant = true)(countingEval)
+    assert(out == Seq((1, None), (2, Some(20)), (3, None), (4, Some(20)), (5, Some(20))))
+    // Only the first kept row is evaluated, and the evaluator is read to the end (so a Python
+    // worker is released and accumulator updates are received).
+    assert(sent.value == 1L)
+    assert(drained.value == 1L)
+    // A partition with no kept row evaluates nothing.
+    sent.reset()
+    assert(run(Seq((1, false), (2, false)), 1, resultIsConstant = true)(countingEval) ==
+      Seq((1, None), (2, None)))
+    assert(sent.value == 0L)
+  }
+
+  test("the constant path fails if the evaluator returns no row") {
+    val e = intercept[SparkException] {
+      run(Seq((1, false), (2, true)), 1, resultIsConstant = true)(_ => Iterator.empty)
+    }
+    assert(e.getMessage.contains("no row"))
+  }
+
+  test("the constant path fails if the evaluator returns more rows than one") {
+    val e = intercept[SparkException] {
+      run(Seq((1, false), (2, true), (3, true)), 1, resultIsConstant = true)(
+        it => evalToTenX(it).flatMap(r => Seq(r, r)))
+    }
+    assert(e.getMessage.contains("more rows than it was given"))
   }
 }
 
