@@ -198,8 +198,8 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
   private def cancel(execution: ExecutionScanState): Unit = {
     val bytesRead = Utils.bytesToString(execution.bytesReadOverLimit.get)
     val maxScanBytes = Utils.bytesToString(execution.maxScanBytes)
-    cancelJobsWithTag(execution.jobTag, s"because the query read $bytesRead, more than the " +
-      s"limit of $maxScanBytes set by ${SQLConf.MAX_SCAN_BYTES.key}")
+    cancelJobsWithTag(execution.jobTag, s"because the query read at least $bytesRead, more " +
+      s"than the limit of $maxScanBytes set by ${SQLConf.MAX_SCAN_BYTES.key}")
   }
 }
 

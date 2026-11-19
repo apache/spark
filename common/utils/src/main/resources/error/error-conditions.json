@@ -7617,7 +7617,7 @@
   },
   "SCAN_BYTES_LIMIT_EXCEEDED" : {
     "message" : [
-      "The query was cancelled because it read <scannedBytes> from its data sources, more than the limit of <limit> set by <config>. Make the query read less data, for example by filtering on a partition column, or increase <config>."
+      "The query was cancelled because it read at least <scannedBytes> from its data sources, more than the limit of <limit> set by <config>. Make the query read less data, for example by filtering on a partition column, or increase <config>."
     ],
     "sqlState" : "53400"
   },

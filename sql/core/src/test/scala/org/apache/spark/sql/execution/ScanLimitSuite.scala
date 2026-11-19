@@ -21,7 +21,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{broadcast, max, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -107,6 +107,33 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
         // The command runs the query that fills the cache as a nested execution.
         checkScanLimitExceeded {
           sql("CACHE TABLE blocking")
+        }
+      }
+    }
+  }
+
+  // The jobs of a scalar subquery and of a broadcast run on threads of their own, which get the
+  // root execution ID and the job tags of the query from its captured local properties. Only
+  // those jobs read data here.
+  Seq(false, true).foreach { aqe =>
+    test(s"the limit of a query covers its scalar subqueries (AQE enabled: $aqe)") {
+      withData { path =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val subquery = spark.read.parquet(path).select(max(block($"id"))).scalar()
+          checkScanLimitExceeded {
+            spark.range(1).select(subquery).collect()
+          }
+        }
+      }
+    }
+
+    test(s"the limit of a query covers its broadcasts (AQE enabled: $aqe)") {
+      withData { path =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val blocking = spark.read.parquet(path).select(block($"id").as("id"))
+          checkScanLimitExceeded {
+            spark.range(4).join(broadcast(blocking), "id").collect()
+          }
         }
       }
     }
