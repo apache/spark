@@ -159,10 +159,11 @@ class RocksDB(
   protected val fileChecksumThreadPoolSize: Option[Int] = {
     val size = conf.fileChecksumThreadPoolSize
     if (size < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
-      logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
-        s"is set to $size, which is below the recommended default of " +
-        s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
-        "This may have performance impact.")
+      logWarning(log"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+        log"is set to ${MDC(LogKeys.THREAD_POOL_SIZE, size)}, which is below the recommended " +
+        log"default of ${MDC(LogKeys.DEFAULT_VALUE,
+          ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE)}. " +
+        log"This may have performance impact.")
     }
     Some(size)
   }

@@ -131,17 +131,17 @@ private[spark] class SparkUI private (
     val actionHttpMethods: Set[String] =
       if (actionsViaGetEnabled) Set("GET", "POST") else Set("POST")
     attachHandler(createRedirectHandler(
-      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = actionHttpMethods,
-      csrfToken = Some(csrfToken)))
-    attachHandler(createRedirectHandler(
-      "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
+      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, basePath = basePath,
       httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
-      "/jobs/hold", "/jobs/", jobsTab.handleHoldRequest, httpMethods = actionHttpMethods,
-      csrfToken = Some(csrfToken)))
+      "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest, basePath = basePath,
+      httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
-      "/jobs/resume", "/jobs/", jobsTab.handleResumeRequest, httpMethods = actionHttpMethods,
-      csrfToken = Some(csrfToken)))
+      "/jobs/hold", "/jobs/", jobsTab.handleHoldRequest, basePath = basePath,
+      httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
+    attachHandler(createRedirectHandler(
+      "/jobs/resume", "/jobs/", jobsTab.handleResumeRequest, basePath = basePath,
+      httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
   }
 
   initialize()

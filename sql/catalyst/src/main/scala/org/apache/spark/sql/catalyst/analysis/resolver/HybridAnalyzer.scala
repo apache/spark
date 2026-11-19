@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Random
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
@@ -238,15 +239,15 @@ class HybridAnalyzer(
     } catch {
       case ex: ExplicitlyUnsupportedResolverFeature =>
         logInfo(
-          "single-pass analyzer is falling back to the fixed-point analyzer because " +
-          s"of an ExplicitlyUnsupportedResolverFeature: $ex"
+          log"single-pass analyzer is falling back to the fixed-point analyzer because " +
+          log"of an ExplicitlyUnsupportedResolverFeature: ${MDC(ERROR, ex)}"
         )
 
         None
       case ex: Throwable =>
         logInfo(
-          "single-pass analyzer is falling back to the fixed-point analyzer because " +
-          s"of an exception: $ex"
+          log"single-pass analyzer is falling back to the fixed-point analyzer because " +
+          log"of an exception: ${MDC(ERROR, ex)}"
         )
 
         None

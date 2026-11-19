@@ -37,8 +37,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class JDBCTableCatalogSuite extends SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
