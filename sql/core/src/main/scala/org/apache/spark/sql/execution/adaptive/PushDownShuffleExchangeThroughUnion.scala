@@ -695,7 +695,7 @@ case class PushDownShuffleExchangeThroughUnion(
       // the siblings. A keyed target's admission as a shuffle template was settled with the
       // candidates; what remains is the rule's own subset permission, which reads the rebuilt
       // layout's specs.
-      .filter { case (target, child) =>
+      .find { case (target, child) =>
         val partitioning = child.outputPartitioning
         partitioning.satisfies(required) &&
           PartitioningCollection.specsForPairing(partitioning, required).exists { spec =>
@@ -719,7 +719,6 @@ case class PushDownShuffleExchangeThroughUnion(
       .map { case (target, child) =>
         (child, target.semanticEquals(prepared.removedLayout))
       }
-      .headOption
   }
 
   /**
@@ -934,14 +933,6 @@ case class PushDownShuffleExchangeThroughUnion(
       target: Partitioning with Expression,
       required: ClusteredDistribution,
       sharedExchanges: Set[SparkPlan]): Option[SparkPlan] = {
-    // `candidateTargets` admits a keyed target only when it still routes its undeclared keys by
-    // hash, and rebinding preserves the layout. Decline rather than abort if that ever changes.
-    if (target match {
-      case keyed: KeyedPartitioning => !keyed.unknownKeysRouted
-      case _ => false
-    }) {
-      return None
-    }
     def addExchange(partitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
       val exchange = ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS)
       PushDownShuffleExchangeThroughUnion.mark(exchange, PushedShuffle)
