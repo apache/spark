@@ -43,7 +43,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
-import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, PlanAdaptiveSubqueries, PushDownKeyedShuffleExchange, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
@@ -467,7 +467,8 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false,
+      containsSubqueries = sparkPlan.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*))
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -830,7 +831,8 @@ object QueryExecution {
   private[execution] def preparations(
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
-      subquery: Boolean): Seq[Rule[SparkPlan]] = {
+      subquery: Boolean,
+      containsSubqueries: Boolean = false): Seq[Rule[SparkPlan]] = {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
@@ -851,6 +853,9 @@ object QueryExecution {
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
+      // Must run after `EnsureRequirements`, whose exchanges it moves, and before the stamps,
+      // which must see the layout a node ends up with.
+      PushDownKeyedShuffleExchange(ensureRequirements, containsSubqueries),
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
