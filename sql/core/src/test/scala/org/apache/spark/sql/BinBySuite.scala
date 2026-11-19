@@ -25,7 +25,8 @@ import scala.concurrent.duration._
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{BinByExec, FilterExec, InputAdapter, ProjectExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BinByExec, FilterExec, InputAdapter, ProjectExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions.{col, expr, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -579,13 +580,12 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  gridTest("BIN BY codegen fuses wide output and bin filtering")(Seq(false, true)) { split =>
+  test("BIN BY codegen fuses wide output and bin filtering") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
-        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> split.toString) {
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       withTempView("bin_by_codegen") {
         spark.range(start = 0L, end = 1000L, step = 1L, numPartitions = 1)
           .selectExpr(
@@ -613,11 +613,49 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           .getOrElse(fail(s"BIN BY was not code generated:\n$plan"))
         assert(stageNodes(stage).exists(_.isInstanceOf[FilterExec]))
         assert(stageNodes(stage).exists(_.isInstanceOf[ProjectExec]))
+        val binBy = stageNodes(stage).collectFirst { case b: BinByExec => b }.get
+        // BIN BY's child runs in its own generated stage.
+        binBy.child match {
+          case InputAdapter(childStage: WholeStageCodegenExec) =>
+            assert(stageNodes(childStage).exists(_.isInstanceOf[RangeExec]), plan)
+          case other => fail(s"The child of BIN BY is not a separate generated stage:\n$other")
+        }
+        assert(!stageNodes(stage).exists(_.isInstanceOf[RangeExec]), plan)
         checkAnswer(generated, expected)
-        assert(stageNodes(stage).collectFirst {
-          case b: BinByExec => b.metrics("numOutputRows").value
-        }.contains(4000L))
+        assert(binBy.metrics("numOutputRows").value == 4000L)
       }
+    }
+  }
+
+  gridTest("BIN BY codegen splits its consume for a parent that reads every column")(
+      Seq(false, true)) { split =>
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> split.toString) {
+      // DISTINCT reads every BIN BY column, so the consume code can be split.
+      val query =
+        """SELECT DISTINCT * FROM VALUES
+          |  (1, TIMESTAMP '2024-01-01 00:02:00', TIMESTAMP '2024-01-01 00:17:00', 150.0D),
+          |  (2, CAST(NULL AS TIMESTAMP), TIMESTAMP '2024-01-01 00:10:00', 100.0D),
+          |  (3, TIMESTAMP '2024-01-01 00:04:00', TIMESTAMP '2024-01-01 00:06:00', 20.0D)
+          |  AS metrics(id, ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        sql(query).collect().toSeq
+      }
+      assert(expected.length == 7)
+      val df = sql(query)
+      val plan = df.queryExecution.executedPlan
+      val stage = binByCodegenStage(plan)
+        .getOrElse(fail(s"BIN BY was not code generated:\n$plan"))
+      assert(stageNodes(stage).exists(_.isInstanceOf[HashAggregateExec]), plan)
+      assert(stage.doCodeGen()._2.body.contains("hashAgg_doConsume") == split)
+      checkAnswer(df, expected)
     }
   }
 
@@ -752,7 +790,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
         Seq((rangeStart, DateTimeUtils.microsToLocalDateTime(Long.MaxValue), 1.0d))
           .toDF("ts_start", "ts_end", "value")
           .createOrReplaceTempView("bin_by_overflow")
-        // The end of the third bin is not representable. LIMIT 1 reads only the first bin.
+        // The third bin overflows the bin index. LIMIT 1 reads only the first bin.
         val df = sql(
           """SELECT bin_start FROM bin_by_overflow BIN BY (
             |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
@@ -1098,8 +1136,9 @@ class BinByWithoutCodegenSuite extends BinBySuite {
     super.sparkConf.set(SQLConf.ENABLE_BIN_BY_CODEGEN.key, "false")
 
   override protected def excluded: Seq[String] = Seq(
-    "BIN BY codegen fuses wide output and bin filtering (false)",
-    "BIN BY codegen fuses wide output and bin filtering (true)",
+    "BIN BY codegen fuses wide output and bin filtering",
+    "BIN BY codegen splits its consume for a parent that reads every column (false)",
+    "BIN BY codegen splits its consume for a parent that reads every column (true)",
     "BIN BY stops expanding a row at a LIMIT in the same stage (false)",
     "BIN BY stops expanding a row at a LIMIT in the same stage (true)",
     "BIN BY stops at a top-level LIMIT after the bins it returns (false)",

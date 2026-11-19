@@ -157,8 +157,7 @@ case class BinByExec(
     val outputVars = buildOutputExpressions(childLen = child.output.length, ratioNullable = true)
       .map(_.genCode(ctx))
 
-    // The state of the next bin changes before `consume`, because the parent code can skip the
-    // rest of the loop body with `continue`.
+    // Set the next bin before `consume`, because the stop check after it can return.
     s"""
        |while ($limitNotReachedCond ($hasMoreBins || $input.hasNext())) {
        |  if (!$hasMoreBins) {
