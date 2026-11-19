@@ -832,6 +832,11 @@ abstract class SchemaPruningSuite
         val id = "CAST(monotonically_increasing_id() % 1000 AS INT)"
         val v = s"s.arr[$id].x AS v"
         val m = s"$id AS m"
+        // The same check with input_file_block_start(), over a join whose side that holds `s`
+        // reads no file. The broadcast join evaluates the select list in the tasks that scan
+        // `join_keys`, where the function returns the start of the scanned block. get() returns
+        // null instead of failing for an index of -1, the function's value where no file is read.
+        val start = "CAST(input_file_block_start() AS INT)"
         // Each query builds about 1000 rows from the one row of `elements`. The explode query
         // reads `n`, without which nested column aliasing does not apply to the explode.
         val queries: Seq[(String, () => DataFrame)] = Seq(
@@ -842,16 +847,26 @@ abstract class SchemaPruningSuite
           "sample" -> (() => spark.table("elements")
             .sample(withReplacement = true, fraction = 1000.0, seed = 0L)
             .selectExpr(v, m)
-            .selectExpr("count(*)", "count_if(v != m)")))
+            .selectExpr("count(*)", "count_if(v != m)")),
+          "join with a side that reads no file" -> (() => sql(
+            "SELECT count(*), count_if(v IS DISTINCT FROM m) FROM (SELECT /*+ BROADCAST(l) */ " +
+              s"get(l.s.arr, $start).x AS v, $start AS m " +
+              "FROM local_elements l JOIN join_keys ON l.id = rid)")))
 
         def withNestedColumnAliasing[T](enabled: Boolean)(f: => T): T = withSQLConf(
             SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> enabled.toString,
             SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> enabled.toString)(f)
 
-        val results = queries.map { case (name, query) =>
-          (name,
-            withNestedColumnAliasing(enabled = false)(query().collect().toSeq),
-            withNestedColumnAliasing(enabled = true)(query().collect().toSeq))
+        // `local_elements` holds the rows of `elements` in a local relation, which reads no file.
+        spark.createDataFrame(elementRows).createOrReplaceTempView("local_elements")
+        val results = try {
+          queries.map { case (name, query) =>
+            (name,
+              withNestedColumnAliasing(enabled = false)(query().collect().toSeq),
+              withNestedColumnAliasing(enabled = true)(query().collect().toSeq))
+          }
+        } finally {
+          spark.catalog.dropTempView("local_elements")
         }
         results.foreach { case (name, without, _) =>
           assert(without.head.getLong(1) == 0, s"$name without nested column aliasing: $without")

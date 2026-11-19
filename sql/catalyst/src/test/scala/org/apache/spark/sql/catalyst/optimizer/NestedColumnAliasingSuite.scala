@@ -366,8 +366,9 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val deterministicReadPair = parentAndChild(Literal(0))
     val nondeterministicReadPair = parentAndChild(Cast(Rand(Literal(0L)), IntegerType))
     // `a[rand].b` is non-deterministic, so `a[rand].b.c` is not redundant with it, while the
-    // redundant deterministic `a[0].b.c` is still dropped. The default extractor does not return
-    // non-deterministic reads, so this passes each read through as it is.
+    // redundant deterministic `a[0].b.c` is still dropped. The default extractor returns a
+    // non-deterministic read only when its only sources of non-determinism are input file
+    // functions, so this passes each read through as it is.
     assert(
       NestedColumnAliasing.getAttributeToExtractValues(
         deterministicReadPair ++ nondeterministicReadPair,
@@ -1028,20 +1029,60 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  // One index for each input file function, whose only source of non-determinism is that function.
+  private val inputFileIndexes = Seq(
+    Length(InputFileName()),
+    Cast(InputFileBlockStart(), IntegerType),
+    Cast(InputFileBlockLength(), IntegerType))
+
   test("SPARK-62042: Alias nested field accesses whose only sources of non-determinism are " +
       "input file functions") {
-    // The access is evaluated below the Repartition, where input_file_block_start() still has the
+    // The access is evaluated below the Repartition, where the input file function still has the
     // value for the file the row comes from.
-    val access = elementX($"s".getField("arr"), Cast(InputFileBlockStart(), IntegerType))
-    val query = withArray.repartition(2).select(access.as("v")).analyze
-    val optimized = Optimize.execute(query)
+    inputFileIndexes.foreach { index =>
+      val access = elementX($"s".getField("arr"), index)
+      val query = withArray.repartition(2).select(access.as("v")).analyze
+      val optimized = Optimize.execute(query)
 
-    val aliases = collectGeneratedAliases(optimized)
-    val expected = withArray.select(access.as(aliases(0)))
-      .select($"${aliases(0)}".as("v"))
-      .repartition(2)
-      .analyze
-    comparePlans(optimized, expected)
+      val aliases = collectGeneratedAliases(optimized)
+      val expected = withArray.select(access.as(aliases(0)))
+        .select($"${aliases(0)}".as("v"))
+        .repartition(2)
+        .analyze
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-62042: Do not alias nested field accesses that use input file functions below " +
+      "a Join") {
+    // The side of the Join that outputs `s` may read no file, while above the Join the input file
+    // function can return the file of the other side's row.
+    val other = LocalRelation($"rid".int)
+    // A Project over the Join, and a Project over a Filter over the Join.
+    for (index <- inputFileIndexes; withFilter <- Seq(false, true)) {
+      def above(access: Expression, plan: LogicalPlan): LogicalPlan =
+        if (withFilter) plan.where(access > 0).select(access.as("v"))
+        else plan.select(access.as("v"))
+      val query = above(
+        elementX($"s".getField("arr"), index),
+        withArray.join(other, condition = Some($"id" === $"rid"))).analyze
+      val optimized = Optimize.execute(query)
+
+      val join = optimized.collectFirst { case j: Join => j }.get
+      assert(join.children.forall(_.deterministic),
+        s"an access that uses an input file function is evaluated below the Join:\n$optimized")
+      // Only the deterministic `s.arr` is aliased below the Join, and the element is picked
+      // above it. With the Filter, the rule first aliases `s.arr` between the Filter and the
+      // Join, and then below the Join, which leaves a Project above the Join that renames the
+      // alias.
+      val aliases = collectGeneratedAliases(optimized)
+      val aliasedJoin = withArray.select($"id", $"s".getField("arr").as(aliases(0)))
+        .join(other, condition = Some($"id" === $"rid"))
+      val planBelow =
+        if (withFilter) aliasedJoin.select($"${aliases(0)}".as(aliases(0))) else aliasedJoin
+      val expected = above(elementX($"${aliases(0)}", index), planBelow).analyze
+      comparePlans(optimized, expected)
+    }
   }
 }
 
