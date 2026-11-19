@@ -5694,6 +5694,85 @@ Project [author#x, pos#x, id#x]
 
 -- !query
 table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a
+-- !query analysis
+Project [id#x, a#x]
++- Project [id#x, author#x, tags#x, a#x]
+   +- Generate stack(2, id#x, null), false, [a#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author
+-- !query analysis
+Project [author#x, c#xL]
++- Generate stack(2, _gen_input_1#xL, null), false, [c#xL]
+   +- Aggregate [author#x], [author#x, count(1) AS _gen_input_1#xL]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null) as a
+-- !query analysis
+Project [id#x, a#x]
++- Generate stack(2, id#x, null), false, [a#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null)
+-- !query analysis
+Project [id#x, col0#x]
++- Generate stack(2, id#x, null), false, [col0#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a
+-- !query analysis
+Project [id#x, a#x]
++- Project [id#x, author#x, tags#x, a#x]
+   +- Generate stack(2, id#x, null), false, [a#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0
+-- !query analysis
+Project [id#x, col0#x]
++- Project [id#x, author#x, tags#x, col0#x]
+   +- Generate stack(2, id#x, null), false, [col0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -5803,6 +5882,104 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
   }
+}
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(id)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 52,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+select id, explode_outer(id) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 28,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(id) as (pos, v)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 45,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+select *, posexplode(id) as (pos, v) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 24,
+    "fragment" : "posexplode(id)"
+  } ]
 }
 
 

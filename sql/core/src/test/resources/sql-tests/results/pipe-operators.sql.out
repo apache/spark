@@ -5214,6 +5214,101 @@ bob	1	4
 
 -- !query
 table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author
+-- !query schema
+struct<author:string,c:bigint>
+-- !query output
+ann	2
+ann	NULL
+bob	2
+bob	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null) as a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null)
+-- !query schema
+struct<id:int,col0:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0
+-- !query schema
+struct<id:int,col0:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query schema
 struct<>
@@ -5335,6 +5430,112 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
   }
+}
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 52,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+select id, explode_outer(id) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 28,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(id) as (pos, v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 45,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+select *, posexplode(id) as (pos, v) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 24,
+    "fragment" : "posexplode(id)"
+  } ]
 }
 
 

@@ -64,32 +64,38 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
 
 /**
  * Validates and strips PipeExpression nodes from a logical plan once their children are ready:
- * either resolved, or a generator item that ExtractGenerator plans later (see
- * `isResolvedGeneratorItem`).
+ * either resolved, or a generator item whose arguments are resolved (see `isReadyGeneratorItem`).
  */
 case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved || isResolvedGeneratorItem(p.child) =>
+        case p: PipeExpression if p.child.resolved || isReadyGeneratorItem(p.child) =>
           validateAndStripPipeExpression(p, p.child)
       }
   }
 
   /**
-   * Returns true for the generator items that ExtractGenerator plans but that never report
-   * themselves resolved: an outer generator (GeneratorOuter is replaced by ExtractGenerator), and
-   * a generator with a parenthesized alias list (MultiAlias is replaced by ResolveAliases or
-   * ExtractGenerator). The PipeExpression must be stripped once the generator inside is resolved,
-   * keeping GeneratorOuter and MultiAlias in place; otherwise ExtractGenerator sees the
-   * PipeExpression above the generator and rejects it as nested inside another expression.
+   * Returns true for a generator item that ExtractGenerator plans, once the generator's arguments
+   * are resolved: a generator, optionally wrapped in GeneratorOuter (for the *_outer functions)
+   * and then in MultiAlias (for a parenthesized alias list). ExtractGenerator replaces both
+   * wrappers when it plans Generate; ResolveAliases only removes the UnresolvedAlias above a
+   * MultiAlias. Neither wrapper ever reports itself resolved, and the generator itself may only
+   * become resolved after this rule runs, when type coercion fixes its arguments (for example,
+   * stack(2, id, null)). So the PipeExpression is stripped as soon as the arguments are resolved,
+   * keeping both wrappers in place; otherwise ExtractGenerator sees the PipeExpression above the
+   * generator and rejects it as nested inside another expression.
    */
-  private def isResolvedGeneratorItem(e: Expression): Boolean = e match {
-    case GeneratorOuter(g) => g.resolved
-    case MultiAlias(GeneratorOuter(g), _) => g.resolved
-    case MultiAlias(g: Generator, _) => g.resolved
+  private def isReadyGeneratorItem(e: Expression): Boolean = e match {
+    case MultiAlias(g: Generator, _) => isReadyGenerator(g)
+    case g: Generator => isReadyGenerator(g)
     case _ => false
+  }
+
+  private def isReadyGenerator(g: Generator): Boolean = g match {
+    case GeneratorOuter(inner) => inner.childrenResolved
+    case _ => g.childrenResolved
   }
 
   /**
@@ -100,8 +106,8 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
    *
    * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
    * @param resolvedChild The child expression to validate and return. It is resolved, except for
-   *                      the generator items accepted by `isResolvedGeneratorItem`, whose
-   *                      generator is resolved but whose GeneratorOuter or MultiAlias is not.
+   *                      the generator items accepted by `isReadyGeneratorItem`, of which only
+   *                      the generator's arguments are known to be resolved.
    * @return The child expression after validation.
    */
   def validateAndStripPipeExpression(

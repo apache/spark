@@ -2071,6 +2071,29 @@ table outer_gen_test
 table outer_gen_test
 |> aggregate posexplode(collect_list(id)) as (pos, id) group by author;
 
+-- Generators that only resolve after type coercion of their arguments, such as stack with an
+-- untyped NULL, with a parenthesized alias list, a single-name alias, or no alias.
+table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a;
+
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author;
+
+table outer_gen_test
+|> select id, stack(2, id, null) as a;
+
+table outer_gen_test
+|> select id, stack(2, id, null);
+
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a;
+
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0;
+
 -- Outer generators: negative tests.
 --------------------------------------
 
@@ -2095,6 +2118,17 @@ table outer_gen_test
 
 table outer_gen_test
 |> extend upper(explode_outer(tags)) as (a, b);
+
+-- A generator with a wrongly typed argument reports the same error as the plain SQL query.
+table outer_gen_test
+|> select id, explode_outer(id);
+
+select id, explode_outer(id) from outer_gen_test;
+
+table outer_gen_test
+|> extend posexplode(id) as (pos, v);
+
+select *, posexplode(id) as (pos, v) from outer_gen_test;
 
 -- Cleanup.
 -----------
