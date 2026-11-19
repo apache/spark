@@ -319,58 +319,32 @@ case class TransformExpression(
    * literal parameters rule a reducer out, or when the connector reports it is not reducible.
    * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
    *
-   * This answers one direction only, so it must not decide a pair: a direction that threw would
-   * look merely not reducible, and the other direction like a one-side reduce. Use
-   * [[pairReducers]].
+   * This answers one direction only, so it must not decide a pair: a reducer here reads as a
+   * one-side reduce only if the other direction answered. Use [[pairReducers]].
    */
   private[sql] def reducers(other: TransformExpression): Option[Reducer[_, _]] =
     TransformExpression.reducerOf(reducerOutcome(other))
 
   /**
-   * Both directions' reducers, `reducers(other)` and `other.reducers(this)`, or `(None, None)` when
-   * either direction's reducer threw: then the pair is not reducible at all and shuffles. Reading a
-   * thrown direction as merely "not reducible" would leave the other direction looking like a
-   * one-side reduce, which is only right for a reducer that satisfies `r(f1(x)) = f2(x)`; a
-   * two-sided one such as a gcd of bucket counts would then pair keys from two different spaces.
-   *
-   * For the same reason, a reducer in one direction counts only if the other direction answered,
-   * by returning a reducer or `null`. A direction that implements no reducer, or was not asked
-   * because its literal types differ, says nothing about whether this one is one-sided, so the
-   * pair is `(None, None)` too.
+   * Both directions' reducers, `reducers(other)` and `other.reducers(this)`. A reducer in one
+   * direction counts only if the other direction answered, by returning a reducer or `null`: a
+   * one-side reduce is right only for a reducer that satisfies `r(f1(x)) = f2(x)`, and a two-sided
+   * one such as a gcd of bucket counts, read as one-sided, would pair keys from two different
+   * spaces. A direction that implements no reducer, or was not asked because its literal types
+   * differ, says nothing about whether the other is one-sided, so the pair is `(None, None)`.
    *
    * Also `(None, None)` when either side has no identity, since a reduce could be neither recorded
    * (`reducedTogetherWith`) nor reported for it. `sameArgumentLayout` already refuses every such
    * pair; deciding it here keeps `isCompatible` and `reducersBothWays` from disagreeing on one.
    *
-   * A pair is decided once: the answer is kept on both expressions, the other side's swapped, so
-   * `isCompatible`, which admits a pair, and `reducersBothWays`, which then reduces it, read the
-   * same one. Asking the connector again could get another answer, e.g. a failure that does not
-   * repeat, or `null` for one side where both reduced, and the reduce would then not be the one
-   * the pair was admitted on.
+   * The planner asks for a pair more than once, so a connector must answer it the same way each
+   * time. An exception other than `UnsupportedOperationException` fails the query.
    */
   def pairReducers(other: TransformExpression)
-      : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
-    val known = decidedPairs.get(other)
-    if (known != null) return known
-    val decided = decidePair(other)
-    decidedPairs.putIfAbsent(other, decided)
-    other.decidedPairs.putIfAbsent(this, decided.swap)
-    decidedPairs.get(other)
-  }
-
-  /**
-   * The pairs [[pairReducers]] decided, by the other side. Not serialized: an executor never
-   * decides a pair.
-   */
-  @transient private lazy val decidedPairs =
-    new ConcurrentHashMap[TransformExpression, (Option[Reducer[_, _]], Option[Reducer[_, _]])]()
-
-  private def decidePair(other: TransformExpression)
       : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
     import TransformExpression._
     if (functionId.isEmpty || other.functionId.isEmpty) return (None, None)
     (reducerOutcome(other), other.reducerOutcome(this)) match {
-      case (Threw(_, _), _) | (_, Threw(_, _)) => (None, None)
       case (Reducible(_), Unimplemented | LiteralTypesDiffer) |
            (Unimplemented | LiteralTypesDiffer, Reducible(_)) => (None, None)
       case (o1, o2) => (reducerOf(o1), reducerOf(o2))
@@ -394,7 +368,6 @@ case class TransformExpression(
 
     val thisParams = extractParameters
     val otherParams = other.extractParameters
-    val thisName = function.canonicalName()
 
     // A single IntegerType parameter on each side is the shape the deprecated
     // reducer(int, ..., int) overload accepts. Null parameters were refused above.
@@ -402,55 +375,33 @@ case class TransformExpression(
       p.length == 1 && p(0).dataType == IntegerType
     }
 
-    // Connector code that throws, a `LinkageError` included, e.g. a `NoClassDefFoundError` for a
-    // missing dependency, makes the outcome `Threw`, so the pair is not reducible rather than
-    // failing the query. `Try` alone would let a `LinkageError` through. `ownCode` says whose code
-    // it is, see `Threw`.
-    def guarded(outcome: => Outcome, ownCode: Boolean = true): Outcome =
-      try outcome catch {
-        case e @ (NonFatal(_) | _: LinkageError) => Threw(e, ownCode)
-      }
-
-    // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below.
-    def probe(call: => Reducer[_, _]): Outcome = guarded {
+    // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below. An
+    // `UnsupportedOperationException` means the overload is not implemented; any other exception
+    // fails the query.
+    def probe(call: => Reducer[_, _]): Outcome =
       try Option(call).fold[Outcome](NotReducible)(Reducible(_)) catch {
         case _: UnsupportedOperationException => Unimplemented
       }
-    }
 
     // Prefer the generalized overload. It reads its literal parameters by type, so it is asked only
     // when they have their declared types; otherwise it counts as not implemented. Use another
-    // overload only if the generalized one is not implemented; any other outcome is final. The type
-    // check reads the connector's `inputTypes()`, so it is guarded too.
+    // overload only if the generalized one is not implemented; any other outcome is final.
     val outcome =
-      guarded {
-        if (!literalParamsMatchInputTypes) {
-          LiteralTypesDiffer
-        } else {
-          // The other side's check runs the other connector's code. A failure there is that
-          // side's to report, which the other direction does when it asks; here it only vetoes
-          // the pair. `probe` guards the reducer call itself, as this side's code.
-          guarded(ownCode = false, outcome =
-            if (!other.literalParamsMatchInputTypes) {
-              LiteralTypesDiffer
-            } else {
-              // A copy of the memoized arrays per call, so a connector cannot change them.
-              probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
-            })
-        }
-      } match {
+      (if (literalParamsMatchInputTypes && other.literalParamsMatchInputTypes) {
+        // A copy of the memoized arrays per call, so a connector cannot change them.
+        probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
+      } else {
+        LiteralTypesDiffer
+      }) match {
         // A parameterless pair falls back to the parameterless overload.
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
         // The deprecated overload is documented for bucket against bucket, and master offered it
-        // only a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`. Same
-        // function means the same canonical name, or the same function where it keeps
-        // `canonicalName()`'s default, a fresh name on every call.
-        // If that finds nothing either, the outcome stays why the generalized one was not asked.
+        // a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`. If that finds
+        // nothing either, the outcome stays why the generalized one was not asked.
         case skipped @ (Unimplemented | LiteralTypesDiffer)
             if fromBucketTransform && other.fromBucketTransform &&
-              isSingleInt(thisParams) && isSingleInt(otherParams) &&
-              (thisName == other.function.canonicalName() || function == other.function) =>
+              isSingleInt(thisParams) && isSingleInt(otherParams) =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
             otherParams(0).value().asInstanceOf[Int])) match {
@@ -463,7 +414,6 @@ case class TransformExpression(
     // A pair of the same function needs no reducer and pairs as it stands, so nothing its probe
     // reports is logged.
     outcome match {
-      case Threw(e, true) if !isSameFunction(other) => logReducerThrew(function, e)
       case Unimplemented if !isSameFunction(other) => logNoReducer(function)
       case LiteralTypesDiffer if !isSameFunction(other) =>
         // Name the side whose literal parameters do not have its declared types. That is this
@@ -640,8 +590,7 @@ object TransformExpression extends Logging {
    * method that cannot be invoked, since one class can declare other input types per instance,
    * e.g. one per column type, and `failure:functionClass:failureClass`, so that a function class
    * that fails in another way is warned about again. The reducer dispatch adds
-   * `reducerThrew:functionClass:failureClass`, `literalTypes:functionClass` and
-   * `noReducer:functionClass`.
+   * `literalTypes:functionClass` and `noReducer:functionClass`.
    */
   private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
@@ -761,22 +710,6 @@ object TransformExpression extends Logging {
   }
 
   /**
-   * Logs that `function`'s reducer threw: at WARN once per function class and kind of failure,
-   * since every planning pass and AQE re-plan asks the pair again, and at DEBUG, with the stack
-   * trace, every time. Keyed, and named, by `name()` and class rather than `canonicalName()`, whose
-   * default is a fresh name on every call; see `transformLabel`.
-   */
-  private def logReducerThrew(function: BoundFunction, e: Throwable): Unit = {
-    logOnce(s"reducerThrew:${function.getClass.getName}:${e.getClass.getName}",
-        log.isWarnEnabled) {
-      logWarning(log"The " + transformLabel(function) + log": reducer threw an exception; " +
-        log"treating as not reducible: ${MDC(ERROR, orElse(e.toString, e.getClass.getName))}. " +
-        log"Further failures of this function are logged at DEBUG.")
-    }
-    logDebug(log"The " + transformLabel(function) + log": reducer threw an exception.", e)
-  }
-
-  /**
    * Logs that `function` declares other types for its literal parameters than the transform's
    * literals have, so Spark does not ask its generalized reducer: at WARN once per function class,
    * and at DEBUG.
@@ -855,8 +788,6 @@ object TransformExpression extends Logging {
   private sealed trait Outcome
   private case class Reducible(reducer: Reducer[_, _]) extends Outcome
   private case object NotReducible extends Outcome
-  /** Connector code threw; `ownCode` says whether it was this side's, so this side reports it. */
-  private case class Threw(e: Throwable, ownCode: Boolean = true) extends Outcome
   private case object Unimplemented extends Outcome
   /** The generalized overload was not asked, since a literal parameter's type is not declared. */
   private case object LiteralTypesDiffer extends Outcome

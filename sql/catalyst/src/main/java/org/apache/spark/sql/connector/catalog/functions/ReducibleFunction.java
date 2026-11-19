@@ -92,12 +92,11 @@ public interface ReducibleFunction<I, O> {
    * Only if it is not implemented (throws {@link UnsupportedOperationException}) does Spark fall
    * back: to {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the
    * deprecated {@code reducer(int, ReducibleFunction, int)} overload when both sides are
-   * {@code bucket(n, col)} transforms of the same function with a non-null count. If every
-   * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
-   * reducer" warning, or, when this overload was not asked because a literal's type differs from
-   * the declared one, a warning that says so; any other exception, from either side's call, is
-   * logged and the pair is treated as not reducible, so the join shuffles unless the two
-   * transforms are the same.
+   * {@code bucket(n, col)} transforms with a non-null count. If every eligible overload throws
+   * {@link UnsupportedOperationException}, Spark logs an "implements no reducer" warning, or, when
+   * this overload was not asked because a literal's type differs from the declared one, a warning
+   * that says so. Any other exception fails the query. Spark may ask for the same pair more than
+   * once while planning, so an implementation must give the same answer each time.
    * <p>
    * Examples:
    * <ul>
@@ -121,8 +120,8 @@ public interface ReducibleFunction<I, O> {
   }
 
   /**
-   * This method is for the bucket function. Spark offers it only a pair of the same function, both
-   * resolved from a {@code bucket(n, col)} transform, and only when the generalized overload is not
+   * This method is for the bucket function. Spark offers it only a pair of transforms both resolved
+   * from a {@code bucket(n, col)} transform, and only when the generalized overload is not
    * implemented, or was not asked because a count's type differs from the one the function
    * declares.
    *

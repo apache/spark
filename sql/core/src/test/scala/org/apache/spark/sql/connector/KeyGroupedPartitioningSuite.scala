@@ -8602,6 +8602,29 @@ class KeyGroupedPartitioningSuite
       .reducers(bucketTransform(BucketLogicTruncateFunction, 4, id)).isDefined)
   }
 
+  test("SPARK-50593: the deprecated int reducer is offered two different bucket functions") {
+    // As on master, any two transforms resolved from a V2 bucket are offered the deprecated
+    // overload, e.g. a connector binding one bucket function per input type, as Iceberg does, whose
+    // implementations accept each other. Whether the other function is compatible is for the
+    // connector to say.
+    def legacyBucket(canonical: String): ScalarFunction[Int] with ReducibleFunction[Int, Int] =
+      new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = canonical
+        override def produceResult(input: InternalRow): Int = 0
+        override def reducer(
+            thisNumBuckets: Int,
+            otherFunc: ReducibleFunction[_, _],
+            otherNumBuckets: Int): Reducer[Int, Int] =
+          BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
+      }
+    val b8 = bucketTransform(legacyBucket("test.bucket(int)"), 8, attr("id"))
+    val b4 = bucketTransform(legacyBucket("test.bucket(bigint)"), 4, attr("id"))
+    assert(b8.pairReducers(b4) == ((Some(BucketReducer(4)), None)))
+  }
+
   test("SPARK-50593: a literal type mismatch does not route a non-bucket to the deprecated " +
       "reducer") {
     // A width-first truncate that implements the generalized overload, which answers "not
@@ -8667,26 +8690,6 @@ class KeyGroupedPartitioningSuite
       val b4 = bucketTransform(fn, 4, id)
       assert(b8.reducers(b4).isDefined, s"declared ${declared.mkString(", ")}")
     }
-  }
-
-  test("SPARK-50593: the deprecated int reducer is only offered a pair of the same function") {
-    // The deprecated overload is documented for bucket against bucket, so a connector may not
-    // check the other function. CarelessLegacyBucketFunction does not, and would return a gcd
-    // reducer for any pair of ints; offered a different function with the same argument layout, it
-    // would pair partitions that do not hold the same rows.
-    val careless4 = bucketTransform(CarelessLegacyBucketFunction, 4, attr("id"))
-    val careless2 = bucketTransform(CarelessLegacyBucketFunction, 2, attr("id"))
-    val other2 = bucketTransform(LiteralFirstIntFunction, 2, attr("id"))
-
-    assert(careless4.reducers(other2).isEmpty && other2.reducers(careless4).isEmpty,
-      "a different function must not be offered the deprecated overload")
-    assert(!careless4.isCompatible(other2))
-    assert(careless4.reducers(careless2).isDefined, "the same function still reduces")
-
-    // Same function means the same canonicalName; name() is only a display name.
-    val lookalike2 = bucketTransform(CarelessLookalikeFunction, 2, attr("id"))
-    assert(careless4.reducers(lookalike2).isEmpty,
-      "a different function sharing only name() must not be offered the deprecated overload")
   }
 
   test("SPARK-50593: truncate over a string and over an int are different transforms") {
@@ -8832,23 +8835,6 @@ class KeyGroupedPartitioningSuite
     assert(IntegerTruncateFunction.reducer(empty, IntegerTruncateFunction, one) == null)
   }
 
-  test("SPARK-50593: a non-UOE reducer exception is logged and treated as not reducible") {
-    // An UnsupportedOperationException means "overload not implemented" (silent). Any other
-    // throwable is a bug in an implemented reducer: the dispatch logs it (not the misleading
-    // "implements no reducer" hint) and treats the pair as not reducible -- it falls back to a
-    // shuffle.
-    val id = attr("id")
-    val l = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(2)))
-    val r = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(4)))
-    val messages = transformExpressionLogs {
-      assert(l.reducers(r).isEmpty, "a throwing reducer must be treated as not reducible")
-    }.map(_.getMessage.getFormattedMessage)
-    assert(messages.exists(_.contains("reducer threw an exception")),
-      "the non-UOE exception must be logged")
-    assert(!messages.exists(_.contains("implements no reducer")),
-      "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
-  }
-
   test("SPARK-50593: a parameterless pair is offered the generalized overload first") {
     // GeneralizedShimFunction implements only the generalized overload and forwards a
     // parameterless pair to the parameterless one. If that default delegated back, this would
@@ -8863,44 +8849,12 @@ class KeyGroupedPartitioningSuite
     assert(days.reducers(years).isDefined)
   }
 
-  test("SPARK-50593: connector code that fails while deciding a pair makes it not reducible") {
-    // The dispatch reads the connector's inputTypes() for the literal-type check and calls its
-    // reducer. Either may throw, a LinkageError included, e.g. a NoClassDefFoundError for a
-    // missing connector dependency. The pair is then not reducible, as for a reducer that throws,
-    // rather than failing the query.
-    def bucketLike(
-        types: => Array[DataType],
-        reduce: => Reducer[Int, Int]): ScalarFunction[Int] with ReducibleFunction[Int, Int] =
-      new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-        override def inputTypes(): Array[DataType] = types
-        override def resultType(): DataType = IntegerType
-        override def name(): String = "failing_bucket"
-        override def canonicalName(): String = name()
-        override def produceResult(input: InternalRow): Int = 0
-        override def reducer(
-            thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
-            otherFunc: ReducibleFunction[_, _],
-            otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
-            : Reducer[Int, Int] = reduce
-      }
-    val inputTypesThrows = bucketLike(throw new IllegalStateException("inputTypes"), null)
-    // scalastyle:off throwerror
-    val reducerLinkageError = bucketLike(Array(IntegerType, LongType),
-      throw new NoClassDefFoundError("org/example/MissingDependency"))
-    // scalastyle:on throwerror
-    Seq(inputTypesThrows, reducerLinkageError).foreach { fn =>
-      val b8 = TransformExpression(fn, Seq(Literal(8), attr("id")))
-      val b4 = TransformExpression(fn, Seq(Literal(4), attr("id")))
-      assert(b8.pairReducers(b4) == ((None, None)))
-      assert(!b8.isCompatible(b4))
-    }
-  }
-
   test("SPARK-50593: a connector with only the deprecated reducer still gets SPJ") {
     // The path a shipped connector such as Iceberg takes: V2ExpressionUtils marks the bucket
     // transforms, the dispatch falls back to the deprecated reducer, and the join reduces both
     // sides onto the common bucket count. Also for a connector that keeps canonicalName()'s
-    // default, a fresh name on every call, which only function equality ties to itself.
+    // default, a fresh name on every call: what offers the deprecated reducer is that both
+    // transforms were resolved from a V2 bucket, not their names.
     for {
       unbound <- Seq(UnboundLegacyBucketFunction, UnboundDefaultNameLegacyBucketFunction)
       (b1, b2) <- Seq((4, 2), (2, 4), (6, 4))
@@ -8924,75 +8878,17 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-50593: a pair asks the connector once, whichever side asks") {
-    // isCompatible admits a pair and reducersBothWays reduces it; both read one decision, in
-    // either order, so the connector is asked once per direction.
-    val calls = new java.util.concurrent.atomic.AtomicInteger()
-    val counting = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "counting_bucket"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): Int = 0
-      override def reducer(
-          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
-          otherFunc: ReducibleFunction[_, _],
-          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
-          : Reducer[Int, Int] = {
-        calls.incrementAndGet()
-        BucketFunction.gcdReducer(
-          thisParams(0).value().asInstanceOf[Int], otherParams(0).value().asInstanceOf[Int])
-      }
-    }
-    val b8 = TransformExpression(counting, Seq(Literal(8), attr("id")))
-    val b4 = TransformExpression(counting, Seq(Literal(4), attr("id")))
-    assert(b8.isCompatible(b4) && b4.isCompatible(b8))
-    assert(b8.pairReducers(b4) == b4.pairReducers(b8).swap)
-    assert(calls.get() == 2, "one call per direction")
-  }
-
-  test("SPARK-50593: a pair is decided from one answer of the connector") {
-    // ChangingAnswerBucketFunction's bucket(12) side reduces when first asked and answers null
-    // after. The pair is admitted on the first answer, both sides reducing onto 4; reducing it on a
-    // later answer would reduce the bucket(16) side alone and merge it against the raw bucket(12)
-    // keys: 16 of 48 rows.
-    ChangingAnswerBucketFunction.reset()
-    withFunction(UnboundChangingAnswerBucketFunction) {
-      val ids = (0 until 48).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
-      createTable("ask16", columns, Array(bucket(16, "id")))
-      sql(s"INSERT INTO testcat.ns.ask16 VALUES ${ids.mkString(", ")}")
-      createTable("ask12", columns, Array(bucket(12, "id")))
-      sql(s"INSERT INTO testcat.ns.ask12 VALUES ${ids.mkString(", ")}")
-      withReducingJoinConfs {
-        val df = sql(
-          s"""
-             |${selectWithMergeJoinHint("ask16", "ask12")}
-             |ask16.id FROM testcat.ns.ask16 JOIN testcat.ns.ask12 ON ask16.id = ask12.id
-             |""".stripMargin)
-        assert(df.collect().length === 48, "every id must find its match")
-      }
-    }
-  }
-
-  test("SPARK-50593: a reducer that throws in one direction makes the pair not reducible") {
+  test("SPARK-50593: a reducer that throws in one direction fails the query") {
     // DirectionalBucketFunction reduces bucket(16) onto bucket(12) by gcd 4 from the finer side and
-    // throws when asked from the coarser one. Reading the throw as "this direction is not
-    // reducible" would leave a one-side reduce: the 16 side reduced by % 4 and reported as
-    // bucket(12), against the 12 side's raw keys, so only keys 0 to 3 would meet.
+    // throws when asked from the coarser one. An exception other than
+    // UnsupportedOperationException fails the query, as it did before the generalized reducer.
+    // Read as "this direction is not reducible", it would leave a one-side reduce: the 16 side
+    // reduced by % 4 against the 12 side's raw keys, 16 of 48 rows.
     val id = attr("id")
     val b16 = bucketTransform(DirectionalBucketFunction, 16, id)
     val b12 = bucketTransform(DirectionalBucketFunction, 12, id)
     assert(b16.reducers(b12).isDefined, "the finer side alone does reduce")
-    assert(b16.pairReducers(b12) == ((None, None)) && b12.pairReducers(b16) == ((None, None)))
-    assert(!b16.isCompatible(b12) && !b12.isCompatible(b16))
-
-    val data = AttributeReference("id", IntegerType)()
-    def spec(t: TransformExpression): physical.KeyedShuffleSpec = physical.KeyedShuffleSpec(
-      physical.KeyedPartitioning(Seq(t.rewriteColumnSlots(_ => data)), Seq.empty),
-      physical.ClusteredDistribution(Seq(data)))
-    withReducingJoinConfs {
-      assert(spec(b16).reducersBothWays(spec(b12)) == ((None, None)))
-    }
+    intercept[IllegalArgumentException](b16.pairReducers(b12))
 
     withFunction(UnboundDirectionalBucketFunction) {
       val ids = (0 until 48).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
@@ -9006,7 +8902,10 @@ class KeyGroupedPartitioningSuite
              |${selectWithMergeJoinHint("dir16", "dir12")}
              |dir16.id FROM testcat.ns.dir16 JOIN testcat.ns.dir12 ON dir16.id = dir12.id
              |""".stripMargin)
-        assert(df.collect().length === 48, "every id must find its match")
+        val e = intercept[Throwable](df.collect())
+        val causes = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+        assert(causes.exists(c => Option(c.getMessage).exists(_.contains("from the coarser side"))),
+          e)
       }
     }
   }
@@ -9039,26 +8938,6 @@ class KeyGroupedPartitioningSuite
     assert(differ.nonEmpty)
     assert(differ.forall(_.contains(TruncateFunction.getClass.getName)), differ)
     assert(!differ.exists(_.contains(DaysFunction.getClass.getName)), differ)
-  }
-
-  test("SPARK-50593: a connector failure is reported against the function whose code threw") {
-    // Each direction checks both sides' literal types, so `bucket`'s direction runs the other
-    // function's inputTypes() too. That failure is the other function's: it is logged when the
-    // other direction asks, and never against `bucket`, which did nothing wrong.
-    val failing = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-      override def inputTypes(): Array[DataType] = throw new IllegalStateException("inputTypes")
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "failing_input_types"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): Int = 0
-    }
-    val threw = transformExpressionLogs {
-      val bucket = bucketTransform(BucketFunction, 8, attr("id"))
-      val other = TransformExpression(failing, Seq(Literal(4), attr("id")))
-      assert(bucket.pairReducers(other) == ((None, None)))
-    }.map(_.getMessage.getFormattedMessage)
-      .filter(_.contains("reducer threw an exception"))
-    assert(threw.nonEmpty && threw.forall(_.contains("failing_input_types")), threw)
   }
 
   test("SPARK-50593: a reducer counts only if the other direction answered") {
@@ -9121,17 +9000,6 @@ class KeyGroupedPartitioningSuite
     assert(!logs.exists(_.contains("implements no reducer")), logs)
   }
 
-  test("SPARK-50593: a reducer that throws for a pair of the same function is not reported") {
-    // Two scans of one transform pair as they stand, so a throwing reducer costs nothing there.
-    val logs = transformExpressionLogs {
-      val l = bucketTransform(ThrowingReducerFunction, 4, attr("id"))
-      val r = bucketTransform(ThrowingReducerFunction, 4, attr("store_id"))
-      assert(l.isSameFunction(r), "test setup")
-      l.pairReducers(r)
-    }.map(_.getMessage.getFormattedMessage)
-    assert(!logs.exists(_.contains("reducer threw an exception")), logs)
-  }
-
   test("SPARK-50593: a transform with no literal parameter does not ask the connector for its " +
       "input types") {
     // The literal-type check has nothing to compare for `days`-like transforms, so it must not call
@@ -9178,37 +9046,6 @@ class KeyGroupedPartitioningSuite
       .forall(_.contains("default_name_bucket")))
   }
 
-  test("SPARK-50593: a reducer warning is logged once per function") {
-    // Every planning pass, and every AQE re-plan, asks a pair again. The WARN is logged once per
-    // function; each failure is still logged at DEBUG, with its stack trace. The once-per-function
-    // set lives as long as the JVM, so a run of this test after another in the same JVM sees no
-    // WARN at all; logging on every probe would show six.
-    val throwing = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "warn_once_bucket"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): Int = 0
-      override def reducer(
-          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
-          otherFunc: ReducibleFunction[_, _],
-          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
-          : Reducer[Int, Int] = throw new IllegalStateException("reducer bug")
-    }
-    // A pair is decided once per expression, so each check builds the transforms afresh, as a
-    // later planning pass does.
-    def b8: TransformExpression = TransformExpression(throwing, Seq(Literal(8), attr("id")))
-    def b4: TransformExpression = TransformExpression(throwing, Seq(Literal(4), attr("id")))
-    val logs = transformExpressionLogs {
-      (1 to 3).foreach(_ => assert(!b8.isCompatible(b4)))
-    }
-    def threw(level: Level): Int = logs.count { e =>
-      e.getLevel == level && e.getMessage.getFormattedMessage.contains("reducer threw an exception")
-    }
-    assert(threw(Level.WARN) <= 1, "at most once per function")
-    assert(threw(Level.DEBUG) == 6, "both directions, three times")
-  }
-
   test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
     // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
@@ -9228,17 +9065,13 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: a throwing generalized overload is surfaced, not masked by the deprecated " +
       "one") {
     // DeprecatedOkGeneralizedThrowsFunction implements both: the generalized overload throws, the
-    // deprecated one would reduce. Generalized-first dispatch treats the generalized bug as
-    // authoritative -- it logs the exception and does NOT fall back to the deprecated overload, so
-    // the pair shuffles. (Deprecated-first would have silently reduced via the deprecated overload,
-    // masking the new-API bug.)
+    // deprecated one would reduce. The generalized overload's answer is authoritative, so its
+    // exception fails the query rather than a silent reduce through the deprecated overload, which
+    // would mask the new-API bug.
     val l = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 4, attr("id"))
     val r = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 2, attr("store_id"))
-    val logs = transformExpressionLogs {
-      assert(l.reducers(r).isEmpty, "a throwing generalized overload must not fall back and reduce")
-    }
-    assert(logs.map(_.getMessage.getFormattedMessage)
-      .exists(_.contains("reducer threw an exception")), "the generalized bug must be surfaced")
+    val e = intercept[RuntimeException](l.reducers(r))
+    assert(e.getMessage.contains("boom from generalized overload"), e)
   }
 
   test("SPARK-50593: a typed-null integer param is not routed to the deprecated int reducer") {

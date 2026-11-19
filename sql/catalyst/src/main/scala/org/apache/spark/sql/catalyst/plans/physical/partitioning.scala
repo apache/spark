@@ -2542,8 +2542,8 @@ case class KeyedShuffleSpec(
           if TransformExpression.hasReducedKeys(e1) || TransformExpression.hasReducedKeys(e2) =>
         (None, None)
 
-      // A reducer that threw in either direction makes the pair not reducible, and so does a side
-      // with no identity, see `pairReducers`.
+      // A reducer in one direction with no answer from the other makes the pair not reducible,
+      // and so does a side with no identity, see `pairReducers`.
       case (e1: TransformExpression, e2: TransformExpression) =>
         val (thisReducer, otherReducer) = e1.pairReducers(e2)
 
@@ -2690,7 +2690,7 @@ case class KeyedShuffleSpec(
             val functionClass = t.function.getClass.getName
             val name = TransformExpression.orElse(t.function.name(), functionClass)
             throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-              t.literalChildren.map(_.value) match {
+              t.literalChildren.map(_.sql) match {
                 case Seq() => name
                 case params => s"$name(${params.mkString(", ")})"
               },

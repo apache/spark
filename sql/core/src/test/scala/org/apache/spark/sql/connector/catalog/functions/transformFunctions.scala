@@ -357,79 +357,6 @@ object UnboundDefaultNameLegacyBucketFunction extends UnboundFunction {
 }
 
 /**
- * A bucket that implements only the deprecated reducer, and whose `bucket(12)` side answers `null`
- * on every call after its first: a stand-in for a connector whose answer for a pair changes
- * between calls. Spark must decide such a pair from one answer. `reset()` before each use.
- */
-object ChangingAnswerBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-  private val twelveSideCalls = new java.util.concurrent.atomic.AtomicInteger()
-  def reset(): Unit = twelveSideCalls.set(0)
-
-  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-  override def resultType(): DataType = IntegerType
-  override def name(): String = "bucket"
-  override def canonicalName(): String = "changing_answer_bucket"
-  override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = {
-    Math.floorMod(input.getLong(1), input.getInt(0))
-  }
-
-  override def reducer(
-      thisNumBuckets: Int,
-      otherFunc: ReducibleFunction[_, _],
-      otherNumBuckets: Int): Reducer[Int, Int] = {
-    if (thisNumBuckets == 12 && twelveSideCalls.incrementAndGet() > 1) {
-      null
-    } else if (otherFunc == this) {
-      BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
-    } else {
-      null
-    }
-  }
-}
-
-object UnboundChangingAnswerBucketFunction extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = ChangingAnswerBucketFunction
-  override def description(): String = name()
-  override def name(): String = "bucket"
-}
-
-/**
- * A bucket function that only overrides the deprecated `reducer(int, func, int)` method and,
- * trusting its documented "bucket against bucket" contract, does not check the other function.
- */
-object CarelessLegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-  override def resultType(): DataType = IntegerType
-  override def name(): String = "careless_bucket"
-  override def canonicalName(): String = name()
-  override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = {
-    Math.floorMod(input.getLong(1), input.getInt(0))
-  }
-
-  override def reducer(
-      thisNumBuckets: Int,
-      otherFunc: ReducibleFunction[_, _],
-      otherNumBuckets: Int): Reducer[Int, Int] = {
-    BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
-  }
-}
-
-/**
- * A different function that shares `CarelessLegacyBucketFunction`'s `name()` but not its
- * `canonicalName()`, and partitions data differently.
- */
-object CarelessLookalikeFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-  override def resultType(): DataType = IntegerType
-  override def name(): String = "careless_bucket"
-  override def canonicalName(): String = "careless_bucket_lookalike"
-  override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = input.getLong(1).toInt
-}
-
-/**
  * A non-bucket function with a single int parameter in the first position, the same argument
  * layout as `bucket(n, col)`.
  */
@@ -974,27 +901,6 @@ object TypeTolerantTruncateFunction
     }
     null
   }
-}
-
-/**
- * A function whose generalized reducer throws an unexpected (non-UnsupportedOperationException)
- * exception. Used to verify the dispatch logs it and treats the pair as not reducible (a shuffle),
- * rather than crashing or emitting the misleading "implements no reducer" hint (it does implement
- * the overload -- it threw a bug, which is a different signal than UOE-means-unimplemented).
- */
-object ThrowingReducerFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-  override def resultType(): DataType = IntegerType
-  override def name(): String = "throwing_reducer"
-  override def canonicalName(): String = name()
-  override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = input.getInt(1)
-
-  override def reducer(
-      thisParams: Array[Literal[_]],
-      otherFunc: ReducibleFunction[_, _],
-      otherParams: Array[Literal[_]]): Reducer[Int, Int] =
-    throw new RuntimeException("boom from reducer")
 }
 
 /**
