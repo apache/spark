@@ -67,7 +67,7 @@ class JoinOptimizationSuite extends PlanTest {
     def testExtractCheckCross(plan: LogicalPlan,
         expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]): Unit = {
       assert(
-        ExtractFiltersAndInnerJoins.unapply(plan).map(e => (e._1, e._2.flatten)) === expected)
+        ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
     }
 
     testExtract(x, None)
@@ -93,16 +93,6 @@ class JoinOptimizationSuite extends PlanTest {
       Some((Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
     testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
       Some((Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr))))
-
-    // The conditions of each join or filter are one group, from the bottom up.
-    assert(ExtractFiltersAndInnerJoins.unapply(
-      x.join(y, condition = Some("x.b".attr === "y.d".attr && "x.a".attr > 1))
-        .where("y.d".attr > 2)
-        .join(z, condition = Some("x.c".attr === "z.c".attr))).map(_._2) ===
-      Some(Seq(
-        Seq("x.b".attr === "y.d".attr, "x.a".attr > 1),
-        Seq("y.d".attr > 2),
-        Seq("x.c".attr === "z.c".attr))))
   }
 
   test("reorder inner joins") {
@@ -188,18 +178,26 @@ class JoinOptimizationSuite extends PlanTest {
     assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
   }
 
-  test("SPARK-62069: do not reorder inner joins when the conditions kept above them come from " +
-    "more than one join or filter") {
-    // The lower join removes a row on which its condition is NULL, so the condition of the join
-    // above is not evaluated on the row, but a filter above all the joins would evaluate it after
-    // the NULL with AND. Only ReorderJoin runs.
+  test("SPARK-62069: do not reorder inner joins when a lower join or filter has a condition " +
+    "that may not move") {
+    // The lower join removes a row on which its condition is NULL, so the filter above the joins
+    // does not evaluate the division on the row. A filter that keeps the throwable condition above
+    // the joins would, once combined with it. Only ReorderJoin runs.
     def divide(l: Expression, r: Expression): Expression =
       Divide(l, r, NumericEvalContext(EvalMode.ANSI))
     val z = LocalRelation($"e".int, $"f".int)
     val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
     val query = testRelation.join(testRelation1, condition = Some($"a" === $"d" && throwing))
-      .join(z, condition = Some($"c" === $"e" && divide($"a", $"f") > 1))
+      .join(z, condition = Some($"c" === $"e"))
+      .where(divide($"a", $"f") > 1)
       .analyze
     comparePlans(ReorderJoin(query), query)
+
+    // The top join has no condition, so the non-deterministic filter is below it.
+    val sampled = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+      .where(Rand(0) > 0.5)
+      .join(z)
+      .analyze
+    comparePlans(ReorderJoin(sampled), sampled)
   }
 }

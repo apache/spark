@@ -96,27 +96,28 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Returns true if the conditions that may not move (see `splitMovable`) are written in at most
-   * one join or filter. `groups` are the conditions of each join or filter, from the bottom up.
+   * Returns the conditions written in the joins and filters below `plan`, the top join or filter:
+   * all of `conditions` but the ones of `plan` itself, which are the last ones.
    */
-  private def keptInOneGroup(
-      groups: Seq[Seq[Expression]],
-      input: Seq[(LogicalPlan, InnerLike)]): Boolean = {
-    val (_, kept) = splitMovableBy(
-      groups.zipWithIndex.flatMap { case (group, i) => group.map((_, i)) },
-      input.map(_._1))(_._1)
-    kept.map(_._2).distinct.size <= 1
+  private def conditionsBelow(plan: LogicalPlan, conditions: Seq[Expression]): Seq[Expression] = {
+    val topCondition = plan match {
+      case Filter(condition, _) => Some(condition)
+      case j: Join => j.condition
+    }
+    conditions.dropRight(topCondition.map(splitConjunctivePredicates(_).size).getOrElse(0))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
-    // A join or filter removes a row on which its condition is NULL, so the conditions written
-    // above it are not evaluated on the row. In the filter that keeps the conditions that may not
-    // move above all the joins, `NULL AND x` evaluates `x`. So the joins are not reordered when
-    // the kept conditions come from more than one join or filter.
-    case p @ ExtractFiltersAndInnerJoins(input, conditionGroups)
-        if input.size > 2 && conditionGroups.nonEmpty &&
-          keptInOneGroup(conditionGroups, input) =>
+    // A join or filter removes a row on which its condition is NULL, so a condition above it is
+    // not evaluated on the row. In a filter, however, `NULL AND x` evaluates `x`, and such a filter
+    // can take a condition from above, e.g. by `CombineFilters`. So the joins are reordered only
+    // when the conditions written below the top join or filter may all move, so that the filter
+    // that keeps the conditions that may not move above all the joins takes the place of the top
+    // join or filter, whose conditions they are.
+    case p @ ExtractFiltersAndInnerJoins(input, conditions)
+        if input.size > 2 && conditions.nonEmpty &&
+          splitMovable(conditionsBelow(p, conditions), input.map(_._1))._2.isEmpty =>
       // The first join that covers the references of a condition can be below the filter or the
       // join that the condition is written in, where it would be evaluated on rows that a join
       // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
@@ -124,7 +125,6 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       // filter before the ones above it. A movable condition written after a kept one can not
       // fail, so it goes into a join, and any filter that `createOrderedJoin` adds only has
       // conditions written before the kept ones.
-      val conditions = conditionGroups.flatten
       val (movable, keptAbove) = splitMovable(conditions, input.map(_._1))
       val joined = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
