@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, LeafNode, LogicalPlan, MergeRows}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, LeafNode, LogicalPlan, MergeRows}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -70,6 +70,7 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       newPlan match {
         case m: MergeRows => widenOutputNullability(m)
         case e: Expand => widenOutputNullability(e, p.asInstanceOf[Expand])
+        case g: Generate => widenOutputNullability(g, p.asInstanceOf[Generate])
         case _ => newPlan
       }
   }
@@ -109,5 +110,21 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
         .withDataType(changedDataTypes.foldLeft(attr.dataType)(StructType.unionLikeMerge))
     }
     if (newOutput == e.output) e else e.copy(output = newOutput)
+  }
+
+  // Generate derives the nullability of its generator output attributes from the element schema
+  // of its generator when it is built. The element schema may become nullable later when this
+  // rule updates the attributes the generator references, e.g., a column of a Dataset that an
+  // outer join makes nullable, so widen the nullability of the generator output attributes
+  // accordingly, keeping their expression IDs. Only the fields that this rule makes nullable are
+  // considered, as some generators declare all fields nullable while their output attributes
+  // keep a narrower nullability, e.g., `ReplicateRows` built for EXCEPT ALL.
+  private def widenOutputNullability(g: Generate, oldGenerate: Generate): Generate = {
+    val fields = g.generator.elementSchema.fields
+    val oldFields = oldGenerate.generator.elementSchema.fields
+    val newOutput = g.generatorOutput.zipWithIndex.map { case (attr, index) =>
+      attr.withNullability(attr.nullable || (fields(index).nullable && !oldFields(index).nullable))
+    }
+    if (newOutput == g.generatorOutput) g else g.copy(generatorOutput = newOutput)
   }
 }
