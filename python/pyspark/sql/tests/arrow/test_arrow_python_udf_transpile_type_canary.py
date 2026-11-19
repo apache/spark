@@ -56,7 +56,6 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.tests.arrow.test_arrow_python_udf_transpile import (
     _TRANSPILE_OFF,
     _TRANSPILE_ON,
-    ARROW_TRANSPILE_SUPPORTED,
     ArrowUDFTranspileTestsMixin,
     _eval_python_nodes,
 )
@@ -222,14 +221,15 @@ _ARROW_REJECTED_RETURN_TYPES = frozenset(
     {"year_month_interval", "calendar_interval", "file", "file_external"}
 )
 
-# Verdict per RETURN type, scalar pandas eval type: the pickled table, except that the
-# return types Arrow cannot express are rejected.
-_EXPECTED_PANDAS_RETURN_VERDICT = {
+# Verdict per RETURN type for the two Arrow-backed eval types (Arrow-optimized and scalar
+# pandas): the pickled table, except that the return types Arrow cannot express are rejected.
+_EXPECTED_ARROW_BACKED_RETURN_VERDICT = {
     label: (REJECTED_BY_ARROW if label in _ARROW_REJECTED_RETURN_TYPES else verdict)
     for label, verdict in _EXPECTED_RETURN_VERDICT.items()
 }
 
-# Verdict per INPUT column type, pickled eval type, with the unannotated `null_probe` body.
+# Verdict per INPUT column type, with the unannotated `null_probe` body (`.isnull()` for a
+# pandas UDF). The same for all three eval types: the check is on the JVM side.
 # boolean and binary are NO_TRANSPILE here but TRANSPILES as return types: an unannotated
 # parameter is only tried as numeric and string, so those columns match no category (see
 # test_annotated_parameters_widen_input_coverage). string_lcase is refused because the check
@@ -267,9 +267,6 @@ _EXPECTED_INPUT_VERDICT = {
     "file": NOT_A_COLUMN_TYPE,
     "file_external": NOT_A_COLUMN_TYPE,
 }
-
-# Verdict per INPUT column type, scalar pandas eval type: currently the pickled table.
-_EXPECTED_PANDAS_INPUT_VERDICT = dict(_EXPECTED_INPUT_VERDICT)
 
 # Parity fixture per TRANSPILES return type: an input column whose body result already
 # matches the declared return type. Pairing them avoids a known, accepted divergence -- a
@@ -341,31 +338,9 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
     def test_sample_tables_are_complete(self):
         # Adding a sample must force a verdict to be recorded for it, in both directions.
         labels = {label for label, _dt, _cat in _SAMPLES}
-        self.assertEqual(
-            set(),
-            labels - set(_EXPECTED_RETURN_VERDICT),
-            "these samples have no entry in _EXPECTED_RETURN_VERDICT",
-        )
-        self.assertEqual(
-            set(),
-            labels - set(_EXPECTED_INPUT_VERDICT),
-            "these samples have no entry in _EXPECTED_INPUT_VERDICT",
-        )
-        self.assertEqual(
-            set(),
-            set(_EXPECTED_RETURN_VERDICT) - labels,
-            "these verdicts refer to samples that no longer exist",
-        )
-        self.assertEqual(
-            set(),
-            set(_EXPECTED_INPUT_VERDICT) - labels,
-            "these verdicts refer to samples that no longer exist",
-        )
-        self.assertEqual(
-            set(),
-            _ARROW_REJECTED_RETURN_TYPES - labels,
-            "these Arrow-rejected labels refer to samples that no longer exist",
-        )
+        self.assertEqual(labels, set(_EXPECTED_RETURN_VERDICT))
+        self.assertEqual(labels, set(_EXPECTED_INPUT_VERDICT))
+        self.assertLessEqual(_ARROW_REJECTED_RETURN_TYPES, labels)
 
     # -- static invariant ---------------------------------------------------------------
 
@@ -418,9 +393,8 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             raise
         return TRANSPILES if pudf.transpiled else NO_TRANSPILE
 
-    def _assert_verdicts(self, expected, observed, table_name, guidance):
+    def _assert_verdicts(self, expected, observed, table_name):
         """Compare verdict maps, showing the observed table in copy-pasteable form."""
-        self.maxDiff = None
         if expected == observed:
             return
         changed = {
@@ -431,68 +405,33 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         rendered = "\n".join(f'    "{label}": {verdict},' for label, verdict in observed.items())
         self.fail(
             f"{table_name} disagrees with what the transpiler now does.\n"
-            f"changed (label: expected -> observed): {changed}\n\n"
-            f"{guidance}\n\n"
-            f"observed table, if the change is intended and verified:\n{rendered}"
+            f"changed (label: expected -> observed): {changed}\n"
+            "If something now TRANSPILES, follow 'Triaging a new type' in this module's "
+            "docstring before updating the table.\n"
+            f"observed table:\n{rendered}"
         )
 
-    def test_return_type_verdicts_pickled(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {}
-            for label, dt, cat in _SAMPLES:
-                observed[label] = self._return_verdict(dt, _BODIES[cat], _PICKLED)
-        self._assert_verdicts(
-            _EXPECTED_RETURN_VERDICT,
-            observed,
-            "_EXPECTED_RETURN_VERDICT",
-            "See 'Triaging a new type' in this module's docstring: if something now "
-            "TRANSPILES, verify parity against the interpreted path BEFORE updating the "
-            "table, using the golden matrix in python/pyspark/sql/tests/coercion/ as the "
-            "authority. A Cast that is analysis-valid but that the interpreted path would "
-            "never perform is a silent divergence, not a feature.",
-        )
-
-    def test_return_type_verdicts_arrow(self):
-        # Correct in both states: before the gate flip nothing transpiles on the Arrow eval
-        # type, and afterwards the verdicts must equal the pickled ones -- except for the
-        # return types Arrow cannot express at all, which fail earlier and either way.
-        expected = {}
-        for label, verdict in _EXPECTED_RETURN_VERDICT.items():
-            if label in _ARROW_REJECTED_RETURN_TYPES:
-                expected[label] = REJECTED_BY_ARROW
-            elif verdict == REJECTED_CHAR_VARCHAR:
-                # Rejected at UDF construction for every eval type, gate or no gate.
-                expected[label] = REJECTED_CHAR_VARCHAR
-            elif ARROW_TRANSPILE_SUPPORTED:
-                expected[label] = verdict
-            else:
-                expected[label] = NO_TRANSPILE
-
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {}
-            for label, dt, cat in _SAMPLES:
-                observed[label] = self._return_verdict(dt, _BODIES[cat], _ARROW)
-        self._assert_verdicts(
-            expected,
-            observed,
-            "the Arrow return verdicts derived from _EXPECTED_RETURN_VERDICT",
-            "Transpilation should admit exactly the same return types on both eval types; "
-            "the only Arrow-specific difference is the return types Arrow cannot express, "
-            "listed in _ARROW_REJECTED_RETURN_TYPES.",
-        )
-
-    def test_return_type_verdicts_pandas(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {
-                label: self._return_verdict(dt, _BODIES[cat], _PANDAS)
-                for label, dt, cat in _SAMPLES
-            }
-        self._assert_verdicts(
-            _EXPECTED_PANDAS_RETURN_VERDICT,
-            observed,
-            "_EXPECTED_PANDAS_RETURN_VERDICT",
-            "Verify Series-valid parity before recording a new transpiling pandas type.",
-        )
+    def test_return_type_verdicts(self):
+        # Every eval type admits the same return types, except those Arrow cannot express.
+        for eval_type, table_name, expected in (
+            (_PICKLED, "_EXPECTED_RETURN_VERDICT", _EXPECTED_RETURN_VERDICT),
+            (
+                _ARROW,
+                "_EXPECTED_ARROW_BACKED_RETURN_VERDICT",
+                _EXPECTED_ARROW_BACKED_RETURN_VERDICT,
+            ),
+            (
+                _PANDAS,
+                "_EXPECTED_ARROW_BACKED_RETURN_VERDICT",
+                _EXPECTED_ARROW_BACKED_RETURN_VERDICT,
+            ),
+        ):
+            with self.subTest(evalType=eval_type), self.sql_conf(_TRANSPILE_ON):
+                observed = {
+                    label: self._return_verdict(dt, _BODIES[cat], eval_type)
+                    for label, dt, cat in _SAMPLES
+                }
+                self._assert_verdicts(expected, observed, table_name)
 
     # -- input-type verdicts ------------------------------------------------------------
 
@@ -514,46 +453,15 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         counts = _eval_python_nodes(df.select(pudf("a")))
         return NO_TRANSPILE if sum(counts.values()) else TRANSPILES
 
-    def test_input_type_verdicts_pickled(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {label: self._input_verdict(dt, _PICKLED) for label, dt, _cat in _SAMPLES}
-        self._assert_verdicts(
-            _EXPECTED_INPUT_VERDICT,
-            observed,
-            "_EXPECTED_INPUT_VERDICT",
-            "The input-type check is ResolveTranspiledPythonUDFOptions.optionMatchesTypes; "
-            "its `case _ => false` is what makes an unrecognised column type fall back. If a "
-            "type now TRANSPILES, verify parity for it before updating the table.",
-        )
-
-    def test_input_type_verdicts_arrow(self):
-        expected = {
-            label: (
-                verdict
-                if (ARROW_TRANSPILE_SUPPORTED or verdict == NOT_A_COLUMN_TYPE)
-                else NO_TRANSPILE
-            )
-            for label, verdict in _EXPECTED_INPUT_VERDICT.items()
-        }
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {label: self._input_verdict(dt, _ARROW) for label, dt, _cat in _SAMPLES}
-        self._assert_verdicts(
-            expected,
-            observed,
-            "the Arrow input verdicts derived from _EXPECTED_INPUT_VERDICT",
-            "The set of column types a transpiled option can bind to is decided on the JVM "
-            "side and must not depend on the eval type.",
-        )
-
-    def test_input_type_verdicts_pandas(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            observed = {label: self._input_verdict(dt, _PANDAS) for label, dt, _cat in _SAMPLES}
-        self._assert_verdicts(
-            _EXPECTED_PANDAS_INPUT_VERDICT,
-            observed,
-            "_EXPECTED_PANDAS_INPUT_VERDICT",
-            "Verify Series-valid input parity before recording a new pandas type.",
-        )
+    def test_input_type_verdicts(self):
+        # ResolveTranspiledPythonUDFOptions.optionMatchesTypes decides this, and its
+        # `case _ => false` is what makes an unrecognised column type fall back.
+        for eval_type in (_PICKLED, _ARROW, _PANDAS):
+            with self.subTest(evalType=eval_type), self.sql_conf(_TRANSPILE_ON):
+                observed = {
+                    label: self._input_verdict(dt, eval_type) for label, dt, _cat in _SAMPLES
+                }
+                self._assert_verdicts(_EXPECTED_INPUT_VERDICT, observed, "_EXPECTED_INPUT_VERDICT")
 
     def test_no_transpile_input_types_still_compute_correctly(self):
         # The point of a fallback: a column type the transpiler cannot bind to must still
@@ -598,36 +506,21 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             "and vice versa",
         )
 
-    def test_transpiling_return_types_have_verified_parity_pickled(self):
-        # Every return type the table records as TRANSPILES is compared against the
-        # interpreted path, so the table can never say TRANSPILES on the strength of the
+    def test_transpiling_return_types_have_verified_parity(self):
+        # Every return type recorded as TRANSPILES is compared against the interpreted path
+        # of its own eval type, so the table can never say TRANSPILES on the strength of the
         # rewrite merely existing.
-        for label, dt, _cat in _SAMPLES:
-            if _EXPECTED_RETURN_VERDICT[label] != TRANSPILES:
-                continue
-            with self.subTest(label=label):
-                df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
-                self._assert_matches_interpreted(body, dt, df, "a", eval_type=_PICKLED)
-
-    def test_transpiling_return_types_have_verified_parity_arrow(self):
-        for label, dt, _cat in _SAMPLES:
-            if _EXPECTED_RETURN_VERDICT[label] != TRANSPILES:
-                continue
-            with self.subTest(label=label):
-                df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
-                self._assert_matches_interpreted(body, dt, df, "a", eval_type=_ARROW)
-
-    def test_transpiling_return_types_have_verified_parity_pandas(self):
-        for label, dt, _cat in _SAMPLES:
-            if _EXPECTED_PANDAS_RETURN_VERDICT[label] != TRANSPILES:
-                continue
-            with self.subTest(label=label):
-                df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
-                self._assert_matches_interpreted(body, dt, df, "a", eval_type=_PANDAS)
+        for eval_type in (_PICKLED, _ARROW, _PANDAS):
+            for label, dt, _cat in _SAMPLES:
+                if _EXPECTED_RETURN_VERDICT[label] != TRANSPILES:
+                    continue
+                with self.subTest(evalType=eval_type, label=label):
+                    df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
+                    self._assert_matches_interpreted(body, dt, df, "a", eval_type=eval_type)
 
     def test_transpiling_input_types_have_verified_parity_pandas(self):
         for label, dt, _cat in _SAMPLES:
-            if _EXPECTED_PANDAS_INPUT_VERDICT[label] != TRANSPILES:
+            if _EXPECTED_INPUT_VERDICT[label] != TRANSPILES:
                 continue
             value = "ab" if label == "string" else (7.0 if label in ("float", "double") else 7)
             df = self.spark.createDataFrame([(value,), (None,)], f"a {dt.simpleString()}")

@@ -26,17 +26,6 @@ Python interpretation in ways we don't currently track. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
 Python execution and a warning is logged at UDF construction time.
 
-Which UDFs are considered at all is decided by eval type: regular Python UDFs,
-Arrow-optimized or not, and scalar pandas UDFs (``_TRANSPILABLE_EVAL_TYPES`` in
-``pyspark.sql.udf``). The internal conf
-``spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes`` names the ones
-actually rewritten. It defaults to all of them and can only narrow the set, and
-it exists to roll one eval type back without turning the feature off:
-``SQL_BATCHED_UDF`` alone is the scope from before Spark 4.5, when only regular
-Python UDFs that were not Arrow-optimized were transpiled. Like the flag, it is
-read when the UDF is built and again when the query is optimized, so removing
-an eval type takes effect for UDFs that already exist.
-
 Python's ``+`` and ``*`` are overloaded for text (concat / repeat), so an
 untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
@@ -114,29 +103,23 @@ An argument the body never reads is not computed at all.
 The return-type cast
 --------------------
 The lowered body is cast to the UDF's declared return type. Between a numeric body
-and a non-decimal numeric return type that is an ANSI ``CAST`` whichever two types
-they are, so a fractional result declared with an integral return type is truncated
-toward zero (``4.5`` to ``4``, ``-4.5`` to ``-4``) and a value the return type cannot
-hold raises ``CAST_OVERFLOW``. This is deliberate: the mismatch is kept and
-documented, not guarded or refused. What the interpreted UDF does with the same
-result depends on its eval type, so the rewrite agrees with one of the three:
+and a non-decimal numeric return type that is an ANSI ``CAST``, so a fractional
+result declared with an integral return type would be truncated toward zero (``4.5``
+to ``4``) and raise ``CAST_OVERFLOW`` out of range. What the interpreted UDF does
+with the same result depends on its eval type, which is why the eval type is passed
+to the transpiler:
 
-* Arrow-optimized Python UDF: Arrow truncates toward zero as well, so there is no
-  difference for a value in range.
+* Arrow-optimized Python UDF: Arrow truncates toward zero as well, so the rewrite
+  agrees for a value in range.
+* scalar pandas UDF: the conversion raises under the default
+  ``spark.sql.execution.pandas.convertToArrowArraySafely=true``, so this pair is
+  refused and the UDF stays interpreted.
 * pickled Python UDF: the result is NULL, because only an ``int`` is accepted for
-  an integral return type. Transpiled it is the truncated value.
-* scalar pandas UDF: the conversion raises, because
-  ``spark.sql.execution.pandas.convertToArrowArraySafely`` is on by default. With
-  that conf off it truncates toward zero too, and the two agree.
+  an integral return type. Transpiled it is the truncated value; this predates the
+  other two eval types and is a documented difference.
 
-Out of range the transpiled cast raises for all three. The interpreted pickled UDF
-still returns NULL, and the two Arrow-backed ones raise under the safe conversion
-and otherwise return whatever the unchecked conversion produced.
-
-Declaring the return type the body actually produces avoids all of this, and taking
-the eval type out of ``spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes``
-restores the interpreted behavior. Pinned by ``PandasUDFTranspileReturnTypeCastTests``
-in ``pyspark.sql.tests.pandas.test_pandas_udf_transpile`` and the
+Pinned by ``PandasUDFTranspileReturnTypeCastTests`` in
+``pyspark.sql.tests.pandas.test_pandas_udf_transpile`` and the
 ``test_float_literal_body_with_integral_return_*`` tests in
 ``pyspark.sql.tests.arrow.test_arrow_python_udf_transpile``.
 
@@ -152,8 +135,7 @@ because the state schema is recorded in the checkpoint and checked on restart.
 Stateful operators record that schema as nullable whatever the plan says
 (``spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled``, on by
 default and fixed for a query when it first starts), so such a query can be
-restarted after transpilation is turned on, turned off, or rolled back for its
-eval type. Where that conf is off the rule is to restart with the same
+restarted after transpilation is turned on or off. Where that conf is off the rule is to restart with the same
 transpilation settings: a query whose state was first written with a non-nullable
 transpiled key cannot be restarted once the UDF stops being transpiled, and fails
 with ``STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE``. The other order, interpreted first
@@ -223,11 +205,9 @@ interpreted one is lossy, silent, or inconsistent:
   on how rows happen to be batched, and is avoided by
   ``preferIntExtensionDtype=true``.
 
-The one difference in the other direction is a fractional body (e.g. ``s * 1.5``)
-declared with an integral return type: interpreted, the float64 result fails the Arrow
-conversion and raises; transpiled, the final ``Cast`` to the return type truncates
-toward zero instead. That is the return-type cast every transpiled UDF gets, kept on
-purpose rather than a special case for this UDF type -- see "The return-type cast" above.
+A fractional body (e.g. ``s * 1.5``) declared with an integral return type is not
+rewritten: interpreted, the float64 result fails the Arrow conversion, where the final
+``Cast`` would truncate. See "The return-type cast" above.
 
 Modulo uses the same internal Python/NumPy remainder expression as the pandas API,
 including integral minima and opposite-sign infinite divisors. A Series divisor of zero
@@ -268,6 +248,7 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DecimalType,
+    IntegralType,
     NumericType,
     StringType,
 )
@@ -1565,6 +1546,19 @@ class CatalystTranspiler(AbstractTranspiler):
                     "convert (or fail), so the transpiler falls back to "
                     "interpreted Python"
                 )
+        if (
+            series_semantics
+            and body_cat in ("float", "numeric")
+            and isinstance(returnType, IntegralType)
+        ):
+            # The interpreted pandas path refuses this conversion (the safe Arrow check is
+            # on by default) where the cast below would truncate toward zero.
+            raise UnsupportedOperationException(
+                "a possibly fractional result does not match the integral return type "
+                f"{returnType.simpleString()}; a scalar pandas UDF fails that conversion "
+                "where the lowered cast would truncate, so the transpiler falls back to "
+                "interpreted Python"
+            )
         converted = self._convert_chunk(params, function_body[0])
         if self._null_guard_emitted:
             warnings.warn(

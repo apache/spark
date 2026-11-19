@@ -15,25 +15,12 @@
 # limitations under the License.
 #
 """
-Parity tests that re-run the Arrow-optimized Python UDF suites with transpilation enabled.
+Re-runs the Arrow-optimized Python UDF suites with transpilation enabled.
 
-The Arrow counterpart of ``pyspark.sql.tests.test_udf_transpile_parity``, whose classes pin
-``pythonUDF.arrow.enabled=false`` to exercise the pickled path. These leave Arrow on, so the
-whole shared UDF mixin runs with the rewrite actually happening -- the widest-blast-radius
-signal in the change, since every inherited test now asserts the rewrite agrees with what the
-interpreted Arrow path produced.
-
-Both sub-regimes are covered because they are different references:
-``ArrowPythonUDFLegacyTestsMixin`` enables the legacy pandas conversion, which changes what
-the function sees (an integer column with NULLs arrives as float64 nan). Transpilation is
-refused entirely there, so ``TranspiledArrowPythonUDFLegacyParityTests`` is what breaks if
-that gate is missing. Targeted tests live in
-``pyspark.sql.tests.arrow.test_arrow_python_udf_transpile``.
-
-Note ``TranspiledUnifiedUDFParityTests`` in ``test_udf_transpile_parity`` does NOT disable
-Arrow, so it ran with transpilation silently off until the eval-type gate was widened.
-
-Transpilation is non-Connect only, hence the ``is_remote_only()`` guards.
+The Arrow counterpart of ``pyspark.sql.tests.test_udf_transpile_parity``. Both conversion
+regimes are run because they are different references: under the legacy pandas conversion
+transpilation must be refused outright, and this is the suite that breaks if that gate is
+missing. Transpilation is non-Connect only, hence the ``is_remote_only()`` guards.
 """
 
 import unittest
@@ -41,7 +28,6 @@ import unittest
 from pyspark.sql.tests.arrow.test_arrow_python_udf import (
     ArrowPythonUDFLegacyTestsMixin,
     ArrowPythonUDFNonLegacyTestsMixin,
-    ArrowPythonUDFTestsMixin,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -71,35 +57,6 @@ def _enable_transpilation(cls):
 def _disable_transpilation(cls):
     for key in _TRANSPILE_CONF:
         cls.spark.conf.unset(key)
-
-
-@unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,  # type: ignore[arg-type]
-)
-class TranspiledArrowPythonUDFParityTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-        _enable_transpilation(cls)
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            _disable_transpilation(cls)
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super().tearDownClass()
-
-    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
-    def test_udf_binary_type(self):
-        super().test_udf_binary_type()
-
-    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
-    def test_udf_binary_type_in_nested_structures(self):
-        super().test_udf_binary_type_in_nested_structures()
 
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)

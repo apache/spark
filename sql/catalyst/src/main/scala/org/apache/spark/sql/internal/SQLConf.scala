@@ -35,7 +35,6 @@ import org.apache.hadoop.mapreduce.OutputCommitter
 import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.config.ConfigRegistry
 import org.apache.spark.config.protobuf.Mutability
 import org.apache.spark.internal.Logging
@@ -708,9 +707,6 @@ object SQLConf {
         "may not be 100% equivalent. Some known differences include: overflows from input types " +
         "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
         "returns. Applies to regular Python UDFs whether or not they are Arrow-optimized. " +
-        "Before 4.5.0 only those that are not Arrow-optimized were transpiled, and no pandas " +
-        "UDFs; setting spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes to " +
-        "SQL_BATCHED_UDF restores that. " +
         "Setting spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled changes the " +
         "values an Arrow-optimized UDF receives and so disables transpilation of " +
         "Arrow-optimized UDFs only. Scalar pandas UDFs are transpiled only for element-wise " +
@@ -726,56 +722,23 @@ object SQLConf {
         "float literal, loses precision above 2^53 for an integral column carrying " +
         "NULLs -- in " +
         "each of those cases the transpiled expression is the exact or ANSI-correct one. " +
-        "The other direction also happens, by design: the result of any transpiled Python " +
-        "UDF is cast to its declared return type, so a fractional body declared with an " +
-        "integral return type is truncated toward zero, and raises if out of range, where " +
-        "the interpreted pandas UDF fails the conversion unless " +
-        "spark.sql.execution.pandas.convertToArrowArraySafely is false. Other " +
+        "A scalar pandas UDF whose body is fractional but whose declared return type is " +
+        "integral is not transpiled: the cast would truncate where the interpreted " +
+        "conversion fails. Other " +
         "vectorized UDFs (arrow_udf, the iterator forms, grouped map/agg) are never " +
         "transpiled. A transpiled expression can be non-nullable where the Python UDF it " +
         "replaces is always nullable. Streaming state schemas are stored nullable either " +
         "way, so a stateful query can be restarted after transpilation settings change, " +
         "unless it was started with " +
         "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled=false: such a " +
-        "query must be restarted with the same transpilation settings, or it can fail with " +
-        "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE. " +
+        "query must restart with the transpilation settings it started with, or the restart " +
+        "can fail with STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE. " +
         "This initial version only works with non-Connect Spark; Spark Connect " +
         "support is to follow. This is an *experimental* feature."
     )
     .version("4.3.0")
     .booleanConf
     .createWithDefault(false)
-
-  // The eval types the built-in Python UDF transpiler supports. Keep in sync with
-  // `_TRANSPILABLE_EVAL_TYPES` in python/pyspark/sql/udf.py, which is what decides whether a UDF
-  // is given transpiled options at all.
-  private[sql] val TRANSPILABLE_PYTHON_UDF_EVAL_TYPES: Seq[Int] = Seq(
-    PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_ARROW_BATCHED_UDF,
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-
-  val PYTHON_UDF_TRANSPILE_EVAL_TYPES =
-    buildConf("spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes")
-    .internal()
-    .withBindingPolicy(ConfigBindingPolicy.SESSION)
-    .doc("Comma-separated names of the Python UDF eval types that " +
-      s"${ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key} may rewrite. The default lists every " +
-      "eval type the transpiler supports, so this can only narrow the set, and is the way " +
-      "to roll one of them back without giving up the others: SQL_BATCHED_UDF alone " +
-      "transpiles only regular Python UDFs that are not Arrow-optimized, as before 4.5.0, " +
-      "when SQL_ARROW_BATCHED_UDF (Arrow-optimized Python UDFs) and SQL_SCALAR_PANDAS_UDF " +
-      "(scalar pandas UDFs) were never rewritten. A UDF whose eval type is not listed runs " +
-      "as interpreted Python. Like the flag, this is read when a UDF is built and again " +
-      "when a query using it is optimized: removing an eval type applies to UDFs that " +
-      "already exist, while adding one back only applies to UDFs built afterwards. " +
-      "Removing an eval type stops its UDFs being transpiled, so what the flag says " +
-      "about restarting a streaming query applies to it as well.")
-    .version("4.5.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(TRANSPILABLE_PYTHON_UDF_EVAL_TYPES.map(PythonEvalType.toString).toSet)
-    .toSequence
-    .createWithDefault(TRANSPILABLE_PYTHON_UDF_EVAL_TYPES.map(PythonEvalType.toString))
 
 
   val PYTHON_UDF_TRANSPILERS =

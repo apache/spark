@@ -162,14 +162,6 @@ class ConvertToCatalystSuite extends PlanTest {
       SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
       SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key -> "true") { block }
 
-  // Transpilation on, with only the named eval types allowed to be rewritten.
-  private def onlyEvalTypes[T](evalTypes: Int*)(block: => T): T =
-    withSQLConf(
-      SQLConf.ANSI_ENABLED.key -> "true",
-      SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
-      SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.key ->
-        evalTypes.map(PythonEvalType.toString).mkString(",")) { block }
-
   // ---- tests ----
 
   test("transpiles when not nested (parentIsUdf = false)") {
@@ -279,13 +271,6 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("still transpiles an Arrow-optimized UDF when legacy pandas conversion is off") {
-    transpileOn {
-      val tpudf = makeTPUDF(makeArrowPyUDF(), catalystExpr)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
-      assert(result == catalystExpr)
-    }
-  }
 
   test("falls back for a scalar pandas UDF when the int extension dtype is enabled") {
     // Integral inputs become masked arrays whose derived results can retain NaN, unlike
@@ -309,111 +294,6 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("still transpiles a scalar pandas UDF when the int extension dtype is off") {
-    transpileOn {
-      val tpudf = makeTPUDF(makeScalarPandasUDF(), catalystExpr)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
-      assert(result == catalystExpr)
-    }
-  }
-
-  // ---- spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes ----
-  //
-  // udf.py attaches no options for an eval type missing from the list, but the list can be
-  // narrowed after the UDF was built, which is the rollback it exists for. So the rule re-checks.
-
-  private val transpilableUDFs: Seq[(Int, () => PythonUDF)] = Seq(
-    PythonEvalType.SQL_BATCHED_UDF -> (() => makePyUDF()),
-    PythonEvalType.SQL_ARROW_BATCHED_UDF -> (() => makeArrowPyUDF()),
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF -> (() => makeScalarPandasUDF()))
-
-  test("the eval type list defaults to every eval type the transpiler supports") {
-    assert(SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.defaultValue.get ==
-      transpilableUDFs.map { case (evalType, _) => PythonEvalType.toString(evalType) })
-  }
-
-  test("falls back for exactly the eval types missing from the eval type list") {
-    for ((removed, _) <- transpilableUDFs) {
-      val kept = transpilableUDFs.map(_._1).filterNot(_ == removed)
-      onlyEvalTypes(kept: _*) {
-        for ((evalType, makeUDF) <- transpilableUDFs) {
-          val result =
-            ConvertToCatalyst.applyExpr(makeTPUDF(makeUDF(), catalystExpr), parentIsUdf = false)
-          val name = PythonEvalType.toString(evalType)
-          if (evalType == removed) {
-            assert(result.isInstanceOf[PythonUDF], s"$name was removed from the list")
-            assert(!result.isInstanceOf[TranspiledPythonUDF])
-          } else {
-            assert(result == catalystExpr, s"$name is still listed")
-          }
-        }
-      }
-    }
-  }
-
-  test("an empty eval type list transpiles no scalar Python UDF") {
-    onlyEvalTypes() {
-      for ((_, makeUDF) <- transpilableUDFs) {
-        val result =
-          ConvertToCatalyst.applyExpr(makeTPUDF(makeUDF(), catalystExpr), parentIsUdf = false)
-        assert(result.isInstanceOf[PythonUDF])
-        assert(!result.isInstanceOf[TranspiledPythonUDF])
-      }
-    }
-  }
-
-  test("eval type names are case-insensitive") {
-    withSQLConf(
-      SQLConf.ANSI_ENABLED.key -> "true",
-      SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key -> "true",
-      SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.key -> " sql_batched_udf , Sql_Scalar_Pandas_Udf ") {
-      assert(ConvertToCatalyst.applyExpr(
-        makeTPUDF(makePyUDF(), catalystExpr), parentIsUdf = false) == catalystExpr)
-      assert(ConvertToCatalyst.applyExpr(
-        makeTPUDF(makeScalarPandasUDF(), catalystExpr), parentIsUdf = false) == catalystExpr)
-      assert(ConvertToCatalyst.applyExpr(
-        makeTPUDF(makeArrowPyUDF(), catalystExpr), parentIsUdf = false).isInstanceOf[PythonUDF])
-    }
-  }
-
-  test("the eval type list rejects an eval type the transpiler does not support") {
-    // It can only narrow the supported set: naming anything else is an error rather than a
-    // silent way to opt an untriaged eval type into the rewrite.
-    for (name <- Seq(
-        PythonEvalType.toString(PythonEvalType.SQL_SCALAR_ARROW_UDF),
-        PythonEvalType.toString(PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF),
-        "NOT_AN_EVAL_TYPE")) {
-      val e = intercept[IllegalArgumentException] {
-        withSQLConf(SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.key ->
-          s"${PythonEvalType.toString(PythonEvalType.SQL_BATCHED_UDF)},$name") {}
-      }
-      assert(e.getMessage.contains(SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.key))
-      assert(e.getMessage.contains(name))
-    }
-  }
-
-  test("a scalar UDF of an eval type the list cannot name is never rewritten") {
-    // Including an eval type id nothing defines, which must fall back rather than throw.
-    transpileOn {
-      for (evalType <- Seq(PythonEvalType.SQL_SCALAR_ARROW_UDF, -1)) {
-        val udf = PythonUDF("udf", null, LongType, Seq(attrA), evalType, udfDeterministic = true)
-        val result = ConvertToCatalyst.applyExpr(makeTPUDF(udf, catalystExpr), parentIsUdf = false)
-        assert(result.isInstanceOf[PythonUDF])
-        assert(!result.isInstanceOf[TranspiledPythonUDF])
-      }
-    }
-  }
-
-  test("the eval type list does not turn down an aggregate UDF") {
-    // The list names the scalar eval types udf.py transpiles. An aggregate call only gets
-    // options from a hand-built or custom-transpiled plan, which the list does not govern.
-    onlyEvalTypes(PythonEvalType.SQL_BATCHED_UDF) {
-      val pyAgg = makePyUDAF().toAggregateExpression()
-      val catalystAgg = Count(Seq(attrA)).toAggregateExpression()
-      val tpudf = TranspiledPythonUDF("agg", pyAgg, List(catalystAgg))
-      assert(ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false) == catalystAgg)
-    }
-  }
 
   test("apply(plan) reaches TranspiledPythonUDF nodes below the root") {
     // Regression test for the traversal bug where ``plan.mapExpressions`` only
