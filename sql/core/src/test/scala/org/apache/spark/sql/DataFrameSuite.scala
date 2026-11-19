@@ -3176,6 +3176,22 @@ class DataFrameSuite extends SharedSparkSession
       assert(q.collect().toSeq === (80L until 100L).map(i => Row(i, i, i, i)))
       assert(gCalls.value === 50)
     }
+
+    // Nor is `f2 > 0 OR j`, over `f2`, which the projection below computes with `g2` as they share
+    // work, but no filter there reads: with whole-stage codegen, the filter of the layer below
+    // `g != j` would compute `f2` first, on the rows `g != j` drops, and fail.
+    val shared = udf((i: Long) => i)
+    val req = udf((i: Long) => { require(i == 8 || i / 10 == 8, s"req called with $i"); i })
+    withSQLConf(
+      SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0",
+      SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "true") {
+      val q = spark.range(0, 100, 1, 1)
+        .select($"id", $"id".cast("string") as "s", shared($"id") as "g2",
+          req(shared($"id")) as "f2")
+        .select($"id", $"g2", $"f2", $"s".rlike("^9") as "g", $"s".rlike("^[89]") as "j")
+        .where($"g2" >= 0 && $"g" =!= $"j" && ($"f2" > 0 || $"j"))
+      assert(q.collect().map(_.getLong(0)).toSeq === 8L +: (80L to 89L))
+    }
   }
 
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +

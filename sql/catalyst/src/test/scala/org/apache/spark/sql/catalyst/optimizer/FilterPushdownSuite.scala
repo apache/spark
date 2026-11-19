@@ -891,8 +891,8 @@ class FilterPushdownSuite extends PlanTest {
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
       // Also when such a condition reads a column below the projection that cannot fail, as f
-      // when the plan computes it in a projection of its own, also two projections below, or as
-      // the result r of an aggregation.
+      // when the plan computes it in a projection of its own, also two projections below or on
+      // one side of a join, or as the result r of an aggregation.
       check(PushPredicateThroughNonJoin(testStringRelation
           .select($"a", $"b", $"e", f as "f")
           .where($"f")
@@ -916,6 +916,18 @@ class FilterPushdownSuite extends PlanTest {
           .analyze),
         fTwoBelow
           .select($"a", $"b", $"e", $"f", j as "j")
+          .where($"j" || $"f")
+          .select($"a", $"f", g as "g", $"j")
+          .where(Not($"g" === $"j")))
+      val joined = testStringRelation
+        .select($"a", $"b", $"e", f as "f")
+        .join(LocalRelation($"x".int), Inner, Some($"a" === $"x"))
+      check(PushPredicateThroughNonJoin(joined
+          .select($"a", $"f", g as "g", j as "j")
+          .where(Not($"g" === $"j") && ($"j" || $"f"))
+          .analyze),
+        joined
+          .select($"a", $"b", $"e", $"f", $"x", j as "j")
           .where($"j" || $"f")
           .select($"a", $"f", g as "g", $"j")
           .where(Not($"g" === $"j")))
@@ -1065,11 +1077,12 @@ class FilterPushdownSuite extends PlanTest {
             .analyze)
       }
       // Nor when a condition after the one that ends the split reads an alias that can fail,
-      // computed in a lower layer: with whole-stage codegen, a filter computes the alias where it
-      // first reads it, so the layer's filter would compute one that no filter below reads, such
-      // as `f2`, computed with `g2` as they share work. Also in the whole batch, where the later
-      // passes see `f2` as a column below the projection, and also when the filter below reads
-      // the alias, as `f` in `f AND g != j AND (NOT j OR f)`.
+      // computed in a lower layer: with whole-stage codegen, the projection computes the alias
+      // where an operator above first reads it, so the layer's filter would compute one that no
+      // filter below reads, such as `f2`, computed with `g2` as they share work. Also in the whole
+      // batch, where the later passes see `f2` as a column below the projection. The check does
+      // not tell whether a filter below already reads the alias, so `(NOT j OR f)` in
+      // `f AND g != j AND (NOT j OR f)` stays above too.
       val shared = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val failing = ScalaUDF((s: String) => s.length, IntegerType, Seq(shared), Seq(None),
@@ -1092,6 +1105,7 @@ class FilterPushdownSuite extends PlanTest {
         .where(Not($"g" === $"j") && ($"x" || $"j"))
         .analyze
       comparePlans(PushPredicateThroughNonJoin(xOverF2), xOverF2)
+      comparePlans(Optimize.execute(xOverF2), xOverF2)
       val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       comparePlans(Optimize.execute(testStringRelation
