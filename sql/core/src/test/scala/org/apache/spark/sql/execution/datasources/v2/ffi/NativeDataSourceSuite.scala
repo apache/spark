@@ -153,12 +153,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   /**
    * Checks that the buffers of the readers of native data sources are freed. A reader closed while
-   * the batch that it returned may still be read, as when a query stops before the end of a
-   * partition, frees the buffers of the batch once it is unreachable. Each test checks that they
-   * are freed after it, so that a test that leaks a reader fails, and the readers of a test are
-   * freed before the next test, see readerAndAllocator, and before the suites that run next in
-   * this JVM, which may count the memory of Arrow. `earlierReaders` are those that were not freed
-   * before the test, which a failed test may have left behind, and which it does not check.
+   * the batch that it returned may still be read, as before the end of its stream in a task with a
+   * thread that the task does not wait for, or outside of a task, frees the buffers of the batch
+   * once it is unreachable. Each test checks that they are freed after it, so that a test that
+   * leaks a reader fails, and the readers of a test are freed before the next test, see
+   * readerAndAllocator, and before the suites that run next in this JVM, which may count the
+   * memory of Arrow. `earlierReaders` are those that were not freed before the test, which a
+   * failed test may have left behind, and which it does not check.
    */
   private def checkReadersFreed(earlierReaders: Set[BufferAllocator]): Unit = {
     if ((readerAllocators() -- earlierReaders).nonEmpty) {
