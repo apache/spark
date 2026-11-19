@@ -1671,13 +1671,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-61870: a DSv2 scan that reads the same rows again but is not row-wise is a " +
-    "creation side") {
-    // A pushed aggregate or join, or the target read of a copy-on-write UPDATE, gives such a scan.
-    // It counts under a selective `Filter`, but not for a key whose DPP filter is dropped, where
-    // `canEvaluateAgain` still asks for `onlyRowWisePushdowns`. The source keeps `i > 3` in a
-    // `Filter` above its scan. The V2 fact takes the inferred `part > 3` in fully, so it gives no
-    // bloom filter on `d.i`.
+  test("SPARK-61870: a DSv2 scan that reads the same rows again is a creation side") {
+    // A row-wise scan reads the same rows again. So does a scan with a pushed aggregate or join, or
+    // the target read of a copy-on-write UPDATE, which is not row-wise. That one counts under a
+    // selective `Filter`, but not for a key whose DPP filter is dropped, where `canEvaluateAgain`
+    // still asks for `onlyRowWisePushdowns`. The source keeps `i > 3` in a `Filter` above its
+    // scan. The V2 fact takes the inferred `part > 3` in fully, so it gives no bloom filter on
+    // `d.i`.
     withTempDir { dir =>
       val factPath = new File(dir, "fact").getCanonicalPath
       spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
@@ -1699,14 +1699,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             }
             assert(plan.exists(_.expressions.exists(
               _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, s"dpp = $dpp:\n$plan")
-            Seq(true, false).foreach { repeatable =>
-              val rewritten = plan.transform {
-                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
-                  r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
-              }
-              val expected = if (repeatable && !dpp) Seq("part") else Nil
-              assert(bloomFilterKeyNames(InjectRuntimeFilter(rewritten)) == expected,
-                s"dpp = $dpp, repeatableRead = $repeatable:\n$rewritten")
+            // (onlyRowWisePushdowns, repeatableRead) of the dimension's scan, first as built.
+            Seq((true, false), (false, true), (false, false)).foreach {
+              case (rowWise, repeatable) =>
+                val rewritten = plan.transform {
+                  case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
+                    assert(r.onlyRowWisePushdowns && !r.repeatableRead, plan)
+                    r.copy(onlyRowWisePushdowns = rowWise, repeatableRead = repeatable)
+                }
+                val expected = if (rowWise || (repeatable && !dpp)) Seq("part") else Nil
+                assert(bloomFilterKeyNames(InjectRuntimeFilter(rewritten)) == expected,
+                  s"dpp = $dpp, onlyRowWisePushdowns = $rowWise, repeatableRead = $repeatable:\n" +
+                    rewritten)
             }
           }
         }

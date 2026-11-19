@@ -512,10 +512,10 @@ class StorageFilterPushDownSuite
       }.getOrElse(fail(s"no variant scan in:\n${df.queryExecution.optimizedPlan}"))
     }
     val unrestricted = variantScan("", identity)
-    assert(unrestricted.onlyRowWisePushdowns && unrestricted.repeatableRead)
+    assert(unrestricted.onlyRowWisePushdowns && unrestricted.isRepeatableRead)
     rowSelectingPushdowns.foreach { case (op, apply) =>
       val scan = variantScan(op, apply)
-      assert(!scan.onlyRowWisePushdowns && !scan.repeatableRead, s"$op: $scan")
+      assert(!scan.onlyRowWisePushdowns && !scan.isRepeatableRead, s"$op: $scan")
     }
   }
 

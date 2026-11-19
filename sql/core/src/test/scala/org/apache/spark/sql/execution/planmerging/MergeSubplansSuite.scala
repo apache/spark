@@ -2485,10 +2485,10 @@ class MergeSubplansSuite extends PlanTest {
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
-    // These stand in for a plain scan produced by the column-pruning path, which is mergeable,
-    // has only row-wise pushdowns and reads the same rows again.
+    // These stand in for a plain scan produced by the column-pruning path, which is mergeable and
+    // has only row-wise pushdowns.
     DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true,
-      onlyRowWisePushdowns = true, repeatableRead = true)
+      onlyRowWisePushdowns = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2515,7 +2515,7 @@ class MergeSubplansSuite extends PlanTest {
       StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     V2ScanPartitioningAndOrdering(
       DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true,
-        onlyRowWisePushdowns = true, repeatableRead = true))
+        onlyRowWisePushdowns = true))
       .asInstanceOf[DataSourceV2ScanRelation]
   }
 

@@ -258,15 +258,12 @@ object ExternalLookupRelations {
  *                             ahead of those operations, see [[SupportsStorageFilters]]. Default
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
- *                             set it keeps storage filters away from its scan. It requires
- *                             `repeatableRead`.
- * @param repeatableRead whether a second read of the scan, such as a runtime bloom filter's
- *                       subquery, returns the same rows. Unlike `onlyRowWisePushdowns`, it holds
- *                       for a pushed aggregate or join and the target read of a copy-on-write
- *                       operation, unless a limit, offset, top-N or sample is pushed too. Default
- *                       false: those let the source pick other rows, and a build site that does
- *                       not set it keeps its scan from being a bloom filter's creation side. It
- *                       holds whenever `onlyRowWisePushdowns` does.
+ *                             set it keeps storage filters away from its scan.
+ * @param repeatableRead whether a second read of a scan that is not `onlyRowWisePushdowns`
+ *                       returns the same rows, as for a pushed aggregate or join and the target
+ *                       read of a copy-on-write operation. See [[isRepeatableRead]]. Default
+ *                       false: a build site that does not set it keeps such a scan from being a
+ *                       runtime bloom filter's creation side.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -280,11 +277,6 @@ case class DataSourceV2ScanRelation(
     onlyRowWisePushdowns: Boolean = false,
     repeatableRead: Boolean = false) extends LeafNode with NamedRelation {
 
-  // A scan whose pushed operations all work on each row by itself returns the same rows when read
-  // again, so DPP and the runtime bloom filter, which read different flags, agree on it.
-  require(!onlyRowWisePushdowns || repeatableRead,
-    "A scan with only row-wise pushdowns must set repeatableRead")
-
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
   // Note: pushedFilters may reference columns pruned out of `output`, so constraint use must first
@@ -292,6 +284,12 @@ case class DataSourceV2ScanRelation(
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
+
+  /**
+   * Whether a second read of the scan, such as a runtime bloom filter's subquery, returns the same
+   * rows. A scan whose pushed operations all work on each row by itself does.
+   */
+  def isRepeatableRead: Boolean = repeatableRead || onlyRowWisePushdowns
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via

@@ -32,7 +32,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
-import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
+import org.apache.spark.sql.connector.{IntegralAverage, NondeterministicIntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
@@ -258,6 +258,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       stmt.executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
+    h2Dialect.registerFunction("my_nondeterministic_avg", NondeterministicIntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
     h2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
     h2Dialect.registerFunction(
@@ -343,9 +344,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
 
   private def checkSchemaNames(df: DataFrame, names: Seq[String]): Unit = {
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
+    val scan = scanOf(df)
     assert(scan.schema.names.sameElements(names))
   }
 
@@ -1027,6 +1026,22 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     assert(scan.repeatableRead && !scan.onlyRowWisePushdowns)
   }
 
+  test("SPARK-61870: a scan with a pushed aggregate function that is not deterministic does not " +
+    "read the same rows again") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach { case (f, repeatable) =>
+        val df = sql(s"SELECT name, h2.$f(id) FROM h2.test.people GROUP BY name")
+        checkAggregateRemoved(df)
+        assert(scanOf(df).isRepeatableRead == repeatable, f)
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
+  }
+
   test("scan with aggregate push-down, top N push-down and offset push-down") {
     val df1 = spark.read
       .table("h2.test.employee")
@@ -1048,7 +1063,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkSortRemoved(topN1)
     checkLimitRemoved(topN1)
     // A pushed top N lets the source pick other rows on a second read.
-    assert(!scanOf(topN1).repeatableRead)
+    assert(!scanOf(topN1).isRepeatableRead)
     checkPushedInfo(topN1,
       "PushedAggregates: [SUM(SALARY)]",
       "PushedGroupByExpressions: [DEPT]",

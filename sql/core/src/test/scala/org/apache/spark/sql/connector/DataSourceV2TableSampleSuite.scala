@@ -332,10 +332,10 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         val joined = scanOf(spark.table(t1).join(spark.table(t2), "id"))
         assert(joined.repeatableRead && !joined.onlyRowWisePushdowns)
         val sampled = spark.table(t1).sample(0.5, 1L).join(spark.table(t2).select("id"), "id")
-        assert(!scanOf(sampled).repeatableRead)
+        assert(!scanOf(sampled).isRepeatableRead)
         // A pushed join above it keeps the sample only with the inner join's pushed operators.
         // The sampled side keeps all its columns, so the sample sits on its scan.
-        assert(!scanOf(sampled.join(spark.table(t2).select("id"), "id")).repeatableRead)
+        assert(!scanOf(sampled.join(spark.table(t2).select("id"), "id")).isRepeatableRead)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
