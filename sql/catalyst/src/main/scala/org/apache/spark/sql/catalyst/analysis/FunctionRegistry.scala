@@ -718,6 +718,7 @@ object FunctionRegistry {
     expression[XxHash64]("xxhash64"),
     expression[Xxh364]("xxh3_64"),
     expression[Xxh3128]("xxh3_128"),
+    expression[FarmFingerprint]("farm_fingerprint"),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2")
@@ -1243,6 +1244,7 @@ object FunctionRegistry {
     registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
     registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
     registerInternalExpression[PandasProduct]("pandas_product")
+    registerInternalExpression[PandasMod]("pandas_mod")
     registerInternalExpression[PandasStddev]("pandas_stddev")
     registerInternalExpression[PandasVariance]("pandas_var")
     registerInternalExpression[PandasSkewness]("pandas_skew")

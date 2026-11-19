@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.types.Decimal
 
 /**
  * Helper functions for arithmetic operations with overflow.
@@ -135,6 +136,41 @@ object MathUtils {
   def pmod(a: Double, n: Double): Double = {
     val r = a % n
     if (r < 0) (r + n) % n else r
+  }
+
+  // Python-style modulo, used by `pandas_mod` for pandas API on Spark: the result takes the sign
+  // of the divisor `n`, as Python's and NumPy's `%` do, and a floating zero result is a zero with
+  // the sign of `n`. This is CPython's algorithm: add `n` to a nonzero remainder whose sign
+  // differs from `n`'s. That cannot overflow, because the remainder is smaller than `n` in
+  // magnitude. `n` must not be zero. Shared by `PandasMod`'s eval and codegen.
+
+  def pythonMod(a: Int, n: Int): Int = {
+    val r = a % n
+    if (r != 0 && (r ^ n) < 0) r + n else r
+  }
+
+  def pythonMod(a: Long, n: Long): Long = {
+    val r = a % n
+    if (r != 0 && (r ^ n) < 0) r + n else r
+  }
+
+  def pythonMod(a: Byte, n: Byte): Byte = pythonMod(a.toInt, n.toInt).toByte
+
+  def pythonMod(a: Short, n: Short): Short = pythonMod(a.toInt, n.toInt).toShort
+
+  def pythonMod(a: Float, n: Float): Float = {
+    val r = a % n
+    if (r == 0) Math.copySign(0.0f, n) else if ((r < 0) != (n < 0)) r + n else r
+  }
+
+  def pythonMod(a: Double, n: Double): Double = {
+    val r = a % n
+    if (r == 0) Math.copySign(0.0, n) else if ((r < 0) != (n < 0)) r + n else r
+  }
+
+  def pythonMod(a: Decimal, n: Decimal): Decimal = {
+    val r = a % n
+    if (!r.isZero && (r.compare(Decimal.ZERO) < 0) != (n.compare(Decimal.ZERO) < 0)) r + n else r
   }
 
   // Casts a rounded double (the result of Math.ceil/Math.floor) to long, throwing an arithmetic

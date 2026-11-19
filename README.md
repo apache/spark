@@ -26,6 +26,9 @@ This README file only contains basic setup instructions.
 
 ## Build Pipeline Status
 
+See the [Apache CI dashboard](https://ci-test.apache.org/#/project/spark) for an overview
+of Spark's CI usage.
+
 | Branch     | Status                                                                                                                                                                                                          |
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | master     | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/release.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/release.yml)                                               |
@@ -64,6 +67,15 @@ This README file only contains basic setup instructions.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml?query=branch%3Abranch-4.x)       |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml?query=branch%3Abranch-4.x)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml?query=branch%3Abranch-4.x)           |
+| branch-4.4 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_main.yml?query=branch%3Abranch-4.4)                                 |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java17.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_java17.yml?query=branch%3Abranch-4.4)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java21.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_java21.yml?query=branch%3Abranch-4.4)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java25.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_java25.yml?query=branch%3Abranch-4.4)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_non_ansi.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_non_ansi.yml?query=branch%3Abranch-4.4)               |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_maven.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_maven.yml?query=branch%3Abranch-4.4)                     |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml?query=branch%3Abranch-4.4)       |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml?query=branch%3Abranch-4.4)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml/badge.svg?branch=branch-4.4)](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml?query=branch%3Abranch-4.4)           |
 | branch-4.3 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg?branch=branch-4.3)](https://github.com/apache/spark/actions/workflows/build_main.yml?query=branch%3Abranch-4.3)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java17.yml/badge.svg?branch=branch-4.3)](https://github.com/apache/spark/actions/workflows/build_java17.yml?query=branch%3Abranch-4.3)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java21.yml/badge.svg?branch=branch-4.3)](https://github.com/apache/spark/actions/workflows/build_java21.yml?query=branch%3Abranch-4.3)                   |

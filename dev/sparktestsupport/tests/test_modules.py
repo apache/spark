@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
+import os
 import unittest
+from pathlib import Path
 from unittest import mock
 
-from sparktestsupport import modules
+from sparktestsupport import SPARK_HOME, modules
+from sparktestsupport.shellutils import is_exe
 from sparktestsupport.utils import determine_modules_for_files, determine_modules_to_test
 
 
@@ -33,6 +36,62 @@ class IsIgnoredFileTests(unittest.TestCase):
     def test_sparktestsupport_source_is_not_ignored(self):
         self.assertFalse(modules.is_ignored_file("dev/sparktestsupport/modules.py"))
 
+    def test_agent_docs_are_ignored(self):
+        for path in [
+            ".agents/pr-workflow.md",
+            "sql/core/.agents/x.md",
+            ".ignore",
+            "python/.ignore",
+            "dev/agent_docs_lint.py",
+        ]:
+            self.assertTrue(modules.is_ignored_file(path), path)
+        self.assertFalse(modules.is_ignored_file("x.agents/y.md"))
+
+
+class ShellScriptTestGoalTests(unittest.TestCase):
+    def test_default_stage(self):
+        goal = modules.ShellScriptTestGoal("dev/example")
+        self.assertIs(goal.stage, modules.TestStage.PRE_BUILD)
+
+    def test_normalizes_and_hashes_equivalent_paths(self):
+        goal = modules.ShellScriptTestGoal("dev/example")
+        equivalents = (
+            modules.ShellScriptTestGoal(Path("dev/example")),
+            modules.ShellScriptTestGoal("./dev//example"),
+        )
+        self.assertEqual(goal.path, Path("dev/example"))
+        for equivalent in equivalents:
+            with self.subTest(goal=equivalent):
+                self.assertEqual(equivalent.path, goal.path)
+                self.assertEqual(equivalent, goal)
+        self.assertEqual(len({goal, *equivalents}), 1)
+
+    def test_rejects_invalid_stages(self):
+        for stage in ("post_build", "pre_build", None):
+            with self.subTest(stage=stage):
+                with self.assertRaises(TypeError) as error:
+                    modules.ShellScriptTestGoal("dev/example", stage)
+                self.assertEqual(str(error.exception), f"Unsupported test stage: {stage!r}")
+
+    def test_rejects_invalid_paths(self):
+        absolute_path = Path.cwd() / "example"
+        for path in (
+            str(absolute_path),
+            absolute_path,
+            "",
+            "  ",
+            ".",
+            "../example",
+            "dev/../example",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(ValueError) as error:
+                    modules.ShellScriptTestGoal(path)
+                self.assertEqual(
+                    str(error.exception),
+                    f"Shell script path must be relative to repo root: {str(path)!r}",
+                )
+
 
 class ModuleTests(unittest.TestCase):
     def test_duplicate_name_does_not_change_module_graph(self):
@@ -43,6 +102,46 @@ class ModuleTests(unittest.TestCase):
                 modules.Module("core", [dependency], [])
             self.assertEqual(modules.all_modules, [dependency, original])
             self.assertEqual(dependency.dependent_modules, set())
+
+    def test_shell_script_test_goals_accept_sequences(self):
+        goal = modules.ShellScriptTestGoal("dev/lint")
+        with mock.patch.object(modules, "all_modules", []):
+            for index, goals in enumerate(([goal], (goal,))):
+                with self.subTest(goals=goals):
+                    module = modules.Module(f"valid-{index}", [], [], shell_script_test_goals=goals)
+                    self.assertEqual(module.shell_script_test_goals, goals)
+
+    def test_shell_script_test_goals_require_a_sequence(self):
+        goal = modules.ShellScriptTestGoal("dev/lint")
+        invalid_goals = (
+            "dev/lint-java",
+            b"dev/lint-java",
+            goal,
+            (item for item in [goal]),
+        )
+        with mock.patch.object(modules, "all_modules", []):
+            dependency = modules.Module("dependency", [], [])
+            for goals in invalid_goals:
+                with self.subTest(goals=goals):
+                    with self.assertRaisesRegex(
+                        TypeError, "^invalid: shell_script_test_goals must be a sequence$"
+                    ):
+                        modules.Module("invalid", [dependency], [], shell_script_test_goals=goals)
+                    self.assertEqual(modules.all_modules, [dependency])
+                    self.assertEqual(dependency.dependent_modules, set())
+
+    def test_shell_script_test_goals_reject_invalid_items(self):
+        goal = modules.ShellScriptTestGoal("dev/lint")
+        with mock.patch.object(modules, "all_modules", []):
+            dependency = modules.Module("dependency", [], [])
+            for goals in (["dev/lint-java"], [goal, "dev/lint-java"]):
+                with self.subTest(goals=goals):
+                    with self.assertRaisesRegex(
+                        TypeError, "^invalid: expected ShellScriptTestGoal, got 'dev/lint-java'$"
+                    ):
+                        modules.Module("invalid", [dependency], [], shell_script_test_goals=goals)
+                    self.assertEqual(modules.all_modules, [dependency])
+                    self.assertEqual(dependency.dependent_modules, set())
 
 
 class ModuleDefinitionsTests(unittest.TestCase):
@@ -65,6 +164,12 @@ class ModuleDefinitionsTests(unittest.TestCase):
             for flag in module.build_profile_flags
         }
         self.assertEqual(set(modules.root.build_profile_flags), expected)
+
+    def test_shell_script_test_goals_are_executable(self):
+        for module in modules.all_modules:
+            for goal in module.shell_script_test_goals:
+                with self.subTest(module=module.name, goal=str(goal.path)):
+                    self.assertTrue(is_exe(os.path.join(SPARK_HOME, goal.path)))
 
     def test_streaming_kafka_does_not_match_sql_kafka(self):
         self.assertTrue(
@@ -95,3 +200,30 @@ class ModuleDefinitionsTests(unittest.TestCase):
                 )
                 self.assertNotIn(modules.root, modules_to_test)
                 self.assertNotIn(modules.streaming_kinesis_asl, modules_to_test)
+
+    def test_rust_sdk_changes_select_rust_sdk_module(self):
+        for filename in (
+            "sql/native/rust/src/lib.rs",
+            "examples/src/main/rust/native-data-source/src/lib.rs",
+            "sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.rust_sdk, changed_modules)
+                self.assertNotIn(modules.root, changed_modules)
+
+    def test_cargo_only_changes_select_only_rust_sdk_module(self):
+        for filename in (
+            "sql/native/rust/src/lib.rs",
+            "examples/src/main/rust/native-data-source/src/lib.rs",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertEqual({modules.rust_sdk}, changed_modules)
+
+    def test_non_rust_example_changes_select_examples_module(self):
+        changed_modules = determine_modules_for_files(["examples/src/main/scala/Example.scala"])
+        self.assertIn(modules.examples, changed_modules)
+
+    def test_sql_changes_do_not_select_rust_sdk_tests(self):
+        self.assertNotIn(modules.rust_sdk, determine_modules_to_test([modules.sql]))

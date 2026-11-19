@@ -53,23 +53,6 @@ abstract class EvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
 
-  /**
-   * Evaluates the UDFs over the input rows and returns the output rows: each input row's
-   * columns followed by its results, as unsafe rows that stay valid until the next call and do
-   * not reference buffers the evaluator releases, e.g. at task completion.
-   * Returns None to let the evaluator buffer the input rows and join them with the results of
-   * `evaluate`, which receives only the projected arguments.
-   *
-   * @param inputs the UDF arguments, which `argMetas` and `schema` refer to by position
-   */
-  protected def evaluateJoined(
-      funcs: Seq[(ChainedPythonFunctions, Long)],
-      argMetas: Array[Array[ArgumentMetadata]],
-      iter: Iterator[InternalRow],
-      inputs: Seq[Expression],
-      schema: StructType,
-      context: TaskContext): Option[Iterator[InternalRow]] = None
-
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new EvalPythonPartitionEvaluator
 
@@ -118,9 +101,6 @@ abstract class EvalPythonEvaluatorFactory(
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       }.toArray)
-
-      val joinedRows = evaluateJoined(pyFuncs, argMetas, iter, allInputs.toSeq, schema, context)
-      if (joinedRows.isDefined) return joinedRows.get
 
       val projection = MutableProjection.create(allInputs.toSeq, childOutput)
       projection.initialize(context.partitionId())

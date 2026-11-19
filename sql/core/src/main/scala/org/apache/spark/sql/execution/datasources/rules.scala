@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLeng
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.FileTypeColumnUsage
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -267,6 +268,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           "Schema may not be specified in a Create Table As Select (CTAS) statement")
 
         val analyzedQuery = query.get
+        checkNoUnknownFileTypeWrite(analyzedQuery.schema)
+        checkNoFileTypeInComparableColumns(analyzedQuery.schema, tableDesc)
         val normalizedTable =
           CreateTableHelper.normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
@@ -290,6 +293,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
+        checkFileTypeHasQualifier(tableDesc.schema)
+        checkNoFileTypeInComparableColumns(tableDesc.schema, tableDesc)
         CreateTableHelper.normalizeCreateTableWithoutQuery(c)
       }
 
@@ -302,6 +307,23 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
+
+  // FILE is not comparable, so it cannot be a partition, bucket, bucket sort or clustering column.
+  private def checkNoFileTypeInComparableColumns(
+      schema: StructType,
+      table: CatalogTable): Unit = {
+    def check(names: Seq[String], usage: FileTypeColumnUsage): Unit = names.foreach { name =>
+      schema.find(f => conf.resolver(f.name, name)).foreach { field =>
+        checkNoFileTypeInColumnUsage(Seq(field.name), field.dataType, usage)
+      }
+    }
+    check(table.partitionColumnNames, FileTypeColumnUsage.PartitionColumn)
+    table.bucketSpec.foreach { bucketSpec =>
+      check(bucketSpec.bucketColumnNames, FileTypeColumnUsage.BucketColumn)
+      check(bucketSpec.sortColumnNames, FileTypeColumnUsage.BucketSortColumn)
+    }
+    table.clusterBySpec.foreach(checkNoFileTypeClusteringColumn(schema, _, conf.resolver))
+  }
 }
 
 /**

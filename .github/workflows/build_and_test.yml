@@ -81,6 +81,7 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -123,13 +124,14 @@ jobs:
             # must run when either the Kubernetes support or the credential-aws module
             # (including its integration-tests module, mapped to credential-aws) changes.
             oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
-            sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            rust_sdk=`./dev/is-changed.py -m rust-sdk`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
             transpile=false
+            sparkr=false
             static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
@@ -145,6 +147,17 @@ jobs:
                   *transpile*) transpile=true; break ;;
                 esac
               done
+              # The scheduled builds cover SparkR. On PRs, run SparkR tests only when the files
+              # of the `sparkr` module or its Scala backend change, not when only its
+              # dependencies such as `hive` and `mllib` change.
+              for f in $changed_files; do
+                case "$f" in
+                  R/*|dev/spark-test-image/sparkr/*) sparkr=true; break ;;
+                  core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
+                  sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
+                  mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -156,7 +169,9 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java25=true
+            # The scheduled Java 25 builds cover the whole build. On PRs, run this job only
+            # when the native data source tests, which are skipped before Java 22, are affected.
+            java25=`./dev/is-changed.py -m "sql,connect"`
           else
             pyspark_periodic=false
             pyspark_connect_old_client=false
@@ -167,6 +182,7 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
+            rust_sdk=false
             buf=false
             ui=false
             docs=false
@@ -193,6 +209,7 @@ jobs:
               \"oidc-e2e\" : \"$oidc_e2e\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"rust-sdk\" : \"$rust_sdk\",
               \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
@@ -337,7 +354,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
+            included-tags: org.apache.spark.tags.DataSourceV2Test
+            comment: "- DSv2 tests"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest,org.apache.spark.tags.DataSourceV2Test
             comment: "- other tests"
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
@@ -441,6 +464,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       packages: write
     steps:
@@ -819,6 +843,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
@@ -877,6 +902,9 @@ jobs:
       with:
         java-version: ${{ inputs.java }}
         free-disk-space: container
+    - name: Agent instruction files check
+      if: hashFiles('dev/agent_docs_lint.py') != ''
+      run: python3.12 ./dev/agent_docs_lint.py --strict
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -1425,3 +1453,33 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  rust-sdk:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).rust-sdk == 'true'
+    name: Run Rust SDK tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The rust-version of the workspace. A fixed toolchain also keeps the new lints of a later
+      # clippy or rustdoc from failing a change that does not touch Rust, such as one to the header.
+      RUSTUP_TOOLCHAIN: '1.85'
+    steps:
+    - name: Bootstrap composite actions
+      uses: actions/checkout@v7
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
+      with:
+        ref: ${{ needs.precondition.outputs.head_sha }}
+    - name: Install Rust
+      run: |
+        rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update \
+          --component clippy,rustfmt
+    - name: Build, test, and lint the SDK and its examples
+      working-directory: sql/native/rust
+      run: |
+        cargo build --workspace --locked
+        cargo test --workspace --locked
+        cargo clippy --workspace --all-targets --locked -- -D warnings
+        cargo fmt --all -- --check
+        RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked

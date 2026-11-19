@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, LeafNode, LogicalPlan, MergeRows}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
@@ -48,9 +48,40 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       // For an Attribute used by the current LogicalPlan, if it is from its children,
       // we fix the nullable field by using the nullability setting of the corresponding
       // output Attribute from the children.
-      p.transformExpressions {
+      val newPlan = p.transformExpressions {
         case attr: Attribute if nullabilities.contains(attr.exprId) =>
           attr.withNullability(nullabilities(attr.exprId))
       }
+      newPlan match {
+        case m: MergeRows => widenOutputNullability(m)
+        case e: Expand => widenOutputNullability(e)
+        case _ => newPlan
+      }
+  }
+
+  // MergeRows derives the nullability of its new output attributes from the outputs of its
+  // instructions when MERGE is rewritten. The outputs may become nullable later, for instance,
+  // when HandleNullInputsForUDF makes a Scala UDF return null for null inputs, so widen the
+  // nullability of the output attributes accordingly, keeping their expression IDs.
+  private def widenOutputNullability(m: MergeRows): MergeRows = {
+    val outputs = m.outputs.map(_.toIndexedSeq)
+    val newOutput = m.output.zipWithIndex.map { case (attr, index) =>
+      attr.withNullability(attr.nullable || outputs.exists(output => output(index).nullable))
+    }
+    if (newOutput == m.output) m else m.copy(output = newOutput)
+  }
+
+  // Expand derives the nullability of its new output attributes from its projections when it is
+  // built, for instance, for grouping sets or UNPIVOT. The projections may become nullable later
+  // when this rule updates the attributes they reference, e.g., a column of a Dataset that an
+  // outer join makes nullable, so widen the nullability of the output attributes accordingly,
+  // keeping their expression IDs.
+  private def widenOutputNullability(e: Expand): Expand = {
+    val projections = e.projections.map(_.toIndexedSeq)
+    val newOutput = e.output.zipWithIndex.map { case (attr, index) =>
+      attr.withNullability(
+        attr.nullable || projections.exists(projection => projection(index).nullable))
+    }
+    if (newOutput == e.output) e else e.copy(output = newOutput)
   }
 }
