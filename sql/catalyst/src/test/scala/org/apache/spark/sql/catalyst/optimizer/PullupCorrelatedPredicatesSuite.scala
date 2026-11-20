@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, MapType, StringType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, MapType, StringType, TestUDT}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -127,11 +128,16 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       above: LogicalPlan => LogicalPlan = identity): (Option[Boolean], Boolean) = {
     val result = if (top.size == 1) top.head else CreateStruct(top)
     val subPlan = lower.groupBy(grouping: _*)(result.as("r"))
-    val plan = above(outer.select(others :+ ScalarSubquery(subPlan).as("sq"): _*)).analyze
+    countBugHandlingIn(above(outer.select(others :+ ScalarSubquery(subPlan).as("sq"): _*)))
+  }
+
+  // countBugHandling of the correlated scalar subquery with the output `r` in `query`.
+  private def countBugHandlingIn(query: LogicalPlan): (Option[Boolean], Boolean) = {
+    val plan = query.analyze
     val optimized = Optimize.execute(plan)
     comparePlans(Optimize.execute(optimized), optimized, false)
     val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
-      case s: ScalarSubquery if s.children.nonEmpty => s
+      case s: ScalarSubquery if s.children.nonEmpty && s.plan.output.head.name == "r" => s
     })
     assert(subqueries.size == 1)
     val countBugDomainJoin = subqueries.head.plan.exists {
@@ -309,8 +315,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       above = _.where($"a" > 1)) == inDecorrelation)
     // Another subquery of the operator, which a filter above on its alias can inline, but not
     // without such a filter; and likewise of a Project above, also through another alias and the
-    // children of a Union, which PushDownPredicates pushes into by position. A subquery that
-    // gives the same rows again does not matter.
+    // children of a Union, which PushDownPredicates pushes a filter into by position. A subquery
+    // that gives the same rows again does not matter.
     val limitedScalar = ScalarSubquery(testRelation2.select($"c").limit(1)).as("x")
     val doubleMaxScalar = ScalarSubquery(testRelation2.groupBy()(max($"d").as("m"))).as("x")
     val repeatableScalar = ScalarSubquery(testRelation2.groupBy()(max($"c").as("m"))).as("x")
@@ -331,13 +337,6 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         above = p => Union(first, p.select($"a", $"sq", other))) == inDecorrelation)
       assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
         above = p => Union(first, p.select($"a", $"sq", other)).where($"x" > 0)) == inLegacy)
-      // ReplaceExceptWithFilter can turn a filter of the right child into one of the left child.
-      val right = first.where($"x" > 0)
-      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
-        above = p => Except(p.select($"a", $"sq", other), right, isAll = false)) == inLegacy)
-      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
-        above = p => Except(p.select($"a", $"sq", other), first, isAll = false)) ==
-        inDecorrelation)
       // A join condition, which PushPredicateThroughJoin can push, but not a lateral subquery,
       // which stays in the right side of its join.
       assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
@@ -349,9 +348,38 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugHandling(correlated(max($"d")), others = Seq(repeatableScalar),
       above = _.where($"x" > 0)) == inDecorrelation)
-    // The subquery itself does not count, though a filter on it reaches it and its MAX of DOUBLEs
-    // may give another value.
-    assert(countBugHandling(correlated(max($"d")), above = _.where($"sq" > 0)) == inDecorrelation)
+    // A filter above on the alias of the subquery itself pushes a copy of the subquery into the
+    // outer input, which counts when it may give other rows, as with a MAX of DOUBLEs.
+    assert(countBugHandling(correlated(max($"d")), above = _.where($"sq" > 0)) == inLegacy)
+    assert(countBugHandling(correlated(max($"c")), above = _.where($"sq" > 0)) == inDecorrelation)
+    // In the condition of its own operator, the subquery itself does not count, though its MAX of
+    // DOUBLEs may give another value: the domain joins compute only the input of the operator.
+    val ownFilter = ScalarSubquery(correlated(max($"d")).groupBy()(count(Literal(1)).as("r")))
+    assert(countBugHandlingIn(testRelation.where(ownFilter === 1L)) == inDecorrelation)
+    // ReorderJoin can move a filter with the subquery above the other inputs of the inner joins
+    // around it, which then count, but not the inputs of joins that the filter is not over.
+    val sqFilter = ScalarSubquery(correlated(max($"c")).groupBy()(count(Literal(1)).as("r"))) === 1L
+    val f = LocalRelation($"f".int)
+    val crossed = testRelation.join(LocalRelation($"e".int)).where(sqFilter)
+    assert(countBugHandlingIn(crossed.join(f.limit(2), Inner, Some($"a" === $"f"))) == inLegacy)
+    assert(countBugHandlingIn(crossed.join(f, Inner, Some($"a" === $"f"))) == inDecorrelation)
+    assert(countBugHandlingIn(testRelation.where(sqFilter).join(f.limit(2), Inner,
+      Some($"a" === $"f"))) == inDecorrelation)
+    // Another correlated subquery of the operator, whose join to the outer input the domain joins
+    // compute again, counts when it may return another number of rows there, e.g. with a
+    // non-deterministic filter, but not when it returns one row.
+    // With rows, since an empty LocalRelation has at most no rows.
+    val twoRows = testRelation2.copy(data = Seq(InternalRow(1, 1.0), InternalRow(2, 2.0)))
+    val nonDeterministicRows =
+      ScalarSubquery(twoRows.where($"a" === $"c" && Rand(0) > 0.5).select($"d")).as("s1")
+    val oneRow = ScalarSubquery(testRelation2.where($"a" === $"c").groupBy()(max($"d").as("m")))
+    val deterministicRows = ScalarSubquery(twoRows.where($"a" === $"c").select($"d"))
+    assert(countBugHandling(correlated(max($"d")), others = Seq(nonDeterministicRows)) ==
+      inLegacy)
+    assert(countBugHandling(correlated(max($"d")), others = Seq(oneRow.as("s1"))) ==
+      inDecorrelation)
+    assert(countBugHandling(correlated(max($"d")), others = Seq(deterministicRows.as("s1"))) ==
+      inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.select($"a", $"sq", repeatableScalar).where($"x" > 0)) == inDecorrelation)
     // MIN, MAX, grouping and DISTINCT keep one of the values that compare equal, which one
@@ -365,13 +393,19 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         collated.groupBy($"a")($"a", max($"s").as("m")),
         collated.groupBy($"a")($"a", min($"s").as("m")),
         collated.groupBy($"a", $"s")($"a", $"s"),
+        collated.groupBy($"a", $"s")($"a", Upper($"s").as("u")),
         Distinct(collated.select($"a", $"s")),
         Intersect(collated.select($"a", $"s"), collated.select($"a", $"s"), isAll = false),
         Except(collated.select($"a", $"s"), collated.select($"a", $"s"), isAll = false)
     ).foreach { outer =>
       assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, outer)
     }
+    val udt = LocalRelation($"a".int, AttributeReference("v", new TestUDT.MyDenseVectorUDT())())
+    assert(countBugHandling(correlated(max($"d")),
+      outer = udt.groupBy($"a")($"a", max($"v").as("m"))) == inLegacy)
     Seq(collated.groupBy($"a")($"a", max($"a").as("m")),
+        // A grouping key that is not in the output.
+        collated.groupBy($"a", $"s")($"a"),
         collated.groupBy($"a", $"b")($"a", $"b"),
         Distinct(collated.select($"a", $"b")),
         Intersect(collated.select($"a", $"b"), collated.select($"a", $"b"), isAll = false)
