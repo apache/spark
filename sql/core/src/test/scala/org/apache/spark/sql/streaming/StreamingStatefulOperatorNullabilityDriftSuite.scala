@@ -32,11 +32,13 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 /**
  * Regression suite for stateful-operator nullability drift.
  *
- * Driver: `PropagateEmptyRelation` drops empty `Union` branches without a streaming
- * guard, so the surviving branch's per-column nullability becomes the Union's
- * nullability and propagates into a stateful operator above -- across microbatches or
- * restarts. New checkpoints keep the branches (SPARK-62057), so the Union scenarios write
- * their checkpoints with pruning on, as checkpoints of earlier versions still prune.
+ * Driver: `PropagateEmptyRelation` drops empty `Union` branches when
+ * `spark.sql.optimizer.propagateEmptyRelationCanPruneStreamingUnionChildren` is true, so the
+ * surviving branch's per-column nullability becomes the Union's nullability and propagates into
+ * a stateful operator above -- across microbatches or restarts. Checkpoints written before
+ * SPARK-62057 have no entry for the conf and are restored with it set to true. The scenarios
+ * that run through `runUnionBranchDropRestart`, the Complete-mode scenario and the existing-query
+ * scenario write their checkpoints with it set to true; the others keep the Union branches.
  *
  * Coverage:
  *   - New-query (default conf): originally-failing scenarios now complete cleanly.
@@ -79,7 +81,8 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
     (inputA, inputB, dfA, dfB)
   }
 
-  // Checkpoints of earlier versions record that PropagateEmptyRelation drops empty Union branches.
+  // Checkpoints written before SPARK-62057 have no entry for the conf and are restored with
+  // pruning on, so PropagateEmptyRelation drops their empty Union branches.
   private def withUnionBranchDrop(f: => Unit): Unit = withSQLConf(
     SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true")(f)
 
