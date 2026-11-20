@@ -165,18 +165,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Adds the CHAR/VARCHAR types of the V2 `columns` to the attributes of `output` with the same
-   * names. The query of a write does not have them, see `TableOutputResolver.applyColumnMetadata`.
-   * An expression stored with the table, such as a CHECK condition or a generation expression,
+   * names. `TableOutputResolver.applyColumnMetadata` removes them from the query of a write. An
+   * expression stored with the table, such as a CHECK condition or a generation expression,
    * resolved against the result pads a string literal compared with a CHAR column, as the write
-   * pads the stored values. A write that treats CHAR as STRING does not pad the values, so `output`
-   * is kept as it is: `ApplyCharTypePadding` skips such a write, but not an expression analyzed
-   * under the fixed settings of `StoredExpressionText`.
+   * pads the stored values. A write that treats CHAR as STRING does not pad the values, so the
+   * types are removed instead, also those of a query that reads a CHAR column and already matches
+   * the table: `ApplyCharTypePadding` skips such a write, but not an expression analyzed under the
+   * fixed settings of `StoredExpressionText`.
    */
   def withCharVarcharTypes(output: Seq[Attribute], columns: Array[Column]): Seq[Attribute] = {
     val conf = SQLConf.get
     // standardSemantics takes precedence over legacy charVarcharAsString.
     if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
-      output
+      output.map(a => a.withMetadata(cleanMetadata(a.metadata)))
     } else {
       val charVarcharColumns = columns.filter(c => hasCharVarchar(c.dataType()))
       output.map { a =>
