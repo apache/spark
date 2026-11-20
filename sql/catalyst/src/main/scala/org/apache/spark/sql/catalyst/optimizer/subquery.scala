@@ -761,7 +761,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * subquery of a LateralJoin, which stays in its right side; any other correlated scalar
    * subquery that may return more than one row and whose plan may give other rows, since its
    * single join can then fail where computed again; the subquery `exprId` in such an alias if its
-   * plan may give other rows, even where its result cannot change, such as a COUNT over a MAX; and
+   * plan may give other rows, even where its result cannot change, such as a COUNT over a MAX
+   * with a filter between; and
    * the subquery `exprId` in the conditions of inner joins that ReorderJoin reorders if one of
    * their inputs may give other rows. It computes these once for `root`. Of the
    * cases of LimitPushDown for a Project, the ones into a join and, for a LIMIT 1, through a
@@ -828,7 +829,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // ExtractFiltersAndInnerJoins flattens a whole chain of inner joins and filters from its top,
     // and a chain below has a part of its inputs and conditions, so checking only the top of each
     // chain, and going on in its inputs, gives the same conditions as checking every chain. For
-    // another join, it returns the join itself as the only input, which is not followed.
+    // another join, it returns the join itself as the only input; ReorderJoin does not reorder
+    // it, and its children are checked as those of any other node.
     def reorderedConditions(p: LogicalPlan): Seq[Expression] = p match {
       case ExtractFiltersAndInnerJoins(input, conditions) if input.size > 1 =>
         val own = if (conditions.exists(SubqueryExpression.hasCorrelatedSubquery) &&
@@ -895,26 +897,38 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // make such queries worse than before: where the outer input, or a join of another
         // subquery to it, may give other rows when computed again (see repeatableInput and
         // mayMoveIntoOuterInput), and for outer references that are not orderable, for which the
-        // domain joins fail. So does a subquery with a scalar Python or external UDF in an
-        // expression of an operator of its plan when the conditional evaluation of SPARK-61482 is
-        // off, since one in a value over no rows would then run for every outer row.
+        // domain joins fail. So does a subquery with a scalar Python or external UDF in the
+        // aggregate expressions of a correlated Aggregate without grouping expressions, whose
+        // values over no rows DecorrelateInnerQuery computes in the count bug branch, when the
+        // conditional evaluation of SPARK-61482 is off, since the UDF would then run for every
+        // outer row.
+        val legacyNestedAggregate =
+          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
-        lazy val onlyDefaultResultSelectsDecorrelation =
-          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
-            !domainJoinsWork ||
-            (!conf.getConf(
-              SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
-              sub.exists(_.expressions.exists(EvalOnlyWhen.hasLiftedUDF)))
+        lazy val onlyDefaultResultSelectsDecorrelation = legacyNestedAggregate ||
+          !domainJoinsWork ||
+          (!conf.getConf(
+            SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
+            sub.exists {
+              case a: Aggregate => correlatedUngroupedAggregate(a) &&
+                a.aggregateExpressions.exists(EvalOnlyWhen.hasLiftedUDF)
+              case _ => false
+            })
         lazy val lowerAggs = sub match {
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
           case _ => Nil
         }
+        lazy val correlatedLowerAggs = lowerAggs.filter(correlatedUngroupedAggregate)
         // The lower Aggregates that selected decorrelation before SPARK-60501, correlated or not.
         def defaultResultCountBugAgg(a: Aggregate): Boolean =
           a.groupingExpressions.isEmpty && hasDefaultResult(a)
         def mayHaveCountBugAgg(a: Aggregate): Boolean = defaultResultCountBugAgg(a) ||
           (correlatedUngroupedAggregate(a) && !onlyDefaultResultSelectsDecorrelation)
+        // Whether no lower Aggregate selects decorrelation as before SPARK-60501, which is where
+        // countBugResult below and DomainJoin.keepLimitAbove apply.
+        lazy val noDefaultResultCountBugAgg =
+          sub.isInstanceOf[Aggregate] && !lowerAggs.exists(defaultResultCountBugAgg)
         // Whether this rule handles the count bug at all, in either place.
         val handleCountBug = conf.decorrelateInnerQueryEnabled &&
           !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING)
@@ -926,10 +940,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // subquery.
         val countBugResult = if (mayHaveCountBugOld.isDefined) {
           countBugResultOld
-        } else if (handleCountBug &&
-            !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) &&
-            sub.isInstanceOf[Aggregate] && !lowerAggs.exists(defaultResultCountBugAgg) &&
-            lowerAggs.exists(correlatedUngroupedAggregate)) {
+        } else if (handleCountBug && !legacyNestedAggregate && noDefaultResultCountBugAgg &&
+            correlatedLowerAggs.nonEmpty) {
           RewriteCorrelatedScalarSubquery.evalSubqueryOnEmptyCorrelatedInput(sub)
         } else {
           None
@@ -959,10 +971,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case _ => false
         })
         val (decorrelatedPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
-        // With handleCountBugInDecorrelate, this says that the count bug is handled in
-        // DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
-        lazy val noDefaultResultCountBugAgg =
-          sub.isInstanceOf[Aggregate] && !lowerAggs.exists(defaultResultCountBugAgg)
+        // With handleCountBugInDecorrelate, noDefaultResultCountBugAgg says that the count bug is
+        // handled in DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
         val newPlan = if (handleCountBugInDecorrelate && noDefaultResultCountBugAgg) {
           decorrelatedPlan.transform { case d: DomainJoin => d.copy(keepLimitAbove = true) }
         } else {
@@ -1021,24 +1031,24 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 
   private def rewriteAll(plan: LogicalPlan, mayMove: ExprId => Boolean): LogicalPlan =
     plan.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-    case j: LateralJoin =>
-      val newPlan = rewriteSubQueries(j, mayMove)
-      // Since a lateral join's output depends on its left child output and its lateral subquery's
-      // plan output, we need to trim the domain attributes added to the subquery's plan output
-      // to preserve the original output of the join.
-      if (!j.sameOutput(newPlan)) {
-        Project(j.output, newPlan)
-      } else {
-        newPlan
-      }
-    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
-      rewriteSubQueries(j, mayMove)
-    // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
-    case q: UnaryNode =>
-      rewriteSubQueries(q, mayMove)
-    case s: SupportsSubquery =>
-      rewriteSubQueries(s, mayMove)
-  }
+      case j: LateralJoin =>
+        val newPlan = rewriteSubQueries(j, mayMove)
+        // Since a lateral join's output depends on its left child output and its lateral subquery's
+        // plan output, we need to trim the domain attributes added to the subquery's plan output
+        // to preserve the original output of the join.
+        if (!j.sameOutput(newPlan)) {
+          Project(j.output, newPlan)
+        } else {
+          newPlan
+        }
+      case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+        rewriteSubQueries(j, mayMove)
+      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+      case q: UnaryNode =>
+        rewriteSubQueries(q, mayMove)
+      case s: SupportsSubquery =>
+        rewriteSubQueries(s, mayMove)
+    }
 }
 
 /**
@@ -1219,7 +1229,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * attributes of the input, by expression ID), or None if it cannot. For a
    * [[DeclarativeAggregate]], the expression applies its update expressions once to its initial
    * values, and then its evaluate expression; a FILTER keeps the initial values when its condition
-   * does not hold. COLLECT_LIST and COLLECT_SET over literal values are computed directly. DISTINCT
+   * does not hold. COLLECT_LIST and COLLECT_SET are computed directly where their arguments over
+   * the row are literals, e.g. `m + 1` or `struct(m)` for a value `m` of the row. DISTINCT
    * does not change the result over a single row. Returns None for other functions, and if the
    * result does not keep the data type and nullability of `ae`. A result that depends on a
    * non-deterministic argument or FILTER is not a literal, and is not taken by the caller.
@@ -1244,15 +1255,18 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           case None => updated
         }
         Some(bindBuffer(f.evaluateExpression, filtered))
-      case c @ (_: CollectList | _: CollectSet)
-          if c.children.forall(_.isInstanceOf[Literal]) &&
-            filter.forall(_.isInstanceOf[Literal]) =>
-        val agg = c.asInstanceOf[TypedImperativeAggregate[_]]
-          .withNewMutableAggBufferOffset(0).withNewInputAggBufferOffset(0)
-        val buffer = new GenericInternalRow(1)
-        agg.initialize(buffer)
-        if (filter.forall(_.eval() == true)) agg.update(buffer, EmptyRow)
-        Some(Literal.create(agg.eval(buffer), agg.dataType))
+      case c @ (_: CollectList | _: CollectSet) if filter.forall(_.isInstanceOf[Literal]) =>
+        val args = c.children.map(tryEvalExpr)
+        if (args.forall(_.isInstanceOf[Literal])) {
+          val agg = c.withNewChildren(args).asInstanceOf[TypedImperativeAggregate[_]]
+            .withNewMutableAggBufferOffset(0).withNewInputAggBufferOffset(0)
+          val buffer = new GenericInternalRow(1)
+          agg.initialize(buffer)
+          if (filter.forall(_.eval() == true)) agg.update(buffer, EmptyRow)
+          Some(Literal.create(agg.eval(buffer), agg.dataType))
+        } else {
+          None
+        }
       case _ => None
     }
     result.filter(r => r.dataType == ae.dataType && (ae.nullable || !r.nullable))

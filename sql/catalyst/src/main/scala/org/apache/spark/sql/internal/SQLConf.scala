@@ -7037,7 +7037,8 @@ object SQLConf {
         "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true. When false, it also makes " +
         "a correlated scalar subquery over a nested aggregate without GROUP BY whose result " +
         "for such rows is not computed while the query is optimized, and that has a scalar " +
-        "Python or external UDF anywhere in its plan, keep the handling before SPARK-60501.")
+        "Python or external UDF in the aggregate expressions of a correlated aggregate without " +
+        "GROUP BY, keep the handling before SPARK-60501.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

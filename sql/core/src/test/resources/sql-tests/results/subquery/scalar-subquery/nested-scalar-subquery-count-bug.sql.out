@@ -796,6 +796,104 @@ struct<a1:int,a:bigint>
 
 
 -- !query
+select a1, ( select count(*) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select sum(m) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1 from t1
+where ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) = 1
+order by a1
+-- !query schema
+struct<a1:int>
+-- !query output
+0
+1
+
+
+-- !query
+select sum(( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) )) a from t1
+-- !query schema
+struct<a:bigint>
+-- !query output
+2
+
+
+-- !query
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:int>
+-- !query output
+0	7
+1	7
+
+
+-- !query
+set spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled	false
+
+
+-- !query
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:int>
+-- !query output
+0	7
+1	7
+
+
+-- !query
+reset spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select a1, ( select collect_list(m + 1) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<int>>
+-- !query output
+0	[4]
+1	[]
+
+
+-- !query
+select a1, ( select collect_list(struct(m)) from
+  (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<struct<m:int>>>
+-- !query output
+0	[{"m":3}]
+1	[{"m":null}]
+
+
+-- !query
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true
 -- !query schema
 struct<key:string,value:string>

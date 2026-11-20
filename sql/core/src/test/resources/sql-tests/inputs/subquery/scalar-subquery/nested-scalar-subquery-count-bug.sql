@@ -295,6 +295,43 @@ select a1, ( select c + (select max(c2) from t3 where t3.c1 = c or t3.c1 = c - 2
   (select count(*) c from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
+-- with the correlation below a UNION ALL, for which decorrelation adds a domain join
+select a1, ( select count(*) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1;
+
+select a1, ( select sum(m) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1;
+
+-- with the subquery in a WHERE clause and in an aggregate function
+select a1 from t1
+where ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) = 1
+order by a1;
+
+select sum(( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) )) a from t1;
+
+-- with a grouped top aggregate that returns only a constant, also when constant folding is not
+-- prevented for the count bug
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1;
+
+set spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled=false;
+
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1;
+
+reset spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled;
+
+-- with COLLECT_LIST over a value computed from the result of the lower aggregate, which skips
+-- the NULL, and over a struct of it, which collects the struct
+select a1, ( select collect_list(m + 1) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select collect_list(struct(m)) from
+  (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
 -- with the legacy behavior, which handles the count bug in decorrelation only if a lower
 -- aggregate without GROUP BY has a function with a default result, such as COUNT
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true;

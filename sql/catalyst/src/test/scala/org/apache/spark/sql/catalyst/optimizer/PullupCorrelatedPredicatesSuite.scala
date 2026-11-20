@@ -317,8 +317,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     val groupedOuter = testRelation.groupBy($"a")($"a", sum($"a").as("s"))
     assert(countBugHandling(filtered(max($"d")), outer = groupedOuter) == inDecorrelation)
-    // A SUM or AVG of decimals becomes NULL on an overflow that depends on the order, unless in
-    // ANSI mode.
+    // An AVG of an ANSI interval gives the same value again (or fails on an overflow).
     val intervals = LocalRelation($"a".int, AttributeReference("i", DayTimeIntervalType())())
     assert(countBugHandling(filtered(max($"d")),
       outer = intervals.groupBy($"a")($"a", avg($"i").as("m"))) == inDecorrelation)
@@ -330,6 +329,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       val outer = input.groupBy($"a")($"a", f.toAggregateExpression().as("s"))
       assert(countBugHandling(filtered(max($"d")), outer = outer) == inLegacy, f)
     }
+    // A SUM or AVG of decimals becomes NULL on an overflow that depends on the order, unless in
+    // ANSI mode.
     val decimals = LocalRelation($"a".int, $"x".decimal(10, 2))
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
@@ -477,6 +478,17 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
             enabled.toString) {
         assert(countBugHandling(filtered(pyUdf)) ==
           (if (enabled) inDecorrelation else inLegacy), enabled)
+        // Not a UDF that does not compute a value over no rows: one over the input of the lower
+        // aggregate or over its result, between the aggregates.
+        val udfOnD = PythonUDF("udf", null, LongType, Seq($"d"), PythonEvalType.SQL_BATCHED_UDF,
+          udfDeterministic = true)
+        val udfBelow = testRelation2.where($"a" === $"c" && udfOnD > 0).groupBy()(
+          max($"d").as("s")).where($"s" > 0)
+        assert(countBugHandling(udfBelow) == inDecorrelation, enabled)
+        val udfOnS = PythonUDF("udf", null, LongType, Seq($"s"), PythonEvalType.SQL_BATCHED_UDF,
+          udfDeterministic = true)
+        assert(countBugHandling(filtered(max($"d")).select(udfOnS.as("s"))) == inDecorrelation,
+          enabled)
       }
     }
     assert(countBugHandling(filtered(max($"d")), others = Seq($"a"),
@@ -610,6 +622,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(lowerMax,
       Seq(CollectList($"s", ignoreNulls = false).toAggregateExpression(false, Some($"s" > 1))))
       == Some("[]"))
+    // And over arguments computed over the row, which skip the NULL or collect a struct of it.
+    assert(countBugResult(lowerMax, Seq(collectList($"s" + 1))) == Some("[]"))
+    assert(countBugResult(lowerMax, Seq(collectList(CreateStruct(Seq($"s"))))) ==
+      Some("[[null]]"))
     // An outer reference between the aggregates, here in a Project, does not change the rows,
     // only values, which are not computed (see below), so it does not matter for a COUNT(*).
     assert(countBugResult(lowerMax.select(($"s" + $"b").as("s"))) == Some("1"))
@@ -632,6 +648,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugResult(failing, Seq(sum($"t"))).isEmpty)
       assert(countBugHandling(failing, Seq(sum($"t"))) == inDecorrelation)
       assert(countBugResult(failing, grouping = Seq($"t")).isEmpty)
+      assert(countBugResult(failing, Seq(collectList($"t"))).isEmpty)
       assert(countBugHandling(failing, grouping = Seq($"t")) == inDecorrelation)
     }
     // Neither is it for a filter between the aggregates, a value over an outer reference, a

@@ -1511,6 +1511,199 @@ Sort [a1#x ASC NULLS FIRST], true
 
 
 -- !query
+select a1, ( select count(*) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x && a1#x] AS a#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(x#x) AS m#x]
+   :           +- SubqueryAlias __auto_generated_subquery_name
+   :              +- Union false, false
+   :                 :- Project [b2#x AS x#x]
+   :                 :  +- Filter (b1#x = outer(a1#x))
+   :                 :     +- SubqueryAlias spark_catalog.default.t2
+   :                 :        +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                 :           +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                 :              +- LocalRelation [col1#x, col2#x]
+   :                 +- Project [c2#x]
+   :                    +- Filter (c1#x = outer(a1#x))
+   :                       +- SubqueryAlias spark_catalog.default.t3
+   :                          +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+   :                             +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                                +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select a1, ( select sum(m) from (select max(x) m from
+  (select b2 x from t2 where t2.b1 = t1.a1 union all select c2 from t3 where t3.c1 = t1.a1)) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x && a1#x] AS a#xL]
+   :  +- Aggregate [sum(m#x) AS sum(m)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(x#x) AS m#x]
+   :           +- SubqueryAlias __auto_generated_subquery_name
+   :              +- Union false, false
+   :                 :- Project [b2#x AS x#x]
+   :                 :  +- Filter (b1#x = outer(a1#x))
+   :                 :     +- SubqueryAlias spark_catalog.default.t2
+   :                 :        +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                 :           +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                 :              +- LocalRelation [col1#x, col2#x]
+   :                 +- Project [c2#x]
+   :                    +- Filter (c1#x = outer(a1#x))
+   :                       +- SubqueryAlias spark_catalog.default.t3
+   :                          +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+   :                             +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                                +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select a1 from t1
+where ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) = 1
+order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x]
+   +- Filter (scalar-subquery#x [a1#x] = cast(1 as bigint))
+      :  +- Aggregate [count(1) AS count(1)#xL]
+      :     +- SubqueryAlias __auto_generated_subquery_name
+      :        +- Aggregate [max(b2#x) AS m#x]
+      :           +- Filter (outer(a1#x) = b1#x)
+      :              +- SubqueryAlias spark_catalog.default.t2
+      :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+      :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+      :                       +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+            +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select sum(( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) )) a from t1
+-- !query analysis
+Aggregate [sum(scalar-subquery#x [a1#x]) AS a#xL]
+:  +- Aggregate [count(1) AS count(1)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Aggregate [max(b2#x) AS m#x]
+:           +- Filter (outer(a1#x) = b1#x)
+:              +- SubqueryAlias spark_catalog.default.t2
+:                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+:                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias spark_catalog.default.t1
+   +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+      +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#x]
+   :  +- Aggregate [m#x], [7 AS 7#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(b2#x) AS m#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+set spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled,Some(false))
+
+
+-- !query
+select a1, ( select 7 from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#x]
+   :  +- Aggregate [m#x], [7 AS 7#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(b2#x) AS m#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+reset spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled
+-- !query analysis
+ResetCommand spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled
+
+
+-- !query
+select a1, ( select collect_list(m + 1) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#x]
+   :  +- Aggregate [collect_list((m#x + 1), 0, 0, true) AS collect_list((m + 1))#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(b2#x) AS m#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select a1, ( select collect_list(struct(m)) from
+  (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#x]
+   :  +- Aggregate [collect_list(struct(m, m#x), 0, 0, true) AS collect_list(struct(m))#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(b2#x) AS m#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true
 -- !query analysis
 SetCommand (spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior,Some(true))
