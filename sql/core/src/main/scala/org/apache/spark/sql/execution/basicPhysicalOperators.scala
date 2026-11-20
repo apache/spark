@@ -349,8 +349,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * generated at its position when the difference is observable:
    *
    *  - With `spark.sql.optimizer.evaluateNotNullChecksInOrder`, before a conjunct that
-   *    `placement` moves the checks before, the checks that it allows at their position, see
-   *    `notNullCheckPlacement` (SPARK-60329).
+   *    `placement` moves the checks before, the pending checks up to the first one that it does
+   *    not allow at its position, see `notNullCheckPlacement` (SPARK-60329). A check after that
+   *    one stays lazy too: generated before it, it could drop a row on which the earlier check
+   *    raises an error, as `And.eval` does.
    *    Such a check only drops a row before an error the conjunct raises on it, as `And.eval`
    *    does. With the config, `InferFiltersFromConstraints` places an inferred check just before
    *    the first conjunct at which the conjuncts so far imply it, so it does not load its column
@@ -387,7 +389,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     } else if (afterNullable && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
       pending
     } else if (placement.exists(_.movesChecks(k))) {
-      pending.filter { case (_, idx) => placement.get.atPosition(idx) }
+      pending.takeWhile { case (_, idx) => placement.get.atPosition(idx) }
     } else {
       Nil
     }
