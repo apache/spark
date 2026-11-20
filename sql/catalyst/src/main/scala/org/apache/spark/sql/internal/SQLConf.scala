@@ -1259,8 +1259,9 @@ object SQLConf {
     buildConf("spark.sql.join.sortMergeAsOfJoin.cursorScan.enabled")
       .internal()
       .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
-        "the join is backward or forward, has no residual join condition, and its as-of " +
-        "condition compares the two sort keys, left one first and of the same type. Other " +
+        "the join is backward or forward, and its as-of condition compares the two sort " +
+        "keys, left one first and of the same type. One tolerance bound on the right key, " +
+        "such as r >= l - 10, can follow it or be the whole residual join condition. Other " +
         "joins, and joins on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type " +
         "keys, buffer each right-side group and scan the buffer again for every left row.")
       .version("4.4.0")

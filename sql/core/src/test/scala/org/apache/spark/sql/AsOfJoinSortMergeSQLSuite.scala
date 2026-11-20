@@ -2670,6 +2670,205 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("cursor scan: a tolerance bound in ON returns the closest quote within the bound") {
+    // Key 'a' has quotes at 10, 20, 30, 38, 40, 42 and 50, and the tolerance is 3. Each trade of
+    // key 'a' is inside, at or past the tolerance from its closest quote, or matches one
+    // exactly. Key 'b' has no quotes, 'c' has no trades, and 'd' has only a NULL quote time.
+    val trades =
+      """VALUES (1, 'a', 8), (2, 'a', 12), (3, 'a', 23), (4, 'a', 27), (5, 'a', 29), (6, 'a', 34),
+        |  (7, 'a', 40), (8, 'a', 47), (9, 'a', 53), (10, 'a', NULL), (11, 'b', 5), (12, 'd', 5),
+        |  (13, NULL, 10) AS t(id, k, ts)""".stripMargin
+    val quotes =
+      """VALUES ('a', NULL, 'a_null'), ('a', 10, 'q10'), ('a', 20, 'q20'), ('a', 30, 'q30'),
+        |  ('a', 38, 'q38'), ('a', 40, 'q40'), ('a', 42, 'q42'), ('a', 50, 'q50'),
+        |  ('c', 1, 'c1'), ('d', NULL, 'd_null'), (NULL, 10, 'null key')
+        |  AS q(k, ts, tag)""".stripMargin
+    for {
+      (direction, inclusiveOp, strictOp, sign) <-
+        Seq(("backward", ">=", ">", "-"), ("forward", "<=", "<", "+"))
+      exact <- Seq(true, false)
+      inclusive <- Seq(true, false)
+      joinType <- Seq("INNER", "LEFT")
+      ansi <- Seq(true, false)
+    } {
+      // The matches of trades 1 to 9, by id.
+      val (inside, atTolerance, exactMatch) = direction match {
+        // 12 is 2 after 10. 23 and 53 are 3 after 20 and 50. 40 is 2 after 38.
+        case "backward" => (Map(2 -> "q10"), Map(3 -> "q20", 9 -> "q50"), "q38")
+        // 8 and 29 are 2 and 1 before 10 and 30. 27 and 47 are 3 before 30 and 50. 40 is 2
+        // before 42. 23 keeps 30 as its closest quote but fails the bound, so 27 checks the
+        // kept quote again.
+        case _ => (Map(1 -> "q10", 5 -> "q30"), Map(4 -> "q30", 8 -> "q50"), "q42")
+      }
+      val found = inside ++ (if (inclusive) atTolerance else Map.empty) +
+        (7 -> (if (exact) "q40" else exactMatch))
+      val expected = (1 to 13).flatMap { id =>
+        found.get(id) match {
+          case Some(tag) => Some(Row(id, tag))
+          case None if joinType == "LEFT" => Some(Row(id, null))
+          case None => None
+        }
+      }
+      val matchOp = if (exact) inclusiveOp else strictOp
+      // The bound compares the quote time first, so it uses the operator of the direction too.
+      val boundOp = if (inclusive) inclusiveOp else strictOp
+      withClue(s"t.ts $matchOp q.ts ON q.ts $boundOp t.ts $sign 3, $joinType, ANSI $ansi: ") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          checkCursorScanWithNullOnKeys(
+            sql(
+              s"""
+                 |SELECT t.id, q.tag
+                 |FROM $trades
+                 |$joinType ASOF JOIN $quotes
+                 |  MATCH_CONDITION (t.ts $matchOp q.ts)
+                 |  ON t.k = q.k AND q.ts $boundOp t.ts $sign 3
+                 |""".stripMargin),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("cursor scan: a tolerance bound in ON on BIGINT, DATE and TIMESTAMP keys returns the " +
+      "closest quote within the bound") {
+    // The trade keys are 10 and 20 and the quote keys 7, 13, 16 and 24, in the unit of the
+    // tolerance 3. So 10 matches 7 backward and 13 forward, both at the tolerance, and 20 is 4
+    // from its closest quotes, past the tolerance. There are no ON keys.
+    Seq(
+      ("CAST(n AS BIGINT)", "3"),
+      ("date_add(DATE'2024-01-01', n)", "INTERVAL '3' DAY"),
+      // A whole number of days.
+      ("date_add(DATE'2024-01-01', n)", "3"),
+      ("add_months(DATE'2024-01-01', n)", "INTERVAL '3' MONTH"),
+      ("TIMESTAMP'2024-01-01 00:00:00' + make_dt_interval(0, 0, 0, n)", "INTERVAL '3' SECOND"),
+      ("TIMESTAMP_NTZ'2024-01-01 00:00:00' + make_dt_interval(0, 0, 0, n)",
+        "INTERVAL '3' SECOND"),
+      ("TIMESTAMP'2024-01-01 00:00:00' + make_ym_interval(0, n)", "INTERVAL '3' MONTH")
+    ).foreach { case (key, tolerance) =>
+      Seq(("backward", ">=", "-", 7), ("forward", "<=", "+", 13)).foreach {
+        case (direction, op, sign, tag) =>
+          withClue(s"$key, $direction: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT t.id, q.tag
+                   |FROM (SELECT n AS id, $key AS ts FROM VALUES (10), (20) AS v(n)) t
+                   |LEFT ASOF JOIN
+                   |  (SELECT n AS tag, $key AS ts FROM VALUES (7), (13), (16), (24) AS v(n)) q
+                   |  MATCH_CONDITION (t.ts $op q.ts)
+                   |  ON q.ts $op t.ts $sign $tolerance
+                   |""".stripMargin),
+              Row(10, tag) :: Row(20, null) :: Nil)
+          }
+      }
+    }
+  }
+
+  test("cursor scan: ON conditions other than one tolerance bound keep the buffered scan") {
+    // The trade at 10 has v = 5. Quotes 3, 6 and 8 come before it, and 12 and 17 after it.
+    Seq(
+      // These bounds keep quotes far enough away. The closest quote fails them, while a farther
+      // one passes.
+      ("t.ts >= q.ts", "q.ts <= t.ts - 5", "q3"),
+      ("t.ts <= q.ts", "q.ts >= t.ts + 5", "q17"),
+      // Quote 8 is inside the tolerance but fails the second part. Quote 6 passes both.
+      ("t.ts >= q.ts", "q.ts >= t.ts - 5 AND q.v > t.v", "q6"),
+      // A bound on a column the join does not sort on. Quote 8 fails it, while quote 6 passes.
+      ("t.ts >= q.ts", "q.v >= t.ts - 5", "q6"),
+      // A tolerance bound written with the limit first, or as a distance.
+      ("t.ts >= q.ts", "t.ts - 5 <= q.ts", "q8"),
+      ("t.ts >= q.ts", "t.ts - q.ts <= 5", "q8")
+    ).foreach { case (matchCondition, on, tag) =>
+      withClue(s"$matchCondition ON $on: ") {
+        checkBufferedScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 10, 5) AS t(id, ts, v)
+               |LEFT ASOF JOIN VALUES (3, 9, 'q3'), (6, 9, 'q6'), (8, 1, 'q8'), (12, 9, 'q12'),
+               |  (17, 9, 'q17') AS q(ts, v, tag)
+               |  MATCH_CONDITION ($matchCondition)
+               |  ON $on
+               |""".stripMargin),
+          Row(1, tag) :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: a DOUBLE ON bound with an infinite or NaN limit returns the closest quote " +
+      "within the bound") {
+    // Spark orders NaN above +Infinity, in the sort and in the comparisons. So a limit that is
+    // NaN, such as +Infinity - Infinity, still passes the quotes at one end of the order.
+    val inf = "CAST('Infinity' AS DOUBLE)"
+    val negInf = "CAST('-Infinity' AS DOUBLE)"
+    val nan = "CAST('NaN' AS DOUBLE)"
+    // (operator, sign, tolerance, the tags of trades +Infinity, -Infinity, NaN and 2.0)
+    Seq(
+      ("<=", "+", inf, Seq("pinf", "ninf", "nan", "pinf")),
+      ("<=", "+", negInf, Seq("pinf", "ninf", "nan", null)),
+      (">=", "-", inf, Seq(null, "ninf", "nan", "one")),
+      (">=", "-", negInf, Seq("pinf", null, "nan", null))
+    ).foreach { case (op, sign, tolerance, tags) =>
+      withClue(s"t.k $op q.k ON q.k $op t.k $sign $tolerance: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, $inf), (2, $negInf), (3, $nan), (4, 2.0D) AS t(id, k)
+               |LEFT ASOF JOIN VALUES ($negInf, 'ninf'), (1.0D, 'one'), ($inf, 'pinf'),
+               |  ($nan, 'nan') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON q.k $op t.k $sign $tolerance
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+  }
+
+  test("cursor scan: an ON tolerance limit that overflows fails both scans under ANSI and " +
+      "matches nothing without ANSI") {
+    // Forward adds the tolerance to the trade time, and backward subtracts it.
+    Seq(
+      ("<=", "+", Long.MaxValue - 1, Long.MaxValue, 0L),
+      (">=", "-", Long.MinValue + 1, Long.MinValue, Long.MaxValue)
+    ).foreach { case (op, sign, tradeTs, quoteTs, farSide) =>
+      def query(quotes: String): DataFrame = sql(
+        s"""
+           |SELECT t.ts, q.ts
+           |FROM VALUES (${tradeTs}L) AS t(ts)
+           |LEFT ASOF JOIN VALUES $quotes AS q(ts)
+           |  MATCH_CONDITION (t.ts $op q.ts)
+           |  ON q.ts $op t.ts $sign 10
+           |""".stripMargin)
+      withClue(s"t.ts $op q.ts: ") {
+        // The quote passes the comparison, so both scans evaluate the limit.
+        for {
+          cursorScan <- Seq(false, true)
+          codegen <- Seq(false, true)
+        } {
+          withClue(s"cursor scan $cursorScan, codegen $codegen: ") {
+            withSQLConf(
+                SQLConf.ANSI_ENABLED.key -> "true",
+                SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+              val e = intercept[RuntimeException](query(s"(${quoteTs}L)").collect())
+              assert(e.asInstanceOf[SparkThrowable].getCondition == "ARITHMETIC_OVERFLOW", e)
+            }
+          }
+        }
+        // Without ANSI, the limit wraps around, so the quote is past it.
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          checkCursorScan(query(s"(${quoteTs}L)"), Row(tradeTs, null) :: Nil)
+        }
+        // No quote passes the comparison, so neither scan evaluates the limit.
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkCursorScanWithNullOnKeys(
+            query(s"(CAST(NULL AS BIGINT)), (${farSide}L)"), Row(tradeTs, null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("cursor scan: tuple, STRUCT and mixed type MATCH_CONDITIONs keep the buffered scan") {
     checkBufferedScan(
       sql(
