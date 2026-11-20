@@ -1059,6 +1059,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select * from (select x, x from t union all select x, x from t)
+|> set x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 76,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
 table t
 |> set x = 1 as z
 -- !query analysis
@@ -1442,6 +1464,51 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 1,
     "stopIndex" : 32,
     "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x from t union all select x, x from t)
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 77,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "select * from (select x, x, x from t union all select x, x, x from t)\n|> drop x\n|> eval x = 1"
   } ]
 }
 
