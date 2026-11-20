@@ -588,8 +588,9 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
-  // An earlier version kept the rows of an input without its own watermark out of the V4 index.
-  // Outer joins would never emit them, while inner and left semi joins still find them.
+  // An earlier version, like the legacy mode, kept the rows of an input without its own watermark
+  // out of the V4 index. Outer joins would never emit them, while inner and left semi joins still
+  // find them.
   for (joinType <- Seq("left_outer", "right_outer", "full_outer", "inner", "left_semi")) {
     test(s"V4 restart from an older checkpoint for an input without its own watermark, $joinType") {
       withJoinConf(4) {
@@ -611,27 +612,33 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
                 "rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
               joinType).select($"leftKey"))
           }
-          testStream(joined)(
-            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-            AddData(stateInput, (1, 5L)),
-            CheckNewAnswer(),
-            StopStream)
-          removeIndexVersion(checkpoint)
-          testStream(joined)(
-            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-            AddData(watermarkInput, (1, 8L)),
-            if (joinType.endsWith("outer")) {
-              ExpectFailure[AnalysisException] { e =>
-                val (side, column) =
-                  if (joinType == "right_outer") ("right", "rightTime") else ("left", "leftTime")
-                checkError(
-                  e.asInstanceOf[AnalysisException],
-                  condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-                  parameters = Map("side" -> side, "column" -> s"`$column`"))
-              }
-            } else {
-              CheckNewAnswer(Row(1))
+          // The legacy mode stores the row of the input without a watermark out of the index, and
+          // records index version 0.
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              AddData(stateInput, (1, 5L)),
+              CheckNewAnswer(),
+              StopStream)
+          }
+          assert(indexVersion(checkpoint) === Some("0"))
+          val checks = if (joinType.endsWith("outer")) {
+            Seq(ExpectFailure[AnalysisException] { e =>
+              val (side, column) =
+                if (joinType == "right_outer") ("right", "rightTime") else ("left", "leftTime")
+              checkError(
+                e.asInstanceOf[AnalysisException],
+                condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                parameters = Map("side" -> side, "column" -> s"`$column`"))
             })
+          } else {
+            // A left semi join emits the left row once.
+            Seq(CheckNewAnswer(Row(1)), AddData(watermarkInput, (1, 9L)),
+              if (joinType == "inner") CheckNewAnswer(Row(1)) else CheckNewAnswer())
+          }
+          testStream(joined)(Seq(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(watermarkInput, (1, 8L))) ++ checks: _*)
         }
       }
     }
