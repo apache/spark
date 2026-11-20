@@ -4403,17 +4403,20 @@ object SQLConf {
     buildConf("spark.sql.streaming.join.stateFormatV4.indexVersion")
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
-        "it evicts by a range condition. 0: by the event time of the input, as in 4.4 and " +
-        "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false, " +
-        "keeping the rows of an input without an event time out of the index. 1: by the column " +
-        "that the default mode evicts the input by, which is the event time for an input bounded " +
-        "only through a column cast to TIMESTAMP. A streaming query keeps the version recorded " +
-        "in its checkpoint, and one restarted from a checkpoint without it uses 0. With 0, the " +
-        "default mode fails to run a join that evicts an input with an event time by another " +
-        "TIMESTAMP column, or an outer join that emits the unmatched rows of an input without " +
-        "one. With 1, the legacy mode fails to run a join that the default mode evicts by a " +
-        "column other than the event time of an input with one.")
+      .doc("The layout of the state format version 4 state of stream-stream joins that a " +
+        "checkpoint records, for an input evicted by a range condition. 0: the layout of a " +
+        "checkpoint written by 4.4 or earlier, or started with " +
+        "spark.sql.streaming.statefulOperator.allowMultiple set to false, which orders such an " +
+        "input by its event time and keeps the rows of an input without one out of the index. " +
+        "1: the layout of a checkpoint started with allowMultiple set to true, which orders such " +
+        "an input by the column that the join evicts it by with allowMultiple set to true. New " +
+        "rows follow the column that the current run evicts by. A streaming query keeps the " +
+        "version recorded in its checkpoint, and one restarted from a checkpoint without it " +
+        "uses 0. With 0, a run with allowMultiple set to true fails for a join that evicts an " +
+        "input with an event time by another TIMESTAMP column, or an outer join that emits the " +
+        "unmatched rows of an input without one. With 1, a run with allowMultiple set to false " +
+        "fails for a join that evicts an input with an event time by another column when " +
+        "allowMultiple is true.")
       .version("4.5.0")
       .intConf
       .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")
