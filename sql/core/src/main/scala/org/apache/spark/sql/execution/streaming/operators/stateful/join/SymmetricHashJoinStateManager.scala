@@ -277,13 +277,12 @@ class SymmetricHashJoinStateManagerV4(
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
-        // A NULL event time is read as time 0, as a NULL timestamp always was.
-        if (row.isNullAt(idx)) {
-          0L
-        } else if (attr.dataType.isInstanceOf[StructType]) {
+        if (attr.dataType.isInstanceOf[StructType]) {
           // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
-          row.getStruct(idx, 2).getLong(1)
+          // A NULL window is never evicted, as in state formats V2 and V3, where its end is NULL.
+          if (row.isNullAt(idx)) Long.MaxValue else row.getStruct(idx, 2).getLong(1)
         } else {
+          // A NULL timestamp is read as time 0.
           row.getLong(idx)
         }
 
@@ -296,6 +295,8 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
+  // TODO(SPARK-61986): A NULL window struct join key still throws a NullPointerException here;
+  //   SPARK-61986 keeps rows whose watermarked join key is NULL out of the state.
   private val extractEventTimeFnFromKey: UnsafeRow => Option[Long] = { row =>
     joinKeyOrdinalForWatermark.map { idx =>
       val attr = keyAttributes(idx)
