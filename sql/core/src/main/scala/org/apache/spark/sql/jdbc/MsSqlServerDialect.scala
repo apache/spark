@@ -96,10 +96,6 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     // and REAL with at most 6 significant digits (123.456789 -> '123.457', 1234567.0 ->
     // '1.23457e+006'), BIT as '1' or '0', DATETIME as 'Jan  1 2024 12:00AM' and VARBINARY bytes
     // as UTF-16 text, so a pushed cast from them would compare different strings than Spark.
-    // TODO: some expressions over a refused cast do not depend on its rendering and could still
-    // be pushed: IS [NOT] NULL as the null check on the cast's input, COUNT as COUNT of the
-    // input, and a BOOLEAN-to-STRING cast used directly as a grouping or sort key as
-    // CASE WHEN b = 1 THEN 'true' WHEN b = 0 THEN 'false' END. Comparisons must stay refused.
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       dataType match {
         case _: StringType if !rendersCastToStringAsSpark(exprDataType) =>
