@@ -103,11 +103,14 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
     sparkSession.newDataFrame { builder =>
-      builder.getReadBuilder
+      val tableBuilder = builder.getReadBuilder
         .setIsStreaming(true)
         .getNamedTableBuilder
         .setUnparsedIdentifier(tableName)
         .putAllOptions(sourceBuilder.getOptionsMap)
+      if (sourceBuilder.hasSourceName) {
+        tableBuilder.setSourceName(sourceBuilder.getSourceName)
+      }
     }
   }
 

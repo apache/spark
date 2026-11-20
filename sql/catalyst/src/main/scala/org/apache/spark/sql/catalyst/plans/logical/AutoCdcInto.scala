@@ -64,6 +64,17 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
  * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
  *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
  *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
+ * @param ignoreNullUpdates Whether an `IGNORE NULL UPDATES` clause was specified. When true, null
+ *                       values in an incoming update are ignored and the existing target value is
+ *                       preserved. The bare clause applies to all columns; the two column lists
+ *                       below scope it to a subset.
+ * @param ignoreNullUpdatesColumns The subset of columns for which null updates are ignored, from
+ *                       `IGNORE NULL UPDATES ON (...)`. [[None]] when the clause is absent or names
+ *                       no subset. Mutually exclusive with [[ignoreNullUpdatesExceptColumns]].
+ * @param ignoreNullUpdatesExceptColumns The columns for which null updates overwrite the target
+ *                       (nulls are ignored for all others), from
+ *                       `IGNORE NULL UPDATES ON * EXCEPT (...)`. [[None]] when the clause is absent
+ *                       or names no subset. Mutually exclusive with [[ignoreNullUpdatesColumns]].
  */
 case class AutoCdcInto(
     targetTable: LogicalPlan,
@@ -75,7 +86,10 @@ case class AutoCdcInto(
     excludeColumns: Option[Seq[UnresolvedAttribute]],
     storedAsScdType: Int,
     trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
-    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]]
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdates: Boolean,
+    ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]]
 ) extends LogicalPlan with BinaryLike[LogicalPlan] {
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = source

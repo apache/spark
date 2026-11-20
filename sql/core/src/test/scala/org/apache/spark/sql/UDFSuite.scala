@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
+import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
@@ -1276,10 +1276,58 @@ class UDFSuite extends SharedSparkSession {
     checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
   }
 
+  test("SPARK-61935: ScalaUDF null handling of a column made nullable by an outer join") {
+    val f = udf[Int, Int](_ + 1)
+    val ds1 = Seq(1, 2).toDS()
+    val ds2 = Seq(2).toDS()
+    // `ds2("value")` is resolved as non-nullable, and becomes nullable after resolution
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer").select(f(ds2("value"))),
+      Row(null) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-61935: grouping sets, CTE and generator over a ScalaUDF with a primitive input") {
+    withTempView("gs") {
+      withUserDefinedFunction("plus1" -> true) {
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        Seq((1, None), (2, Some(201)), (3, None)).toDF("pk", "salary")
+          .createOrReplaceTempView("gs")
+
+        checkAnswer(
+          sql("SELECT plus1(salary) AS k, count(*) FROM gs " +
+            "GROUP BY GROUPING SETS ((plus1(salary)))"),
+          Row(null, 2) :: Row(202, 1) :: Nil)
+
+        // a CTE that is not inlined
+        checkAnswer(
+          sql(
+            """WITH c AS (SELECT pk, plus1(salary) AS k, rand() AS r FROM gs)
+              |SELECT a.pk, a.k, a.k IS NULL FROM c a JOIN c b ON a.pk = b.pk
+              |""".stripMargin),
+          Row(1, null, true) :: Row(2, 202, false) :: Row(3, null, true) :: Nil)
+
+        val df = sql("SELECT explode(array(plus1(a), plus1(b))) AS v " +
+          "FROM VALUES (1, 2), (NULL, 3) AS t(a, b)")
+        assert(df.schema("v").nullable)
+        checkAnswer(df, Row(2) :: Row(3) :: Row(null) :: Row(4) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {
     val kryoBufUDAF = udaf(KryoBufAggregator())
     val input = Seq(1L, 2L, 3L).toDF("value")
     val result = input.select(kryoBufUDAF($"value").as("sum"))
     checkAnswer(result, Row(6L) :: Nil)
+  }
+
+  test("SPARK-60762: The types of a UDF are not in the generated code") {
+    spark.udf.register("rowSize", (r: Row) => r.size)
+    val df = sql("""SELECT rowSize(named_struct('fieldName"b', id)) AS r FROM range(2)""")
+    val code = df.queryExecution.executedPlan.collect {
+      case w: WholeStageCodegenExec => w.doCodeGen()._2.body
+    }
+    assert(code.nonEmpty && code.forall(!_.contains("fieldName")))
+    checkAnswer(df, Row(1) :: Row(1) :: Nil)
   }
 }

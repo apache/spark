@@ -647,7 +647,8 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class Contains(left: Expression, right: Expression) extends StringPredicate {
+case class Contains(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.Contains.exec(l, r, collationId)
   }
@@ -698,7 +699,8 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+case class StartsWith(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.StartsWith.exec(l, r, collationId)
   }
@@ -754,7 +756,8 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+case class EndsWith(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.EndsWith.exec(l, r, collationId)
   }
@@ -1490,11 +1493,11 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     if (evals.length == 1) {
       val stringTrimCode: String = this match {
         case _: StringTrim =>
-          CollationSupport.StringTrim.genCode(srcString.value)
+          CollationSupport.StringTrim.genCode(srcString.value, collationId)
         case _: StringTrimLeft =>
-          CollationSupport.StringTrimLeft.genCode(srcString.value)
+          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
         case _: StringTrimRight =>
-          CollationSupport.StringTrimRight.genCode(srcString.value)
+          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
       }
       ev.copy(code = code"""
          |${srcString.code}
@@ -1622,7 +1625,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override protected def direction: String = "BOTH"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrim.exec(srcString)
+    CollationSupport.StringTrim.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
@@ -1739,7 +1742,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override protected def direction: String = "LEADING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimLeft.exec(srcString)
+    CollationSupport.StringTrimLeft.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
@@ -1807,7 +1810,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override protected def direction: String = "TRAILING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimRight.exec(srcString)
+    CollationSupport.StringTrimRight.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
@@ -2407,10 +2410,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       null
     } else {
       val formatter = new java.util.Formatter(Locale.US)
-      val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
+      val arglist = children.tail.map(child => toFormatterArg(child.eval(input)))
       UTF8String.fromString(
         formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*).toString)
     }
+  }
+
+  // java.util.Formatter dispatches on the runtime class of its argument and has no case for
+  // Catalyst's Decimal, so %f/%e/%g reject it. java.math.BigDecimal is accepted and stays exact.
+  // %a stays unsupported: Formatter accepts it only for float and double.
+  private def toFormatterArg(value: Any): AnyRef = value match {
+    case d: Decimal => d.toJavaBigDecimal
+    case other => other.asInstanceOf[AnyRef]
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2419,9 +2430,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
+    val decimalClass = classOf[Decimal].getName
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      val argClass = CodeGenerator.javaClass(v._1)
       val value =
-        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
+        if (argClass == classOf[Decimal]) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ${v._2.value}.toJavaBigDecimal()"
+        } else if (argClass.isAssignableFrom(classOf[Decimal])) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ((${v._2.value} instanceof $decimalClass) ? " +
+            s"(($decimalClass) ${v._2.value}).toJavaBigDecimal() : ${v._2.value})"
+        } else if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
             s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"
@@ -2651,7 +2671,7 @@ case class StringSpace(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
 
   def this(str: Expression, pos: Expression) = {
@@ -2822,7 +2842,7 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Length(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
@@ -2919,7 +2939,7 @@ case class BitLength(child: Expression)
   since = "2.3.0",
   group = "string_funcs")
 case class OctetLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =

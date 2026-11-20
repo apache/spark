@@ -23,6 +23,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.udf.worker.{DirectWorker, LocalTcpConnection,
   UDFProtoCommunicationPattern, UDFWorkerProperties, UDFWorkerSpecification,
   UnixDomainSocket, WorkerCapabilities, WorkerConnectionSpec}
+import org.apache.spark.udf.worker.core.WorkerLogger
 
 class DirectGrpcDispatcherSuite extends AnyFunSuite {
 // scalastyle:on funsuite
@@ -77,6 +78,20 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
       new DirectGrpcDispatcher(directSpec(udsProperties, Some(capabilities)))
     }
     assert(error.getMessage.contains("requires BIDIRECTIONAL_STREAMING"))
+  }
+
+  test("DIRECT factory creates a DirectGrpcDispatcher") {
+    val capabilities = WorkerCapabilities.newBuilder()
+      .addSupportedCommunicationPatterns(
+        UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING)
+      .build()
+    val dispatcher = new DirectDispatcherFactory().createDispatcher(
+      directSpec(udsProperties, Some(capabilities)), WorkerLogger.NoOp)
+    try {
+      assert(dispatcher.isInstanceOf[DirectGrpcDispatcher])
+    } finally {
+      dispatcher.close()
+    }
   }
 
   test("requests a backoff reset for every transient failure after endpoint creation") {

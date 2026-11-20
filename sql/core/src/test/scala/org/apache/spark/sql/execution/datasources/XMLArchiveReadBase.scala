@@ -44,6 +44,8 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
+  override protected def supportsDecompressionCodec: Boolean = true
+
   // XML infers from record content, unions fields across inputs by name, and represents nested
   // elements as structs, so it keeps all three `supports*` defaults (inference, schema-merge,
   // complex types) and runs the full shared test set. Inference needs no trigger option, so

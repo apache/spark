@@ -2477,6 +2477,11 @@ class CollectionExpressionsSuite
         assert(ElementAt(array, Literal(-1)).nullable)
         assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
         assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+        // A null ordinal returns null even when neither the array nor its elements can be null.
+        val nonNullArray = CreateArray(a :: Nil)
+        assert(ElementAt(nonNullArray, AttributeReference("ordinal", IntegerType)()).nullable)
+        assert(ElementAt(nonNullArray,
+          AttributeReference("ordinal", IntegerType, nullable = false)()).nullable == !ansiEnabled)
 
         // CreateArray case invalid indices
         assert(!ElementAt(array, Literal(0)).nullable)
@@ -2519,6 +2524,36 @@ class CollectionExpressionsSuite
         assert(ElementAt(stArray4, Literal(0)).nullable)
         assert(ElementAt(stArray4, Literal(4)).nullable)
         assert(ElementAt(stArray4, Literal(-4)).nullable)
+      }
+    }
+  }
+
+  test("SPARK-60755: ElementAt on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    val field = StructField("f", StringType, nullable = false)
+    val c = BoundReference(0, StructType(Seq(field)), nullable = false)
+    val d = BoundReference(1, StructType(Seq(field)), nullable = true)
+    val inputWithStruct = create_row(create_row("x"), null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(1)), "x", input)
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(-2)), "x", input)
+        val fields = GetArrayStructFields(CreateArray(Seq(c, d)), field, 0, 1, containsNull = true)
+        checkEvaluation(ElementAt(fields, Literal(1)), "x", inputWithStruct)
+        // No element can be NULL.
+        checkEvaluation(ElementAt(CreateArray(Seq(a)), Literal(1)), "x", input)
+        // The index is invalid in every row.
+        checkExceptionInExpression[Exception](
+          ElementAt(CreateArray(Seq(b)), Literal(0)), input, "The index 0 is invalid")
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            ElementAt(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(ElementAt(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
       }
     }
   }
@@ -3532,6 +3567,48 @@ class CollectionExpressionsSuite
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
 
+  test("SPARK-59602: array set operations normalize special floating-point values") {
+    val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    val doubles = Literal.create(
+      Seq(-0.0d, 0.0d, nonCanonicalNaN, Double.NaN), ArrayType(DoubleType, false))
+    val doubleSet = Literal.create(Seq(0.0d, Double.NaN), ArrayType(DoubleType, false))
+    checkEvaluation(ArrayDistinct(doubles), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayUnion(doubles, doubleSet), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayIntersect(doubles, doubleSet), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayExcept(doubles, doubleSet), Seq.empty[Double])
+    checkEvaluation(ArrayExcept(doubleSet, doubles), Seq.empty[Double])
+    checkEvaluation(ArraysOverlap(doubles, doubleSet), true)
+
+    val nonCanonicalFloatNaN = java.lang.Float.intBitsToFloat(0x7f800001)
+    val floats = Literal.create(
+      Seq(-0.0f, 0.0f, nonCanonicalFloatNaN, Float.NaN), ArrayType(FloatType, false))
+    val floatSet = Literal.create(Seq(0.0f, Float.NaN), ArrayType(FloatType, false))
+    checkEvaluation(ArrayDistinct(floats), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayUnion(floats, floatSet), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayIntersect(floats, floatSet), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayExcept(floats, floatSet), Seq.empty[Float])
+    checkEvaluation(ArrayExcept(floatSet, floats), Seq.empty[Float])
+    checkEvaluation(ArraysOverlap(floats, floatSet), true)
+  }
+
+  test("SPARK-59602: array set operations normalize nested floating-point values") {
+    val nestedType = ArrayType(DoubleType, containsNull = false)
+    val nested = Literal.create(
+      Seq(Seq(-0.0d), Seq(0.0d), Seq(Double.NaN)), ArrayType(nestedType, false))
+    val nestedSet = Literal.create(
+      Seq(Seq(0.0d), Seq(Double.NaN)), ArrayType(nestedType, false))
+    checkEvaluation(ArrayDistinct(nested), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayUnion(nested, nestedSet), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayIntersect(nested, nestedSet), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayExcept(nested, nestedSet), Seq.empty[Seq[Double]])
+    checkEvaluation(ArraysOverlap(nested, nestedSet), true)
+
+    val structType = new StructType().add("d", DoubleType, nullable = false)
+    val structs = Literal.create(
+      Seq(Row(-0.0d), Row(0.0d)), ArrayType(structType, containsNull = false))
+    checkEvaluation(ArrayDistinct(structs), Seq(Row(0.0d)))
+  }
+
   test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater than non-NaN value") {
     // ArrayMin
     checkEvaluation(ArrayMin(
@@ -3659,6 +3736,19 @@ class CollectionExpressionsSuite
     // an internal IndexOutOfBoundsException.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
+    }
+  }
+
+  test("SPARK-61552: array_insert with a foldable position that fails to evaluate") {
+    // `ConstantFolding` leaves such a position in a conditional branch. Only a row that evaluates
+    // the position should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val arr = BoundReference(0, ArrayType(IntegerType), nullable = true)
+      val pos = Cast(Divide(Literal(1.0), Literal(0.0)), IntegerType)
+      val e = ArrayInsert(arr, pos, Literal(1), legacyNegativeIndex = false)
+      val expr = If(IsNull(arr), Literal.create(null, e.dataType), e)
+      checkEvaluation(expr, null, create_row(null))
+      checkExceptionInExpression[ArithmeticException](expr, create_row(Seq(2)), "DIVIDE_BY_ZERO")
     }
   }
 }

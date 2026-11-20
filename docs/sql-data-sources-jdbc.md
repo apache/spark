@@ -383,6 +383,22 @@ logging into the data sources.
     <td>read</td>
   </tr>
   <tr>
+    <td><code>zonelessTimestampAsNTZ</code></td>
+    <td><code>true</code> for Oracle, <code>false</code> for other dialects</td>
+    <td>
+      When the option is set to <code>true</code>, timestamp types without a time zone are inferred as Spark's TimestampNTZ type regardless of <code>preferTimestampNTZ</code>. Otherwise, they follow <code>preferTimestampNTZ</code>. This option is currently only supported by Oracle. Its default follows the dialect's legacy TimestampNTZ mapping configuration: it is <code>false</code> when that configuration is enabled. Depending on the driver, values read as TimestampNTZ may not keep their wall-clock time unless <code>timestampNTZAsWallClock</code> is also <code>true</code>. For tables in a JDBC catalog, set this option on the catalog (<code>spark.sql.catalog.&lt;name&gt;.zonelessTimestampAsNTZ</code>), as there per-query values do not apply. There it also decides the types of the target table's columns on writes, and so how the written values are cast. For tables created with <code>CREATE TABLE ... USING jdbc</code>, set this option in the table's <code>OPTIONS</code>: the table keeps the schema inferred at creation, and a read that infers a different one fails.
+    </td>
+    <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>timestampNTZAsWallClock</code></td>
+    <td><code>true</code> for Oracle, <code>false</code> for other dialects</td>
+    <td>
+      When the option is set to <code>true</code>, TimestampNTZ values are read and written as <code>java.time.LocalDateTime</code>, preserving the wall-clock value without a time zone conversion. This requires a JDBC driver that supports <code>java.time.LocalDateTime</code>. Otherwise, they are converted through <code>java.sql.Timestamp</code> in the JVM default time zone. Its default follows the dialect's legacy TimestampNTZ mapping configuration: it is <code>false</code> when that configuration is enabled (only Oracle has one, so the default is <code>true</code> for Oracle and <code>false</code> for other dialects).
+    </td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>hint</code></td>
     <td>(none)</td>
     <td>
@@ -1638,6 +1654,11 @@ as the activated JDBC Driver.
       <td>geometry</td>
       <td>BinaryType</td>
       <td></td>
+    </tr>
+    <tr>
+      <td>json</td>
+      <td>StringType</td>
+      <td>Unparsed JSON text</td>
     </tr>
     <tr>
       <td>rowversion</td>

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{EOFException, File, FileOutputStream, StringWriter}
+import java.io.{EOFException, File, FileOutputStream, StringReader, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
@@ -24,6 +24,7 @@ import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
+import javax.xml.transform.stream.StreamSource
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
@@ -34,14 +35,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
+import org.xml.sax.SAXException
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, Row, SaveMode, YearUDT}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -1271,6 +1273,25 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "basket.xml"))
       // Mostly checking it doesn't fail
       assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
+  }
+
+  test("XSD validation does not resolve external references in records") {
+    val schema = ValidatorUtil.getSchema(
+      getTestResourcePath(resDir + "basket.xsd").replace("file:/", "/"))
+
+    withTempDir { dir =>
+      val dataFile = new File(dir, "data.txt")
+      Files.write(dataFile.toPath, "9027".getBytes(StandardCharsets.UTF_8))
+      // The validator sees the raw record before the record parser does, so it must
+      // reject DOCTYPE references the same way the parser does.
+      val record =
+        s"""<?xml version="1.0"?>
+           |<!DOCTYPE basket [<!ENTITY ext SYSTEM "${dataFile.toURI}">]>
+           |<basket><entry><key>&ext;</key><value>1</value></entry></basket>""".stripMargin
+      intercept[SAXException] {
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(record)))
+      }
     }
   }
 
@@ -3658,7 +3679,7 @@ class XmlSuite
   }
 
   test("validate XML Options") {
-    assert(XmlOptions.getAllOptions.size == 32)
+    assert(XmlOptions.getAllOptions.size == 33)
     // Please add validation on any new XML options here
     assert(XmlOptions.isValidOption("rowTag"))
     assert(XmlOptions.isValidOption("rootTag"))
@@ -3677,6 +3698,7 @@ class XmlSuite
     assert(XmlOptions.isValidOption("mode"))
     assert(XmlOptions.isValidOption("locale"))
     assert(XmlOptions.isValidOption("compression"))
+    assert(XmlOptions.isValidOption("decompression"))
     assert(XmlOptions.isValidOption("multiLine"))
     assert(XmlOptions.isValidOption("samplingRatio"))
     assert(XmlOptions.isValidOption("columnNameOfCorruptRecord"))
@@ -3762,6 +3784,97 @@ class XmlSuite
     }
   }
 
+  // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
+  // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
+  // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
+  // extension, so extension-based detection cannot pick the right codec and the
+  // `decompression` option is what makes the read succeed.
+  private def writeCompressed(file: File, data: String, codec: String): Unit = {
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    val os = new FileOutputStream(file)
+    val out = codec match {
+      case "" => os
+      case "zstd" | "zstandard" | "zst" =>
+        new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case name => codecFactory.getCodecByName(name).createOutputStream(os)
+    }
+    out.write(data.getBytes(StandardCharsets.UTF_8))
+    out.close()
+  }
+
+  private def xmlDoc(records: Seq[(Int, String)]): String =
+    records.map { case (id, v) =>
+      s"  <ROW><id>$id</id><value>$v</value></ROW>"
+    }.mkString("<ROWS>\n", "\n", "\n</ROWS>")
+
+  test("SPARK-60217 decompression option overrides file name extension") {
+    val numRecord = 100
+    val records = (1 to numRecord).map(i => (i, s"value_$i"))
+    // Every read-supported codec, including zstd/zstandard/zst which the writers do not support.
+    val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
+      .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard", "zst")
+    codecs.foreach { codec =>
+      withTempDir { dir =>
+        // Misleading `.xml` name (no codec suffix): extension-based detection would read it as
+        // plain text and fail. The `decompression` option forces the correct codec.
+        val file = new File(dir, "data.xml")
+        writeCompressed(file, xmlDoc(records), codec)
+
+        val df = spark.read
+          .option("decompression", codec)
+          .option("rowTag", "ROW")
+          .xml(file.getCanonicalPath)
+        checkAnswer(df.select("id", "value"), records.map { case (id, v) => Row(id, v) })
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option none reads a file with a codec extension as-is") {
+    withTempDir { dir =>
+      // A plain-text XML that happens to carry a `.gz` extension. Extension-based detection would
+      // try (and fail) to gunzip it; `decompression` = none must read the raw bytes.
+      val file = new File(dir, "plain.xml.gz")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+
+      val df = spark.read
+        .option("decompression", HadoopCompressionCodec.NONE.lowerCaseName())
+        .option("rowTag", "ROW")
+        .xml(file.getCanonicalPath)
+      checkAnswer(df.select("id", "value"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-60217 decompression option rejects an invalid codec") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.xml")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+      checkErrorMatchPVals(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.read.option("decompression", "illegal").option("rowTag", "ROW")
+            .xml(file.getCanonicalPath).collect()
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+      )
+    }
+  }
+
+  test("SPARK-60217 compression option does not force a codec on read") {
+    withTempDir { dir =>
+      // Unlike `decompression`, the write-side `compression` option (which may be persisted
+      // in a table's options) must not force a codec on read: a plain file is still read as-is.
+      val file = new File(dir, "plain.xml")
+      writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
+
+      val df = spark.read
+        .option("compression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .option("rowTag", "ROW")
+        .xml(file.getCanonicalPath)
+      checkAnswer(df, Row(1L, "a") :: Nil)
+    }
+  }
+
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {
@@ -3796,7 +3909,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def open() : Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     // assert that there are no open files for this executor
     assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
     openCounterPerThread.put(threadId, 1)
@@ -3804,7 +3917,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def close(): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     if (openCounterPerThread.get(threadId) == 1) {
       openCounterPerThread.put(threadId, 0)
     }

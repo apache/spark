@@ -53,7 +53,7 @@ import org.apache.spark.sql.util.NumericHistogram
     """,
   arguments = """
     Arguments:
-      * expr - A numeric, date, timestamp, or interval expression whose values are aggregated
+      * expr - A numeric, date, time, timestamp, or interval expression whose values are aggregated
           into the histogram.
       * nb - A foldable integer expression (at least 2) giving the number of histogram bins.
   """,

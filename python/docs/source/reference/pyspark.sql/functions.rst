@@ -348,6 +348,7 @@ Hash Functions
     :toctree: api/
 
     crc32
+    farm_fingerprint
     hash
     md5
     sha

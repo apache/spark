@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.canonicalizeDeterministic
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -55,10 +56,16 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * them uniformly with no per-argument metadata. With the result now an ordinary column, arithmetic,
  * `when`, casts, the element index, multiple UDFs and nested calls `f(g(x))` all just work.
  *
- * Runs before [[ExtractPythonUDFs]]. Handles all ten single-lambda functions: `transform`,
- * `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions (desugared to
- * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
- * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
+ * Runs first in the optimizer's UDF extraction batch, before every rule that decides where a
+ * Python UDF is evaluated from the columns it reads (`ExtractPythonUDFFromJoinCondition`,
+ * [[ExtractPythonUDFFromAggregate]], [[ExtractPythonUDFs]], ...): inside a lambda a UDF reads the
+ * lambda's variables, so only its lifted form tells them, e.g., that it applies to an aggregate's
+ * result and must be evaluated above the aggregate. Handles all ten single-lambda functions:
+ * `transform`, `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions
+ * (desugared to `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort`
+ * precomputes a per-element key - one per element even for a nondeterministic UDF, so that an
+ * element has the same key on either side of a comparison - or, when one call takes both elements,
+ * the UDF over the cross product of pairs.
  * A UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`, is handled too: the
  * whole nest is rewritten root-first (see `apply` / `rewriteNest`), lifting the UDF out one lambda
  * level at a time so it ends up applied to the fully flattened leaves.
@@ -154,6 +161,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * no per-element key. Precomputes the UDF over every ordered pair - an n x n matrix with
    * `udf(arr[i], arr[j])` at (i, j) - and the comparator reads it by the two elements' positions,
    * so no Python runs while sorting. Costs O(n^2) calls and memory vs. O(n) for a per-element key.
+   * A nondeterministic UDF is drawn once per ordered pair, so `udf(x, y)` and `udf(y, x)` need not
+   * agree: with no per-element key to share, such a comparator does not define an order.
    */
   private def rewritePairwiseComparator(sort: ArraySort): Expression = {
     val ArraySort(argument, function, allowNull) = sort
@@ -361,8 +370,6 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       indexVar: Option[NamedLambdaVariable],
       alsoBind: Seq[NamedLambdaVariable] = Nil): Carrier = {
     val LambdaFunction(body, _, _) = function
-    val lambdaExprIds =
-      (elementVars ++ indexVar.toSeq ++ alsoBind).map(_.exprId).toSet
 
     // Collect the UDF calls to lift. Innermost first, so that a nested call like `f(g(x))` has
     // `g` lifted before `f`, letting `f`'s array UDF consume `g`'s array result.
@@ -398,13 +405,13 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         indexVar.map(_.exprId -> indexArray.get).toMap ++
         alsoBind.map(_.exprId -> alignedArguments.head).toMap
 
-    // One lifted array UDF per distinct call. `arrayResults` maps each original call (by `liftKey`)
-    // to the array holding its per-element results, so a nested call `f(g(x))` and the carrier
-    // lookups can find it. Deterministic calls that lift to the *same* function over the *same*
-    // array arguments share one lifted UDF: a key-form comparator's `udf(a)` and `udf(b)`
-    // canonicalize differently (`a` != `b`) but both read the whole array, so without this the
-    // Python function would run 2n times instead of n. Nondeterministic calls stay distinct (their
-    // signature is the lifted node itself, carrying a distinct `resultId`), matching `liftKey`.
+    // One lifted array UDF per distinct call. `arrayResults` maps each original call (by
+    // `canonicalizeDeterministic`) to the array holding its per-element results, so a nested call
+    // `f(g(x))` and the carrier lookups can find it. Deterministic calls that lift to the *same*
+    // function over the *same* array arguments share one lifted UDF: a key-form comparator's
+    // `udf(a)` and `udf(b)` canonicalize differently (`a` != `b`) but both read the whole array, so
+    // without this the Python function would run 2n times instead of n. Nondeterministic calls stay
+    // distinct, except in a key-form comparator (see `signature` below).
     var arrayResults = Map.empty[Expression, Expression]
     val distinctLifted = scala.collection.mutable.ArrayBuffer.empty[PythonUDF]
     val ordinalBySignature = scala.collection.mutable.HashMap.empty[Expression, Int]
@@ -417,9 +424,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       val arrayArgs = udf.children.map {
         case NamedArgumentExpression(key, value) =>
           NamedArgumentExpression(
-            key, overArray(value, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults))
+            key, overArray(value, alignedArguments.head, arrayOfVar, arrayResults))
         case child =>
-          overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
+          overArray(child, alignedArguments.head, arrayOfVar, arrayResults)
       }
       // Each lift wraps the arguments in exactly one more `array` level. Lifting a base UDF gives
       // depth 1; re-lifting an already-lifted element-wise UDF (a UDF from a *nested* lambda,
@@ -442,14 +449,23 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         PythonUDF.liftedElementwiseEvalType(udf.evalType),
         udf.udfDeterministic,
         elementwiseNestingDepth = newDepth)
-      val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
+      // Calls share one lifted UDF when their lifted forms have the same key; `overArray` keeps
+      // each argument's determinism, so `lifted` is deterministic exactly when `udf` is. A key-form
+      // comparator (the one caller passing `alsoBind`) shares a nondeterministic call too: its
+      // lifted result is each element's sort key, and an element must have one key whichever side
+      // of a comparison it is on. With a draw per call, `(a, b) -> r(a) - r(b)` would not be
+      // antisymmetric, and the sort could fail with "Comparison method violates its general
+      // contract!".
+      val signature =
+        if (alsoBind.nonEmpty) lifted.canonicalized else canonicalizeDeterministic(lifted)
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
         val o = distinctLifted.length
         distinctLifted += lifted
         o
       })
-      arrayResults += (liftKey(udf) -> distinctLifted(ordinal))
-      udfFieldByKey += (liftKey(udf) -> ordinal)
+      val key = canonicalizeDeterministic(udf)
+      arrayResults += (key -> distinctLifted(ordinal))
+      udfFieldByKey += (key -> ordinal)
     }
     val liftedArrays = distinctLifted.toSeq
 
@@ -490,8 +506,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     }
 
     val rewrittenBody = body.transformDown {
-      case udf: PythonUDF if udfFieldByKey.contains(liftKey(udf)) =>
-        val ordinal = udfFieldByKey(liftKey(udf))
+      case udf: PythonUDF if udfFieldByKey.contains(canonicalizeDeterministic(udf)) =>
+        val ordinal = udfFieldByKey(canonicalizeDeterministic(udf))
         // A UDF over a comparator's right-hand element must read that element's key, so the
         // struct field is read through whichever bound variable the call's own arguments used.
         val side = udf.collectFirst {
@@ -541,27 +557,11 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     }
     visit(body)
     // Deduplicate identical calls so the same UDF is evaluated once per array. Nondeterministic
-    // calls are kept distinct (see `liftKey`).
+    // calls are kept distinct (see `canonicalizeDeterministic`).
     val seen = scala.collection.mutable.LinkedHashMap.empty[Expression, PythonUDF]
-    collected.result().foreach(udf => seen.getOrElseUpdate(liftKey(udf), udf))
+    collected.result().foreach(udf => seen.getOrElseUpdate(canonicalizeDeterministic(udf), udf))
     seen.values.toSeq
   }
-
-  private def readsLambdaVariable(e: Expression, lambdaExprIds: Set[ExprId]): Boolean =
-    e.exists {
-      case v: NamedLambdaVariable => lambdaExprIds.contains(v.exprId)
-      case _ => false
-    }
-
-  /**
-   * The key that decides whether two UDF calls are "the same call" for lifting. A deterministic
-   * call is deduplicated by canonical form, so an identical call is evaluated once. A
-   * nondeterministic call must stay distinct - `transform(arr, x -> f(x) + f(x))` calls `f` twice
-   * and each call may return a different value - so it is keyed by its own `resultId`-bearing node
-   * (`canonicalized` erases `resultId`, which would collapse the two calls into one).
-   */
-  private def liftKey(udf: PythonUDF): Expression =
-    if (udf.udfDeterministic) udf.canonicalized else udf
 
   /**
    * Turns a UDF argument expression, written in terms of single elements, into the equivalent
@@ -585,28 +585,36 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       child: Expression,
       firstArgument: Expression,
       arrayOfVar: Map[ExprId, Expression],
-      lambdaExprIds: Set[ExprId],
       arrayResults: Map[Expression, Expression]): Expression = child match {
     case v: NamedLambdaVariable if arrayOfVar.contains(v.exprId) => arrayOfVar(v.exprId)
-    case udf: PythonUDF if arrayResults.contains(liftKey(udf)) =>
-      arrayResults(liftKey(udf))
+    case udf: PythonUDF if arrayResults.contains(canonicalizeDeterministic(udf)) =>
+      arrayResults(canonicalizeDeterministic(udf))
     case e =>
       // Replace each already-lifted nested UDF call with a synthetic variable standing for that
       // call's aligned array result, then fold those arrays into the variable-to-array map so the
       // logic below treats them exactly like element variables. This keeps a lifted UDF buried in
       // a composite argument (`f(g(x) + 1)`) from being left as a raw UDF inside a lambda.
+      // Top-down, so the outermost lifted call is replaced whole: bottom-up would first replace
+      // a lifted call nested in its arguments (`h(x)` in `f(g(h(x)) + 1)`), after which `g(...)`
+      // no longer matches its own lifted result and would be left behind as a raw UDF.
       val nestedVars = scala.collection.mutable.LinkedHashMap.empty[Expression, NamedLambdaVariable]
-      val expr = e.transformUp {
-        case u: PythonUDF if arrayResults.contains(liftKey(u)) =>
-          nestedVars.getOrElseUpdate(liftKey(u), {
-            val arrType = arrayResults(liftKey(u)).dataType.asInstanceOf[ArrayType]
+      val expr = e.transformDown {
+        case u: PythonUDF if arrayResults.contains(canonicalizeDeterministic(u)) =>
+          val key = canonicalizeDeterministic(u)
+          nestedVars.getOrElseUpdate(key, {
+            val arrType = arrayResults(key).dataType.asInstanceOf[ArrayType]
             NamedLambdaVariable("g", arrType.elementType, arrType.containsNull)
           })
       }
-      val fullArrayOf = arrayOfVar ++
-        nestedVars.map { case (key, v) => v.exprId -> arrayResults(key) }
+      // The arrays of just the variables `expr` reads: zipping in one it does not read, such as the
+      // element array for `f(g(x) + 1)`, which reads only `g`'s result, would build a struct per
+      // element for nothing.
+      val readIds = expr.collect { case v: NamedLambdaVariable => v.exprId }.toSet
+      val arrayOfRead =
+        (arrayOfVar ++ nestedVars.map { case (key, v) => v.exprId -> arrayResults(key) })
+          .filter { case (id, _) => readIds.contains(id) }
 
-      if (!readsLambdaVariable(expr, fullArrayOf.keySet)) {
+      if (arrayOfRead.isEmpty) {
         // Independent of the element (an outer column or constant): repeat it into an array aligned
         // with the iterated array, so every UDF argument is a single-level array the worker
         // flattens the same way. `transform(arr, _ -> e)` keeps the value constant, matching shape.
@@ -616,23 +624,24 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       } else {
         // An expression over the element(s) and/or nested results, e.g. `udf(x * 2)` or
         // `f(g(x) + 1)`. Compute it for every element with a native `transform`, which stays inside
-        // the JVM. Multi-argument shapes need the values side by side, so zip them first.
-        val arrays = fullArrayOf.values.toSeq.distinct
+        // the JVM. An expression reading several arrays needs their values side by side, so zip
+        // them first.
+        val arrays = arrayOfRead.values.toSeq.distinct
         if (arrays.length == 1) {
           val arr = arrays.head
           val elemType = arr.dataType.asInstanceOf[ArrayType]
           val v = NamedLambdaVariable("x", elemType.elementType, elemType.containsNull)
           val substituted = expr.transformUp {
-            case old: NamedLambdaVariable if fullArrayOf.contains(old.exprId) => v
+            case old: NamedLambdaVariable if arrayOfRead.contains(old.exprId) => v
           }
           ArrayTransform(arr, LambdaFunction(substituted, Seq(v)))
         } else {
-          // Zip every array the expression may read, then project the fields it needs.
+          // Zip the arrays the expression reads, then project the fields it needs.
           val names = arrays.indices.map(i => s"$carrierElementPrefix$i")
           val zipped = ArraysZip(arrays, names.map(Literal(_)))
           val structType = zipped.dataType.asInstanceOf[ArrayType].elementType
           val v = NamedLambdaVariable("z", structType, nullable = false)
-          val ordinalOf = fullArrayOf.map { case (id, arr) => id -> arrays.indexOf(arr) }
+          val ordinalOf = arrayOfRead.map { case (id, arr) => id -> arrays.indexOf(arr) }
           val substituted = expr.transformUp {
             case old: NamedLambdaVariable if ordinalOf.contains(old.exprId) =>
               GetStructField(v, ordinalOf(old.exprId), Some(names(ordinalOf(old.exprId))))

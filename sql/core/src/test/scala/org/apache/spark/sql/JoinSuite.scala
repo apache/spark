@@ -22,12 +22,13 @@ import java.util.Locale
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -66,6 +67,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val c = pair._2
     val df = sql(sqlString)
     val optimized = df.queryExecution.optimizedPlan
+    val optimizedJoin = optimized.collectFirst { case join: Join => join }.getOrElse {
+      fail(s"No join in optimized plan:\n$optimized")
+    }
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoinExec => j
@@ -80,13 +84,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
     assert(
-      canPlanAsBroadcastHashJoin(optimized.asInstanceOf[Join], conf) ===
+      canPlanAsBroadcastHashJoin(optimizedJoin, conf) ===
         operators.head.isInstanceOf[BroadcastHashJoinExec],
       "canPlanAsBroadcastHashJoin not in sync with join selection codepath!")
     operators.head match {
       case bhj: BroadcastHashJoinExec =>
         assert(
-          getBroadcastHashJoinBuildSide(optimized.asInstanceOf[Join], conf)
+          getBroadcastHashJoinBuildSide(optimizedJoin, conf)
             .contains(bhj.buildSide),
           "getBroadcastHashJoinBuildSide not in sync with join selection codepath!")
       case _ =>
@@ -518,8 +522,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
 
-      // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
-      // operator.
+      // Make sure the outer join's output is not clustered by one side's join key.
       checkAnswer(
         sql(
           """
@@ -1187,6 +1190,77 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-61666: sort merge joins release the sorters of their children early") {
+    // A join that stops reading one side before its end releases that side's sorter once it has
+    // produced its last row, instead of holding its memory until the task completes. Read the
+    // join to its end in a task, and check that the task holds no execution memory afterwards.
+    def memoryAfterJoin(df: DataFrame): Seq[Long] = {
+      df.queryExecution.toRdd.mapPartitions { iter =>
+        iter.foreach(_ => ())
+        Iterator(TaskContext.get().taskMemoryManager().getMemoryConsumptionForThisTask)
+      }.collect().toSeq
+    }
+    def isGenerated(df: DataFrame, nodeName: String): Boolean = {
+      collect(df.queryExecution.executedPlan) {
+        case s: WholeStageCodegenExec => s.collect { case p if p.nodeName == nodeName => p }
+      }.flatten.nonEmpty
+    }
+
+    // The join reads `small` to its end, but not `big`.
+    val small = spark.range(0, 100).select($"id".as("k1"))
+    val big = spark.range(0, 1000).select($"id".as("k2"))
+    withTempView("small", "big") {
+      small.createOrReplaceTempView("small")
+      big.createOrReplaceTempView("big")
+      // Fully generated; generated sorts under an interpreted join (the join output has more
+      // fields than `maxFields`); and no codegen at all. With `maxFields`, only the inner, outer
+      // and existence joins run interpreted: the output of a semi or anti join is the output of
+      // its left side, which the generated sort below it has as well.
+      Seq(
+        (Seq.empty[(String, String)], true, true),
+        (Seq(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "1"), true, false),
+        (Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"), false, false)).foreach {
+        case (codegenConfs, sortGenerated, joinGenerated) =>
+          Seq(false, true).foreach { aqe =>
+            withSQLConf(codegenConfs ++ Seq(
+                SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+                SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+                SQLConf.SHUFFLE_PARTITIONS.key -> "1"): _*) {
+              val joins = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
+                small.join(big, $"k1" === $"k2", joinType)
+              } ++ Seq(
+                big.join(small, $"k1" === $"k2", "right_outer"),
+                spark.sql(
+                  "SELECT * FROM small WHERE EXISTS (SELECT 1 FROM big WHERE k2 = k1) OR k1 < 0"))
+              joins.foreach { df =>
+                // Run it first: with AQE, the plan is final only then.
+                val memory = memoryAfterJoin(df)
+                val clue = s"$codegenConfs, aqe=$aqe\n${df.queryExecution.executedPlan}"
+                assert(isGenerated(df, "Sort") == sortGenerated, clue)
+                if (df.queryExecution.executedPlan.output.length > 1) {
+                  assert(isGenerated(df, "SortMergeJoin") == joinGenerated, clue)
+                }
+                assert(memory.forall(_ == 0L), s"$memory, $clue")
+              }
+            }
+          }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = spark.range(0, 100).select(($"id" % 5).as("k"), $"id".as("ts"))
+      val quotes = spark.range(0, 1000).select(($"id" % 5).as("k"), $"id".as("ts"))
+      val df = trades.joinAsOf(
+        quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+      val memory = memoryAfterJoin(df)
+      assert(isGenerated(df, "SortMergeAsOfJoin"), df.queryExecution.executedPlan)
+      assert(memory.forall(_ == 0L), s"$memory, ${df.queryExecution.executedPlan}")
+    }
+  }
+
   test("SPARK-29850: sort-merge-join an empty table should not memory leak") {
     val df1 = spark.range(10).select($"id", $"id" % 3 as Symbol("p"))
       .repartition($"id").groupBy($"id").agg(Map("p" -> "max"))
@@ -1308,34 +1382,53 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: left-broadcast NAAJ fallback uses nested-loop join") {
+  test("SPARK-36082, SPARK-59673: NAAJ threshold eligibility precedes broadcast hints") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
       withTempView("naajHintedLeft", "naajHintedRight") {
         Seq[java.lang.Double](-0.0d, 2.0d, null).toDF("key")
           .createOrReplaceTempView("naajHintedLeft")
         Seq[java.lang.Double](0.0d, 1.0d).toDF("key")
           .createOrReplaceTempView("naajHintedRight")
 
-        val result = sql(
-          "select /*+ BROADCAST(naajHintedLeft) */ naajHintedLeft.* " +
-            "from naajHintedLeft left anti join naajHintedRight on " +
+        val querySuffix =
+          "* from naajHintedLeft left anti join naajHintedRight on " +
             "naajHintedLeft.key = naajHintedRight.key or " +
-            "isnull(naajHintedLeft.key = naajHintedRight.key)")
-        val plan = result.queryExecution.sparkPlan
-        val nestedLoopJoins = plan.collect {
-          case join: BroadcastNestedLoopJoinExec => join
+            "isnull(naajHintedLeft.key = naajHintedRight.key)"
+        val leftHintedQuery = "select /*+ BROADCAST(naajHintedLeft) */ " + querySuffix
+        val rightHintedQuery = "select /*+ BROADCAST(naajHintedRight) */ " + querySuffix
+        val unhintedQuery = "select " + querySuffix
+
+        def checkNAAJ(
+            query: String,
+            expectedClass: Class[_ <: BinaryExecNode],
+            expectedBuildSide: BuildSide): Unit = {
+          assertJoin((query, expectedClass)) match {
+            case join: BroadcastHashJoinExec =>
+              assert(join.isNullAwareAntiJoin)
+              assert(join.buildSide === expectedBuildSide)
+            case join: BroadcastNestedLoopJoinExec =>
+              assert(join.buildSide === expectedBuildSide)
+            case join =>
+              fail(s"Unexpected join: $join")
+          }
+          checkAnswer(sql(query), Row(2.0d))
         }
-        val nullAwareHashJoins = plan.collect {
-          case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          checkNAAJ(leftHintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
+          checkNAAJ(unhintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
         }
-        assert(nestedLoopJoins.size === 1)
-        assert(nestedLoopJoins.head.buildSide === BuildLeft)
-        assert(nullAwareHashJoins.isEmpty)
-        checkAnswer(result, Row(2.0d))
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          checkNAAJ(leftHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildLeft)
+          checkNAAJ(rightHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildRight)
+        }
       }
     }
   }
@@ -1935,6 +2028,54 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       }.isEmpty, df.queryExecution)
     } finally {
       cached.unpersist()
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a throwable condition into " +
+    "a lower join") {
+    withTable("s") {
+      Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it,
+      // whether the CASE WHEN is in the WHERE clause or in the ON clause of the join with w.
+      val df = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+      val onClause = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |  AND CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(onClause, Row(1))
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a condition that can fail ahead of " +
+    "a non-deterministic or throwable one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `rand(10) * 10 > 100` is false on every row, so the `AND` short-circuit keeps the
+      // division by zero on t.id = 3 from being evaluated.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id
+            |WHERE rand(10) * 10 > 100 AND 10L / (t.id - 3) > 0
+            |""".stripMargin),
+        Nil)
+      // The CASE WHEN removes the row whose id is 3, the only one where the division is by zero.
+      // The division follows the throwable CASE WHEN, so it stays above it.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t
+            |JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |  AND CASE WHEN t.id = 3 THEN false WHEN t.id < 0 THEN raise_error('neg') ELSE true END
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id AND 10L / (t.id + s.id - 6) > 0
+            |""".stripMargin),
+        (4L to 9L).map(i => Row(i, i, i)))
     }
   }
 }

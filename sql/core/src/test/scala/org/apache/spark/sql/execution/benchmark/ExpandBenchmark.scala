@@ -33,22 +33,11 @@ import org.apache.spark.sql.internal.SQLConf
  * OptimizeExpand rule that pre-aggregates data before the Expand. Controlled by
  * spark.sql.optimizer.optimizeExpandRatio (default -1 = disabled).
  *
- * It also measures two optimizations that target a shared expensive
- * subexpression landing in the branches of the Expand, using a traffic/BI
- * "N-day active users" rollup (conditional COUNT(DISTINCT) and conditional SUM
- * aggregates whose conditions all share the same datetime subexpression):
- *  - rewriteCountDistinctConditional collapses N conditional COUNT(DISTINCT)
- *    on the same base column into one distinct group, shrinking the Expand
- *    fan-out from Nx to 1x (cuts data amplification, not the per-row
- *    subexpression evaluation cost);
- *  - subexpressionElimination (in Expand, via whole-stage codegen) evaluates
- *    the shared subexpression once per input row instead of once per Expand
- *    branch occurrence.
- * The four cases form a 2x2 matrix over the two optimizations (base, +rewrite,
- * +rewrite+CSE, and +CSE alone), so the benefit of each optimization can be
- * attributed independently. Controlled by
- * spark.sql.optimizer.rewriteCountDistinctConditional.enabled (default true)
- * and spark.sql.subexpressionElimination.enabled (default true).
+ * It also measures subexpression elimination in Expand. With the conditional
+ * distinct rewrite on (the default), the shared datetime expression is repeated
+ * in both Expand branches: the distinct branch for the counts and the regular
+ * branch for the sums. Controlled by
+ * spark.sql.subexpressionElimination.enabled (default true).
  *
  * To run this benchmark:
  * {{{
@@ -57,19 +46,13 @@ import org.apache.spark.sql.internal.SQLConf
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/ExpandBenchmark-results.txt".
  * }}}
- *
- * Optional arguments select benchmark sections (default: all):
- * {{{
- *   <this class> ratio    # Expand: varying number of COUNT(DISTINCT)
- *   <this class> char     # Expand: varying data characteristics (pure distinct)
- *   <this class> subexpr  # Expand: subexpression elimination across branches
- *   <this class> smoke    # all sections with tiny data and a single iteration
- * }}}
  */
 object ExpandBenchmark extends SqlBasedBenchmark {
 
   private val OPTIMIZE_EXPAND_RATIO =
     SQLConf.OPTIMIZE_EXPAND_RATIO.key
+  private val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key
 
   private def prepareTable(name: String, N: Long,
       keyMod: Int, colMods: Seq[Int]): Unit = {
@@ -99,7 +82,7 @@ object ExpandBenchmark extends SqlBasedBenchmark {
 
   private def expandRatioBenchmark(
       title: String, N: Long, numDistinct: Int,
-      table: String, numIters: Int = 5): Unit = {
+      table: String): Unit = {
     val benchmark = new Benchmark(title, N, output = output)
 
     val sqlWithSum = countDistinctQuery(
@@ -114,28 +97,28 @@ object ExpandBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase(
         s"with sum - baseline (ratio $ratioWithSum)",
-        numIters = numIters) { _ =>
+        numIters = 5) { _ =>
       withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
         spark.sql(sqlWithSum).noop()
       }
     }
     benchmark.addCase(
         s"with sum - optimized (ratio $ratioWithSum)",
-        numIters = numIters) { _ =>
+        numIters = 5) { _ =>
       withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
         spark.sql(sqlWithSum).noop()
       }
     }
     benchmark.addCase(
         s"pure distinct - baseline (ratio $ratioPure)",
-        numIters = numIters) { _ =>
+        numIters = 5) { _ =>
       withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
         spark.sql(sqlPure).noop()
       }
     }
     benchmark.addCase(
         s"pure distinct - optimized (ratio $ratioPure)",
-        numIters = numIters) { _ =>
+        numIters = 5) { _ =>
       withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
         spark.sql(sqlPure).noop()
       }
@@ -147,12 +130,15 @@ object ExpandBenchmark extends SqlBasedBenchmark {
   /**
    * Prepares a traffic-like fact table: one row per page view, with a user id,
    * a date-string partition column `pt` (format `yyyyMMdd`), and a metric value.
+   * `pt` starts at 2023-06-02 and spans 730 days, so against the 2025-06-01
+   * anchor in [[conditionalAggsQuery]] `daysSince` is 1 through 730 and the
+   * widest window matches every row.
    */
   private def prepareTrafficTable(name: String, N: Long, userMod: Int): Unit = {
     spark.range(N)
       .selectExpr(
         s"cast(id % $userMod as bigint) as user_id",
-        "date_format(date_add(date '2023-06-01', cast(id % 730 as int)), 'yyyyMMdd') as pt",
+        "date_format(date_add(date '2023-06-02', cast(id % 730 as int)), 'yyyyMMdd') as pt",
         "cast(id % 3600 as bigint) as value")
       .createOrReplaceTempView(name)
   }
@@ -162,10 +148,10 @@ object ExpandBenchmark extends SqlBasedBenchmark {
    * given day windows, one conditional COUNT(DISTINCT) and one conditional SUM
    * whose conditions all share the same expensive datetime subexpression
    * (parse `pt`, format it back, then `datediff` against a fixed date).
-   * `RewriteDistinctAggregates` places those conditions in the branches of an
-   * Expand, so without subexpression elimination the shared subexpression is
-   * codegen'd once per occurrence: 9 in the distinct branch(es) and 9 in the
-   * SUM branch, i.e. 18 evaluations per input row.
+   * With the conditional distinct rewrite on, the counts share one distinct
+   * Expand branch and the sums stay on the regular branch, so the shared
+   * subexpression is repeated in both. With the rewrite off, each count keeps
+   * its own distinct branch.
    */
   private def conditionalAggsQuery(table: String, windows: Seq[Int]): String = {
     val daysSince = "datediff(" +
@@ -183,62 +169,90 @@ object ExpandBenchmark extends SqlBasedBenchmark {
   }
 
   /**
-   * Measures a traffic/BI "N-day active users" rollup (see [[conditionalAggsQuery]])
-   * under all four combinations of the two optimizations that affect the shared
-   * `daysSince` subexpression in the Expand branches:
-   *  - base: rewriteCountDistinctConditional off, subexpression elimination off
-   *    -> 10 Expand branches (one per conditional COUNT(DISTINCT) plus one for
-   *    the SUMs), daysSince evaluated 18 times per input row;
-   *  - +rewrite: rewriteCountDistinctConditional on, CSE off -> the 9
-   *    conditional COUNT(DISTINCT) expressions collapse into one distinct group, so the
-   *    Expand has 2 branches (data amplification drops from 10x to 2x), but
-   *    daysSince is still evaluated 18 times per input row;
-   *  - +rewrite+CSE: both on -> the Expand runs the standard whole-stage
-   *    subexpression elimination, evaluating daysSince once per input row
-   *    before the branch loop;
-   *  - +CSE alone: rewriteCountDistinctConditional off, subexpression
-   *    elimination on -> the same 10-branch Expand as the base case, but
-   *    daysSince is evaluated once per input row, isolating the CSE benefit
-   *    without the data-amplification reduction.
+   * The traffic query's day windows are nested (day <= 1 is a subset of day <= 7, ... of
+   * day <= 730) and together cover every row, so every row matches some predicate and the
+   * union-of-filters guard degenerates to the raw base. This is the best case for the
+   * conditional-count collapse itself: conf on collapses the 9 conditional counts into one
+   * distinct group, removing most of the Expand fan-out.
    */
-  private def subExprEliminationBenchmark(
-      title: String, N: Long, table: String, numIters: Int = 3): Unit = {
+  private def overlappingWorkloadBenchmark(
+      title: String, N: Long, table: String): Unit = {
     val benchmark = new Benchmark(title, N, output = output)
     val sql = conditionalAggsQuery(table, Seq(1, 7, 14, 30, 60, 90, 180, 365, 730))
 
-    benchmark.addCase(
-        "rewrite off, CSE off (10x amplify, 18 evals/row)",
-        numIters = numIters) { _ =>
-      withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+    benchmark.addCase("conf off (9 distinct groups)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "false") {
         spark.sql(sql).noop()
       }
     }
-    benchmark.addCase(
-        "rewrite on, CSE off (2x amplify, 18 evals/row)",
-        numIters = numIters) { _ =>
-      withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+    benchmark.addCase("conf on (1 collapsed group)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "true") {
         spark.sql(sql).noop()
       }
     }
-    benchmark.addCase(
-        "rewrite on, CSE on (2x amplify, 1 eval/row)",
-        numIters = numIters) { _ =>
-      withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-          SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+
+    benchmark.run()
+  }
+
+  private def subExprEliminationBenchmark(
+      title: String, N: Long, table: String): Unit = {
+    val benchmark = new Benchmark(title, N, output = output)
+    val sql = conditionalAggsQuery(table, Seq(1, 7, 14, 30, 60, 90, 180, 365, 730))
+
+    benchmark.addCase("CSE disabled (re-evaluate each use)", numIters = 3) { _ =>
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
         spark.sql(sql).noop()
       }
     }
-    benchmark.addCase(
-        "rewrite off, CSE on (10x amplify, 1 eval/row)",
-        numIters = numIters) { _ =>
-      withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-          SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+    benchmark.addCase("CSE enabled (evaluate once per row)", numIters = 3) { _ =>
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        spark.sql(sql).noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  /**
+   * Prepares a table with a unique base column `ord`, a grouping key `user_id`, and
+   * a 100-value flag column `bucket`. This is the workload shape that regressed in
+   * SPARK-56898 before the union-of-filters guard: high-cardinality base with
+   * low-selectivity disjoint predicates. Unguarded, collapsing the conditional counts
+   * keys the first aggregate by every distinct base value (unbounded by how few rows
+   * the predicates select); guarded, rows matching no predicate collapse into a NULL
+   * key, matching the pre-rewrite plan's cardinality while keeping the collapsed
+   * Expand.
+   */
+  private def prepareHostileTable(name: String, N: Long, userMod: Int): Unit = {
+    spark.range(N)
+      .selectExpr(
+        s"cast(id % $userMod as bigint) as user_id",
+        "cast(id as bigint) as ord",
+        "cast(id % 100 as int) as bucket")
+      .createOrReplaceTempView(name)
+  }
+
+  private def conditionalCountsQuery(table: String, numFlags: Int): String = {
+    val counts = (0 until numFlags).map(i =>
+      s"count(distinct if(bucket = $i, ord, null)) as flag_cnt_$i").mkString(",\n  ")
+    s"""SELECT user_id,
+       |  $counts
+       |FROM $table
+       |GROUP BY user_id""".stripMargin
+  }
+
+  private def hostileWorkloadBenchmark(
+      title: String, N: Long, table: String): Unit = {
+    val benchmark = new Benchmark(title, N, output = output)
+    val sql = conditionalCountsQuery(table, numFlags = 10)
+
+    benchmark.addCase("conf off (10 distinct groups)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "false") {
+        spark.sql(sql).noop()
+      }
+    }
+    benchmark.addCase("conf on (1 guarded group)", numIters = 3) { _ =>
+      withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "true") {
         spark.sql(sql).noop()
       }
     }
@@ -247,33 +261,23 @@ object ExpandBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val smoke = mainArgs.contains("smoke")
-    val sectionFilter = mainArgs.filterNot(_ == "smoke").toSet
+    val N = 10L << 20 // ~10M rows
 
-    def runSection(key: String, name: String)(body: => Unit): Unit = {
-      if (sectionFilter.isEmpty || sectionFilter.contains(key)) {
-        runBenchmark(name)(body)
-      }
-    }
-
-    val numIters = if (smoke) 1 else 5
-    val N = if (smoke) 1000L else 10L << 20 // ~10M rows
-
-    runSection("ratio", "Expand: varying number of COUNT(DISTINCT)") {
+    runBenchmark("Expand: varying number of COUNT(DISTINCT)") {
       prepareTable("expand_bench", N, keyMod = 1000,
         colMods = Seq(100, 200, 300, 400, 500, 600, 700, 800))
 
       expandRatioBenchmark(
-        "2 distinct aggregates", N, 2, "expand_bench", numIters)
+        "2 distinct aggregates", N, 2, "expand_bench")
       expandRatioBenchmark(
-        "4 distinct aggregates", N, 4, "expand_bench", numIters)
+        "4 distinct aggregates", N, 4, "expand_bench")
       expandRatioBenchmark(
-        "6 distinct aggregates", N, 6, "expand_bench", numIters)
+        "6 distinct aggregates", N, 6, "expand_bench")
       expandRatioBenchmark(
-        "8 distinct aggregates", N, 8, "expand_bench", numIters)
+        "8 distinct aggregates", N, 8, "expand_bench")
     }
 
-    runSection("char", "Expand: varying data characteristics (pure distinct)") {
+    runBenchmark("Expand: varying data characteristics (pure distinct)") {
       // Default: 1K groups, moderate distinct cardinality
       prepareTable("expand_default", N, keyMod = 1000,
         colMods = Seq(100, 200, 300, 400, 500, 600))
@@ -299,49 +303,49 @@ object ExpandBenchmark extends SqlBasedBenchmark {
         "6 pure distinct aggs with varying data", N, output = output)
 
       benchDataChar.addCase("1K groups, moderate card - baseline",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
           spark.sql(sql6d).noop()
         }
       }
       benchDataChar.addCase("1K groups, moderate card - optimized",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
           spark.sql(sql6d).noop()
         }
       }
       benchDataChar.addCase("100K groups, moderate card - baseline",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
           spark.sql(sql6dHighKey).noop()
         }
       }
       benchDataChar.addCase("100K groups, moderate card - optimized",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
           spark.sql(sql6dHighKey).noop()
         }
       }
       benchDataChar.addCase("1K groups, low card (5 vals) - baseline",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
           spark.sql(sql6dLowCard).noop()
         }
       }
       benchDataChar.addCase("1K groups, low card (5 vals) - optimized",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
           spark.sql(sql6dLowCard).noop()
         }
       }
       benchDataChar.addCase("no grouping key - baseline",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "-1") {
           spark.sql(sql6dGlobal).noop()
         }
       }
       benchDataChar.addCase("no grouping key - optimized",
-          numIters = numIters) { _ =>
+          numIters = 5) { _ =>
         withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
           spark.sql(sql6dGlobal).noop()
         }
@@ -350,12 +354,33 @@ object ExpandBenchmark extends SqlBasedBenchmark {
       benchDataChar.run()
     }
 
-    runSection("subexpr", "Expand: subexpression elimination across branches") {
-      val numRows = if (smoke) 1000L else 5L << 20 // ~5M rows
+    runBenchmark("Expand: subexpression elimination across branches") {
+      val numRows = 5L << 20 // ~5M rows
       prepareTrafficTable("expand_traffic", numRows, userMod = 1000000)
       subExprEliminationBenchmark(
         "9 conditional COUNT(DISTINCT) + 9 conditional SUM sharing one subexpression",
-        numRows, "expand_traffic", numIters = if (smoke) 1 else 3)
+        numRows, "expand_traffic")
+    }
+
+    runBenchmark("Expand: conditional COUNT(DISTINCT), overlapping predicates") {
+      val numRows = 5L << 20 // ~5M rows
+      prepareTrafficTable("expand_traffic_windows", numRows, userMod = 1000000)
+      overlappingWorkloadBenchmark(
+        "9 conditional COUNT(DISTINCT) + 9 conditional SUM, overlapping day windows",
+        numRows, "expand_traffic_windows")
+    }
+
+    runBenchmark("Expand: conditional COUNT(DISTINCT), high-cardinality base") {
+      // ~10M rows, 100K groups (~100 rows each), unique base column. Each of the 10
+      // disjoint predicates matches ~1% of rows. Conf-off keeps 10 distinct groups
+      // with NULL-collapsed keys; conf-on collapses to 1 guarded group, whose key
+      // cardinality must not regress against the conf-off plan.
+      val hostileRows = 10L << 20
+      prepareHostileTable("expand_hostile", hostileRows, userMod = 100000)
+      hostileWorkloadBenchmark(
+        "10 conditional COUNT(DISTINCT), unique base, " +
+          "1%-selective disjoint predicates",
+        hostileRows, "expand_hostile")
     }
   }
 }

@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.Uninterruptibles
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EVENT_LOOP
 
@@ -77,20 +79,15 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def stop(): Unit = {
     if (stopped.compareAndSet(false, true)) {
       eventThread.interrupt()
-      var onStopCalled = false
+      if (Thread.currentThread() != eventThread) {
+        // onStop must not run concurrently with onReceive, even if the caller is interrupted.
+        Uninterruptibles.joinUninterruptibly(eventThread)
+      }
       try {
-        eventThread.join()
-        // Call onStop after the event thread exits to make sure onReceive happens before onStop
-        onStopCalled = true
         onStop()
       } catch {
         case ie: InterruptedException =>
           Thread.currentThread().interrupt()
-          if (!onStopCalled) {
-            // ie is thrown from `eventThread.join()`. Otherwise, we should not call `onStop` since
-            // it's already called.
-            onStop()
-          }
       }
     } else {
       // Keep quiet to allow calling `stop` multiple times.

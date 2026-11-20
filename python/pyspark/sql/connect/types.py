@@ -31,6 +31,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     DecimalType,
     DoubleType,
+    FileType,
+    FileTypeMode,
     FloatType,
     GeographyType,
     GeometryType,
@@ -130,8 +132,12 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.null.CopyFrom(pb2.DataType.NULL())
     elif isinstance(data_type, CharType):
         ret.char.length = data_type.length
+        if data_type.collation is not None:
+            ret.char.collation = data_type.collation
     elif isinstance(data_type, VarcharType):
         ret.var_char.length = data_type.length
+        if data_type.collation is not None:
+            ret.var_char.collation = data_type.collation
     elif isinstance(data_type, StringType):
         ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):
@@ -193,6 +199,11 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.array.contains_null = data_type.containsNull
     elif isinstance(data_type, VariantType):
         ret.variant.CopyFrom(pb2.DataType.Variant())
+    elif isinstance(data_type, FileType):
+        if data_type.mode == FileTypeMode.EXTERNAL:
+            ret.file.mode = pb2.DataType.FILE_TYPE_MODE_EXTERNAL
+        else:
+            ret.file.mode = pb2.DataType.FILE_TYPE_MODE_UNKNOWN
     elif isinstance(data_type, GeometryType):
         ret.geometry.srid = data_type.srid
     elif isinstance(data_type, GeographyType):
@@ -246,9 +257,15 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         collation = schema.string.collation if schema.string.collation != "" else "UTF8_BINARY"
         return StringType(collation)
     elif schema.HasField("char"):
-        return CharType(schema.char.length)
+        return CharType(
+            schema.char.length,
+            schema.char.collation if schema.char.HasField("collation") else None,
+        )
     elif schema.HasField("var_char"):
-        return VarcharType(schema.var_char.length)
+        return VarcharType(
+            schema.var_char.length,
+            schema.var_char.collation if schema.var_char.HasField("collation") else None,
+        )
     elif schema.HasField("date"):
         return DateType()
     elif schema.HasField("time"):
@@ -322,6 +339,10 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     elif schema.HasField("variant"):
         return VariantType()
+    elif schema.HasField("file"):
+        if schema.file.mode == pb2.DataType.FILE_TYPE_MODE_EXTERNAL:
+            return FileType.external()
+        return FileType()
     elif schema.HasField("geometry"):
         srid = schema.geometry.srid
         if srid == GeometryType.MIXED_SRID:

@@ -51,13 +51,16 @@ object OfflineStateRepartitionUtils {
         val previousBatch = prevBatchOpt.get
 
         require(batch.metadataOpt.isDefined, s"Batch $batchId metadata not found")
-        val shufflePartitions = getShufflePartitions(batch.metadataOpt.get).get
+        val shufflePartitions = getShufflePartitions(batch.metadataOpt.get)
 
         require(previousBatch.metadataOpt.isDefined,
           s"Previous batch $prevBatchId metadata not found")
-        val previousShufflePartitions = getShufflePartitions(previousBatch.metadataOpt.get).get
+        val previousShufflePartitions = getShufflePartitions(previousBatch.metadataOpt.get)
 
-        previousShufflePartitions != shufflePartitions
+        (previousShufflePartitions, shufflePartitions) match {
+          case (Some(previous), Some(current)) => previous != current
+          case _ => false
+        }
     }
   }
 

@@ -19,13 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
-import org.apache.spark.util.collection.Utils
 
 /**
  * Infer predicates and column pruning for [[CTERelationDef]] from its reference points, and push
@@ -50,8 +49,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
       input: Seq[Expression],
       mapping: Map[Attribute, Expression]): Seq[Expression] = {
     input.map(e => e.transform {
-      case a: Attribute =>
-        mapping.keys.find(_.semanticEquals(a)).map(mapping).getOrElse(a)
+      case a: Attribute => mapping.getOrElse(a, a)
     })
   }
 
@@ -75,7 +73,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
 
       case PhysicalOperation(projects, predicates, ref: CTERelationRef) =>
         val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
-        val attrMapping = Utils.toMap(ref.output, cteDef.output)
+        val attrMapping = AttributeMap(ref.output.zip(cteDef.output))
         val newPredicates = if (isTruePredicate(preds)) {
           preds
         } else {
@@ -187,14 +185,18 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * `plan`, wherever predicate push-down rules sharing the fixedPoint batches with this rule
    * (e.g. `PushDownPredicates`) may have moved it. The descent mirrors the cases of
    * `PushPredicateThroughNonJoin` and `PushPredicateThroughJoin`, translating `predicate` back
-   * the same way they translate the pushed condition (for `Project` and `Aggregate` it uses
-   * the very same `AliasHelper` utilities, so the two cannot drift apart): through projection
-   * and grouping-key aliases, positionally into each branch (`Union`), and unchanged
+   * the same way they translate the pushed condition (for `Project` it uses the very same
+   * `AliasHelper` utilities, and for `Aggregate` it calls
+   * `PushPredicateThroughNonJoin.pushBelowAggregate`, so the two cannot drift apart): through
+   * projection aliases, through grouping-key aliases with float/double grouping keys normalized
+   * as `pushBelowAggregate` does, positionally into each branch (`Union`), and unchanged
    * through operators that pass the referenced attributes verbatim (`Join`, `Window`, and
-   * output-preserving unary nodes like `Filter`, `Sort`, `Repartition`). Descent stops at
-   * operators that remap attributes in other ways (e.g. `Generate`, `Expand`): if the filter
-   * cannot be located, the input plan is returned unchanged, and the caller re-pushes on top,
-   * which is redundant but always semantics-preserving.
+   * output-preserving unary nodes like `Filter`, `Sort`, `Repartition`). The descent is recursive
+   * because the filter can end up several operators down -- in particular between the projections
+   * `PushPredicateThroughNonJoin` splits a `Project` into for expensive projected expressions.
+   * Descent stops at operators that remap attributes in other ways (e.g. `Generate`, `Expand`):
+   * if the filter cannot be located, the input plan is returned unchanged, and the caller
+   * re-pushes on top, which is redundant but always semantics-preserving.
    *
    * Ancestors of the removed filter are rebuilt with `withNewChildren` rather than direct
    * case-class copies so that `TreeNode` tags (e.g. `Project.hiddenOutputTag`, which the
@@ -239,13 +241,17 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         }
         if (removedAny) (u.withNewChildren(newChildren), true) else (u, false)
       case agg: Aggregate =>
-        // Mirror PushPredicateThroughNonJoin: translate the target through the grouping
-        // aliases with the same helper it uses to move grouping-key filters below the
-        // aggregate (filters referencing aggregate expressions stay up, so they are always
-        // found above this node).
-        val translated = replaceAlias(target, getAliasMap(agg))
-        val (newChild, removed) = remove(agg.child, translated)
-        if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
+        // Mirror PushPredicateThroughNonJoin: split and translate the target with the same helper
+        // it uses to move filters below the aggregate. A filter it keeps entirely above this node
+        // has been found above already, and one it splits is not entirely below it.
+        val (pushDown, stayUp) =
+          PushPredicateThroughNonJoin.pushBelowAggregate(splitConjunctivePredicates(target), agg)
+        if (pushDown.isEmpty || stayUp.nonEmpty) {
+          (agg, false)
+        } else {
+          val (newChild, removed) = remove(agg.child, pushDown.reduce(And))
+          if (removed) (agg.withNewChildren(Seq(newChild)), true) else (agg, false)
+        }
       case w: Window =>
         // PushDownPredicates pushes filters referencing only partition columns below the
         // window unchanged (partition columns are input attributes, so no translation).

@@ -18,6 +18,9 @@
 github:
   description: "Apache Spark - A unified analytics engine for large-scale data processing"
   homepage: https://spark.apache.org/
+  collaborators:
+    # Being a collaborator lets committers request a review from this bot to get an AI review.
+    - spark-test
   features:
     issues: true
   labels:

@@ -188,9 +188,10 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
    * Evict the state by timestamp. Returns the number of values evicted.
    *
    * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
-   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
-   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
-   *   the scan starts from startTimestamp + 1.
+   * @param startTimestamp Exclusive lower bound. When provided, the caller guarantees that
+   *   entries with timestamp <= startTimestamp were evicted already and no newly admitted rows
+   *   have timestamps <= startTimestamp, so the scan starts from startTimestamp + 1. `None`
+   *   scans all timestamps up to endTimestamp.
    */
   def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long
 
@@ -200,9 +201,10 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
    * It is caller's responsibility to consume the whole iterator.
    *
    * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
-   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
-   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
-   *   the scan starts from startTimestamp + 1.
+   * @param startTimestamp Exclusive lower bound. When provided, the caller guarantees that
+   *   entries with timestamp <= startTimestamp were evicted already and no newly admitted rows
+   *   have timestamps <= startTimestamp, so the scan starts from startTimestamp + 1. `None`
+   *   scans all timestamps up to endTimestamp.
    */
   def evictAndReturnByTimestamp(
       endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair]
@@ -921,8 +923,10 @@ class SymmetricHashJoinStateManagerV4(
      *
      * @param endTimestamp Inclusive upper bound: entries with timestamp <= endTimestamp are
      *   eligible for eviction.
-     * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp
-     *   are assumed to have been evicted already. The scan starts from startTimestamp + 1.
+     * @param startTimestamp Exclusive lower bound. When provided, the caller guarantees that
+     *   entries with timestamp <= startTimestamp were evicted already and no newly admitted rows
+     *   have timestamps <= startTimestamp, so the scan starts from startTimestamp + 1. `None`
+     *   scans all timestamps up to endTimestamp.
      */
     def scanEvictedKeys(
         endTimestamp: Long,

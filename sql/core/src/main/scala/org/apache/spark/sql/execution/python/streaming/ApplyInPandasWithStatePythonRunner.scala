@@ -72,6 +72,11 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
+  // The data and state counts of each batch returned from Python cover the whole batch and are
+  // read from its first row, so the batch must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   // Installed at worker launch. This runner is constructed per task, so each launch reads the
   // configuration that task carries. A running streaming query carries a snapshot:
   // `StreamExecution` runs its batches on `sparkSession.cloneSession()`, whose conf is copied at
@@ -155,8 +160,10 @@ class ApplyInPandasWithStatePythonRunner(
         arrowMaxRecordsPerBatch,
         arrowMaxBytesPerBatch)
     }
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
+    // The batches go through `writer`, which stays bound to the stream of the first call, while
+    // `dataOut` can be a new stream on every call. So count the bytes that `writer` writes.
+    val startData = writer.bytesWritten()
+    val hasInput = if (inputIterator.hasNext) {
       val (keyRow, groupState, dataIter) = inputIterator.next()
       assert(dataIter.hasNext, "should have at least one data row!")
       pandasWriter.startNewGroup(keyRow, groupState)
@@ -167,14 +174,15 @@ class ApplyInPandasWithStatePythonRunner(
       }
 
       pandasWriter.finalizeGroup()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
       pandasWriter.finalizeData()
       super[PythonArrowInput].close()
       false
     }
+    val deltaData = writer.bytesWritten() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 
   /**
