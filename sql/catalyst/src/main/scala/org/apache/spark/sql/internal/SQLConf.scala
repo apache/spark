@@ -4655,6 +4655,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
