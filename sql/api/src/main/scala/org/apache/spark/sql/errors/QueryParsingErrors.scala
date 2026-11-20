@@ -932,7 +932,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def timeTravelTimestampReferencesColumnsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
-      messageParameters = Map("expr" -> ("\"" + SparkParserUtils.source(ctx) + "\"")),
+      messageParameters = Map("expr" -> quoteByDefault(SparkParserUtils.source(ctx))),
       ctx)
   }
 
