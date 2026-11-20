@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.FullOuter
-import org.apache.spark.sql.execution.{LocalTableScanExec, SortExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{LocalTableScanExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -50,7 +50,7 @@ class FullOuterJoinOrderingSuite
       checkOrdered(df, Seq(Row(null), Row(null), Row(1), Row(2), Row(3), Row(3), Row(4)), "k")
       val plan = df.queryExecution.executedPlan
       val generatedJoins = collect(plan) {
-        case w: WholeStageCodegenExec if w.exists(_.isInstanceOf[SortMergeJoinExec]) => w
+        case w @ WholeStageCodegenExec(ProjectExec(_, _: SortMergeJoinExec)) => w
       }
       assert(generatedJoins.nonEmpty == codegen.toBoolean, plan)
       assert(fullOuterJoin(df).leftKeys.head.nullable)
