@@ -29,7 +29,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
 
 /** Builds check and generated-column invariants for a write to a resolved V2 table. */
 private[sql] class TableConstraintResolution(
@@ -43,7 +42,7 @@ private[sql] class TableConstraintResolution(
       r: DataSourceV2Relation): V2WriteCommand = {
     val tableCheckInvariants =
       if (r.table.constraints != null && r.table.constraints.nonEmpty) {
-        val input = withCharVarcharTypes(v2Write.query.output, r)
+        val input = CharVarcharUtils.withCharVarcharTypes(v2Write.query.output, r.table.columns())
         // Check constraint is the only enforced constraint for DSV2 tables.
         r.table.constraints.collect {
           case c: Check => buildCheckInvariant(c, input)
@@ -56,35 +55,6 @@ private[sql] class TableConstraintResolution(
     // Combine the check invariants into a single expression using conjunctive AND.
     allInvariants.reduceOption(And).fold(v2Write)(
       condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
-  }
-
-  /**
-   * The output of the query of a write, with the CHAR and VARCHAR types of the table columns that
-   * `TableOutputResolver` removes from it. A CHECK condition resolved against it pads a string
-   * literal compared with a CHAR column, as the stored values are padded. A write that treats CHAR
-   * as STRING does not pad the values, so the output is kept as it is: `ApplyCharTypePadding` skips
-   * such a write, but not a condition read from its text under the fixed settings.
-   */
-  private def withCharVarcharTypes(
-      output: Seq[Attribute],
-      r: DataSourceV2Relation): Seq[Attribute] = {
-    val conf = SQLConf.get
-    // standardSemantics takes precedence over legacy charVarcharAsString.
-    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
-      output
-    } else {
-      val resolver = catalogManager.v1SessionCatalog.conf.resolver
-      val charVarcharColumns =
-        r.table.columns().filter(c => CharVarcharUtils.hasCharVarchar(c.dataType()))
-      output.map { a =>
-        charVarcharColumns.find(c => resolver(c.name(), a.name)).fold(a) { c =>
-          a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
-            .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY,
-              c.dataType().catalogString)
-            .build())
-        }
-      }
-    }
   }
 
   private def buildCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
