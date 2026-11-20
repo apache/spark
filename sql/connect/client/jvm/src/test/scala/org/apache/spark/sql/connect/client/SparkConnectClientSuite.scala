@@ -32,13 +32,14 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkThrowable}
+import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
+import org.apache.spark.sql.streaming.StreamingQueryException
 
 class SparkConnectClientSuite extends ConnectFunSuite {
 
@@ -394,7 +395,31 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
-  test("ParseException keeps the server message for a condition the client does not define") {
+  // The errorFactory entries that rebuild a server error from this client's error definitions.
+  // StreamingQueryException and SparkException always keep the server's message.
+  private val renderingErrorFactory = GrpcExceptionConverter.errorFactory.filter {
+    case (name, _) =>
+      name != classOf[StreamingQueryException].getName && name != classOf[SparkException].getName
+  }
+
+  private def isInstanceOf(error: Throwable, className: String): Boolean =
+    Iterator
+      .iterate[Class[_]](error.getClass)(_.getSuperclass)
+      .takeWhile(_ != null)
+      .exists(_.getName == className)
+
+  // Entries whose exception type carries no query context.
+  private val withoutQueryContext = Set(
+    classOf[NamespaceAlreadyExistsException],
+    classOf[TableAlreadyExistsException],
+    classOf[TempTableAlreadyExistsException],
+    classOf[NoSuchDatabaseException],
+    classOf[NoSuchNamespaceException],
+    classOf[NoSuchTableException],
+    classOf[UnsupportedOperationException],
+    classOf[SparkUpgradeException]).map(_.getName)
+
+  test("Server errors the client cannot render keep the server's message") {
     val sqlContext = new QueryContext {
       override def contextType(): QueryContextType = QueryContextType.SQL
       override def objectType(): String = ""
@@ -405,59 +430,80 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       override def callSite(): String = ""
       override def summary(): String = "== SQL (line 1, position 1) ==\nSELECT\n^^^^^^\n"
     }
-    Seq(
-      // A subcondition the client lacks, with a query context and the server's SQLSTATE.
+    // (condition, message parameters, query context, server SQLSTATE, expected SQLSTATE)
+    val cases = Seq(
+      // A subcondition the client lacks. The server's SQLSTATE differs from the 42000 the
+      // client would derive from the main condition, and wins.
       (
         "INVALID_SQL_SYNTAX.SUBCONDITION_NOT_DEFINED_BY_CLIENT",
         Map("statement" -> "SELECT"),
         Array(sqlContext),
-        Some("42000"),
+        Some("42601"),
+        "42601"),
+      // The same without a server SQLSTATE, as for a server condition that defines none: the
+      // client falls back to the main condition's SQLSTATE.
+      (
+        "INVALID_SQL_SYNTAX.SUBCONDITION_NOT_DEFINED_BY_CLIENT",
+        Map("statement" -> "SELECT"),
+        Array.empty[QueryContext],
+        None,
         "42000"),
-      // A main condition the client lacks, without a query context or SQLSTATE, as when only
-      // the truncated error status is available.
+      // A main condition the client lacks, without a server SQLSTATE.
       (
         "CONDITION_NOT_DEFINED_BY_CLIENT",
         Map.empty[String, String],
-        Array.empty[QueryContext],
+        Array(sqlContext),
         None,
-        "XXKCM")).foreach {
-      case (errorClass, messageParameters, queryContext, serverSqlState, expectedSqlState) =>
-        withClue(errorClass) {
-          val serverMessage = s"\n[$errorClass] Server message. SQLSTATE: $expectedSqlState\n" +
-            queryContext.map(_.summary()).mkString
-          val error = GrpcExceptionConverter
-            .errorFactory(classOf[ParseException].getName)(
+        "XXKCM"),
+      // A condition the client defines, but whose template uses a parameter the server did not
+      // send, as when the template gained a placeholder in the client's version.
+      ("DUPLICATE_KEY", Map("unrelated" -> "x"), Array.empty[QueryContext], None, "23505"))
+    for ((name, constructor) <- renderingErrorFactory) {
+      cases.foreach {
+        case (errorClass, messageParameters, queryContext, serverSqlState, expectedSqlState) =>
+          withClue(s"$name, $errorClass, $serverSqlState: ") {
+            val serverMessage =
+              s"[$errorClass] Server message. SQLSTATE: $expectedSqlState" +
+                queryContext.map("\n" + _.summary()).mkString
+            val error = constructor(
               GrpcExceptionConverter.ErrorParams(
                 message = serverMessage,
                 cause = None,
                 errorClass = Some(errorClass),
                 messageParameters = messageParameters,
                 queryContext = queryContext,
-                sqlState = serverSqlState))
-            .asInstanceOf[ParseException]
-          assert(error.getMessage == serverMessage)
-          assert(error.getCondition == errorClass)
-          assert(error.getSqlState == expectedSqlState)
-          assert(error.getMessageParameters.asScala == messageParameters)
-          assert(error.getQueryContext.toSeq == queryContext.toSeq)
-        }
+                sqlState = serverSqlState)).asInstanceOf[Throwable with SparkThrowable]
+            assert(isInstanceOf(error, name))
+            assert(error.getMessage == serverMessage)
+            assert(error.getCondition == errorClass)
+            assert(error.getSqlState == expectedSqlState)
+            assert(error.getMessageParameters.asScala == messageParameters)
+            val expectedContext =
+              if (withoutQueryContext.contains(name)) Seq.empty else queryContext.toSeq
+            assert(error.getQueryContext.toSeq == expectedContext)
+          }
+      }
     }
   }
 
-  test("ParseException is rendered from the client definitions for a defined condition") {
-    val error = GrpcExceptionConverter
-      .errorFactory(classOf[ParseException].getName)(GrpcExceptionConverter.ErrorParams(
-        message = "Server message",
-        cause = None,
-        errorClass = Some("PARSE_SYNTAX_ERROR"),
-        messageParameters = Map("error" -> "'SELEC'", "hint" -> ""),
-        queryContext = Array.empty,
-        sqlState = None))
-      .asInstanceOf[ParseException]
-    assert(error.getMessage.contains("[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELEC'."))
-    assert(!error.getMessage.contains("Server message"))
-    assert(error.getCondition == "PARSE_SYNTAX_ERROR")
-    assert(error.getSqlState == "42601")
+  test("Server errors the client can render are rendered from its own definitions") {
+    for ((name, constructor) <- renderingErrorFactory) {
+      withClue(name) {
+        val error = constructor(
+          GrpcExceptionConverter.ErrorParams(
+            message = "Server message",
+            cause = None,
+            errorClass = Some("DUPLICATE_KEY"),
+            messageParameters = Map("keyColumn" -> "`abc`"),
+            queryContext = Array.empty,
+            sqlState = None)).asInstanceOf[Throwable with SparkThrowable]
+        assert(isInstanceOf(error, name))
+        assert(error.getMessage.contains("[DUPLICATE_KEY] Found duplicate keys `abc`."))
+        assert(!error.getMessage.contains("Server message"))
+        assert(error.getCondition == "DUPLICATE_KEY")
+        assert(error.getSqlState == "23505")
+      }
+    }
   }
 
   private case class TestPackURI(
