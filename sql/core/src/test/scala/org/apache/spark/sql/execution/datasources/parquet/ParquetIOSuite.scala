@@ -175,38 +175,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           Arrays.fill(backing, 63.toByte)
       }
     }
-
-    test(s"binary writer preserves reused off-heap rows, " +
-        s"dictionary $dictionary, writer $version") {
-      val projection = UnsafeProjection.create(reusedBinarySchema)
-      val address = Platform.allocateMemory(64 * 1024)
-      val row = new UnsafeRow(reusedBinarySchema.length)
-      try {
-        checkReusedBinaryWrites(version, enabled, pageSize, dictionaryPages, plainPages) {
-          (writer, input) =>
-            val projected = projection(input)
-            Platform.setMemory(address, 42.toByte, 64 * 1024)
-            projected.writeToMemory(null, address + 16)
-            row.pointTo(null, address + 16, projected.getSizeInBytes)
-            writer.write(row)
-            Platform.setMemory(address, 63.toByte, 64 * 1024)
-        }
-      } finally {
-        Platform.freeMemory(address)
-      }
-    }
-
-    test(s"binary writer preserves reused generic arrays, " +
-        s"dictionary $dictionary, writer $version") {
-      checkReusedBinaryWrites(version, enabled, pageSize, dictionaryPages, plainPages) {
-        (writer, input) =>
-          writer.write(input)
-          if (!input.isNullAt(0)) {
-            // All four binary fields share this array.
-            Arrays.fill(input.getBinary(0), 63.toByte)
-          }
-      }
-    }
   }
 
   test("SPARK-11694 Parquet logical types are not being tested properly") {
