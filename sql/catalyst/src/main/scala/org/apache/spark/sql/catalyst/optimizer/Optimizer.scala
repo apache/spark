@@ -3430,9 +3430,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         if canPushThrough(joinType) =>
       // An inner join evaluates its condition before the filter, so the filter's conditions are
       // written after it, as at the end of its ON clause, and a non-deterministic or throwable
-      // conjunct of it keeps the ones that can fail in place.
-      val afterBarrier = joinType.isInstanceOf[InnerLike] &&
-        joinCondition.exists(cond => !cond.deterministic || cond.throwable)
+      // conjunct of it keeps the ones that can fail in place. So does such a conjunct of the
+      // condition of a left semi or left anti join, which decides which left rows reach the
+      // filter. The other joins keep every row of the side that they push the filter's
+      // conditions to.
+      val afterBarrier =
+        (joinType.isInstanceOf[InnerLike] || joinType == LeftSemi || joinType == LeftAnti) &&
+          joinCondition.exists(cond => !cond.deterministic || cond.throwable)
       val (movable, stayUp) = splitMovable(
         splitConjunctivePredicates(filterCondition), Seq(left, right), afterBarrier)
       val (leftFilterConditions, rightFilterConditions, commonMovable) =

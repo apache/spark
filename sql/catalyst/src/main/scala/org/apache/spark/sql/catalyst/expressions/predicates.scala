@@ -300,9 +300,9 @@ trait PredicateHelper extends AliasHelper with Logging {
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. The conjuncts that may not move are returned in their written order.
    *
-   * If `afterBarrier` is true, the conjuncts are evaluated after a condition that they may not
-   * move ahead of, as if after a non-deterministic or throwable conjunct, so only the ones that
-   * can not fail may move.
+   * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
+   * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
+   * condition of the join below them, so only the ones that can not fail may move.
    */
   protected def splitMovable(
       conditions: Seq[Expression],

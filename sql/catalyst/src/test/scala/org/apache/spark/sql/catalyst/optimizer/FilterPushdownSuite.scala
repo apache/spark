@@ -1270,6 +1270,27 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of a left semi or left anti join") {
+    // The division is built in ANSI mode, where it can fail. The condition of a left semi or
+    // left anti join decides which left rows reach the filter above it, so after the throwable
+    // conjunct of the join condition, a filter condition that can fail stays above the join. A
+    // condition that can not fail is pushed. A left outer join keeps every left row, so both are
+    // pushed below it.
+    val divide = Divide($"b", Literal(2), NumericEvalContext(EvalMode.ANSI))
+    val condition = Some($"a" === $"d" && IsNull(RaiseError(Literal("boom"))))
+    Seq(LeftSemi, LeftAnti, LeftOuter).foreach { joinType =>
+      val originalQuery = testRelation.join(testRelation1, joinType, condition)
+        .where(divide > 1 && $"c" > 1)
+      val correctAnswer = if (joinType == LeftOuter) {
+        testRelation.where(divide > 1 && $"c" > 1).join(testRelation1, joinType, condition)
+      } else {
+        testRelation.where($"c" > 1).join(testRelation1, joinType, condition).where(divide > 1)
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")

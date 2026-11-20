@@ -3198,6 +3198,23 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62091: a filter condition that can fail is not pushed through a left semi or " +
+    "left anti join ahead of its throwable condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Both joins drop the left row whose id is 3, the only one where the division is by zero:
+      // the CASE WHEN of the condition is false there for the left semi join, and true there
+      // for the left anti join.
+      val left = spark.range(0, 10, 1, 1).toDF("l")
+      val right = spark.range(0, 10, 1, 1).toDF("r")
+      val expected = (4L to 9L).map(Row(_))
+      Seq("left_semi" -> ($"l" =!= 3), "left_anti" -> ($"l" === 3)).foreach { case (joinType, c) =>
+        val joined = left.join(right,
+          $"l" === $"r" && when($"l" < 0, raise_error(lit("neg"))).otherwise(c), joinType)
+        checkAnswer(joined.where(lit(10L) / ($"l" - 3) > 0), expected)
+      }
+    }
+  }
+
   test("SPARK-61921: an inferred filter over a column that can fail is not evaluated ahead of " +
     "the condition through a limit, a sort, a join or an aggregate") {
     withSQLConf(
