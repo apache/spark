@@ -7,7 +7,7 @@ When a change needs a version — `@since` annotations, config `.version("...")`
   - breaking / binary-incompatible changes that can't ship in a minor release;
   - dependency upgrades that don't fix a critical issue worth backporting.
 
-  A MiMa exclusion alone does not make a change master-only: most are for changes a minor release may ship, such as a new public method or a removed internal member, so they go in the `branch-<N>.x` version's section.
+  A MiMa exclusion alone does not make a change master-only: most are for changes a minor release may ship, such as a new abstract method in a public trait or abstract class, or a removed internal member, so they go in the `branch-<N>.x` version's section.
 
 Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
 

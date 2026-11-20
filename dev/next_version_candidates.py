@@ -29,7 +29,7 @@ Choosing between them ("is this change master-only?") is a judgement call and is
 made here -- this script only reports the mechanical facts.
 
 Takes no arguments. Reads from a local git remote pointing at apache/spark (the
-`upstream` the AGENTS.md pre-flight has you configure); errors out if none exists,
+`upstream` that `.agents/pre-flight.md` has you configure); errors out if none exists,
 rather than fetching full histories over the network into your working repo.
 
 Usage: dev/next_version_candidates.py

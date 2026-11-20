@@ -12,8 +12,8 @@ for that directory's scope. A directory may carry these instructions as `CLAUDE.
 `AGENTS.md`, so check **both** names. Where both exist, one is a symlink to the other, and reading
 either one is sufficient.
 
-Before editing agent docs (an `AGENTS.md`, `CLAUDE.md` or `.agents/` file): read
-`.agents/agent-docs.md`.
+Agent instructions go in `AGENTS.md` or the `.agents/` directory beside it. Before adding or
+editing them: read `.agents/agent-docs.md`.
 
 ## Pre-flight Checks
 
@@ -31,10 +31,12 @@ skip it.
 - Before writing a new Scala or Python test suite: read `.agents/test-base-classes.md` and pick
   the lowest base class that provides what the test actually needs.
 - When writing or changing a test, pin the configs its assertions depend on: runtime SQL configs
-  with `withSQLConf` (`self.sql_conf` in Python), static SQL and core configs in the suite's Spark
-  conf (`sparkConf` in Scala, `conf()` in Python). Scheduled jobs rerun the suites with other
-  defaults set through env vars, such as the Non-ANSI job (`SPARK_ANSI_SQL_MODE=false`) and the
-  UDS, JDK codegen and RocksDB UI jobs. When a result differs by ANSI mode and both matter, assert
+  with `withSQLConf` (`self.sql_conf` in Python), static SQL and core configs in the suite's conf
+  (`sparkConf` in `SharedSparkSession` suites, `conf` in `SharedSparkContext` suites, `conf()` in
+  Python). Scheduled jobs rerun the suites with other defaults set through env vars, such as the
+  Non-ANSI job (`SPARK_ANSI_SQL_MODE=false`) and the UDS and JDK codegen jobs. The RocksDB UI job
+  keeps the live UI store on disk, and no config switches it back to memory, so a UI or listener
+  test must pass with either store. When a result differs by ANSI mode and both matter, assert
   both modes instead of pinning one. To check, run the suite with `SPARK_ANSI_SQL_MODE=false`.
 - Never remove, skip or weaken a failing test (`ignore`, `assume(false)`, `@unittest.skip`, or an
   expected value or golden file updated just to match), or mock the code under test, unless asked.
@@ -52,9 +54,10 @@ skip it.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
   content requires it). When changing Scala, Java or Python code: read
   `.agents/code-conventions.md`, and run its spot-checks before committing.
-- Every new file needs the Apache License header, copied from a neighboring file of the same type
-  and placed after the `#!` line of an executable script. A file that cannot carry one, such as
-  test data, goes in `dev/.rat-excludes` instead; the license check in CI fails otherwise.
+- Every new file that `dev/.rat-excludes` does not already match needs the Apache License header,
+  copied from a neighboring file of the same type and placed after the `#!` line of an executable
+  script. If such a file cannot carry one, add it to `dev/.rat-excludes`; the license check in CI
+  fails otherwise.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.
