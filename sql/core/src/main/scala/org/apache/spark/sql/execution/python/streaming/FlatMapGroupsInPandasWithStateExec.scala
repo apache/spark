@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, Processing
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.python.ArrowPythonRunner
+import org.apache.spark.sql.execution.python.{ArrowPythonRunner, PythonPhaseMetrics}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.resolveArgOffsets
 import org.apache.spark.sql.execution.streaming.operators.stateful._
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.{FlatMapGroupsWithStateExecBase, GroupStateImpl}
@@ -69,7 +69,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     skipEmittingInitialStateKeys: Boolean,
-    child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
+    child: SparkPlan)
+  extends UnaryExecNode with FlatMapGroupsWithStateExecBase with PythonPhaseMetrics {
 
   // TODO(SPARK-40444): Add the support of initial state.
   override protected val initialStateDeserializer: Expression = null
