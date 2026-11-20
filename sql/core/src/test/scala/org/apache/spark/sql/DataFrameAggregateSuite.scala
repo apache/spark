@@ -201,6 +201,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
         Row(null, null, 113000.0, 3) :: Nil)
   }
 
+  test("SPARK-62094: grouping sets of a struct made nullable by an outer join") {
+    val left = Seq((1, 10), (2, 20)).toDF("a", "x")
+    val right = Seq(2).toDF("b")
+    // The field of `struct(right("b"))` is resolved as non-nullable, and becomes nullable after
+    // resolution
+    checkAnswer(
+      left.join(right, left("a") === right("b"), "left_outer")
+        .groupingSets(Seq(Seq(struct(right("b")))), struct(right("b")))
+        .count()
+        .toDF("s", "count")
+        .select($"s.b", $"count"),
+      Row(null, 1) :: Row(2, 1) :: Nil)
+  }
+
   test("grouping and grouping_id") {
     checkAnswer(
       courseSales.cube("course", "year")
