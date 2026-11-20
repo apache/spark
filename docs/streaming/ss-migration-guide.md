@@ -70,12 +70,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the state of such a query
   can hold the wrong keys.
 
-- Since Spark 4.4, the output column of a generator such as `explode` in the Dataset API is
-  nullable when the input of the generator is computed from a column that an outer join makes
-  nullable, for example `explode(array(right("b")))` after a left outer join with `right`.
-  Previously, such a column was non-nullable and returned a wrong value, such as `-1` or `0`,
-  instead of NULL. As a result, an existing query started before Spark 4.3 that keeps such a column
-  in its state, for example as a grouping key of a streaming aggregation, fails to restart with
+- Since Spark 4.4, the output column of a generator such as `explode` in the Dataset API, or a
+  struct field or an array element in it, is nullable when the input of the generator is computed
+  from a column that an outer join makes nullable, for example `explode(array(right("b")))` or
+  `explode(array(struct(right("b").as("x"))))` after a left outer join with `right`. Previously,
+  it was non-nullable and returned a wrong value, such as `-1` or `0`, instead of NULL. As a
+  result, an existing query started before Spark 4.3 that keeps such a value in its state, for
+  example as a grouping key of a streaming aggregation, fails to restart with
   `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new checkpoint location, or set
   `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the state of such a
   query can hold the wrong keys. The same holds for a query started on Spark 4.3 or later, which

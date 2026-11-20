@@ -116,14 +116,22 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
   // of its generator when it is built. The element schema may become nullable later when this
   // rule updates the attributes the generator references, e.g., a column of a Dataset that an
   // outer join makes nullable, so widen the nullability of the generator output attributes
-  // accordingly, keeping their expression IDs. Only the fields that this rule makes nullable are
+  // accordingly, keeping their expression IDs. Likewise, merge the nested nullability that the
+  // element schema gains, e.g., the nullability of a struct field built from such a column, into
+  // the data types of the output attributes. Only the fields that this rule changes are
   // considered, as some generators declare all fields nullable while their output attributes
   // keep a narrower nullability, e.g., `ReplicateRows` built for EXCEPT ALL.
   private def widenOutputNullability(g: Generate, oldGenerate: Generate): Generate = {
     val fields = g.generator.elementSchema.fields
     val oldFields = oldGenerate.generator.elementSchema.fields
     val newOutput = g.generatorOutput.zipWithIndex.map { case (attr, index) =>
-      attr.withNullability(attr.nullable || (fields(index).nullable && !oldFields(index).nullable))
+      val (field, oldField) = (fields(index), oldFields(index))
+      val newAttr = attr.withNullability(attr.nullable || (field.nullable && !oldField.nullable))
+      if (field.dataType != oldField.dataType) {
+        newAttr.withDataType(StructType.unionLikeMerge(attr.dataType, field.dataType))
+      } else {
+        newAttr
+      }
     }
     if (newOutput == g.generatorOutput) g else g.copy(generatorOutput = newOutput)
   }
