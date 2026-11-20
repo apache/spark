@@ -620,7 +620,9 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators, isFirstBatch)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators, isFirstBatch,
+              sparkSession.sessionState.conf.getConf(
+                SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
         )
     }
   }

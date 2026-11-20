@@ -588,7 +588,9 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
-  test("V4 restart from an older checkpoint fails when the condition bounds another column") {
+  // The checkpoint has no join output watermark check, so the join keeps the earlier eviction.
+  test("V4 restart from an older checkpoint keeps evicting by the event time when the " +
+      "condition bounds another column") {
     withJoinConf(4) {
       withTempDir { checkpoint =>
         // A version before this change, with the stream-stream join code of Spark 4.3, wrote this
@@ -602,13 +604,13 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
         rightInput.addData((9, 400L))
         testStream(result)(
           StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          // The watermark is 340 s, which the cutoff from expiry applies to leftTime.
           AddData(rightInput, (9, 400L)),
-          ExpectFailure[AnalysisException] { e =>
-            checkError(
-              e.asInstanceOf[AnalysisException],
-              condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-              parameters = Map("side" -> "left", "column" -> "`expiry`"))
-          })
+          CheckNewAnswer(Row(1, null, 100L), Row(2, null, 100L)),
+          AddData(rightInput, (1, 460L)),
+          CheckNewAnswer(),
+          StopStream)
+        assert(indexVersion(checkpoint) === Some("0"))
       }
     }
   }
