@@ -187,10 +187,12 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
     // The connector selects by position, so it receives a copy, which Spark checks afterwards: a
-    // copy that the connector reordered would bind the parameters to the wrong predicates.
+    // copy that the connector reordered would bind the parameters to the wrong predicates. The
+    // descriptions are taken first, because the connector receives the predicate instances.
+    val offeredDescriptions = offeredPredicates.map(_.describe()).toIndexedSeq
     val passedPredicates = offeredPredicates.clone()
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates,
-      offeredCandidates.toIndexedSeq, passedPredicates,
+      offeredDescriptions, offeredCandidates.toIndexedSeq, passedPredicates,
       lookupBuilder.selectLookupPredicates(passedPredicates))
     val selectedConjuncts = selectedPredicates.flatMap(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
@@ -378,18 +380,17 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
    * candidates, in the connector's order, which defines the fields of each request parameter row.
    * Positions keep two candidates of the same shape, for example the same lookup field compared
    * with two different join-side values, distinguishable. `passed` is the copy of `offered` that
-   * the connector received; it must still hold the offered predicates in the offered order.
+   * the connector received; for a non-empty selection, it must still hold the offered predicates
+   * in the offered order. As each offered predicate has its own `LookupParameter`, which equals
+   * only itself, `equals` tells every reorder apart while it accepts an equal rebuilt predicate.
    */
   private def selectedCandidates(
       tableName: String,
       offered: Array[V2Predicate],
+      descriptions: IndexedSeq[String],
       candidates: IndexedSeq[OfferedLookupPredicate],
       passed: Array[V2Predicate],
       selected: Array[Int]): Seq[OfferedLookupPredicate] = {
-    if (!offered.indices.forall(index => passed(index) eq offered(index))) {
-      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-        tableName, "MODIFIED_CANDIDATES", Map.empty)
-    }
     if (selected == null) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
@@ -398,19 +399,25 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
+    if (!passed.corresponds(offered)(_ == _)) {
+      val position = passed.indices.indexWhere(position => passed(position) != offered(position))
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, "MODIFIED_CANDIDATES",
+        Map("position" -> position.toString, "predicate" -> descriptions(position)))
+    }
     val seen = mutable.BitSet.empty
-    selected.toSeq.map { index =>
-      if (index < 0 || index >= candidates.length) {
+    selected.toSeq.map { position =>
+      if (position < 0 || position >= candidates.length) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "INVALID_SELECTED_PREDICATE_INDEX",
-          Map("index" -> index.toString, "maxIndex" -> (candidates.length - 1).toString))
+          tableName, "INVALID_SELECTED_PREDICATE_POSITION",
+          Map("position" -> position.toString, "maxPosition" -> (candidates.length - 1).toString))
       }
-      if (!seen.add(index)) {
+      if (!seen.add(position)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "DUPLICATE_SELECTED_PREDICATE",
-          Map("index" -> index.toString, "predicate" -> offered(index).describe()))
+          Map("position" -> position.toString, "predicate" -> descriptions(position)))
       }
-      candidates(index)
+      candidates(position)
     }
   }
 

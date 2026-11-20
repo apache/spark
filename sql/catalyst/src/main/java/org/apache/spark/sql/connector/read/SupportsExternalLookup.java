@@ -90,7 +90,8 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   cannot evaluate that way, and do not select unsupported names or shapes.</li>
    *   <li>An empty result means no access path fits; the query then fails.</li>
    *   <li>The input array and its elements are read-only. The returned positions refer to the
-   *   offered order, so Spark fails the query if the source changes the array.</li>
+   *   offered order, so Spark fails the query if, when this method returns a non-empty result,
+   *   the array no longer holds the offered predicates in the offered order.</li>
    * </ul>
    * Spark calls this method only on builders of lookup scans, at most once, after any filter
    * pushdown and before column pruning. Besides filter pushdown and column pruning, Spark calls

@@ -505,16 +505,24 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       (_ => Array.empty, "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE", Map.empty),
       (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
-      (_ => Array(-1), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "-1", "maxIndex" -> "0")),
+      (_ => Array(-1), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "-1", "maxPosition" -> "0")),
       (_.indices.toArray :+ 1,
-        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "1", "maxIndex" -> "0")),
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "1", "maxPosition" -> "0")),
       (_ => Array(0, 0), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
-        Map("index" -> "0", "predicate" -> "id = ?")),
+        Map("position" -> "0", "predicate" -> "id = ?")),
+      // The message describes the predicate as offered, even after the connector changed it.
+      ({ candidates => candidates(0).children()(0) = FieldReference.column("other"); Array(0, 0) },
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
+        Map("position" -> "0", "predicate" -> "id = ?")),
       // The input array is read-only.
       ({ candidates => candidates(0) = null; Array(0) },
-        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.MODIFIED_CANDIDATES", Map.empty)).foreach {
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.MODIFIED_CANDIDATES",
+        Map("position" -> "0", "predicate" -> "id = ?")),
+      // With no selection, a changed array cannot bind wrongly, so the result decides the error.
+      ({ candidates => candidates(0) = null; Array.empty },
+        "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE", Map.empty)).foreach {
       case (select, condition, parameters) =>
         checkError(
           exception = prepareError(lookupJoinOnId(
@@ -538,7 +546,24 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     checkError(
       exception = prepareError(lookupJoin(lookup, streamId === id && streamLabel === label)),
       condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.MODIFIED_CANDIDATES",
-      parameters = Map("table" -> QUOTED_TABLE_NAME))
+      parameters = Map("table" -> QUOTED_TABLE_NAME, "position" -> "0", "predicate" -> "id = ?"))
+  }
+
+  test("a connector may replace a candidate with an equal predicate") {
+    val Seq(streamId, streamLabel) = stream.output
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING", select = {
+      candidates =>
+        // A rebuilt predicate keeps the offered LookupParameter, so it equals the candidate.
+        candidates.indices.foreach { position =>
+          val candidate = candidates(position)
+          candidates(position) = new Predicate(candidate.name(), candidate.children().clone())
+        }
+        Array(1, 0)
+    }))
+    val Seq(id, label) = lookup.output
+    val prepared = prepare(lookupJoin(lookup, streamId === id && streamLabel === label))
+    assert(prepared.lookupParameters === Seq(streamLabel, streamId))
+    assert(prepared.lookupKeys.map(_.name) === Seq("label", "id"))
   }
 
   test("a left outer join makes NOT NULL lookup columns nullable") {

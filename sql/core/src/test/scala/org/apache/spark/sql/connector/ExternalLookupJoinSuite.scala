@@ -769,12 +769,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     Seq(
       ("nullKeySelection", "true", "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
-      ("selectionMode", "negative", "INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "-1", "maxIndex" -> "0")),
-      ("selectionMode", "outOfRange", "INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "1", "maxIndex" -> "0")),
+      ("selectionMode", "negative", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "-1", "maxPosition" -> "0")),
+      ("selectionMode", "outOfRange", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "1", "maxPosition" -> "0")),
       ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE",
-        Map("index" -> "0", "predicate" -> "id = ?")),
+        Map("position" -> "0", "predicate" -> "id = ?")),
+      ("selectionMode", "modifyCandidates", "MODIFIED_CANDIDATES",
+        Map("position" -> "0", "predicate" -> "id = ?")),
       ("maxBatchSize", "0", "NON_POSITIVE_MAX_PARAMETER_ROWS", Map("value" -> "0"))).foreach {
       case (option, value, subClass, parameters) =>
         val lookup = spark.read
@@ -6246,6 +6248,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
           case "duplicate" => supported.take(1) ++ supported.take(1)
           case "negative" => Array(-1)
           case "outOfRange" => Array(candidates.length)
+          case "modifyCandidates" => supported
         }
         selectedLookupPredicates = selected.filter(candidates.indices.contains).map { index =>
           candidates(index).name()
@@ -6253,6 +6256,8 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
           case "<" | "<=" | ">" | ">=" if ignoreSelectedRanges => "any"
           case name => name
         }.toSeq
+        // The input array is read-only; this mode writes into it.
+        if (selectionMode == "modifyCandidates") candidates(0) = null
         selected
       }
 
