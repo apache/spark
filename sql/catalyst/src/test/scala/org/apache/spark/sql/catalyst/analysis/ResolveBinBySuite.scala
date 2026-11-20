@@ -195,8 +195,9 @@ class ResolveBinBySuite extends AnalysisTest {
     val tsStartU = UnresolvedAttribute("ts_start")
     val tsEndU = UnresolvedAttribute("ts_end")
     val valueU = UnresolvedAttribute("value")
-    val result = ResolveBinBy.apply(
-      unresolved(rangeStart = tsStartU, rangeEnd = tsEndU, distribute = Seq(valueU)))
+    val result = getAnalyzer.executeAndCheck(
+      unresolved(rangeStart = tsStartU, rangeEnd = tsEndU, distribute = Seq(valueU)),
+      new QueryPlanningTracker)
     val bi = result.asInstanceOf[BinBy]
     assert(bi.rangeStart.exprId == tsStart.exprId)
     assert(bi.rangeEnd.exprId == tsEnd.exprId)
@@ -209,8 +210,9 @@ class ResolveBinBySuite extends AnalysisTest {
     val md = new MetadataBuilder().putString("comment", "a measure").build()
     val valueMd = AttributeReference("value", DoubleType, nullable = true, md)()
     val child = SubqueryAlias("m", LocalRelation(tsStart, tsEnd, valueMd, label))
-    val bi = ResolveBinBy.apply(
-      unresolved(child = child, distribute = Seq(UnresolvedAttribute(Seq("m", "value")))))
+    val bi = getAnalyzer.executeAndCheck(
+      unresolved(child = child, distribute = Seq(UnresolvedAttribute(Seq("m", "value")))),
+      new QueryPlanningTracker)
       .asInstanceOf[BinBy]
 
     // The input is read (held in distributeColumns) but not forwarded by identity.
@@ -283,7 +285,7 @@ class ResolveBinBySuite extends AnalysisTest {
       distributeColumns = Seq(UnresolvedAttribute(Seq("t2", "value"))),
       outputAliases = BinByOutputAliases.empty,
       child = join)
-    val resolved1 = ResolveBinBy.apply(u1).asInstanceOf[BinBy]
+    val resolved1 = getAnalyzer.executeAndCheck(u1, new QueryPlanningTracker).asInstanceOf[BinBy]
     assert(resolved1.rangeStart.exprId == t1Start.exprId)
     assert(resolved1.rangeEnd.exprId == t1End.exprId)
 
@@ -296,25 +298,28 @@ class ResolveBinBySuite extends AnalysisTest {
       distributeColumns = Seq(UnresolvedAttribute(Seq("t2", "value"))),
       outputAliases = BinByOutputAliases.empty,
       child = join)
-    val resolved2 = ResolveBinBy.apply(u2).asInstanceOf[BinBy]
+    val resolved2 = getAnalyzer.executeAndCheck(u2, new QueryPlanningTracker).asInstanceOf[BinBy]
     assert(resolved2.rangeStart.exprId == t2Start.exprId)
     assert(resolved2.rangeEnd.exprId == t2End.exprId)
   }
 
   test("rejects unresolvable column references with UNRESOLVED_COLUMN") {
-    expectError(
+    Seq(
       unresolved(rangeStart = UnresolvedAttribute("nonexistent")),
-      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-    expectError(
-      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))),
-      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent")))).foreach { plan =>
+      val ex = intercept[SparkThrowable] {
+        getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+      }
+      assert(ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    }
   }
 
   test("UNRESOLVED_COLUMN suggestions are ordered by similarity to the missing name") {
     // `valeu` is one edit away from `value`, so `value` is suggested first and the remaining
     // columns follow by edit distance.
     val ex = intercept[SparkThrowable](
-      ResolveBinBy.apply(unresolved(rangeStart = UnresolvedAttribute("valeu"))))
+      getAnalyzer.executeAndCheck(
+        unresolved(rangeStart = UnresolvedAttribute("valeu")), new QueryPlanningTracker))
     assert(ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     assert(ex.getMessageParameters.get("objectName") == "`valeu`")
     assert(ex.getMessageParameters.get("proposal") == "`value`, `label`, `ts_end`, `ts_start`")

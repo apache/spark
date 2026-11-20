@@ -67,6 +67,9 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxBins(100)
       .setSeed(1)
+    assert(dt.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    dt.setIntermediateStorageLevel("DISK_ONLY")
+    assert(dt.getIntermediateStorageLevel === "DISK_ONLY")
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }

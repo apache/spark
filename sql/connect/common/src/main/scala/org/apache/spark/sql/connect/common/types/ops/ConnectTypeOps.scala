@@ -161,7 +161,7 @@ object ConnectTypeOps {
   /** Encoder-keyed dispatch for Arrow serialization. */
   def forEncoder(enc: AgnosticEncoder[_]): Option[ConnectTypeOps] =
     enc match {
-      case LocalTimeEncoder => Some(new TimeTypeConnectOps(TimeType()))
+      case LocalTimeEncoder(precision) => Some(new TimeTypeConnectOps(TimeType(precision)))
       // Add new framework encoders here
       case _ => None
     }

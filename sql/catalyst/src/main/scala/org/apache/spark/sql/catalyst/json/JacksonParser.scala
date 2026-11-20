@@ -168,13 +168,15 @@ class JacksonParser(
 
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+    lazy val existenceDefaultValues = ResolveDefaultColumns.existenceDefaultValues(st)
     val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
       new JsonFilters(filters, st)
     } else {
       new NoopFilters
     }
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
+      case START_OBJECT => convertObject(
+        parser, st, fieldConverters, existenceDefaultValues, jsonFilters, isRoot = true)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -238,7 +240,8 @@ class JacksonParser(
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
 
         val res = try {
-          convertObject(parser, st, fieldConverters)
+          convertObject(
+            parser, st, fieldConverters, ResolveDefaultColumns.existenceDefaultValues(st))
         } catch {
           case err: PartialResultException =>
             throw PartialArrayDataResultException(
@@ -487,8 +490,10 @@ class JacksonParser(
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+      lazy val existenceDefaultValues = ResolveDefaultColumns.existenceDefaultValues(st)
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
-        case START_OBJECT => convertObject(parser, st, fieldConverters).get
+        case START_OBJECT =>
+          convertObject(parser, st, fieldConverters, existenceDefaultValues).get
       }
 
     case at: ArrayType =>
@@ -587,11 +592,14 @@ class JacksonParser(
   /**
    * Parse an object from the token stream into a new Row representing the schema.
    * Fields in the json that are not defined in the requested schema will be dropped.
+   * `existenceDefaultValues` is `ResolveDefaultColumns.existenceDefaultValues(schema)`, which the
+   * caller computes once per converter instead of once per object.
    */
   private def convertObject(
       parser: JsonParser,
       schema: StructType,
       fieldConverters: Array[ValueConverter],
+      existenceDefaultValues: Array[Any],
       structFilters: StructFilters = new NoopFilters(),
       isRoot: Boolean = false): Option[InternalRow] = {
     val containerDepth = parser.getParsingContext.getNestingDepth
@@ -601,7 +609,7 @@ class JacksonParser(
 
     structFilters.reset()
     lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(schema)
-    resetExistenceDefaultsBitmask(schema, bitmask)
+    resetExistenceDefaultsBitmask(existenceDefaultValues, bitmask)
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.currentName) match {
         case Some(index) =>
@@ -630,7 +638,7 @@ class JacksonParser(
     if (skipRow) {
       None
     } else if (badRecordException.isEmpty) {
-      applyExistenceDefaultValuesToRow(schema, row, bitmask)
+      applyExistenceDefaultValuesToRow(existenceDefaultValues, row, bitmask)
       Some(convertRow(row, schema))
     } else {
       throw PartialResultException(row, badRecordException.get)
@@ -937,16 +945,18 @@ class JacksonParser(
       }
       throw badRecord(error, () => recordLiteral(record))
     }
-    // Resuming is only safe where the parser cannot have moved past the element that failed. A
-    // scalar element leaves it on that scalar's own token, and `convertObject` consumes through
-    // END_OBJECT before raising `PartialResultException`; any other container failure can have
-    // stopped anywhere inside the element.
-    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean =
-      options.parseMode != FailFastMode && (elementStart match {
-        case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
-        case Some(_) => error.isInstanceOf[RuntimeException]
-        case None => false
-      })
+    // Resuming is only safe where the failed element left the parser back in the top-level array.
+    // A syntax error inside a nested object ends `convertObject` at that object's END_OBJECT, not
+    // the element's, so a `PartialResultException` alone does not prove the element was consumed.
+    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean = {
+      val context = jsonParser.getParsingContext
+      options.parseMode != FailFastMode && context.inArray && context.getParent.inRoot &&
+        (elementStart match {
+          case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
+          case Some(_) => error.isInstanceOf[RuntimeException]
+          case None => false
+        })
+    }
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)

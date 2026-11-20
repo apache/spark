@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedExpression, NamedLambdaVariable, Or, PythonUDAF, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
@@ -78,9 +79,11 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // join keys, assuming Joins with join keys are always planned as hash join or sort merge
       // join. It's very unlikely that we will break this assumption in the near future.
       case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
-          // The analyzer guarantees left and right joins keys are of the same data type. Here we
-          // only need to check join keys of one side.
-          if leftKeys.exists(k => needNormalize(k)) =>
+          // The analyzer guarantees left and right join keys are of the same data type, but a key
+          // can already be normalized on one side only (e.g. a filter pushed below an Aggregate
+          // reads the normalized grouping key, and a subquery rewrite turns it into a join key),
+          // so check both sides.
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
         val newLeftJoinKeys = leftKeys.map(normalize)
         val newRightJoinKeys = rightKeys.map(normalize)
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
@@ -90,7 +93,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
       // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if leftKeys.exists(needNormalize) =>
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
         val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
         j.copy(condition = Some(Or(equality, IsNull(equality))))
 
@@ -99,6 +102,68 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // here. For now we normalize grouping expressions during planning. See Case 2 in the
       // Scaladoc just above.
     }
+
+  /**
+   * Whether `aggregate` outputs its float/double grouping keys normalized. The planner normalizes
+   * the grouping keys of every Aggregate (see `SparkStrategies.Aggregation`), except one whose
+   * aggregate functions are all grouped-agg pandas UDFs, planned as `ArrowAggregatePythonExec` on
+   * the raw keys. Rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
+   * The answer can still change during optimization, see [[mayChangeKeyForm]].
+   */
+  private[sql] def outputsNormalizedKeys(aggregate: Aggregate): Boolean = {
+    val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae.aggregateFunction
+    })
+    aggregateFunctions.isEmpty || !aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
+  }
+
+  /**
+   * Whether the form of the keys `aggregate` outputs may still change during optimization, so that
+   * a filter pushed below it must not depend on it. This is the case for an Aggregate with a
+   * grouped-agg pandas UDF: `ColumnPruning` can remove its other aggregate functions, so that it
+   * outputs the raw keys, or all of them, so that it becomes group-only and outputs normalized
+   * keys.
+   */
+  private[sql] def mayChangeKeyForm(aggregate: Aggregate): Boolean = {
+    aggregate.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.isInstanceOf[PythonUDAF]
+      case _ => false
+    })
+  }
+
+  /**
+   * The float/double grouping expressions that `aggregate` outputs normalized, without aliases.
+   */
+  private[sql] def normalizedKeys(aggregate: Aggregate): Seq[Expression] = {
+    if (outputsNormalizedKeys(aggregate)) {
+      aggregate.groupingExpressions
+        .map {
+          case a: Alias => a.child
+          case e => e
+        }
+        .filter(e => needNormalize(e.dataType))
+    } else {
+      Nil
+    }
+  }
+
+  /**
+   * Whether a rule must not replace `aggregate` with a Project of `outputs` (a subset of
+   * `aggregate.aggregateExpressions`) over its child, because one of them reads a float/double
+   * grouping key that `aggregate` outputs normalized: the Project would output the raw key,
+   * unlike the Aggregate and unlike what a filter pushed below the Aggregate has read. Streaming
+   * Aggregates are exempt and keep the previous behavior: keeping one that such a rule used to
+   * remove would add a stateful operator, which a query restarted from an existing checkpoint
+   * rejects. Filters are not normalized below streaming Aggregates either (see
+   * `PushPredicateThroughNonJoin.pushBelowAggregate`).
+   */
+  private[sql] def readsNormalizedKeys(
+      aggregate: Aggregate,
+      outputs: Seq[NamedExpression]): Boolean = {
+    val keys = normalizedKeys(aggregate)
+    !aggregate.isStreaming && keys.nonEmpty &&
+      outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
+  }
 
   /**
    * Short circuit if the underlying expression is already normalized

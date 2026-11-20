@@ -57,9 +57,39 @@ public interface PartitionReaderFactory extends Serializable {
   }
 
   /**
+   * Returns a row-based partition reader that may apply the storage filter of {@code request} while
+   * it reads the given {@link InputPartition}. Spark calls this instead of
+   * {@link #createReader(InputPartition)} for a {@link SupportsStorageFilters} scan it offered a
+   * filter, so the factory of such a scan must implement it for row-based reads.
+   *
+   * @since 5.0.0
+   */
+  default PartitionReader<InternalRow> createReader(
+      InputPartition partition, StorageFilterRequest request) {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
+  }
+
+  /**
+   * Returns a columnar partition reader that may apply the storage filter of {@code request} while
+   * it reads the given {@link InputPartition}. Spark calls this instead of
+   * {@link #createColumnarReader(InputPartition)} for a {@link SupportsStorageFilters} scan it
+   * offered a filter, so the factory of such a scan must implement it for columnar reads.
+   *
+   * @since 5.0.0
+   */
+  default PartitionReader<ColumnarBatch> createColumnarReader(
+      InputPartition partition, StorageFilterRequest request) {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
+  }
+
+  /**
    * Returns true if the given {@link InputPartition} should be read by Spark in a columnar way.
    * This means, implementations must also implement {@link #createColumnarReader(InputPartition)}
-   * for the input partitions that this method returns true.
+   * for the input partitions that this method returns true, and
+   * {@link #createColumnarReader(InputPartition, StorageFilterRequest)} for a scan offered a
+   * storage filter.
    * <p>
    * As of Spark 2.4, Spark can only read all input partition in a columnar way, or none of them.
    * Data source can't mix columnar and row-based partitions. This may be relaxed in future

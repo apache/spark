@@ -130,11 +130,18 @@ public interface Column {
    * @since 4.2.0
    */
   static Builder builderFrom(Column column) {
+    GenerationExpression genExpr = column.columnGenerationExpression();
+    String legacySql = column.generationExpression();
+    if (legacySql != null && (genExpr == null || genExpr.getSql() == null)) {
+      // The column may provide the SQL only through the legacy SQL getter.
+      genExpr = new GenerationExpression(
+          legacySql, genExpr != null ? genExpr.getExpression() : null);
+    }
     return new Builder(column.name(), column.dataType())
         .nullable(column.nullable())
         .comment(column.comment())
         .defaultValue(column.defaultValue())
-        .generationExpression(column.columnGenerationExpression())
+        .generationExpression(genExpr)
         .identityColumnSpec(column.identityColumnSpec())
         .metadata(column.metadataInJSON())
         .id(column.id());
@@ -171,10 +178,12 @@ public interface Column {
    * Returns the generation expression of this table column as a SQL string. Null means no
    * generation expression.
    * <p>
-   * This returns only the SQL string form. Prefer {@link #columnGenerationExpression()}, which can
-   * also carry a connector {@link org.apache.spark.sql.connector.expressions.Expression} and
-   * captures the semantics unambiguously. It is up to the data source to verify expression
-   * compatibility and reject writes as necessary.
+   * This returns only the SQL string form. {@link #columnGenerationExpression()} can also carry a
+   * connector {@link org.apache.spark.sql.connector.expressions.Expression}. See
+   * {@link GenerationExpression} for how Spark reads each form. It is up to the data source to
+   * verify expression compatibility and reject writes as necessary.
+   * If the object returned by {@code columnGenerationExpression()} has no SQL string, Spark uses
+   * this method's SQL string as the fallback when its modeled expression cannot be converted.
    */
   @Nullable
   default String generationExpression() {

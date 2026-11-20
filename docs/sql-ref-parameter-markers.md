@@ -29,6 +29,26 @@ You cannot mix named and unnamed parameter markers in the same SQL statement.
 
 Parameter markers can be used wherever literal values are allowed in the SQL syntax.
 
+The marker syntax (`:name` or `?`) does not declare a type. The type is the type of the
+bound value:
+
+* In SQL, `USING` binds a [constant expression](sql-ref-syntax-aux-exec-imm.html).
+  A [string literal](sql-ref-literals.html#string-literal) such as `'ab'` is `STRING`.
+  Use a typed literal (`5L`, `DATE '2024-01-01'`) or `CAST` to choose another type.
+  A CHAR or VARCHAR value without an explicit collation currently binds as `STRING`.
+  An explicitly collated value such as `CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE)`
+  keeps that CHAR/VARCHAR type. Cast the marker in the SQL text when you need
+  CHAR/VARCHAR without relying on collation.
+* In Python, Scala, or Java `spark.sql(..., args)`, Spark infers the type from the host
+  value. A Python or Java `str` / `String` is `STRING`. Host args must be literal-like
+  constants: literals, or array/map/struct constructors of them. A `Column` such as
+  `lit('ab').cast('CHAR(2)')` is rejected with `INVALID_SQL_ARG`.
+
+To convert after binding, wrap the marker in the SQL text: `CAST(:p AS CHAR(2))` or
+`CAST(? AS INT)`. By default those CHAR/VARCHAR casts are `STRING`; they stay
+`CHAR`/`VARCHAR` when types are first-class. See
+[Character String Types](sql-ref-character-string-types.html).
+
 To parameterize identifiers (such as table or column names), use the [`IDENTIFIER` clause](sql-ref-identifier-clause.html).
 
 Parameter markers can be provided by:
@@ -61,6 +81,32 @@ If no value has been bound to the parameter marker an `UNBOUND_SQL_PARAMETER` er
 You are not required to reference all supplied parameter markers.
 
 The mandatory preceding `:` (colon) differentiates the namespace of named parameter markers from that of column names and SQL parameters.
+
+##### Type examples
+
+```sql
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(:p)' USING 'ab' AS p;
+  string
+
+> SET spark.sql.charVarchar.standardSemantics.enabled = true;
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(:p)' USING CAST('ab' AS CHAR(2)) AS p;
+  string
+
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(:p)' USING CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE) AS p;
+  char(2) collate UTF8_LCASE
+
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(CAST(:p AS CHAR(2)))' USING 'ab' AS p;
+  char(2)
+```
+
+```python
+spark.sql("SELECT TYPEOF(:p)", args={"p": "ab"}).first()[0]
+# 'string'
+
+spark.sql("SET spark.sql.charVarchar.standardSemantics.enabled = true")
+spark.sql("SELECT TYPEOF(CAST(:p AS CHAR(2)))", args={"p": "ab"}).first()[0]
+# 'char(2)'
+```
 
 ##### Examples
 
@@ -155,6 +201,27 @@ Unnamed parameter markers are typed placeholder variables. The API invoking the 
 Each occurrence of an unnamed parameter marker consumes a value provided by the API invoking the SQL statement in order.
 If no value has been bound to the parameter marker, an `UNBOUND_SQL_PARAMETER` error is raised.
 You are not required to consume all provided values.
+
+The type rules are the same as for named markers: bind a typed `USING` expression, or
+`CAST` the `?` in the statement. A CHAR or VARCHAR `USING` value without an explicit
+collation currently binds as `STRING`; an explicitly collated CHAR or VARCHAR value
+keeps that type. Host `spark.sql(..., args)` values must be literal-like constants;
+they cannot be a `cast` `Column`.
+
+```sql
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING 'ab';
+  string
+
+> SET spark.sql.charVarchar.standardSemantics.enabled = true;
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING CAST('ab' AS CHAR(2));
+  string
+
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(?)' USING CAST('ab' AS CHAR(2) COLLATE UTF8_LCASE);
+  char(2) collate UTF8_LCASE
+
+> EXECUTE IMMEDIATE 'SELECT TYPEOF(CAST(? AS CHAR(2)))' USING 'ab';
+  char(2)
+```
 
 ### Examples
 

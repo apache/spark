@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.io.File
+import java.nio.file.Files
+
+import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   // sarutak/oracle-free is a custom fork of gvenzl/oracle-free which allows to set timeout for
@@ -38,6 +44,39 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   // causing the suite to abort with "ORA-12541: No listener". Give it more headroom so the
   // test is not flaky on slow CI runners.
   override def connectionTimeout: Option[String] = Some("15min")
+
+  // The listener refuses a dedicated connection with ORA-12516 once the processes the instance
+  // last reported to it, plus the connections it has handed off since, reach PROCESSES. The
+  // instance reports only every few seconds, the image's default PROCESSES of 200 leaves room
+  // for about 110 connections on top of its background processes, and the JDBC v2 tests open
+  // close to 100 short-lived connections within one such window. PROCESSES is a static
+  // parameter, so a wrapper entrypoint raises it in the spfile before the image's own entrypoint
+  // (container-entrypoint.sh of gvenzl/oracle-free and its forks) starts the database. Other
+  // images, such as those built from oracle/docker-images, have no such entrypoint and start as
+  // they are.
+  private val entryPointDir = "/docker-entrypoint-oracle"
+  private val entryPointScript = "oracle-docker-entrypoint.sh"
+  private def wrapsEntryPoint: Boolean = imageName.contains("oracle-free")
+
+  override def getEntryPoint: Option[String] =
+    if (wrapsEntryPoint) Some(s"$entryPointDir/$entryPointScript") else None
+
+  override def beforeContainerStart(
+      hostConfigBuilder: HostConfig,
+      containerConfigBuilder: ContainerConfig): Unit = if (wrapsEntryPoint) {
+    val dir = Utils.createTempDir()
+    val script = new File(dir, entryPointScript)
+    Utils.tryWithResource(getClass.getClassLoader.getResourceAsStream(entryPointScript)) { in =>
+      Files.copy(in, script.toPath)
+    }
+    // The database runs as the `oracle` user of the container, not as the owner of these files.
+    Seq(dir, script).foreach { f =>
+      f.setReadable(true, false)
+      f.setExecutable(true, false)
+    }
+    val bind = new Bind(dir.getAbsolutePath, new Volume(entryPointDir), AccessMode.ro)
+    hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ bind: _*)
+  }
 
   override def getJdbcUrl(ip: String, port: Int): String = {
     s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"

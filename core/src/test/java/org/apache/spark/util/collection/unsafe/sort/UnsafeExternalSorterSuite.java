@@ -590,6 +590,46 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void testGetIteratorWithMoreThanIntMaxSpilledRecords() throws Exception {
+    // Writing more than Integer.MAX_VALUE records is infeasible in a unit test, so simulate two
+    // spill files whose record counts add up past it. With an `int` running count the total
+    // wrapped negative: the second spill file was skipped and the in-memory tail was asked to
+    // skip ~2^31 records, throwing ArrayIndexOutOfBoundsException.
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      final UnsafeSorterSpillWriter largeSpill = mockSpillWriter(Integer.MAX_VALUE);
+      final UnsafeSorterSpillWriter smallSpill = mockSpillWriter(10);
+      sorter.addSpillWriterForTesting(largeSpill);
+      sorter.addSpillWriterForTesting(smallSpill);
+      for (int i = 0; i < 5; i++) {
+        insertNumber(sorter, i);
+      }
+
+      final UnsafeSorterIterator iter = sorter.getIterator(0);
+      verify(largeSpill).getReader(any());
+      verify(smallSpill).getReader(any());
+      assertEquals((long) Integer.MAX_VALUE + 10 + 5, iter.getNumRecords());
+      // The mocked spill readers are empty, so the iterator reaches the in-memory tail, which
+      // must start at its first record rather than be advanced.
+      verifyIntIterator(iter, 0, 5);
+      assertFalse(iter.hasNext());
+    } finally {
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
+    }
+  }
+
+  /** A spill writer that reports `numRecords` spilled records and returns an empty reader. */
+  private static UnsafeSorterSpillWriter mockSpillWriter(int numRecords) throws IOException {
+    final UnsafeSorterSpillReader reader = mock(UnsafeSorterSpillReader.class);
+    when(reader.getNumRecords()).thenReturn((long) numRecords);
+    final UnsafeSorterSpillWriter writer = mock(UnsafeSorterSpillWriter.class);
+    when(writer.recordsSpilled()).thenReturn(numRecords);
+    when(writer.getReader(any())).thenReturn(reader);
+    return writer;
+  }
+
+  @Test
   public void testNoOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
     for (int i = 0; i < 100; i++) {

@@ -93,13 +93,14 @@ case class ToTime(str: Expression, format: Option[Expression])
       methodInputTypes = arguments.map(_.dataType))
   }
 
-  override lazy val replacement: Expression = format match {
-    case None => invokeParser()
-    case Some(expr) if expr.foldable =>
-      Option(expr.eval())
+  // A foldable format that fails to evaluate is passed to the parser for each row instead, so
+  // that only a row that evaluates the format fails.
+  override lazy val replacement: Expression = format.flatMap(ExprUtils.tryEvalFoldable) match {
+    case Some(fmt) =>
+      Option(fmt)
         .map(f => invokeParser(Some(f.toString), Seq(str)))
         .getOrElse(Literal(null, TimeType()))
-    case _ => invokeParser()
+    case None => invokeParser()
   }
 
   override def inputTypes: Seq[AbstractDataType] = {

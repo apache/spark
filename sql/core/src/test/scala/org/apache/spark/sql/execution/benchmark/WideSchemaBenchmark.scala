@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.util.Utils
 
 /**
@@ -103,6 +103,36 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       df.count()  // force caching
       benchmark.addCase(s"$width columns") { iter =>
         df.withColumn("id", lit(1)).withColumn("name", lit("name")).queryExecution.optimizedPlan
+      }
+    }
+    benchmark.run()
+  }
+
+  def optimizeLargeUnion(): Unit = {
+    val benchmark = new Benchmark("optimize large union", 1, output = output)
+    Seq(100, 1000, 10000).foreach { width =>
+      def child(prefix: String): DataFrame =
+        spark.range(1).selectExpr((1 to width).map(i => s"id + $i as ${prefix}_$i"): _*)
+      val df = child("a").union(child("b"))
+      benchmark.addCase(s"$width columns") { iter =>
+        // `ColumnPruning` prunes the children of the `Union` for the `Aggregate`. A `select`
+        // would be pushed through the `Union` by `PushProjectionThroughUnion` instead.
+        df.groupBy("a_1").count().queryExecution.optimizedPlan
+      }
+    }
+    benchmark.run()
+  }
+
+  def optimizeLargeCube(): Unit = {
+    val benchmark = new Benchmark("optimize large cube", 1, output = output)
+    Seq(100, 1000, 10000).foreach { width =>
+      val columns = (1 to 3).map(i => s"id as g_$i") ++ (1 to width).map(i => s"id as c_$i")
+      val df = spark.range(1).selectExpr(columns: _*).cache()
+      df.count()  // force caching
+      val sums = (1 to width).map(i => sum(s"c_$i"))
+      benchmark.addCase(s"$width columns") { iter =>
+        // `ColumnPruning` prunes the `Expand` for the `Aggregate` but keeps every summed column.
+        df.cube("g_1", "g_2", "g_3").agg(sums.head, sums.tail: _*).queryExecution.optimizedPlan
       }
     }
     benchmark.run()
@@ -231,6 +261,14 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
 
     runBenchmarkWithDeleteTmpFiles("optimize large select expressions") {
       optimizeLargeSelectExpressions()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("optimize large union") {
+      optimizeLargeUnion()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("optimize large cube") {
+      optimizeLargeCube()
     }
 
     runBenchmarkWithDeleteTmpFiles("many column field read and write") {

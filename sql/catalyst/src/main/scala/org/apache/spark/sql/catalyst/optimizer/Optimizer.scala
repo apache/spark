@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -954,6 +954,23 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
+  // Pushes `LocalLimit(1)` below a group-only Aggregate under `LIMIT 1` and replaces the Aggregate
+  // with a Project of its child. If that Project would read float/double keys that the Aggregate
+  // normalizes, the Aggregate is kept, with the limit still pushed below it.
+  private def pushLimitOneThroughGroupOnlyAggregate(
+      limitExpr: Expression,
+      agg: Aggregate): LogicalPlan = {
+    if (!NormalizeFloatingNumbers.readsNormalizedKeys(agg, agg.aggregateExpressions)) {
+      val newAgg = EliminateSorts(agg.copy(child = LocalLimit(limitExpr, agg.child)))
+        .asInstanceOf[Aggregate]
+      Project(newAgg.aggregateExpressions, newAgg.child)
+    } else if (agg.child.maxRowsPerPartition.exists(_ <= 1)) {
+      agg
+    } else {
+      EliminateSorts(agg.copy(child = LocalLimit(limitExpr, agg.child)))
+    }
+  }
+
   private def pushLocalLimitThroughJoin(limitExpr: Expression, join: Join): Join = {
     join.joinType match {
       case RightOuter if join.condition.nonEmpty =>
@@ -1007,11 +1024,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
-      Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
+      Limit(le, pushLimitOneThroughGroupOnlyAggregate(le, a))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
-      Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
+      Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
@@ -1037,7 +1052,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
 /**
  * Attempt to convert UDFS to Catalyst expressions.
  */
-object ConvertToCatalyst extends Rule[LogicalPlan] {
+object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     // Short circuit if there are no Transpiled Python UDFs in the plan.
     if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
@@ -1058,7 +1073,69 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         e.containsPattern(TRANSPILED_PYTHON_UDF) && e.exists(_.isInstanceOf[TranspiledPythonUDF])
       } => p
 
-      case p => convertOperator(p)
+      case p => convertOperator(keepCartesianGuard(p))
+    }
+  }
+
+  /**
+   * With `spark.sql.crossJoin.enabled=false`, hands back to Python every call that spans both
+   * sides of a join with no other condition spanning them, so CheckCartesianProducts still fails
+   * the query (SPARK-58780).
+   *
+   * Interpreted, such a call cannot be evaluated by the join, so ExtractPythonUDFFromJoinCondition
+   * pulls it out into a Filter above a join with no condition, and the check raises. Lowered, it is
+   * a native expression that reads both sides, which is all the check looks for -- but no join key
+   * can be extracted from it, so the planner still picks a CartesianProduct and the query runs
+   * quadratic in silence. Keeping the Python UDF keeps the error users asked for.
+   *
+   * Covers the call in the join's own condition and in a Filter above it (`join(...).where(...)`,
+   * or a comma join in SQL), which predicate pushdown later moves into the join. A key that only
+   * arrives from further away, e.g. a Filter above this one, is not seen here, so that call stays
+   * interpreted when it could have been lowered: slower, but no different from transpilation off.
+   */
+  private def keepCartesianGuard(p: LogicalPlan): LogicalPlan = {
+    // The join types CheckCartesianProducts checks. An explicit Cross join is allowed to be one.
+    def checked(j: Join): Boolean = j.joinType match {
+      case Inner | LeftOuter | RightOuter | FullOuter => true
+      case _ => false
+    }
+    def spans(e: Expression, j: Join): Boolean =
+      e.references.exists(j.left.outputSet.contains) &&
+        e.references.exists(j.right.outputSet.contains)
+    def keepPython(cond: Expression, joins: Seq[Join], joinConds: Seq[Expression]): Expression = {
+      val conjuncts = splitConjunctivePredicates(cond)
+      // The joins that only a Python UDF ties together, transpiled or not. Interpreted, a conjunct
+      // holding one is pulled out of the join, so it is no key to the check either way.
+      val unkeyed = joins.filter { j =>
+        !(conjuncts ++ joinConds).exists(c => spans(c, j) && !c.exists { e =>
+          isScalarPythonUDF(e) && spans(e, j)
+        })
+      }
+      // Only the call itself goes back to Python. Its arguments are left for `convertOperator`,
+      // which may still lower a nested call that reads one side.
+      def strip(e: Expression): Expression = e match {
+        case s: TranspiledPythonUDF if unkeyed.exists(spans(s, _)) => s.pythonUDFExpr
+        case other if other.containsPattern(TRANSPILED_PYTHON_UDF) => other.mapChildren(strip)
+        case other => other
+      }
+      if (unkeyed.isEmpty) cond else strip(cond)
+    }
+    if (conf.crossJoinEnabled) {
+      p
+    } else {
+      p match {
+        case j @ Join(_, _, _, Some(cond), _) if checked(j) =>
+          j.copy(condition = Some(keepPython(cond, Seq(j), Nil)))
+        case f @ Filter(cond, child) =>
+          val joins = child.collect { case j: Join if checked(j) => j }
+          if (joins.isEmpty) {
+            f
+          } else {
+            f.copy(condition = keepPython(cond, joins, joins.flatMap(_.condition)
+              .flatMap(splitConjunctivePredicates)))
+          }
+        case other => other
+      }
     }
   }
 
@@ -1507,9 +1584,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
+      val newOutputSet = AttributeSet(newOutput)
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
-          newOutput.contains(a)
+          newOutputSet.contains(a)
         }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
@@ -1547,9 +1625,33 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
+    // Pass through only the columns of the child of a Python UDF evaluation that the parent uses,
+    // and prune the child to those and the arguments of the UDFs. The child is pruned here, as
+    // the rule does not visit this Project again.
+    case p @ Project(_, e: BaseEvalPython)
+        if !e.requiredChildOutput.forall(p.references.contains) =>
+      val newEval = e.withRequiredChildOutput(e.requiredChildOutput.filter(p.references.contains))
+      p.copy(child = newEval.withNewChildren(Seq(prunedChild(e.child, newEval.references))))
+
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
       j.copy(right = prunedChild(right, j.references))
+
+    // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
+    // is pruned to them in the next pass, once the join no longer references the others.
+    case p @ Project(_, j: ExternalLookupJoin)
+        if !AttributeSet(j.requiredLookupOutput).subsetOf(p.references) =>
+      val required = p.references ++ j.references
+      p.copy(child = j.copy(
+        left = prunedChild(j.left, required),
+        right = prunedChild(j.right, required),
+        requiredLookupOutput = j.requiredLookupOutput.filter(p.references.contains)))
+
+    // A semi or anti external lookup join outputs no lookup column, like a Left Existence Join.
+    case j @ ExternalLookupJoin(_, right, LeftSemi | LeftAnti, _, _, _)
+        if j.requiredLookupOutput.nonEmpty || !right.outputSet.subsetOf(j.references) =>
+      val withoutLookupOutput = j.copy(requiredLookupOutput = Seq.empty)
+      withoutLookupOutput.copy(right = prunedChild(right, withoutLookupOutput.references))
 
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
@@ -1558,11 +1660,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, u: Union) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
-        val newOutput = prunedChild(firstChild, p.references).output
+        // Compute these once, not per column of each child: `output` may create new attributes
+        // on each call (e.g. a `Project` with aliases), and a `Seq` lookup is linear.
+        val firstChildOutput = firstChild.output.toIndexedSeq
+        val newOutputSet = AttributeSet(prunedChild(firstChild, p.references).output)
         // pruning the columns of all children based on the pruned first child.
         val newChildren = u.children.map { p =>
           val selected = p.output.zipWithIndex.filter { case (a, i) =>
-            newOutput.contains(firstChild.output(i))
+            newOutputSet.contains(firstChildOutput(i))
           }.map(_._1)
           Project(selected, p)
         }
@@ -2235,7 +2340,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
  * Generate a list of additional filters from an operator's existing constraint but remove those
  * that are either already part of the operator's condition or are part of the operator's child
  * constraints. These filters are currently inserted to the existing conditions in the Filter
- * operators and on either side of Join operators.
+ * operators and on either side of Join and AsOfJoin operators.
  *
  * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
  * Inner and LeftSemi joins.
@@ -2243,19 +2348,42 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
+  // Marks the Filters the AsOfJoin case adds, so the Filter case adds no failable, IN or
+  // correlated EXISTS filter to them.
+  private val asOfInputFilterTag = TreeNodeTag[Unit]("asOfInputFilter")
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
-      inferFilters(plan)
+      inferFilters(plan, inferAcrossAsOfJoins(plan))
     } else {
       plan
     }
   }
 
-  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+  // The main plan inlines the body of a correlated scalar or lateral subquery and runs this rule
+  // on it again, after later rules can have moved the Filters the AsOfJoin case added out of
+  // their tag. So only that run infers filters across as-of joins. A correlated EXISTS or IN
+  // body is inlined only after this batch, so it gets none, as before.
+  // TODO: An uncorrelated LATERAL subquery is inlined too, so its body still goes through the
+  //  AsOfJoin case twice.
+  private def inferAcrossAsOfJoins(plan: LogicalPlan): Boolean = plan match {
+    case s: Subquery if s.correlated => false
+    case _ => conf.inferFiltersAcrossAsOfJoinEnabled
+  }
+
+  private def inferFilters(
+      plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
+    // The new filters go ahead of the condition, so one over a column that can fail (see
+    // `failableOutput`) would compute that column on rows a conjunct of the condition drops.
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      val canAdd: Expression => Boolean =
+        if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
+      lazy val failable = failableOutput(child)
+      val newFilters = (filter.constraints --
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter { c =>
+          canAdd(c) && !c.references.exists(failable.contains)
+        }
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -2286,6 +2414,33 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
         case _ => join
       }
+
+    // A right row that fails the ON condition is never the match of any left row, so a filter
+    // that follows from the left constraints and the ON condition can drop it before the join.
+    // An inner join also drops the left rows without a match, so its left side gets one too.
+    case j: AsOfJoin if acrossAsOfJoins =>
+      lazy val allConstraints = getAllConstraints(j.left, j.right, j.condition)
+      val newLeft = j.joinType match {
+        case Inner => inferAsOfInputFilter(j.left, allConstraints)
+        case LeftOuter => j.left
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      // The join reads the right input lazily and reads one row past each key group. A right
+      // filter changes which rows it reads, so a right ON key or a right input expression that
+      // can fail could fail on a row the join did not read before.
+      val rightKeys =
+        j.condition.toSeq.flatMap(AsOfJoin.extractEquiJoinKeys(_, j.left, j.right)._2)
+      val newRight = if (rightKeys.forall(cannotFail) && cannotFailAnywhere(j.right)) {
+        inferAsOfInputFilter(j.right, allConstraints)
+      } else {
+        j.right
+      }
+      // A self join loses its shared exchange when only one input gets a filter: the right input
+      // with LeftOuter, or the left input with Inner when the right one stays unfiltered above.
+      // Leaving the other input unfiltered too when both inputs are the same plan would keep it,
+      // but the filter drops rows before the shuffle.
+      j.copy(left = newLeft, right = newRight)
   }
 
   private def getAllConstraints(
@@ -2299,17 +2454,84 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       .union(inferConstraintsFromLiteralBindings(baseConstraints))
   }
 
-  private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPredicates = constraints
+  private def inferNewFilter(
+      plan: LogicalPlan,
+      constraints: ExpressionSet,
+      canAdd: Expression => Boolean = canBeFilter): LogicalPlan = {
+    val newPredicates = (constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints
+      } -- plan.constraints).toSeq.filter(canAdd)
     if (newPredicates.isEmpty) {
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /** Whether no expression of `plan` can fail. Aliases and sort orders count as their child. */
+  private def cannotFailAnywhere(plan: LogicalPlan): Boolean = !plan.exists {
+    _.expressions.exists {
+      case a: Alias => !cannotFail(a.child)
+      case s: SortOrder => !cannotFail(s.child)
+      case e => !cannotFail(e)
+    }
+  }
+
+  private def inferAsOfInputFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
+    // Under the legacy flag, a later run of this rule infers with canBeFilter from a Filter that
+    // lost its tag, so an equality or literal added here could lead to a filter that can fail.
+    // IS NOT NULL takes no part in that inference.
+    val canAdd: Expression => Boolean = if (conf.legacyInferFailableFiltersFromConstraints) {
+      c => c.isInstanceOf[IsNotNull] && canBeAsOfFilter(c)
+    } else {
+      canBeAsOfFilter
+    }
+    val newPlan = inferNewFilter(plan, constraints, canAdd)
+    if (newPlan ne plan) newPlan.setTagValue(asOfInputFilterTag, ())
+    newPlan
+  }
+
+  private def canBeFilter(constraint: Expression): Boolean =
+    conf.legacyInferFailableFiltersFromConstraints || cannotFail(constraint)
+
+  /**
+   * An as-of input gets no filter that can fail, even with the legacy flag on, since as-of joins
+   * had no inferred filters before. Nor an IN or correlated EXISTS filter: a sort-merge semi join
+   * makes the as-of join sort that input again, and a NOT IN over nullable columns is a
+   * nested-loop join if it has several columns or spark.sql.optimizeNullAwareAntiJoin is off.
+   */
+  private def canBeAsOfFilter(constraint: Expression): Boolean =
+    !SubqueryExpression.hasInOrCorrelatedExistsSubquery(constraint) && cannotFail(constraint)
+
+  /**
+   * A constraint only says what holds on the rows an operator outputs. As a filter, it also runs
+   * on rows and values the query may never evaluate it on, e.g. `10 / x > 0` from `x = y AND
+   * 10 / y > 0` on a row where `x` is 0 and `y` is not, so only a constraint that cannot fail
+   * becomes a filter. Constant parts count as what they evaluate to, as they are folded right
+   * after this rule. An uncorrelated subquery counts as a constant, as it runs once whichever
+   * rows use it, and a correlated one by its values and its correlation condition. Callers pass
+   * the original expressions, because [[ExpressionSet.filter]] tests the canonicalized ones.
+   */
+  private def cannotFail(constraint: Expression): Boolean = ExprUtils.canEvaluateUnconditionally(
+    stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
+
+  private def stripCannotFail(e: Expression): Expression = e match {
+    // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
+    case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
+      stripCannotFail(r.left)
+    case i: InSubquery =>
+      (i.values.map(IsNotNull(_)) ++ i.query.joinCond).map(stripCannotFail).reduce[Expression](And)
+    case x: Exists =>
+      x.joinCond.map(stripCannotFail).foldLeft[Expression](Literal.TrueLiteral)(And)
+    case s: ScalarSubquery if !s.isCorrelated => Literal.create(null, s.dataType)
+    case other => other.mapChildren(stripCannotFail)
+  }
+
+  private def isNonZeroIntegral(e: Expression): Boolean = e match {
+    case Literal(v, _: IntegralType) => v != null && v != 0
+    case _ => false
   }
 }
 
@@ -2401,13 +2623,12 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(FILTER), ruleId)(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic and the outer condition is not
-    // throwable (inner can be throwable as it was going to be evaluated first anyways).
+    // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
+    // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
+    // inner condition must be deterministic.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, rest) =
-        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
-      val mergedFilter = (ExpressionSet(combineCandidates) --
+      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
+      val mergedFilter = (ExpressionSet(movable) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
@@ -2551,7 +2772,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN, EXTERNAL_LOOKUP_JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -2592,7 +2813,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    is worth splitting.
     // Note that a given filter may contain parts (separated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
-    // Additional restriction:
+    // Additional restrictions:
+    // SPARK-60602: A throwable part (including one over a throwable alias) must not be
+    // evaluated on rows the parts written before it would have filtered out. So it is pushed
+    // only when no expensive part is written before it, it never enters the projection split,
+    // and the parts left above the projection keep their written order.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2616,22 +2841,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
           (cond, usedAliases, replaced)
         }
+        // A component is cheap if it uses nothing expensive from the projection: either it
+        // uses nothing at all, or only inexpensive items. Then we can push it because it might
+        // eliminate more data quickly and it may also be something which could be evaluated at
+        // the storage layer. We may wish to improve this heuristic in the future.
+        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(a => isExpensive(a._2.child))
         // Split the filter's components into cheap and expensive while keeping track of
-        // what each references from the projection.
-        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
-          .partition { case (cond, used, replaced) =>
-            // Didn't use anything? We're good
-            if (used.isEmpty) {
-              true
-            } else if (!used.exists(_._2.child.expensive)) {
-              // If it's cheap we can push it because it might eliminate more data quickly and
-              // it may also be something which could be evaluated at the storage layer.
-              // We may wish to improve this heuristic in the future.
-              true
-            } else {
-              false
-            }
-          }
+        // what each references from the projection. The cheap components written before the
+        // first expensive one are all pushed. After it, a throwable component (e.g.
+        // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
+        // so it is not evaluated on rows the components before it would have filtered out.
+        val (cheapWithUsed, expensiveWithUsed) = splitPushable(
+          originalAndRewrittenConditionsWithUsedAlias)(
+          canPush = { case (_, used, _) => isCheap(used) },
+          throwable = { case (_, _, replaced) => replaced.throwable })
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2642,15 +2865,21 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Case 3: split the projection around the expensive conditions. Non-deterministic
         // conditions stay in the top filter, as they do everywhere else in this rule -- the
         // split orders conditions by cost, and cost is no way to decide how many rows a
-        // non-deterministic expression sees.
+        // non-deterministic expression sees. Throwable conditions, or conditions over throwable
+        // aliases, stay there too: ordering by cost could evaluate them (or compute the aliases
+        // in a lower projection) ahead of the conditions written before them.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
-            val (deterministic, nonDeterministic) =
-              expensiveWithUsed.partition { case (cond, _, _) => cond.deterministic }
+            val (splittable, notSplittable) = expensiveWithUsed.partition {
+              case (cond, _, replaced) => cond.deterministic && !replaced.throwable
+            }
             val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
               project, aliasMap, baseChild,
-              deterministic.map { case (cond, used, _) => (cond, used) })
-            (child, aliases, unplaced ++ nonDeterministic.map(_._1))
+              splittable.map { case (cond, used, _) => (cond, used) })
+            // Keep the top filter in the order the conditions were written, so a throwable
+            // condition still only sees the rows the conditions before it kept.
+            val stayUpSet = (unplaced ++ notSplittable.map(_._1)).toSet
+            (child, aliases, expensiveWithUsed.map(_._1).filter(stayUpSet.contains))
           } else {
             (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
           }
@@ -2677,24 +2906,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
-    // keys so the filter won't see any new data after push down.
+    // keys so the filter won't see any new data after push down. Float/double grouping keys are
+    // normalized by the Aggregate, so the pushed filter reads them normalized wherever that could
+    // change its result (see `pushBelowAggregate`). A throwable predicate written after one that
+    // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
+    // throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
-      val aliasMap = getAliasMap(aggregate)
-
-      // For each filter, expand the alias and check if the filter can be evaluated using
-      // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
-      }
+      val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        val newAggregate = aggregate.copy(child = Filter(pushDown.reduce(And), aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
@@ -2706,19 +2929,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
     // 2. Deterministic.
-    // 3. Placed before any non-deterministic predicates.
+    // 3. Not throwable, if a predicate written before it stays up (see `splitPushable`).
     case filter @ Filter(condition, w: Window)
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
-      val (candidates, nonDeterministic) =
-        splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
-        cond.references.subsetOf(partitionAttrs)
+      val (pushDown, stayUp) = splitPushableConjuncts(condition) { cond =>
+        cond.deterministic && cond.references.subsetOf(partitionAttrs)
       }
-
-      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -2730,7 +2948,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
+      val (pushDown, stayUp) = splitPushableConjuncts(condition)(_.deterministic)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -2760,7 +2978,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
     case filter @ Filter(condition, watermark: EventTimeWatermark) =>
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { p =>
+      val (pushDown, stayUp) = splitPushableConjuncts(condition) { p =>
         p.deterministic && !p.references.contains(watermark.eventTime)
       }
 
@@ -2776,7 +2994,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child) { predicate =>
+      pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
@@ -2801,21 +3019,112 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
+  /**
+   * Whether an operator of [[canPushThrough]] can output no row for an input row. Below such an
+   * operator, a pushed condition sees the input rows it drops, which the condition above it
+   * would never see.
+   */
+  private def canDropRows(p: UnaryNode): Boolean = p match {
+    case g: Generate => !g.outer
+    case _: ScriptTransformation => true
+    case _ => false
+  }
+
+  // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
+  // it, rewritten in terms of the aggregate's child, and the ones that stay above it. A conjunct
+  // can be pushed if it is deterministic and, after alias expansion, only reads the aggregate's
+  // child (that is, grouping keys and constants), unless it is throwable and a conjunct written
+  // before it stays above (see `splitPushable`). Expressions above the aggregate see its
+  // float/double grouping keys normalized (see NormalizeFloatingNumbers: -0.0 becomes 0.0 and every
+  // NaN becomes one canonical NaN), so a pushed conjunct reads them normalized too, wherever the
+  // raw value could change its result. If the form of the keys the aggregate outputs may still
+  // change (with grouped-agg pandas UDFs, see NormalizeFloatingNumbers.mayChangeKeyForm), a
+  // conjunct that normalizing would change stays above it instead, where it reads whatever the
+  // final plan outputs. Streaming aggregates keep the previous behavior, with conjuncts pushed
+  // below them unnormalized: rules can still replace them with a Project of the raw keys (see
+  // NormalizeFloatingNumbers.readsNormalizedKeys), and keeping a conjunct above one could separate
+  // two aggregates that RemoveRedundantAggregates would merge, adding a stateful operator. The CTE
+  // rule PushdownPredicatesAndPruneColumnsForCTEDef uses this too, to find the filters it pushed.
+  private[optimizer] def pushBelowAggregate(
+      conds: Seq[Expression],
+      aggregate: Aggregate): (Seq[Expression], Seq[Expression]) = {
+    val aliasMap = getAliasMap(aggregate)
+    val keys = if (aggregate.isStreaming) {
+      Nil
+    } else {
+      aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .map(trimAliases)
+    }
+    val mayChangeKeyForm = NormalizeFloatingNumbers.mayChangeKeyForm(aggregate)
+    // (condition, condition with aliases expanded, pushed form or None if it cannot be pushed)
+    val candidates = conds.map { cond =>
+      val replaced = replaceAlias(cond, aliasMap)
+      val pushable = cond.deterministic && cond.references.nonEmpty &&
+        replaced.references.subsetOf(aggregate.child.outputSet)
+      val normalized = if (pushable && keys.nonEmpty) {
+        normalizeGroupingExpressions(replaced, keys)
+      } else {
+        replaced
+      }
+      val canPush = pushable && (!mayChangeKeyForm || normalized.fastEquals(replaced))
+      (cond, replaced, if (canPush) Some(normalized) else None)
+    }
+    // The aliases are expanded in the pushed conjunct, so a conjunct over a throwable alias is
+    // throwable too.
+    val (pushDown, stayUp) = splitPushable(candidates)(
+      canPush = _._3.isDefined,
+      throwable = { case (_, replaced, _) => replaced.throwable })
+    (pushDown.map(_._3.get), stayUp.map(_._1))
+  }
+
+  // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on
+  // their normalized values (see NormalizeFloatingNumbers). Each occurrence of a grouping
+  // expression is wrapped in its normalized form, with one exception: a float/double attribute
+  // that is a direct operand of one of the comparisons matched below is left as is, and so is a
+  // float attribute widened to double (as when a FLOAT column is compared with a DOUBLE or
+  // DECIMAL value), since widening keeps -0.0 and NaN. Those comparisons already treat -0.0 and
+  // 0.0 as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
+  // CodegenContext.genEqual), and so does InSet, an IN list that OptimizeIn converted. IsNull,
+  // IsNotNull and IsNaN cannot tell normalized values apart either, nor can an IN subquery, which
+  // becomes a join on EqualTo conditions (whose keys NormalizeFloatingNumbers normalizes on both
+  // sides when it is an equi-join). So wrapping would not change the result, and leaving them as
+  // is keeps plain comparisons usable by data sources and partition pruning.
+  private[optimizer] def normalizeGroupingExpressions(
+      e: Expression,
+      grouping: Seq[Expression]): Expression = e match {
+    // A grouping key already normalized when the filter was pushed through an Aggregate above on
+    // the same key. Any other normalized expression may be computed from a grouping key (when the
+    // upper Aggregate groups by an expression of this one's key), so the key inside it still has
+    // to be normalized. This also matches array and map keys: `normalize` builds new lambda
+    // variables for them, but `semanticEquals` compares canonicalized trees, which renumber them.
+    case _: KnownFloatingPointNormalized
+        if grouping.exists(g => NormalizeFloatingNumbers.normalize(g).semanticEquals(e)) => e
+    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
+         _: GreaterThanOrEqual | _: In | _: InSet | _: InSubquery | _: IsNull | _: IsNotNull |
+         _: IsNaN =>
+      e.mapChildren {
+        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
+        case c @ Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => c
+        case c => normalizeGroupingExpressions(c, grouping)
+      }
+    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
+    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
+  }
+
   private def pushDownPredicate(
       filter: Filter,
-      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      grandchild: LogicalPlan,
+      keepThrowableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild.
+    // come from grandchild. With `keepThrowableUp`, a throwable predicate is not pushed even when
+    // it is written first, as the operator in between can drop rows it would then see.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, nonDeterministic) =
-      splitConjunctivePredicates(filter.condition).partition(_.deterministic)
-
-    val (pushDown, rest) = candidates.partition { cond =>
-      cond.references.subsetOf(grandchild.outputSet)
+    val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
+      cond.deterministic && !(keepThrowableUp && cond.throwable) &&
+        cond.references.subsetOf(grandchild.outputSet)
     }
-
-    val stayUp = rest ++ nonDeterministic
 
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
@@ -2828,6 +3137,29 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       filter
     }
   }
+
+  /**
+   * Splits `conds`, the conjuncts of a filter in their written order, into the ones to push below
+   * an operator and the ones to keep above it. `canPush` tells whether the operator lets a
+   * conjunct through, and `throwable` whether it may throw (e.g. `raise_error`). Every conjunct
+   * written before the first one that cannot be pushed is pushed. After it, only the conjuncts
+   * that are not throwable are pushed, so a throwable conjunct is not evaluated on rows the
+   * conjuncts before it would have filtered out. Moving a non-throwable conjunct below a
+   * throwable one is fine, as it can only reduce the rows the throwable one sees. The conjuncts
+   * to keep above are returned in the order they were written.
+   */
+  private def splitPushable[T](conds: Seq[T])(
+      canPush: T => Boolean, throwable: T => Boolean): (Seq[T], Seq[T]) = {
+    val (leading, rest) = conds.span(canPush)
+    // The head of `rest`, if any, is the first conjunct that cannot be pushed.
+    val (pushedRest, stayUp) = rest.drop(1).partition(c => canPush(c) && !throwable(c))
+    (leading ++ pushedRest, rest.take(1) ++ stayUp)
+  }
+
+  /** [[splitPushable]] over the conjuncts of `condition`, checking each for `throwable`. */
+  private def splitPushableConjuncts(condition: Expression)(
+      canPush: Expression => Boolean): (Seq[Expression], Seq[Expression]) =
+    splitPushable(splitConjunctivePredicates(condition))(canPush, _.throwable)
 
   /**
    * Splits `project` into a stack of [[Project]]s with the expensive conditions in
@@ -2870,8 +3202,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * The most demanding group is left un-placed for the caller to put above the projection --
    * where expensive conditions go when there is nothing worth splitting.
    *
-   * Callers must pass deterministic conditions only -- the grouping below orders conditions by
-   * cost, and cost is no way to decide how many rows a non-deterministic expression sees.
+   * Callers must pass deterministic, non-throwable conditions only -- the grouping below orders
+   * conditions by cost, and cost is no way to decide how many rows a non-deterministic
+   * expression sees, nor may it evaluate a throwable one ahead of the conditions before it.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form).
@@ -2883,11 +3216,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       expensiveConds: Seq[(Expression, AttributeMap[Alias])])
     : (LogicalPlan, AttributeSet, Seq[Expression]) = {
     val expensiveAliases = AttributeSet(
-      aliasMap.collect { case (attr, alias) if alias.child.expensive => attr })
+      aliasMap.collect { case (attr, alias) if isExpensive(alias.child) => attr })
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
+    // Two aliases share work exactly when they share a regex, so version 0 of the estimate
+    // collects the regex expressions and not their ancestors. A Python UDF counts here even with
+    // `avoidDoubleFilterEvalForPythonUDF` off, so two aliases sharing one stay in one layer and
+    // do not run it twice. The split only stacks layers above `baseChild`, so a restart from a
+    // checkpoint does not depend on it.
+    val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
-      attr -> aliasMap(attr).child.collect { case e if e.expensive => e.canonicalized }.toSet
+      attr -> aliasMap(attr).child.collect {
+        case e if e.expensive || (regexIsExpensive && e.isInstanceOf[StringRegexExpression]) =>
+          e.canonicalized
+      }.toSet
     })
     def expensiveParts(attr: Attribute): Set[Expression] =
       expensivePartsOf.getOrElse(attr, Set.empty)
@@ -2952,6 +3294,28 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   }
 
   /**
+   * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
+   * RLIKE as expensive, and with `avoidDoubleFilterEvalForPythonUDF` off a Python UDF is only as
+   * expensive as its arguments. Both are checked here rather than in `expensive`, because
+   * `hasExpensiveChild` caches the answer of a parent expression.
+   */
+  private def isExpensive(e: Expression): Boolean = {
+    // The stand-in below can only make `e` cheaper, so a cheap `e` needs no rewrite.
+    val classified =
+      if (!e.expensive || conf.getConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF)) {
+        e
+      } else {
+        // The stand-in is not foldable either, so a LIKE/RLIKE pattern from a UDF stays expensive.
+        e.transformUp {
+          case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+        }
+      }
+    classified.expensive ||
+      (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
+        e.exists(_.isInstanceOf[StringRegexExpression]))
+  }
+
+  /**
    * Check if we can safely push a filter through a projection, by making sure that predicate
    * subqueries in the condition do not contain the same attributes as the plan they are moved
    * into. This can happen when the plan and predicate subquery have the same source.
@@ -2973,6 +3337,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  * And also pushes down the join filter, where the `condition` can be evaluated using only the
  * attributes of the left or right side of sub query when applicable.
  *
+ * Also pushes the safe predicates through an [[AsOfJoin]]
+ *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -2980,19 +3346,74 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
    * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
-   * canEvaluateInRight to prevent pushing these predicates on either side of the join.
+   * canEvaluateInRight to prevent pushing these predicates on either side of the join, as well as
+   * the other conjuncts that may not move (see [[splitMovable]]).
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, stayUp) =
-      condition.partition(cond => cond.deterministic && !cond.throwable)
+    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right))
+    val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
+      splitBySide(pushDownCandidates, left, right)
+
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+  }
+
+  /**
+   * Splits conjuncts that may move (see [[splitMovable]]) by the side of the join that can
+   * evaluate them, as [[split]] does.
+   *
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   */
+  private def splitBySide(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
-      pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
+      condition.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
+  }
+
+  /**
+   * [[split]] for an external lookup join. A conjunct over lookup columns alone goes onto the
+   * lookup side, so one that a lookup-side stage cannot evaluate, such as one with a Python UDF or
+   * a subquery, is neither pushed nor moved into the condition, and it is left out of the result.
+   * A conjunct over both sides can only go into the condition, which plans a UDF but not a
+   * subquery, so it is left out only when it holds a subquery. A conjunct without references,
+   * such as a literal, belongs to neither side. It stays with the common conditions, so that a
+   * condition that folds to false keeps its result without a lookup, instead of leaving a join
+   * whose stream side is empty. A comparison of a lookup column with a constant moves as for a
+   * join; lookup planning still offers it to the connector as a lookup candidate. A conjunct that
+   * may not move (see [[splitMovable]]) is left out of the result too. That is decided over all
+   * the conjuncts: [[split]] sees only the ones with references, while the one that keeps later
+   * conjuncts in place may have none, such as `rand() < 0.5`.
+   *
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   */
+  private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
+    val movable = splitMovable(condition, Seq(join.left, join.right))._1.filterNot { cond =>
+      cond.references.exists(join.right.outputSet.contains) && (
+        if (cond.references.subsetOf(join.right.outputSet)) {
+          !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
+        } else {
+          SubqueryExpression.hasSubquery(cond)
+        })
+    }
+    val (withoutReferences, withReferences) = movable.partition(_.references.isEmpty)
+    val (left, right, common) = split(withReferences, join.left, join.right)
+    (left, right, common ++ withoutReferences)
+  }
+
+  /**
+   * [[canEvaluateWithinJoin]] for the condition of an inner external lookup join, which also
+   * accepts an external UDF: lookup planning evaluates it on the stream side, or in a filter above
+   * the join, as it evaluates a Python UDF.
+   */
+  private def canEvaluateWithinLookupJoin(expr: Expression): Boolean = expr match {
+    case udf: ExternalUserDefinedFunction => udf.deterministic
+    case _: Unevaluable | _: SubqueryExpression | _: PythonUDF | _: AttributeReference =>
+      canEvaluateWithinJoin(expr)
+    case e => e.deterministic && e.children.forall(canEvaluateWithinLookupJoin)
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
@@ -3007,8 +3428,11 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
-        split(splitConjunctivePredicates(filterCondition), left, right)
+      val (movable, stayUp) =
+        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
+      val (leftFilterConditions, rightFilterConditions, commonMovable) =
+        splitBySide(movable, left, right)
+      val commonFilterCondition = commonMovable ++ stayUp
       joinType match {
         case _: InnerLike =>
           // push down the single side `where` condition into respective sides
@@ -3016,9 +3440,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          // don't push throwable expressions into join condition
-          val (newJoinConditions, others) =
-            commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
+          // don't push throwable expressions into join condition, nor the other conjuncts that
+          // may not move
+          val (newJoinConditions, notInJoin) = commonMovable.partition(canEvaluateWithinJoin)
+          val others = notInJoin ++ stayUp
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)
@@ -3088,6 +3513,97 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
+      }
+    // The same for an external lookup join. The conjuncts keep their written order where they stay.
+    case f @ Filter(filterCondition, j: ExternalLookupJoin) =>
+      val conjuncts = splitConjunctivePredicates(filterCondition)
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
+        splitLookupJoin(conjuncts, j)
+      val (newJoinConditions, rightFilterConditionsToPush) = j.joinType match {
+        case Inner =>
+          // don't push throwable expressions into join condition
+          (commonFilterCondition.filter(cond =>
+            canEvaluateWithinLookupJoin(cond) && !cond.throwable), rightFilterConditions)
+        // A filter on lookup columns above a left outer join also removes the null-padded rows of
+        // stream rows without a match, so it stays above. EliminateOuterJoin first makes the join
+        // inner when the filter rejects nulls. A semi or anti join outputs no lookup column.
+        case LeftOuter | LeftSemi | LeftAnti => (Nil, Nil)
+        case other =>
+          throw SparkException.internalError(s"Unexpected external lookup join type: $other")
+      }
+      val pushed = leftFilterConditions ++ rightFilterConditionsToPush ++ newJoinConditions
+      if (pushed.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(
+          left = leftFilterConditions.
+            reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left),
+          right = rightFilterConditionsToPush.
+            reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right),
+          condition = (j.condition.toSeq ++ newJoinConditions).reduceLeftOption(And))
+        conjuncts.filterNot(pushed.contains).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Push the join filter of an external lookup join into its children.
+    case j: ExternalLookupJoin =>
+      val conjuncts = j.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val (leftJoinConditions, rightJoinConditions, _) = splitLookupJoin(conjuncts, j)
+      val leftJoinConditionsToPush = j.joinType match {
+        case Inner | LeftSemi => leftJoinConditions
+        // A stream-side conjunct decides which stream rows find a match, so it stays in the
+        // condition. The lookup join checks it on each stream row before the lookup when it cannot
+        // fail, as ExprUtils.canEvaluateUnconditionally decides, and otherwise on the joined rows.
+        case LeftOuter | LeftAnti => Nil
+        case other =>
+          throw SparkException.internalError(s"Unexpected external lookup join type: $other")
+      }
+      if (leftJoinConditionsToPush.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        j.copy(
+          left = leftJoinConditionsToPush.
+            reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left),
+          right = rightJoinConditions.
+            reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right),
+          condition = conjuncts.filterNot(cond =>
+            leftJoinConditionsToPush.contains(cond) || rightJoinConditions.contains(cond)).
+            reduceLeftOption(And))
+      }
+
+    // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
+    case f @ Filter(filterCondition, j: AsOfJoin) =>
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
+        split(splitConjunctivePredicates(filterCondition), j.left, j.right)
+      if (leftFilterConditions.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(left = Filter(leftFilterConditions.reduceLeft(And), j.left))
+        (rightFilterConditions ++ commonFilterCondition).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Right-side ON predicates can filter the right input first.
+    // Left-side ON predicates can filter the left input only for an inner join
+    // because a left outer join keeps every left row.
+    case j: AsOfJoin =>
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+        split(j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right)
+      val (pushedLeftConditions, keptLeftConditions) = j.joinType match {
+        case Inner => (leftJoinConditions, Nil)
+        case LeftOuter => (Nil, leftJoinConditions)
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      if (pushedLeftConditions.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        val newLeft = pushedLeftConditions.
+          reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left)
+        val newRight = rightJoinConditions.
+          reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right)
+        j.copy(left = newLeft, right = newRight,
+          condition = (keptLeftConditions ++ commonJoinCondition).reduceLeftOption(And))
       }
   }
 }

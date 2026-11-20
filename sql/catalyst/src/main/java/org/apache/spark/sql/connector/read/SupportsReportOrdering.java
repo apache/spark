@@ -44,6 +44,11 @@ public interface SupportsReportOrdering extends Scan {
    * avoid a sort, whether or not it is a partition key. Nor does it rely on the sort orders after
    * it. The exception is a sort order on a partition key that is not a transform, when Spark uses
    * the reported {@code KeyGroupedPartitioning}.
+   * <p>
+   * If Spark relies on none of the reported sort orders, for example when this returns an empty
+   * array, it may treat each partition as sorted by the partition keys that are not transforms.
+   * This needs a reported {@code KeyGroupedPartitioning}, whose partitions each hold a single key
+   * value. {@code spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled} controls it.
    */
   SortOrder[] outputOrdering();
 }

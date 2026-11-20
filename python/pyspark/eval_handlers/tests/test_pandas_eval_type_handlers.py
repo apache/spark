@@ -31,6 +31,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.types import BinaryType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
     PySparkBaseTestCase,
@@ -40,6 +41,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import EvalConf, RunnerConf
@@ -60,7 +62,11 @@ if have_pandas and have_pyarrow:
         PandasScalarUDFHandler,
         PandasWindowAggUDFHandler,
     )
-    from pyspark.sql.conversion import ArrowBatchTransformer
+    from pyspark.sql.conversion import (
+        ArrowBatchTransformer,
+        ArrowToPandasConversion,
+        PandasToArrowConversion,
+    )
 
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
@@ -90,11 +96,19 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
         return offsets
 
     @classmethod
-    def _grouped_handler(cls, handler_cls, udf, arg_offsets, num_udf_args, runner_conf=None):
-        """Build a grouped/cogrouped-map handler from its
-        ``(func, arg_offsets, return_type, num_udf_args)`` UDF tuple."""
+    def _grouped_handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
+        """Build a grouped/cogrouped-map handler. The function the handler wraps loses its
+        signature, so the handler reads it from its ``_raw_func``."""
         return handler_cls(
-            udfs=[(udf, arg_offsets, cls._GROUPED_RETURN_TYPE, num_udf_args)],
+            udf_descs=[
+                UDF(
+                    funcs=[udf],
+                    args_offsets=arg_offsets,
+                    kwargs_offsets={},
+                    return_type=cls._GROUPED_RETURN_TYPE,
+                    result_id=0,
+                )
+            ],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=None,
         )
@@ -106,14 +120,20 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @staticmethod
     def _udf(func, return_type=None, args=(0,), kwargs=None):
-        """A pandas UDF tuple ``(func, args_offsets, kwargs_offsets, return_type)``."""
-        return (func, list(args), dict(kwargs or {}), return_type or LongType())
+        """A ``UDF`` record for a pandas UDF, as the worker builds it."""
+        return UDF(
+            funcs=[func],
+            args_offsets=list(args),
+            kwargs_offsets=dict(kwargs or {}),
+            return_type=return_type or LongType(),
+            result_id=0,
+        )
 
     @staticmethod
-    def _agg_handler(handler_cls, *udfs, runner_conf=None):
-        """Build a grouped-agg/window-agg handler from one or more ``_udf`` tuples."""
+    def _agg_handler(handler_cls, *udf_descs, runner_conf=None):
+        """Build a grouped-agg/window-agg handler from one or more ``_udf`` records."""
         return handler_cls(
-            udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+            udf_descs=list(udf_descs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
         )
 
     @staticmethod
@@ -157,10 +177,10 @@ class PandasEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
 class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
     _INPUT_TYPE = StructType([StructField("a", LongType()), StructField("b", LongType())])
 
-    def _handler(self, *udfs, runner_conf=None, input_type=None):
-        """Build the handler from one or more ``_udf`` tuples."""
+    def _handler(self, *udf_descs, runner_conf=None, input_type=None):
+        """Build the handler from one or more ``_udf`` records."""
         return ArrowBatchedUDFLegacyPandasHandler(
-            udfs=list(udfs),
+            udf_descs=list(udf_descs),
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
         )
@@ -217,10 +237,10 @@ class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasScalarUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     @staticmethod
-    def _handler(*udfs, runner_conf=None):
-        """Build a PandasScalarUDFHandler from one or more ``_udf`` tuples."""
+    def _handler(*udf_descs, runner_conf=None):
+        """Build a PandasScalarUDFHandler from one or more ``_udf`` records."""
         return PandasScalarUDFHandler(
-            udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+            udf_descs=list(udf_descs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
         )
 
     def test_invokes_udf_per_batch(self):
@@ -305,7 +325,7 @@ class PandasScalarIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     def _handler(udf, return_type=None, args=(0,), runner_conf=None):
         """Build a PandasScalarIterUDFHandler whose one UDF reads the given arg offsets."""
         return PandasScalarIterUDFHandler(
-            udfs=[(udf, list(args), {}, return_type or LongType())],
+            udf_descs=[PandasEvalTypeHandlerTestCase._udf(udf, return_type, args)],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=None,
         )
@@ -363,6 +383,17 @@ class PandasScalarIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             list(handler.run(0, iter([self._batch(a=[1, 2]), self._batch(a=[3, 4])])))
         self.assertEqual(cm.exception.getCondition(), "INPUT_NOT_FULLY_CONSUMED")
 
+    def test_stop_iteration_in_udf_call_raises_runtime_error(self):
+        # A non-generator UDF that eagerly reads an empty input raises StopIteration from the
+        # call itself.
+        def eager(series_iter):
+            return iter([next(series_iter)])
+
+        handler = self._handler(eager)
+        with self.assertRaises(PySparkRuntimeError) as cm:
+            list(handler.run(0, iter([])))
+        self.assertEqual(cm.exception.getCondition(), "STOP_ITERATION_OCCURRED")
+
     def test_struct_return_takes_dataframe(self):
         # struct_in_pandas="dict" + df_for_struct=True: a struct return is a DataFrame.
         struct_type = StructType([StructField("x", LongType()), StructField("y", LongType())])
@@ -385,9 +416,9 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
 
     @staticmethod
     def _handler(udf, return_type, runner_conf=None):
-        """Build a PandasMapUDFHandler from its ``(func, None, None, return_type)`` UDF tuple."""
+        """Build a PandasMapUDFHandler; map UDFs take no arg offsets."""
         return PandasMapUDFHandler(
-            udfs=[(udf, None, None, return_type)],
+            udf_descs=[PandasEvalTypeHandlerTestCase._udf(udf, return_type, args=())],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=None,
         )
@@ -404,6 +435,149 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
         struct_batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2, 3]))
         out = list(handler.run(0, iter([struct_batch])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
+
+    def test_detailed_timing_disabled(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
+        handler = self._handler(lambda dfs: dfs, self._return_type)
+        output = list(handler.run(0, iter([batch])))
+        self.assertEqual(output[0].num_rows, 2)
+        self.assertEqual(metrics.to_dict(), {})
+
+    def test_phase_timing_excludes_nested_input_and_consumer_work(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        clock_ns = 0
+
+        def advancing(ns, func):
+            running = False
+
+            def wrapped(*args, **kwargs):
+                nonlocal clock_ns, running
+                if running:
+                    return func(*args, **kwargs)
+                running = True
+                try:
+                    clock_ns += ns
+                    return func(*args, **kwargs)
+                finally:
+                    running = False
+
+            return wrapped
+
+        batches = [
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2])),
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[3, 4, 5])),
+        ]
+
+        def data():
+            nonlocal clock_ns
+            for batch in batches:
+                clock_ns += 17_000_000  # Read/deserialization.
+                clock_ns += 23_000_000  # Iterator work outside conversion.
+                yield batch
+            clock_ns += 29_000_000  # Input exhaustion.
+
+        def udf(dfs):
+            nonlocal clock_ns
+            clock_ns += 7_000_000
+            first = next(dfs)
+
+            def results():
+                nonlocal clock_ns
+                combined = pd.concat([first, *dfs])
+                for start, end in ((0, 1), (1, 4), (4, 5)):
+                    clock_ns += 13_000_000
+                    yield combined.iloc[start:end]
+                clock_ns += 11_000_000
+
+            return results()
+
+        handler = self._handler(
+            udf,
+            self._return_type,
+            RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
+        )
+        with (
+            patch("pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns),
+            patch.object(
+                ArrowToPandasConversion,
+                "to_pandas",
+                new=advancing(3_000_000, ArrowToPandasConversion.to_pandas),
+            ),
+            patch.object(
+                PandasToArrowConversion,
+                "from_pandas",
+                new=advancing(5_000_000, PandasToArrowConversion.from_pandas),
+            ),
+        ):
+            output = []
+            for batch in handler.run(0, data()):
+                output.append(batch)
+                clock_ns += 19_000_000  # Consumer work after yielding the output.
+
+        self.assertEqual([batch.num_rows for batch in output], [1, 3, 1])
+        self.assertEqual(self._struct_values(output), [1, 2, 3, 4, 5])
+        report = metrics.to_dict()
+        self.assertEqual(report["pythonNumTimedBatches"], 2)
+        self.assertEqual(report["pythonInputPreparationTime"], 2 * 3)
+        self.assertEqual(report["pythonUDFExecutionTime"], 7 + 3 * 13 + 11)
+        self.assertEqual(report["pythonOutputPreparationTime"], 3 * 5)
+
+    def test_timing_with_unconsumed_input_and_early_close(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
+
+        for consumed in (0, 1):
+            with self.subTest(consumed=consumed):
+                metrics.reset()
+                clock_ns = 0
+                pulls = 0
+
+                def data():
+                    nonlocal clock_ns, pulls
+                    for _ in range(2):
+                        pulls += 1
+                        clock_ns += 17_000_000
+                        yield batch
+
+                def udf(dfs):
+                    nonlocal clock_ns
+                    clock_ns += 7_000_000
+                    for _ in range(consumed):
+                        yield next(dfs)
+
+                handler = self._handler(
+                    udf,
+                    self._return_type,
+                    RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
+                )
+                input_iter = data()
+                result = handler.run(0, input_iter)
+                with patch(
+                    "pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns
+                ):
+                    try:
+                        self.assertEqual(pulls, 0)
+                        if consumed:
+                            self.assertEqual(next(result).num_rows, 2)
+                            clock_ns += 1_000_000_000
+                            result.close()
+                        else:
+                            self.assertEqual(list(result), [])
+                    finally:
+                        result.close()
+                        input_iter.close()
+
+                report = metrics.to_dict()
+                self.assertEqual(pulls, consumed)
+                self.assertEqual(report["pythonNumTimingReports"], 1)
+                self.assertEqual(report["pythonNumTimedBatches"], consumed)
+                self.assertEqual(report["pythonUDFExecutionTime"], 7)
 
     def test_legacy_accepts_any_iterable(self):
         # With the legacy flag on (its default), a UDF may return any iterable -- here a
@@ -454,7 +628,6 @@ class PandasGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasGroupedMapUDFHandler,
             lambda df: pd.DataFrame({"v": df["b"] * 2}),
             self._KEY0_VALUE1,
-            1,
         )
         groups = [
             iter([self._batch(a=[1, 1], b=[1, 2]), self._batch(a=[1], b=[3])]),
@@ -471,7 +644,6 @@ class PandasGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasGroupedMapUDFHandler,
             lambda key, df: pd.DataFrame({"v": [key[0]] * len(df)}),
             self._KEY0_VALUE1,
-            2,
         )
         out = list(handler.run(0, iter([iter([self._batch(a=[7, 7], b=[1, 2])])])))
         self.assertEqual(self._struct_values(out), [7, 7])
@@ -481,14 +653,13 @@ class PandasGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasGroupedMapUDFHandler,
             lambda df: pd.DataFrame({"v": df["b"].astype("int32")}),
             self._KEY0_VALUE1,
-            1,
         )
         out = list(handler.run(0, iter([iter([self._batch(a=[1], b=[3])])])))
         self.assertEqual(out[0].column(0).type.field("v").type, pa.int64())
 
     def test_rejects_non_dataframe_result(self):
         handler = self._grouped_handler(
-            PandasGroupedMapUDFHandler, lambda df: df["b"], self._KEY0_VALUE1, 1
+            PandasGroupedMapUDFHandler, lambda df: df["b"], self._KEY0_VALUE1
         )
         with self.assertRaises(PySparkTypeError):
             list(handler.run(0, iter([iter([self._batch(a=[1], b=[3])])])))
@@ -500,7 +671,6 @@ class PandasGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasGroupedMapUDFHandler,
             lambda df: pd.DataFrame({"v": df["b"]}),
             self._KEY0_VALUE1,
-            1,
             runner_conf=conf,
         )
         values = list(range(100))
@@ -520,9 +690,7 @@ class PandasGroupedMapIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             for df in df_iter:
                 yield pd.DataFrame({"v": df["b"] * 2})
 
-        handler = self._grouped_handler(
-            PandasGroupedMapIterUDFHandler, double, self._KEY0_VALUE1, 1
-        )
+        handler = self._grouped_handler(PandasGroupedMapIterUDFHandler, double, self._KEY0_VALUE1)
         groups = [
             iter([self._batch(a=[1, 1], b=[1, 2]), self._batch(a=[1], b=[3])]),
             iter([self._batch(a=[2], b=[5])]),
@@ -535,9 +703,7 @@ class PandasGroupedMapIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             for df in df_iter:
                 yield pd.DataFrame({"v": [key[0]] * len(df)})
 
-        handler = self._grouped_handler(
-            PandasGroupedMapIterUDFHandler, with_key, self._KEY0_VALUE1, 2
-        )
+        handler = self._grouped_handler(PandasGroupedMapIterUDFHandler, with_key, self._KEY0_VALUE1)
         out = list(handler.run(0, iter([iter([self._batch(a=[7, 7], b=[1, 2])])])))
         self.assertEqual(self._struct_values(out), [7, 7])
 
@@ -548,7 +714,7 @@ class PandasGroupedMapIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             yield pd.DataFrame({"v": next(df_iter)["b"]})
 
         handler = self._grouped_handler(
-            PandasGroupedMapIterUDFHandler, first_only, self._KEY0_VALUE1, 1
+            PandasGroupedMapIterUDFHandler, first_only, self._KEY0_VALUE1
         )
         group1 = iter([self._batch(a=[1], b=[1]), self._batch(a=[1], b=[2])])
         group2 = iter([self._batch(a=[2], b=[3])])
@@ -562,7 +728,7 @@ class PandasGroupedMapIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
                 yield df["b"]
 
         handler = self._grouped_handler(
-            PandasGroupedMapIterUDFHandler, yields_series, self._KEY0_VALUE1, 1
+            PandasGroupedMapIterUDFHandler, yields_series, self._KEY0_VALUE1
         )
         with self.assertRaises(PySparkTypeError):
             list(handler.run(0, iter([iter([self._batch(a=[1], b=[3])])])))
@@ -578,7 +744,6 @@ class PandasCoGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasCoGroupedMapUDFHandler,
             lambda left, right: pd.DataFrame({"v": [left["b"].sum() + right["b"].sum()]}),
             self._offsets,
-            2,
         )
         cogroup = (
             [self._batch(a=[1], b=[1]), self._batch(a=[1], b=[2])],
@@ -594,7 +759,6 @@ class PandasCoGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             PandasCoGroupedMapUDFHandler,
             lambda key, left, right: pd.DataFrame({"v": [key[0]]}),
             self._offsets,
-            3,
         )
         cogroups = [
             ([self._batch(a=[4], b=[1])], [self._batch(a=[], b=[])]),
@@ -605,7 +769,7 @@ class PandasCoGroupedMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
 
     def test_rejects_non_dataframe_result(self):
         handler = self._grouped_handler(
-            PandasCoGroupedMapUDFHandler, lambda left, right: 1, self._offsets, 2
+            PandasCoGroupedMapUDFHandler, lambda left, right: 1, self._offsets
         )
         cogroup = ([self._batch(a=[1], b=[1])], [self._batch(a=[1], b=[2])])
         with self.assertRaises(PySparkTypeError):

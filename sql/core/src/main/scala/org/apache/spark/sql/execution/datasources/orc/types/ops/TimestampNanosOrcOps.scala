@@ -27,7 +27,7 @@ import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
@@ -48,7 +48,7 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * UTC wall clock, via Timestamp.valueOf(LocalDateTime.ofInstant(instant, UTC)). This keeps the
  * pushed predicate consistent with the ORC min/max statistics regardless of the JVM time zone.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps {
 
@@ -92,6 +92,17 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
     case i: Instant => Timestamp.valueOf(LocalDateTime.ofInstant(i, ZoneOffset.UTC))
     case other => other
   }
+
+  // The reader truncates the stored values to the read precision (see makeDeserializer and
+  // OrcAtomicColumnVector.getTimestampLTZNanos), while ORC evaluates a pushed down predicate
+  // against the stored values. E.g. a stored 00:00:00.123456789 of a TIMESTAMP_LTZ(9) file is read
+  // as 00:00:00.1234567 for TIMESTAMP_LTZ(7), so a pushed down `ts = 00:00:00.1234567` would skip
+  // it. The values of a TIMESTAMP_LTZ(p) file have at most p fractional digits, so a read
+  // precision of at least p keeps them. Any other read type does not keep them either.
+  override def acceptsReadType(readType: DataType): Boolean = readType match {
+    case r: TimestampLTZNanosType => r.precision >= t.precision
+    case _ => false
+  }
 }
 
 /**
@@ -111,7 +122,7 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
  * super-value, so the two are value-equal and the pushed predicate is consistent with the ORC
  * min/max statistics.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps {
 
@@ -153,5 +164,16 @@ case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps 
   override def castFilterLiteral(value: Any): Any = value match {
     case ldt: LocalDateTime => Timestamp.valueOf(ldt)
     case other => other
+  }
+
+  // The reader truncates the stored values to the read precision (see makeDeserializer and
+  // OrcAtomicColumnVector.getTimestampNTZNanos), while ORC evaluates a pushed down predicate
+  // against the stored values. E.g. a stored 00:00:00.123456789 of a TIMESTAMP_NTZ(9) file is read
+  // as 00:00:00.1234567 for TIMESTAMP_NTZ(7), so a pushed down `ts = 00:00:00.1234567` would skip
+  // it. The values of a TIMESTAMP_NTZ(p) file have at most p fractional digits, so a read
+  // precision of at least p keeps them. Any other read type does not keep them either.
+  override def acceptsReadType(readType: DataType): Boolean = readType match {
+    case r: TimestampNTZNanosType => r.precision >= t.precision
+    case _ => false
   }
 }

@@ -24,6 +24,7 @@ import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.Transform;
 
 /**
@@ -75,6 +76,11 @@ public class DelegatingTable implements Table {
   }
 
   @Override
+  public Map<String, String> displayProperties() {
+    return Collections.unmodifiableMap(info.displayProperties());
+  }
+
+  @Override
   public Transform[] partitioning() {
     return info.partitions();
   }
@@ -82,6 +88,16 @@ public class DelegatingTable implements Table {
   @Override
   public Constraint[] constraints() {
     return info.constraints();
+  }
+
+  @Override
+  public WriteDistributionMode writeDistributionMode() {
+    return info.writeDistributionMode();
+  }
+
+  @Override
+  public SortOrder[] writeOrdering() {
+    return info.writeOrdering();
   }
 
   @Override

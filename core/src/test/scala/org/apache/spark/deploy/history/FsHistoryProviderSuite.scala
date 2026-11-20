@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.security.AccessControlException
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.PrivateMethodTester
@@ -40,7 +41,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
-import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPRESS}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
@@ -1561,6 +1562,43 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-60581: log cleaner with both the max age and the maximum number of log files") {
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(maxAge)
+    val conf = createTestConf()
+      .set(CLEANER_ENABLED, true)
+      .set(MAX_LOG_AGE_S.key, s"${maxAge}ms")
+      .set(MAX_LOG_NUM, 2)
+    val provider = new FsHistoryProvider(conf, clock)
+
+    def newCompletedLogFile(appId: String, lastModified: Long): File = {
+      val log = newLogFile(appId, None, inProgress = false)
+      writeFile(log, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+      log.setLastModified(lastModified)
+      log
+    }
+    val log1 = newCompletedLogFile("app1", 1000L)
+    val log2 = newCompletedLogFile("app2", 5000L)
+    val log3 = newCompletedLogFile("app3", 6000L)
+
+    // Load all logs while they are within the max age, before the cleaner runs.
+    provider.checkForLogs()
+    provider.getListing().size should be (3)
+
+    // Only app1 exceeds the max age. Removing it leaves exactly the maximum number of logs,
+    // so the max number policy should not remove anything more.
+    clock.setTime(maxAge + 2000L)
+    updateAndCheck(provider) { list =>
+      list.map(_.id) should contain theSameElementsAs Seq("app2", "app3")
+    }
+    assert(!log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+    assert(provider.listing.count(classOf[LogInfo]) === 2)
+  }
+
   test("backwards compatibility with LogInfo from Spark 2.4") {
     case class LogInfoV24(
          logPath: String,
@@ -1772,6 +1810,66 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val job2 = appStore.job(2)
         assert(job2.status === JobExecutionStatus.SUCCEEDED)
       }
+    }
+  }
+
+  test("SPARK-59747: don't retry compaction of event log files with malformed input") {
+    withTempDir { dir =>
+      val conf = createTestConf().set(FAST_IN_PROGRESS_PARSING, true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      // Keep the event log files uncompressed so that the bytes appended below are decoded as-is.
+      conf.set(EVENT_LOG_COMPRESS, false)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val provider = new FsHistoryProvider(conf)
+
+      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+
+      // Keep the writer running so fast listing replay halts after the environment update.
+      // Pad the first file so the malformed bytes are not decoded by listing's read-ahead,
+      // but are decoded when compaction replays the file in full.
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerEnvironmentUpdate(Map(
+          "Spark Properties" -> Seq.empty,
+          "Hadoop Properties" -> Seq.empty,
+          "JVM Information" -> Seq.empty,
+          "System Properties" -> Seq.empty,
+          "Metrics Properties" -> Seq.empty,
+          "Classpath Entries" -> Seq.empty))) ++
+        (1 to 1000).map(SparkListenerJobStart(_, 0, Seq.empty)), rollFile = true)
+
+      val firstFile = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles.head
+      Files.write(new File(firstFile.getPath.toUri).toPath,
+        Array[Byte](0xC3.toByte, 0x28.toByte, '\n'.toByte), StandardOpenOption.APPEND)
+
+      writeEventsToRollingWriter(writer, Seq(SparkListenerJobEnd(1, 1, JobSucceeded)),
+        rollFile = false)
+
+      val logAppender = new LogAppender("malformed event log compaction")
+      withLogAppender(logAppender, loggerNames = Seq(classOf[EventLogFileCompactor].getName)) {
+        updateAndCheck(provider) { list =>
+          assert(list.map(_.id) === Seq("app"))
+          val logFiles = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
+          assert(!logFiles.exists(file => EventLogFileWriter.isCompacted(file.getPath)))
+          assert(logFiles.map { file =>
+            RollingEventLogFilesWriter.getEventLogFileIndex(file.getPath.getName)
+          } === Seq(1, 2))
+          val info = provider.listing.read(classOf[LogInfo], writer.logPath)
+          assert(info.lastEvaluatedForCompaction === Some(2))
+        }
+      }
+      assert(logAppender.loggingEvents.exists { event =>
+        event.getLevel == Level.WARN && event.getMessage.getFormattedMessage ==
+          s"Event log file ${firstFile.getPath} contains malformed input"
+      })
+
+      writer.stop()
+      provider.stop()
     }
   }
 
@@ -2633,6 +2731,61 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     } finally {
       Utils.deleteRecursively(dir2)
     }
+  }
+
+  test("SPARK-60580: listing entries without a log source from an older version") {
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
+
+    val log = newLogFile("app1", None, inProgress = false)
+    writeFile(log, None,
+      SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+      SparkListenerApplicationEnd(2L))
+    log.setLastModified(0L)
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+    }
+
+    // A listing entry written before SPARK-55793 (Spark 4.1 and earlier) has no
+    // logSourceName / logSourceFullPath. The wrapper's String fields are read back as null
+    // and the ApplicationAttemptInfo Options as None. The store serializer omits null and None
+    // fields (NON_ABSENT), so writing them stores the same JSON as such an entry.
+    val app = provider.listing.read(classOf[ApplicationInfoWrapper], "app1-id")
+    val oldAttempts = app.attempts.map { a =>
+      new AttemptInfoWrapper(
+        a.info.copy(logSourceName = None, logSourceFullPath = None),
+        a.logPath, a.fileSize, a.lastIndex, a.adminAcls, a.viewAcls,
+        a.adminAclsGroups, a.viewAclsGroups, null, null)
+    }
+    provider.listing.write(new ApplicationInfoWrapper(app.info, oldAttempts))
+    assert(provider.getAttempt("app1-id", None).logSourceFullPath === null)
+
+    // The event log can be downloaded.
+    val bytes = new ByteArrayOutputStream()
+    val zipOut = new ZipOutputStream(bytes)
+    provider.writeEventLogs("app1-id", None, zipOut)
+    zipOut.close()
+    val zipIn = new ZipInputStream(new ByteArrayInputStream(bytes.toByteArray))
+    try {
+      zipIn.getNextEntry.getName should be (log.getName)
+    } finally {
+      zipIn.close()
+    }
+
+    // The UI can be loaded.
+    provider.getAppUI("app1-id", None) should not be None
+
+    // The cleaner deletes the expired log and its listing entry.
+    clock.setTime(maxAge + 1)
+    provider.cleanLogs()
+    assert(!log.exists())
+    intercept[NoSuchElementException] {
+      provider.listing.read(classOf[ApplicationInfoWrapper], "app1-id")
+    }
+
+    provider.stop()
   }
 
   test("SPARK-55864: directory removed while SHS is running") {

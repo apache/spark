@@ -139,7 +139,7 @@ object ResolveExecuteImmediate {
       objectName = None, // No named object for EXECUTE IMMEDIATE, unlike views
       sqlText = Some(sqlString),
       startIndex = Some(0),
-      stopIndex = Some(sqlString.length - 1)
+      stopIndex = Some(sqlString.codePointCount(0, sqlString.length) - 1)
     )
 
     // Parse and analyze the inner statement with local variables hidden and EXECUTE IMMEDIATE
@@ -227,14 +227,7 @@ object ResolveExecuteImmediate {
   private def extractOriginalText(queryExpr: Expression): String = {
     val origin = queryExpr.origin
     // Try to extract the original text from the origin information
-    (origin.sqlText, origin.startIndex, origin.stopIndex) match {
-      case (Some(sqlText), Some(startIndex), Some(stopIndex)) =>
-        // Extract the substring from the original SQL text
-        sqlText.substring(startIndex, stopIndex + 1)
-      case _ =>
-        // Fallback to the SQL representation if origin information is not available
-        queryExpr.sql
-    }
+    origin.sqlTextSlice.getOrElse(queryExpr.sql)
   }
 
   /**

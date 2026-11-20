@@ -17,11 +17,45 @@
 
 import unittest
 
+from pyspark.errors import AnalysisException
+from pyspark.sql import Row, functions
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
+    def test_bin_by_with_non_strict_column_resolution(self):
+        with self.sql_conf(
+            {
+                "spark.sql.binByRelationOperator.enabled": "true",
+                "spark.sql.analyzer.strictDataFrameColumnResolution": "false",
+            }
+        ):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+            )
+            changed = (
+                df.withColumn("start", functions.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'"))
+                .withColumn("end", functions.expr("TIMESTAMP_NTZ '2024-01-01 00:18:00'"))
+                .withColumn("value", functions.lit(200.0))
+            )
+            result = changed.binBy(
+                df["start"], df["end"], functions.expr("INTERVAL 5 MINUTES"), [df["value"]]
+            )
+            self.assertEqual(
+                result.orderBy("bin_start").select("value").collect(),
+                [Row(37.5), Row(62.5), Row(62.5), Row(37.5)],
+            )
+            with self.assertRaises(AnalysisException) as error:
+                changed.binBy(
+                    changed["start"],
+                    changed["end"],
+                    functions.expr("INTERVAL 5 MINUTES"),
+                    [changed["missing"]],
+                ).collect()
+            self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
     def test_help_command(self):
         df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
         super().check_help_command(df)

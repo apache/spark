@@ -339,7 +339,7 @@ ________________________________________________________________________________
 def _parse_memory(s: str) -> int:
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
+    return the value in MiB. Raise ValueError for empty or invalid memory strings.
 
     Examples
     --------
@@ -349,7 +349,7 @@ def _parse_memory(s: str) -> int:
     2048
     """
     units = {"g": 1024, "m": 1, "t": 1 << 20, "k": 1.0 / 1024}
-    if s[-1].lower() not in units:
+    if not s or s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
 
@@ -510,6 +510,41 @@ def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
             return f
 
 
+def _format_exception(
+    e: BaseException,
+    hide_traceback: bool = False,
+    simplified_traceback: bool = False,
+    capture_locals: bool = False,
+) -> str:
+    """Format a Python failure using explicit options, without changing process environment."""
+    if hide_traceback:
+        return "".join(traceback.format_exception_only(type(e), e))
+    tb = sys.exc_info()[-1]
+    if simplified_traceback and tb is not None:
+        simplified_tb = try_simplify_traceback(tb)
+        if simplified_tb is not None:
+            tb = simplified_tb
+            e.__cause__ = None
+    te = traceback.TracebackException(type(e), e, tb, compact=True, capture_locals=capture_locals)
+    return "".join(te.format())
+
+
+def format_worker_exception(e: BaseException, hide_traceback: Optional[bool] = None) -> str:
+    """
+    Formats an exception raised in the Python worker as it is reported to the JVM, honoring the
+    SPARK_HIDE_TRACEBACK, SPARK_SIMPLIFIED_TRACEBACK and SPARK_TRACEBACK_WITH_LOCALS environment
+    variables. Must be called while handling ``e``.
+    """
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+    return _format_exception(
+        e,
+        hide_traceback,
+        bool(os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False)),
+        bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)),
+    )
+
+
 def handle_worker_exception(
     e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
 ) -> None:
@@ -528,31 +563,10 @@ def handle_worker_exception(
         Whether to hide the traceback in the output.
         By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-
-    if hide_traceback is None:
-        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
-
-    def format_exception() -> str:
-        if hide_traceback:
-            return "".join(traceback.format_exception_only(type(e), e))
-        tb = sys.exc_info()[-1]
-        if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-            simplified_tb = try_simplify_traceback(tb)  # type: ignore[arg-type]
-            if simplified_tb is not None:
-                tb = simplified_tb
-                e.__cause__ = None
-        # We only set SPARK_TRACEBACK_WITH_LOCALS=1 for now. This equivalent to a
-        # check for the existence of the environment variable.
-        capture_locals = bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False))
-        te = traceback.TracebackException(
-            type(e), e, tb, compact=True, capture_locals=capture_locals
-        )
-        return "".join(te.format())
-
     try:
-        exc_info = format_exception()
+        exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(exc_info.encode("utf-8"), outfile)
+        write_with_length(exc_info.encode("utf-8", "backslashreplace"), outfile)
     except IOError:
         # JVM close the socket
         pass
@@ -712,8 +726,11 @@ class PythonEvalType:
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
 
-    # Window aggregation with an incremental ``Aggregator``. A window has no shuffle, so each
-    # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
+    # Window aggregation with an incremental ``Aggregator``. A window partition is evaluated
+    # within one task, so there is no PARTIAL/FINAL split and no ``merge``: each frame's rows are
+    # folded with ``reduce`` and ``finish`` produces its value. An unbounded frame (the whole
+    # partition) is folded once; a bounded frame is folded per row, extending the previous row's
+    # buffer while the lower bound stays fixed.
     SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
