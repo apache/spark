@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, ExpressionWithUnresolvedIdentifier, FunctionResolution, IdentifierResolution, PlanWithUnresolvedIdentifier, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, FunctionResolution, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
@@ -376,53 +376,26 @@ case class CreateSQLFunctionCommand(
       }.distinct
     }
 
-    // With `followPath`, an unqualified name counts only when the SQL PATH resolves it to the temp
-    // function. Calls that an IDENTIFIER clause builds use it, as earlier versions accepted them.
-    def isTempScalarCall(nameParts: Seq[String], followPath: Boolean): Boolean =
-      isTemporaryScalarFunctionName(catalog, nameParts) &&
-        (!followPath || nameParts.length > 1 ||
-          analyzer.unqualifiedFunctionResolvesToTemp(nameParts.head))
-
-    def collectInExpression(expr: Expression, followPath: Boolean): Seq[String] = expr.flatMap {
-      case e: SubqueryExpression => collectTempFunctions(e.plan, followPath)
-      case e: UnresolvedFunction if isTempScalarCall(e.nameParts, followPath) =>
-        Seq(e.nameParts.last)
-      // An IDENTIFIER-clause call: check the call it builds from its constant name.
-      case e: ExpressionWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
-        identifierNameParts(analyzer, e.identifierExpr).map(e.exprBuilder(_, e.otherExprs)) match {
-          case Some(f: UnresolvedFunction) if isTempScalarCall(f.nameParts, followPath = true) =>
-            Seq(f.nameParts.last)
-          case _ => Seq.empty
-        }
-      // A routed JSON constructor is a temporary-function reference only when the
-      // temporary function owns it, not the built-in or a persistent function before it.
-      case j: UnresolvedJsonConstructor
-        if j.routeThroughResolution &&
-          catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) &&
-          analyzer.unqualifiedFunctionResolvesToTemp(j.prettyName) =>
-        Seq(j.prettyName)
-      case _ => Seq.empty
-    }
-
-    def collectTempFunctions(child: LogicalPlan, followPath: Boolean = false): Seq[String] = {
+    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
       child.flatMap {
-        case w: UnresolvedWith if !w.resolved =>
-          w.innerChildren.flatMap(collectTempFunctions(_, followPath))
-        // An IDENTIFIER-named table function: its arguments exist only in the plan it builds.
-        case p: PlanWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
-          val name = identifierNameParts(analyzer, p.identifierExpr)
-          collectInExpression(p.identifierExpr, followPath) ++ name.toSeq.flatMap { n =>
-            collectTempFunctions(p.planBuilder(n, p.children), followPath = true)
-          }
-        // A qualified temp table function call. Resolution's recorded names cover the others.
-        case u: UnresolvedTableValuedFunction =>
-          val qualified = if (u.name.length > 1 && isTemporaryTableFunctionName(catalog, u.name)) {
-            Seq(u.name.last)
-          } else {
-            Nil
-          }
-          qualified ++ u.functionArgs.flatMap(collectInExpression(_, followPath))
-        case plan if !plan.resolved => plan.expressions.flatMap(collectInExpression(_, followPath))
+        case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
+        case plan if !plan.resolved =>
+          plan.expressions.flatMap(_.flatMap {
+            case e: SubqueryExpression => collectTempFunctions(e.plan)
+            // As in earlier versions, a `session.` call is left to the cyclic check under the
+            // legacy flag. By default the record of bound temp functions covers it.
+            case e: UnresolvedFunction
+              if e.nameParts.length != 2 && isTemporaryScalarFunctionName(catalog, e.nameParts) =>
+              Seq(e.nameParts.last)
+            // A routed JSON constructor is a temporary-function reference only when the
+            // temporary function owns it, not the built-in or a persistent function before it.
+            case j: UnresolvedJsonConstructor
+              if j.routeThroughResolution &&
+                catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) &&
+                analyzer.unqualifiedFunctionResolvesToTemp(j.prettyName) =>
+              Seq(j.prettyName)
+            case _ => Seq.empty
+          })
         case _ => Seq.empty
       }.distinct
     }
@@ -434,26 +407,6 @@ case class CreateSQLFunctionCommand(
 
   private def legacyTempFunctionCheck: Boolean =
     conf.getConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION)
-
-  // The name an IDENTIFIER clause evaluates to, resolved and evaluated as the body's analysis
-  // did. None when it is not a constant string.
-  private def identifierNameParts(analyzer: Analyzer, expr: Expression): Option[Seq[String]] =
-    try {
-      val resolved = if (expr.resolved) {
-        Some(expr)
-      } else {
-        // A fresh context keeps the names its lookups record out of this statement's context.
-        AnalysisContext.withNewAnalysisContext {
-          analyzer.execute(Project(Seq(Alias(expr, "name")()), OneRowRelation()))
-        } match {
-          case Project(Seq(a: Alias), _) if a.resolved => Some(a.child)
-          case _ => None
-        }
-      }
-      resolved.map(IdentifierResolution.evalIdentifierExpr)
-    } catch {
-      case _: AnalysisException => None
-    }
 
   // A same-named temp table function does not count: the scalar call then reaches a built-in or
   // persistent function, or fails analysis.
@@ -575,9 +528,23 @@ case class CreateSQLFunctionCommand(
         case (ident, false) => isSQLFunction(catalog.lookupFunctionInfo(ident).getClassName)
       }
 
+    // Under the legacy flag, a qualified temp reference fails where this check walks, as earlier
+    // versions failed to look it up here as a persistent function.
+    def failLegacyQualifiedTempReference(
+        nameParts: Seq[String],
+        isTempName: (SessionCatalog, Seq[String]) => Boolean): Unit = {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      if (legacyTempFunctionCheck && !isTemp && nameParts.length > 1 &&
+          isTempName(catalog, nameParts)) {
+        throw UserDefinedFunctionErrors.invalidTempFuncReference(
+          routineName = name.asMultipart, tempFuncName = nameParts.last)
+      }
+    }
+
     def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
       plan.foreach {
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
+          failLegacyQualifiedTempReference(nameParts, isTemporaryTableFunctionName)
           sqlFunctionIdentifier(nameParts, tableFunction = true).foreach { case (ident, isSystem) =>
             val f = withPosition(u) {
               (if (isSystem) {
@@ -612,6 +579,7 @@ case class CreateSQLFunctionCommand(
     }
 
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
+      failLegacyQualifiedTempReference(u.nameParts, isTemporaryScalarFunctionName)
       sqlFunctionIdentifier(u.nameParts, tableFunction = false).foreach { case (ident, isSystem) =>
         val f = withPosition(u) {
           (if (isSystem) {

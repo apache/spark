@@ -421,22 +421,18 @@ class FunctionResolution(
 
   /**
    * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
-   * before any built-in or persistent function of that name. Any name may be passed: unlike
-   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]], `system.builtin` owns it only when
-   * it defines the name.
+   * before `system.builtin` and any persistent function. Same precondition as
+   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
    */
   def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
-    unqualifiedFunctionOwnerKind(functionName, builtinMustExist = true)
-      .contains(SessionCatalog.Temp)
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
 
   /**
    * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
-   * a persistent function (or no owner). Without `builtinMustExist`, `system.builtin` owns any
-   * name.
+   * a persistent function (or no owner).
    */
   private def unqualifiedFunctionOwnerKind(
-      functionName: String,
-      builtinMustExist: Boolean = false): Option[SessionCatalog.SessionFunctionKind] = {
+      functionName: String): Option[SessionCatalog.SessionFunctionKind] = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
     // system.builtin first, so the common case returns on the first entry with no catalog lookup;
     // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
@@ -445,9 +441,7 @@ class FunctionResolution(
       val candidate = pathEntry :+ functionName
       FunctionResolution.sessionNamespaceKind(candidate) match {
         case Some(SessionCatalog.Builtin) =>
-          if (!builtinMustExist || candidateOwnsFunction(candidate)) {
-            return Some(SessionCatalog.Builtin)
-          }
+          return Some(SessionCatalog.Builtin)
         case Some(SessionCatalog.Temp) =>
           // A visible temp scalar function shadows the builtin; a visible temp *table* function
           // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way

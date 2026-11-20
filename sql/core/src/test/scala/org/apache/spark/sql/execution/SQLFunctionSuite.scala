@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.SQLFunctionExpression
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Explode, Literal}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -687,6 +687,62 @@ class SQLFunctionSuite extends SharedSparkSession {
           assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
           assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
         }
+      }
+    }
+  }
+
+  test("SPARK-60805: the legacy flag keeps earlier versions' outcome in nested positions") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_tbl" -> true, "tbl_fn" -> false,
+        "perm_nested" -> false) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 2")
+      sql("CREATE TEMPORARY FUNCTION temp_tbl() RETURNS TABLE (a INT) RETURN SELECT 2")
+      sql("CREATE FUNCTION tbl_fn(x INT) RETURNS TABLE (a INT) RETURN SELECT x")
+      // Earlier versions created these: their checks did not look at qualified names here.
+      val accepted = Seq(
+        "() RETURNS INT RETURN (WITH c AS (SELECT session.temp_fn() AS a) SELECT a FROM c)",
+        "() RETURNS TABLE (a INT) RETURN WITH c AS (SELECT * FROM session.temp_tbl()) " +
+          "SELECT * FROM c",
+        "() RETURNS TABLE (a INT) RETURN WITH c AS (SELECT * FROM system.session.temp_tbl()) " +
+          "SELECT * FROM c",
+        "(x INT DEFAULT session.temp_fn()) RETURNS TABLE (a INT) RETURN SELECT x")
+      // And rejected these. The cyclic check expands a called SQL function with its arguments.
+      val rejected = Seq(
+        "() RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(temp_fn())",
+        "() RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(session.temp_fn())",
+        "() RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(system.session.temp_fn())",
+        "() RETURNS INT RETURN (SELECT temp_fn())",
+        "() RETURNS INT RETURN (WITH c AS (SELECT temp_fn() AS a) SELECT a FROM c)",
+        "(x INT DEFAULT temp_fn()) RETURNS INT RETURN x",
+        "(x INT DEFAULT temp_fn()) RETURNS TABLE (a INT) RETURN SELECT x",
+        "(x INT DEFAULT session.temp_fn()) RETURNS INT RETURN x")
+      def assertRejected(function: String): Unit = {
+        val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_nested$function"))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$function: ${e.getMessage}")
+      }
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        accepted.foreach { function =>
+          sql(s"CREATE FUNCTION perm_nested$function")
+          sql("DROP FUNCTION perm_nested")
+        }
+        rejected.foreach(assertRejected)
+      }
+      (accepted ++ rejected).foreach(assertRejected)
+    }
+  }
+
+  test("SPARK-60805: a temp generator in LATERAL VIEW is a temp reference") {
+    withUserDefinedFunction("temp_gen" -> true, "perm_gen" -> false) {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction(
+        "temp_gen", children => Explode(children.head), "scala_udf")
+      val ddl = "CREATE FUNCTION perm_gen() RETURNS TABLE (c INT) RETURN SELECT c " +
+        "FROM VALUES (array(1, 2)) AS t(arr) LATERAL VIEW temp_gen(arr) tv AS c"
+      val e = intercept[AnalysisException](sql(ddl))
+      assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
+      assert(e.getMessageParameters.get("tempObjName") == "`temp_gen`", e.getMessage)
+      // Earlier versions accepted it, as the legacy flag does.
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        sql(ddl)
+        checkAnswer(sql("SELECT * FROM perm_gen()"), Seq(Row(1), Row(2)))
       }
     }
   }
