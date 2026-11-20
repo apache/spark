@@ -192,11 +192,16 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
         eventTimeWatermarkForEviction
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
-        StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-          condition,
-          eventTimeWatermarkForEviction)
+        // An input that the rising-only rule leaves without a cutoff keeps the state watermark of
+        // earlier versions, which holds back the output watermark for the rows it keeps.
+        def stateWatermark(risingCutoffsOnly: Boolean): Option[Long] =
+          StreamingJoinHelper.getStateValueWatermark(
+            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+            attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
+            condition,
+            eventTimeWatermarkForEviction,
+            risingCutoffsOnly)
+        stateWatermark(risingCutoffsOnly = true).orElse(stateWatermark(risingCutoffsOnly = false))
       } else {
         None
       }

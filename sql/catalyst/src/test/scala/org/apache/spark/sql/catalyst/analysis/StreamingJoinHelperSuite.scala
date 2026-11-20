@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DecimalType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -100,6 +100,12 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     val truncating = leftTime.cast(LongType) >= rightTime.cast(LongType) - 5
     assert(cutoff(truncating) === Some(94999L))
     assert(cutoff(truncating && leftTime.cast(LongType) > 10) === Some(10000L))
+    // Casts that round, or keep too few digits, count too. One that keeps every digit does not.
+    Seq[(DataType, Option[Long])](DecimalType(10, 0) -> Some(10000L), FloatType -> Some(10000L),
+        DecimalType(16, 6) -> Some(94999L)).foreach { case (dataType, expected) =>
+      assert(cutoff(leftTime.cast(dataType) >= rightTime.cast(dataType) - 5 &&
+        leftTime.cast(LongType) > 10) === expected, dataType)
+    }
     // The sum gives no cutoff that rises with the watermark, so it does not count.
     assert(cutoff(leftTime > rightTime &&
       leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === Some(100000L))

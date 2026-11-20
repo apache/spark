@@ -224,8 +224,9 @@ object UnsupportedOperationChecker extends Logging {
         .filter { case (_, input, _) => counts(input) }
         .collectFirst {
           case (side, input, other) if input.output.exists(hasEventTimeCol) && (
-              StreamingJoinHelper.getStateValueWatermark(
-                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty ||
+              // As the join's output watermark, take the cutoff of earlier versions.
+              StreamingJoinHelper.getStateValueWatermark(input.outputSet, other.outputSet,
+                condition, Some(1000000), risingCutoffsOnly = false).isEmpty ||
               SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) &&
               SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK) &&
               StreamingJoinHelper.getStateValueWatermarkColumn(input.output, other.outputSet,

@@ -161,6 +161,87 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
       }
     }
 
+    // DECIMAL(10, 0) rounds half up, so 39.3 and 39.45 both become 39.
+    test(s"constant-only conjunct caps a cutoff through a rounding cast, V$version") {
+      withJoinStateVersion(version) {
+        val leftInput = MemoryStream[(Int, Double)]
+        val rightInput = MemoryStream[(Int, Double)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("lt"))
+          .withWatermark("lt", "1 second")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rt"))
+          .withWatermark("rt", "1 second")
+        val condition = expr("leftKey = rightKey AND " +
+          "CAST(lt AS DECIMAL(10, 0)) >= CAST(rt AS DECIMAL(10, 0)) AND CAST(lt AS LONG) > 10")
+        val joined = left.join(right, condition, "left_outer")
+          .select($"leftKey", $"lt".cast("double"), $"rt".cast("double"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 39.3)), AddData(rightInput, (9, 39.3)))),
+          CheckNewAnswer(),
+          // The watermark becomes 39.4 s, above lt = 39.3 s.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 40.4)), AddData(rightInput, (9, 40.4)))),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 40.5)),
+          CheckNewAnswer(),
+          AddData(rightInput, (1, 39.45)),
+          CheckNewAnswer(Row(1, 39.3, 39.45)))
+      }
+    }
+
+    // A left semi join processes its right input first. The negative-sign conjunct kept the
+    // earlier cutoff low, so the right row (1, 1200) was stored for the left row of its batch.
+    test(s"left semi join keeps a right row that a negative-sign conjunct kept, V$version") {
+      withJoinStateVersion(version) {
+        val (leftInput, rightInput, left, right) = inputs()
+        val joined = left.join(right, expr("leftKey = rightKey AND rt BETWEEN " +
+            "lt - INTERVAL 10 MINUTES AND lt + INTERVAL 10 MINUTES AND " +
+            "CAST(lt AS LONG) + CAST(rt AS LONG) > 100"), "left_semi")
+          .select($"leftKey", $"lt".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (9, 1000L)), AddData(rightInput, (9, 1000L)))),
+          CheckNewAnswer(Row(9, 1000L)),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 2000L)), AddData(rightInput, (8, 2000L)))),
+          CheckNewAnswer(Row(8, 2000L)),
+          StreamProgressLockedActions(Seq(
+            AddData(rightInput, (1, 1200L)), AddData(leftInput, (1, 1300L)))),
+          CheckNewAnswer(Row(1, 1300L)))
+      }
+    }
+
+    // Neither input gets a cutoff, so the left state keeps (1, 200). Its state watermark of
+    // earlier versions, from the negative-sign conjunct, still holds back the join's output
+    // watermark for the deduplication.
+    test(s"output watermark keeps the cutoff of earlier versions for an input without one, " +
+        s"V$version") {
+      withJoinStateVersion(version) {
+        val (leftInput, rightInput, left, right) = inputs()
+        val joined = left.join(right, expr(
+            "leftKey = rightKey AND CAST(lt AS LONG) + CAST(rt AS LONG) > 100"))
+          .select($"leftKey", $"lt").dropDuplicatesWithinWatermark()
+          .select($"leftKey", $"lt".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 200L)), AddData(rightInput, (9, 200L)))),
+          CheckNewAnswer(),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 300L)), AddData(rightInput, (8, 300L)))),
+          CheckNewAnswer(Row(8, 300L)),
+          AddData(rightInput, (9, 400L)),
+          CheckNewAnswer(),
+          // The watermark is 299 s, but the joined row's lt of 200 s is not late.
+          AddData(rightInput, (1, 500L)),
+          CheckNewAnswer(Row(1, 200L)))
+      }
+    }
+
     test(s"constant-only conjunct does not cap the state cutoff, V$version") {
       withJoinStateVersion(version) {
         val (leftInput, rightInput, left, right) = inputs()

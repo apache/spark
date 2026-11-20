@@ -771,7 +771,8 @@ case class StreamingSymmetricHashJoinExec(
 
     // A left semi join processes its right input first, so this batch's left rows can still match
     // a right row that the completion check skips (SPARK-61380). Earlier versions tested it against
-    // the cutoff on the event time solved over the whole input, which a picked column can exceed.
+    // the cutoff on the event time solved over the whole input, which a picked column can exceed,
+    // with constant-only and negative-sign conjuncts.
     // TODO: [SPARK-61380] For a right input evicted by a picked column other than its event time,
     //  the skip still drops a right row that the eviction keeps, so a left row of a later batch
     //  can miss its match.
@@ -781,7 +782,8 @@ case class StreamingSymmetricHashJoinExec(
         val eventTime = WatermarkSupport.findEventTimeColumn(inputAttributes,
           allowMultipleEventTimeColumns = false)
         val cutoff = StreamingJoinHelper.getStateValueWatermark(AttributeSet(inputAttributes),
-          AttributeSet(left.output), condition.full, eventTimeWatermarkForEviction)
+          AttributeSet(left.output), condition.full, eventTimeWatermarkForEviction,
+          risingCutoffsOnly = false)
         // The value predicate gives the same answer when it tests the event time with that cutoff,
         // since a row with a NULL in the picked column does not reach the completion check.
         if (cutoff.contains(p.stateWatermark) && eventTime.exists(p.expr.references.contains)) {
