@@ -533,7 +533,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         sqlText = Some(s"select $query"))
       (() => withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
     }
-    // A cast to the type of the expression, with a context of its own (ANSI) or none (LEGACY).
+    // A cast to the type of the expression, with a context of its own (ANSI, TRY) or none (LEGACY).
     val castContext = "== SQL (line 1, position 1) ==\ncast"
     def sameTypeCast(expr: Expression, evalMode: EvalMode.Value): Expression = {
       val o = Origin(
