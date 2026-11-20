@@ -180,6 +180,31 @@ class DistinctKeyVisitorSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60830: distinct attributes through a projected cast of a CHAR/VARCHAR column") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq(CharType(5), VarcharType(5)).foreach { dt =>
+        val k = AttributeReference("k", dt)()
+        val rel = LocalRelation(k)
+        val ks = Cast(k, StringType).as("ks")
+        checkDistinctAttributes(Distinct(rel).select(ks), Set(ExpressionSet(Seq(ks.toAttribute))))
+        checkDistinctAttributes(rel.groupBy(k)(ks), Set(ExpressionSet(Seq(ks.toAttribute))))
+        // An alias of the column itself, or the column itself, is kept next to the cast.
+        val k2 = k.as("k2")
+        checkDistinctAttributes(Distinct(rel).select(k2, ks),
+          Set(ExpressionSet(Seq(k2.toAttribute)), ExpressionSet(Seq(ks.toAttribute))))
+        val e = AttributeReference("e", IntegerType)()
+        val e2 = e.as("e2")
+        checkDistinctAttributes(Distinct(LocalRelation(k, e)).select(k, e2, ks), Set(
+          ExpressionSet(Seq(k, e2.toAttribute)),
+          ExpressionSet(Seq(ks.toAttribute, e2.toAttribute))))
+        // Casts to another collation or to a length-checked type are not mapped.
+        checkDistinctAttributes(
+          Distinct(rel).select(Cast(k, StringType("UTF8_LCASE")).as("kl")), Set.empty)
+        checkDistinctAttributes(Distinct(rel).select(Cast(k, VarcharType(2)).as("kv")), Set.empty)
+      }
+    }
+  }
+
   test("Project's distinct attributes") {
     checkDistinctAttributes(t1.select($"a", $"b"), Set.empty)
     checkDistinctAttributes(Distinct(t1).select($"a"), Set.empty)

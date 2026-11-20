@@ -95,7 +95,9 @@ object EstimationUtils {
       // semantics each CHAR and VARCHAR column in a read-side check. ANALYZE TABLE reads the table
       // through them as well, so the statistics already describe the values they return.
       // Statistics collected otherwise (with padding off, or reported by a connector) can describe
-      // shorter values. The VARCHAR check never makes a value longer.
+      // shorter values, and more distinct ones: the padding and the checks can make values equal
+      // that differ only in trailing spaces. The distinct count is kept as is, and the VARCHAR
+      // check never makes a value longer.
       case alias @ Alias(WithoutCastToPlainString(
           CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, n, padsToLength)), _)
           if attributeStats.contains(attr) =>

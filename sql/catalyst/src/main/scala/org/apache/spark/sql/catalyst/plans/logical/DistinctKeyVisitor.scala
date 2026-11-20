@@ -38,20 +38,30 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   private def projectDistinctKeys(
       keys: Set[ExpressionSet], projectList: Seq[NamedExpression]): Set[ExpressionSet] = {
     val outputSet = ExpressionSet(projectList.map(_.toAttribute))
-    val aliases = projectList.collect {
-      // TODO: Expand distinctKeys for redundant aliases on the same expression
-      case alias: Alias if alias.child.deterministic => alias.child.canonicalized -> alias
+    val deterministicAliases = projectList.collect {
+      case alias: Alias if alias.child.deterministic => alias
+    }
+    // TODO: Expand distinctKeys for redundant aliases on the same expression
+    val aliases = deterministicAliases.map(alias => alias.child.canonicalized -> alias).toMap
+
+    // An alias of a cast to a STRING of the same collation is distinct where the cast child is.
+    // The keys are mapped once with the aliases above and once with these taking precedence.
+    val castAliases = deterministicAliases.flatMap { alias =>
+      val child = CharVarcharUtils.stripCastToPlainString(alias.child)
+      if (child eq alias.child) None else Some(child.canonicalized -> alias)
     }.toMap
     if (aliases.isEmpty) {
       keys.filter(_.subsetOf(outputSet))
     } else {
-      val aliasedDistinctKeys = keys.map(_.map(_.transform {
-        case expr: Expression =>
-          aliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
-      }))
-      aliasedDistinctKeys.collect {
+      def aliasedDistinctKeys(map: Map[Expression, Alias]): Set[ExpressionSet] =
+        keys.map(_.map(_.transform {
+          case expr: Expression =>
+            map.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
+        }))
+      val mappings = if (castAliases.isEmpty) Seq(aliases) else Seq(aliases, aliases ++ castAliases)
+      mappings.flatMap(aliasedDistinctKeys).collect {
         case es: ExpressionSet if es.subsetOf(outputSet) => ExpressionSet(es)
-      } ++ keys.filter(_.subsetOf(outputSet))
+      }.toSet ++ keys.filter(_.subsetOf(outputSet))
     }
   }
 

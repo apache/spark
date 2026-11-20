@@ -405,6 +405,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             .getOrElse(fail(s"no join, $clue"))
           assert(join.stats.sizeInBytes ==
             join.left.stats.sizeInBytes + join.right.stats.sizeInBytes, clue)
+          // A left join with a side that projects the cast is removed as well.
+          val projected = sql(s"SELECT s FROM $stringTable LEFT JOIN " +
+            s"(SELECT CAST(c AS STRING) AS k FROM $tableName GROUP BY c) g ON s = g.k")
+          assert(projected.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.isEmpty,
+            clue)
+          assert(projected.count() == 1000, clue)
         }
       }
     }

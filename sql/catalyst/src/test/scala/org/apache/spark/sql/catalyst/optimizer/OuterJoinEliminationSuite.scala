@@ -337,6 +337,11 @@ class OuterJoinEliminationSuite extends PlanTest {
           Some(Cast($"s", StringType("UTF8_LCASE")) === Cast(k, StringType("UTF8_LCASE"))))
           .select($"s").analyze
         comparePlans(Optimize.execute(lcase), lcase)
+        // A side that projects the cast is unique on it as well.
+        comparePlans(Optimize.execute(
+          x.join(y.groupBy(k)(Cast(k, StringType).as("ks")), LeftOuter, Some($"s" === $"ks"))
+            .select($"s").analyze),
+          x.select($"s").analyze)
       }
     }
   }

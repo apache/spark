@@ -258,7 +258,8 @@ case class FilterEstimation(
   /**
    * Returns the column under the read-side padding or check that a scan wraps a CHAR or VARCHAR
    * column in, and under the cast to STRING that a comparison adds when CHAR and VARCHAR are
-   * first-class types (see `CharVarcharUtils.stripCastToPlainString`).
+   * first-class types (see `CharVarcharUtils.stripCastToPlainString`). The column's distinct
+   * count is used as it is, as `EstimationUtils.getAliasStats` keeps it.
    */
   private def unwrapCharVarcharRead(e: Expression): Expression = {
     CharVarcharUtils.stripCastToPlainString(e) match {
