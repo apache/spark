@@ -2362,15 +2362,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  // The rounded sizes alone can be equal, and can differ from the value that the user set.
+  def formatScanBytes(n: Long): String = s"$n bytes (${Utils.bytesToString(n)})"
+
   def scanBytesLimitExceededError(
       scannedBytes: Long, maxScanBytes: Long, cause: Throwable): SparkException = {
-    // The rounded sizes alone can be equal, and can differ from the value that the user set.
-    def bytes(n: Long): String = s"$n bytes (${Utils.bytesToString(n)})"
     new SparkException(
       errorClass = "SCAN_BYTES_LIMIT_EXCEEDED",
       messageParameters = Map(
-        "scannedBytes" -> bytes(scannedBytes),
-        "limit" -> bytes(maxScanBytes),
+        "scannedBytes" -> formatScanBytes(scannedBytes),
+        "limit" -> formatScanBytes(maxScanBytes),
         "config" -> toSQLConf(SQLConf.MAX_SCAN_BYTES.key)),
       cause = cause)
   }

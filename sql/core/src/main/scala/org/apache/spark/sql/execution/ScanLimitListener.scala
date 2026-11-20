@@ -26,8 +26,8 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, EXECUTION_ID, NUM_BYTES, NUM_BYTES_MAX}
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.errors.QueryExecutionErrors.formatScanBytes
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -212,12 +212,9 @@ private[sql] object ScanLimitListener {
    * other ones.
    */
   def cancelReason(bytesRead: Long, maxScanBytes: Long): String = {
-    s"because the query read at least ${bytes(bytesRead)}, more than the limit of " +
-      s"${bytes(maxScanBytes)} set by ${SQLConf.MAX_SCAN_BYTES.key}"
+    s"because the query read at least ${formatScanBytes(bytesRead)}, more than the limit of " +
+      s"${formatScanBytes(maxScanBytes)} set by ${SQLConf.MAX_SCAN_BYTES.key}"
   }
-
-  // The rounded sizes alone can be equal, and can differ from the value that the user set.
-  private def bytes(n: Long): String = s"$n bytes (${Utils.bytesToString(n)})"
 }
 
 /** What a root execution with a scan limit has read. */
