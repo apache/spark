@@ -908,7 +908,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
    * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
    * keep the flag's default. The aggregate and the join builds set `repeatableRead` from it
-   * instead, the aggregate build together with [[hasDeterministicAggregate]], see
+   * instead, the aggregate build together with [[isDeterministicAggregation]], see
    * [[DataSourceV2ScanRelation.repeatableRead]]. Limit, offset and top-N pushdowns run before the
    * aggregate and the join builds, so those builds see a limit, offset or top-N pushed above an
    * aggregate or join. An operation pushed into a side of a pushed join is kept with that side's
@@ -927,7 +927,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   // Whether every pushed group-by expression and aggregate function is deterministic.
   // `V2Aggregator` does not take `BoundFunction.isDeterministic` into its `deterministic`, so it is
   // checked here.
-  private def hasDeterministicAggregate(holder: ScanBuilderHolder): Boolean =
+  // TODO(SPARK-62133): check only `deterministic` once `V2Aggregator` takes `isDeterministic`.
+  private def isDeterministicAggregation(holder: ScanBuilderHolder): Boolean =
     holder.pushedAggOutputMap.values.forall { e =>
       e.deterministic && !e.exists {
         case v: aggregate.V2Aggregator[_, _] => !v.aggrFunc.isDeterministic
@@ -950,7 +951,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // A pushed aggregate cannot be reproduced by rebuilding the scan, so this scan stays
       // not-mergeable (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        repeatableRead = !hasRowSelectingPushdown(holder) && hasDeterministicAggregate(holder))
+        repeatableRead = !hasRowSelectingPushdown(holder) && isDeterministicAggregation(holder))
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
         // to the expected data type.

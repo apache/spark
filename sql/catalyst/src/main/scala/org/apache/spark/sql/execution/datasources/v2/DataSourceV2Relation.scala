@@ -261,9 +261,11 @@ object ExternalLookupRelations {
  *                             set it keeps storage filters away from its scan.
  * @param repeatableRead whether a second read of a scan that is not `onlyRowWisePushdowns`
  *                       returns the same rows, as for a pushed aggregate or join and the target
- *                       read of a copy-on-write operation. See [[isRepeatableRead]]. Default
- *                       false: a build site that does not set it keeps such a scan from being a
- *                       runtime bloom filter's creation side.
+ *                       read of a copy-on-write operation. For a pushed aggregate, this relies
+ *                       on the source computing it, including its groups, the same way on each
+ *                       read, for example adding floating point values in the same order. See
+ *                       [[isRepeatableRead]]. Default false: a build site that does not set it
+ *                       keeps such a scan from being a runtime bloom filter's creation side.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,

@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, NondeterministicIntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
@@ -1031,10 +1032,31 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
-      Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach { case (f, repeatable) =>
-        val df = sql(s"SELECT name, h2.$f(id) FROM h2.test.people GROUP BY name")
-        checkAggregateRemoved(df)
-        assert(scanOf(df).isRepeatableRead == repeatable, f)
+      withTempPath { dir =>
+        val factPath = dir.getCanonicalPath
+        spark.range(10).selectExpr("id", "IF(id % 2 = 0, 'fred', 'mary') AS name")
+          .write.parquet(factPath)
+        // A JDBC scan reports no statistics, so a small default size lets it be a creation side.
+        withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "1000",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+          Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach {
+            case (f, repeatable) =>
+              val df = sql(s"SELECT name, h2.$f(id) AS v FROM h2.test.people GROUP BY name")
+              checkAggregateRemoved(df)
+              assert(scanOf(df).isRepeatableRead == repeatable, f)
+              // `v > 0` keeps every group but is a selective `Filter` above the scan, and the
+              // bloom filter's subquery would read the scan again.
+              val joined = df.where("v > 0").join(spark.read.parquet(factPath), "name")
+              val plan = joined.queryExecution.optimizedPlan
+              val hasBloomFilter = plan.exists(_.expressions.exists(_.exists {
+                case _: BloomFilterMightContain => true
+                case _ => false
+              }))
+              assert(hasBloomFilter == repeatable, s"$f:\n$plan")
+          }
+        }
       }
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
