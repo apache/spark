@@ -971,6 +971,21 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case _ => false
         })
         val (decorrelatedPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        // countBugResult is the result for an outer row for which the decorrelated subquery
+        // returns no row. Where decorrelation adds a domain join anyway, as on master, e.g. for a
+        // non-equality correlation or a correlation below a UNION ALL, such a row is one without
+        // matching rows only if the domain has every outer row, which it may not where its domain
+        // joins are known not to work (see domainJoinsWork). A row missing there would get
+        // countBugResult, which can differ from its own result where master's result over no
+        // rows happens to be its result, e.g. COUNT(*) FILTER (WHERE s IS NULL) over s = MAX for
+        // a row with matching rows. So it is not used there, and the subquery keeps the result of
+        // master.
+        val countBugResultKept = if (mayHaveCountBugOld.isEmpty && countBugResult.isDefined &&
+            !domainJoinsWork && decorrelatedPlan.exists(_.isInstanceOf[DomainJoin])) {
+          None
+        } else {
+          countBugResult
+        }
         // With handleCountBugInDecorrelate, noDefaultResultCountBugAgg says that the count bug is
         // handled in DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
         val newPlan = if (handleCountBugInDecorrelate && noDefaultResultCountBugAgg) {
@@ -982,7 +997,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           // For idempotency, we must save this variable the first time this rule is run, because
           // decorrelation introduces a GROUP BY is if one wasn't already present.
           mayHaveCountBugOld.get
-        } else if (countBugResult.isDefined) {
+        } else if (countBugResultKept.isDefined) {
           // constructLeftJoins handles the count bug with countBugResult, also for a grouped top
           // Aggregate over a lower Aggregate without grouping expressions.
           true
@@ -1002,7 +1017,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
         }
         ScalarSubquery(newPlan, outerAttrs, exprId, getJoinCondition(newCond, conditions),
-          hint, Some(mayHaveCountBug), Some(needSingleJoin), countBugResult)
+          hint, Some(mayHaveCountBug), Some(needSingleJoin), countBugResultKept)
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
           decorrelate(sub, plan, handleCountBug = true)
@@ -1286,7 +1301,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * only if the correlated input is empty for it. That holds if the correlated input has no
    * correlated Aggregate without grouping expressions, whose row decorrelation loses, and if the
    * domain joins that decorrelation adds there anyway, e.g. for a non-equality correlation, have
-   * every outer row (they compute the outer input again, as on master). So for such an outer row
+   * every outer row (they compute the outer input again, as on master; PullupCorrelatedPredicates
+   * does not use the result where they are known not to). So for such an outer row
    * the correlated input is taken as empty, and the chain is evaluated over it as before
    * decorrelation: an Aggregate without grouping expressions returns one row on empty input. An
    * outer reference in the chain does not change which rows it returns; a value or grouping key

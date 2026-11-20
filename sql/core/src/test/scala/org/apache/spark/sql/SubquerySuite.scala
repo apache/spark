@@ -3954,6 +3954,27 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: a result computed before decorrelation is not used where the domain " +
+      "join that decorrelation adds anyway computes a non-deterministic outer input again") {
+    withTempView("b") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      withUserDefinedFunction("spark60501_rk" -> true) {
+        spark.udf.register("spark60501_rk",
+          udf((_: Long) => 1 + scala.util.Random.nextInt(999)).asNondeterministic())
+        // Every key has rows below it in b, so s is not NULL and the result is 0 for every row.
+        // For the non-equality correlation, decorrelation adds a domain join, as on master, which
+        // computes the random keys again; a row whose key is missing there gets the result over
+        // no rows of master, 0, and would get 1, the result for a row without matching rows.
+        val subquery = "(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
+          "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))"
+        checkAnswer(
+          sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM " +
+            "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
+          Row(0, 1000))
+      }
+    }
+  }
+
   test("SPARK-60501: a non-deterministic filter above the subquery and a LIMIT in the outer " +
       "input keep the count bug handling of before where the subquery needs domain joins") {
     withTempView("b", "o") {

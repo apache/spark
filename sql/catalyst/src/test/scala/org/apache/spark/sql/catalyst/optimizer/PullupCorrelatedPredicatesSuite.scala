@@ -557,8 +557,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugResult(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) == Some("1"))
     // For a non-equality correlation, decorrelation adds the domain join that it adds on master,
-    // also in a single aggregate, which computes the outer input again.
-    assert(countBugResult(nonEquality, outer = nonDeterministicOuter) == Some("1"))
+    // also in a single aggregate, which computes the outer input again. So the result is used
+    // only where the domain joins work, and the subquery keeps the handling of master otherwise.
+    assert(countBugResult(nonEquality) == Some("1"))
+    assert(countBugResult(nonEquality, outer = nonDeterministicOuter).isEmpty)
+    assert(countBugHandling(nonEquality, outer = nonDeterministicOuter) == inLegacy)
     assert(subqueryWithOutputR(nonDeterministicOuter.select(
       ScalarSubquery(countOver(nonEquality)).as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
     assert(countBugResult(correlated(max($"d")), above = _.where($"sq" > 0)) == Some("1"))
