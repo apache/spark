@@ -421,10 +421,12 @@ object SubExprUtils extends PredicateHelper {
  * RewriteCorrelatedScalarSubquery.
  *
  * `countBugResult` is the result of the subquery for an outer row for which the decorrelated
- * subquery returns no row, when PullupCorrelatedPredicates computed it from the subquery before
- * decorrelation (a Literal). RewriteCorrelatedScalarSubquery
- * uses it instead of evaluating the decorrelated subquery on zero tuples, which cannot tell that a
- * lower Aggregate without grouping expressions returned one row on empty input.
+ * subquery returns no row, if PullupCorrelatedPredicates computed it from the subquery before
+ * decorrelation. RewriteCorrelatedScalarSubquery uses it instead of evaluating the decorrelated
+ * subquery on zero tuples, which cannot tell that a lower Aggregate without grouping expressions
+ * returned one row on empty input. When it is set, `mayHaveCountBug` is true, also for a top
+ * Aggregate with a GROUP BY clause over such a lower Aggregate, which returns a row for the row of
+ * the lower Aggregate.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
@@ -434,7 +436,7 @@ case class ScalarSubquery(
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None,
-    countBugResult: Option[Expression] = None)
+    countBugResult: Option[Literal] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
