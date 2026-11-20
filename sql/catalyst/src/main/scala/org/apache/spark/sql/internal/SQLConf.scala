@@ -8979,6 +8979,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SCALAR_SUBQUERY_COUNT_BUG_STATIC_RESULT_ENABLED =
+    buildConf("spark.sql.optimizer.scalarSubqueryCountBugStaticResult.enabled")
+      .internal()
+      .doc("PROTOTYPE. When true, the result of a correlated scalar subquery over a nested " +
+        "Aggregate without GROUP BY for an outer row without matching rows is computed from " +
+        "the subquery before decorrelation, instead of with the domain joins of decorrelation.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
     buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
       .internal()

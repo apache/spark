@@ -419,6 +419,12 @@ object SubExprUtils extends PredicateHelper {
  * returns at most 1 row. For such subqueries we use a modification of an outer join called
  * LeftSingle join. This value is set in PullupCorrelatedPredicates and used in
  * RewriteCorrelatedScalarSubquery.
+ *
+ * `countBugResult` is the result of the subquery for an outer row for which the decorrelated
+ * subquery returns no row, when PullupCorrelatedPredicates computed it from the subquery before
+ * decorrelation (a Literal). RewriteCorrelatedScalarSubquery
+ * uses it instead of evaluating the decorrelated subquery on zero tuples, which cannot tell that a
+ * lower Aggregate without grouping expressions returned one row on empty input.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
@@ -427,7 +433,8 @@ case class ScalarSubquery(
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
-    needSingleJoin: Option[Boolean] = None)
+    needSingleJoin: Option[Boolean] = None,
+    countBugResult: Option[Expression] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
