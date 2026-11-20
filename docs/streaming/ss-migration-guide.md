@@ -73,9 +73,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   analysis, also when an existing query restarts. To run such a query, add a range condition that
   bounds the state, or a watermark in the join keys, and start it from a new checkpoint. A left
   semi join of that kind still runs, as in earlier versions, but its state is not evicted. Such
-  conjuncts still hold back, as in earlier versions, a cutoff that goes through a cast to a whole
-  number, such as `CAST(leftTime AS LONG) >= CAST(rightTime AS LONG) - 5`, and a cutoff that
-  applies to the event time but is solved for another column.
+  conjuncts still hold back, as in earlier versions, a cutoff that goes through a cast that can
+  round or drop digits, such as `CAST(leftTime AS LONG) >= CAST(rightTime AS LONG) - 5`, a cutoff
+  that applies to the event time but is solved for another column, the check of a left semi join
+  on new right rows, and the output watermark of the join for an input that gets no cutoff.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 

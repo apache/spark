@@ -68,7 +68,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * @param eventWatermark                watermark defined on the input event data
    * @param risingCutoffsOnly             whether only conjuncts whose cutoff rises with the
    *                                      watermark give a cutoff. Earlier versions also took
-   *                                      constant-only and negative-sign conjuncts.
+   *                                      constant-only and negative-sign conjuncts, and so does
+   *                                      the result when a cutoff goes through an inexact cast, or
+   *                                      when every cutoff is solved for another column than the
+   *                                      input's event time, which has none of its own.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -96,7 +99,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
-    var truncatingCutoff = false
+    var inexactCutoff = false
     val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
@@ -116,24 +119,37 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       if (stateWatermark.nonEmpty) {
         logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
           log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
-        truncatingCutoff ||= predicate.exists {
-          case Cast(c, _: IntegralType, _, _) => !c.dataType.isInstanceOf[IntegralType]
+        inexactCutoff ||= predicate.exists {
+          case c: Cast => isInexactCast(c)
           case _ => false
         }
       }
       stateWatermark
     }
     val cutoff = allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
-    // A cutoff through a truncating cast, or one solved for another column on an input whose
+    // A cutoff through an inexact cast, or one solved for another column on an input whose
     // event time the rising-only rule leaves unbounded, keeps the minimum of earlier versions,
     // constant-only conjuncts included.
     val eventTime = attributesToFindStateWatermarkFor.filter(_.metadata.contains(delayKey))
-    val keepEarlierMinimum = risingCutoffsOnly && cutoff.isDefined && (truncatingCutoff ||
+    val keepEarlierMinimum = risingCutoffsOnly && cutoff.isDefined && (inexactCutoff ||
       eventTime.nonEmpty && eventTime.size < attributesToFindStateWatermarkFor.size &&
       getStateValueWatermark(eventTime, attributesWithEventWatermark, joinCondition,
         eventWatermark).isEmpty)
     if (!keepEarlierMinimum) cutoff else getStateValueWatermark(attributesToFindStateWatermarkFor,
       attributesWithEventWatermark, joinCondition, eventWatermark, risingCutoffsOnly = false)
+  }
+
+  // Whether a cast can round or drop digits that the solver, which reads every cast as exact,
+  // keeps, so that a cutoff solved through it can evict rows that still match.
+  private def isInexactCast(cast: Cast): Boolean = (cast.child.dataType, cast.dataType) match {
+    case (_: IntegralType, _: IntegralType | _: DecimalType) => false
+    case (_, _: IntegralType) => true
+    case (from: DecimalType, to: DecimalType) => to.scale < from.scale
+    case (TimestampType | TimestampNTZType, to: DecimalType) => to.scale < 6
+    case (_, _: DecimalType) => true
+    case (ByteType | ShortType | FloatType, FloatType) => false
+    case (_, FloatType) => true
+    case _ => false
   }
 
   /**
