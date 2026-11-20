@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, ResultSet, Time, Timestamp}
+import java.util.Calendar
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, NANOS_PER_MICROS}
@@ -157,9 +160,10 @@ private[jdbc] object JDBCValueGetter {
         rs.getTime(pos + 1), t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
   }
 
-  final case class TimestampGetter(dialect: JdbcDialect) extends JDBCValueGetter {
+  final case class TimestampGetter(dialect: JdbcDialect, calendar: Option[Calendar] = None)
+      extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1)
+      val t = calendar.fold(rs.getTimestamp(pos + 1))(rs.getTimestamp(pos + 1, _))
       if (t != null) {
         row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
       } else {
@@ -222,10 +226,13 @@ private[jdbc] object JDBCValueGetter {
   // `TimestampGetter` (including the Julian->Gregorian rebase in `fromJavaTimestamp`), then
   // re-attaches the sub-microsecond digits from `java.sql.Timestamp.getNanos` that the micro path
   // drops, before truncating to the column precision.
-  final case class TimestampLTZNanosGetter(dialect: JdbcDialect, precision: Int)
+  final case class TimestampLTZNanosGetter(
+      dialect: JdbcDialect,
+      precision: Int,
+      calendar: Option[Calendar] = None)
       extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1)
+      val t = calendar.fold(rs.getTimestamp(pos + 1))(rs.getTimestamp(pos + 1, _))
       if (t != null) {
         val converted = dialect.convertJavaTimestampToTimestamp(t)
         val epochMicros = fromJavaTimestamp(converted)
@@ -284,7 +291,11 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
-  final case class ArrayGetter(arrayType: ArrayType, dialect: JdbcDialect, metadata: Metadata)
+  final case class ArrayGetter(
+      arrayType: ArrayType,
+      dialect: JdbcDialect,
+      metadata: Metadata,
+      calendar: Option[Calendar] = None)
       extends JDBCValueGetter {
     private def elementConversion(et: DataType): AnyRef => Any = et match {
       case TimestampType => arrayConverter[Timestamp] {
@@ -324,11 +335,42 @@ private[jdbc] object JDBCValueGetter {
       case _ => (array: Object) => array.asInstanceOf[Array[Any]]
     }
 
+    private def containsTimestamp(dt: DataType): Boolean = dt match {
+      case TimestampType => true
+      case ArrayType(et, _) => containsTimestamp(et)
+      case _ => false
+    }
+
+    private def readWithCalendar(array: java.sql.Array, et: DataType, cal: Calendar): Any = {
+      val elements = array.getResultSet()
+      try {
+        val values = ArrayBuffer.empty[Any]
+        while (elements.next()) {
+          values += (et match {
+            case TimestampType =>
+              nullSafeConvert[Timestamp](
+                elements.getTimestamp(2, cal),
+                t => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
+            case ArrayType(et0, _) =>
+              nullSafeConvert[java.sql.Array](
+                elements.getArray(2), a => readWithCalendar(a, et0, cal))
+          })
+        }
+        new GenericArrayData(values.toArray)
+      } finally {
+        elements.close()
+      }
+    }
+
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit =
       try {
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          arr => new GenericArrayData(elementConversion(arrayType.elementType)(arr.getArray())))
+          arr => calendar.filter(_ => containsTimestamp(arrayType.elementType)) match {
+            case Some(cal) => readWithCalendar(arr, arrayType.elementType, cal)
+            case None =>
+              new GenericArrayData(elementConversion(arrayType.elementType)(arr.getArray()))
+          })
         row.update(pos, array)
       } catch {
         case _: java.lang.ClassCastException =>
