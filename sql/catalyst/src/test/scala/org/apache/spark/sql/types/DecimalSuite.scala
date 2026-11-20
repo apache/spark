@@ -125,6 +125,30 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
+  test("SPARK-62122: integral conversions of compact decimals with negative scale") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq((123L, 5, -2), (-123L, 5, -2), (103050709L, 9, -10), (999999999L, 9, -11)).foreach {
+        case (unscaled, precision, scale) =>
+          val compact = Decimal(unscaled, precision, scale)
+          assert(compact.toDebugString.startsWith("Decimal(compact"))
+          val expanded = Decimal(BigDecimal(unscaled, scale), precision, scale)
+          assert(expanded.toDebugString.startsWith("Decimal(expanded"))
+          assert(compact.toLong === expanded.toLong)
+          assert(compact.toInt === expanded.toInt)
+          assert(compact.toScalaBigInt === expanded.toScalaBigInt)
+          assert(compact.toJavaBigInteger === expanded.toJavaBigInteger)
+          Seq[Decimal => Any](_.roundToLong(), _.roundToInt(), _.roundToShort(), _.roundToByte())
+            .foreach { f =>
+              val want = scala.util.Try(f(expanded))
+              val got = scala.util.Try(f(compact))
+              assert(got.isSuccess === want.isSuccess, s"$compact")
+              if (want.isSuccess) assert(got.get === want.get, s"$compact")
+            }
+      }
+      assert(Decimal(123L, 5, -2).toLong === 12300L)
+    }
+  }
+
   test("SPARK-30252, SPARK-51084: Negative scale is not allowed by default") {
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
       checkError(
