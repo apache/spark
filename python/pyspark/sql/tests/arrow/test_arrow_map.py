@@ -318,7 +318,7 @@ class MapInArrowTestsMixin:
             def func(iterator):
                 for _ in iterator:
                     yield pa.RecordBatch.from_arrays(
-                        [[1]], pa.schema([pa.field("a", pa.int32(), nullable=False)])
+                        [[1]], schema=pa.schema([pa.field("a", pa.int32(), nullable=False)])
                     )
 
             df = self.spark.range(1)
