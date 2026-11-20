@@ -1168,7 +1168,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         struct(lt.as("start"), (lt + expr("INTERVAL 10 SECONDS")).as("end"))).as("lw"))
       .withWatermark("lw", "10 seconds")
     val right = rightInput.toDF().toDF("rk", "s")
-    // Output the whole lw, so that nested column pruning keeps the struct in the join state.
+    // Reference lw as a whole, so that nested column pruning keeps the struct in the join state.
     val joined = left.join(right, expr("lk = rk")).select($"lk", $"t", $"lw".isNull, $"s")
 
     testStream(joined)(
