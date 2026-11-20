@@ -73,8 +73,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, FileType, MapType, Struc
  *      declaring its layout again.
  *   3. Register it in TypeOps.apply() below - single registration point
  *
- * Column vectors (WritableColumnVector, ConstantColumnVector) do not yet build child vectors
- * for a struct-, array- or map-backed framework type.
+ * Column vectors (WritableColumnVector, ConstantColumnVector) build one child vector per field
+ * for a struct-backed framework type, but not yet child vectors for an array- or map-backed one.
  *
  * @see
  *   TimeTypeOps for a reference implementation

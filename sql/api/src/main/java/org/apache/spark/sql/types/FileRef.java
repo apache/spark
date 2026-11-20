@@ -34,8 +34,9 @@ import org.apache.spark.annotation.Unstable;
  * <p>Every field is nullable, as in the Parquet FILE logical type. A reference names the bytes it
  * refers to through {@link #uri}, and {@link #offset} and {@link #size} select the byte range
  * {@code [offset, offset + size)} of it. The Parquet FILE type also allows the bytes to be stored
- * inline in the value. Spark keeps those inline bytes internal: a FileRef carries them, so that a
- * value converts to a FileRef and back without loss, but does not expose them.
+ * inline in the value. A FileRef carries those inline bytes, so that a value converts to a FileRef
+ * and back without loss, but its API has no constructor or getter for them. The canonical JSON
+ * form of a value, as shown by {@code Dataset.show()}, includes them.
  *
  * <p>A FileRef is a value: two FileRefs are equal when all their fields are equal. This is
  * unrelated to the FILE type in SQL, which defines no equality.

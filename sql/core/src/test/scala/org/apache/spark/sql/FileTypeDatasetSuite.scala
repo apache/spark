@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.beans.BeanProperty
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -71,11 +72,39 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
 
   test("show renders a FILE value as its canonical JSON") {
     val df = Seq(FileRecord(1, f2, Seq(f2))).toDF()
-    Seq(true, false).foreach { codegen =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+    // Test sessions generate code for every expression, so the last setting is the only one
+    // that evaluates the display expression interpretively.
+    Seq(
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"),
+      Seq(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")).foreach { confs =>
+      withSQLConf(confs: _*) {
         val shown = df.showString(1, truncate = 0)
         assert(shown.contains("""|1  |{"uri":"/data/b.txt"}|[{"uri":"/data/b.txt"}]|"""), shown)
       }
+    }
+  }
+
+  test("a FILE literal is named and explained by its JSON form") {
+    val df = spark.range(1).select(functions.typedLit(f2))
+    assert(df.columns.toSeq === Seq("""FILE {"uri":"/data/b.txt"}"""))
+    assert(df.collect().map(_.getFile(0)).toSeq === Seq(f2))
+  }
+
+  test("aggregates that hash a FILE value fail with an error that names FILE") {
+    val df = Seq(FileRecord(1, f1, Nil), FileRecord(2, f2, Nil)).toDF().repartition(2)
+    Seq("approx_count_distinct(file)", "count(DISTINCT file)").foreach { agg =>
+      val e = intercept[Exception](df.selectExpr(agg).collect())
+      val causes = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).toSeq
+      assert(causes.exists {
+        case u: SparkUnsupportedOperationException => u.getCondition == "UNSUPPORTED_DATATYPE"
+        case _ => false
+      }, s"$agg: $e")
+      // Null FILE values hash to the seed, so these aggregates still run over them.
+      val nulls = Seq(FileRecord(1, null, Nil), FileRecord(2, null, Nil)).toDF().repartition(2)
+      checkAnswer(nulls.selectExpr(agg), Row(0L))
     }
   }
 

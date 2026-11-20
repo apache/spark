@@ -16,13 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.types.ops
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, DeserializerBuildHelper, InternalRow, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{FileRefEncoder, OptionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
@@ -217,6 +217,14 @@ class FileTypeOpsSuite extends SparkFunSuite with SQLHelper {
     assert(ops.formatExternal(uriOnly) === Some("""{"uri":"/data/a.txt"}"""))
   }
 
+  test("the string and SQL forms of a FILE literal") {
+    val lit = Literal.create(FileTypeOps.fromFileRef(uriOnly), FileType.external)
+    assert(lit.toString === """{"uri":"/data/a.txt"}""")
+    assert(lit.sql === """FILE {"uri":"/data/a.txt"}""")
+    assert(Literal.default(FileType()).toString === """{"uri":""}""")
+    assert(Literal.create(null, FileType()).sql === "CAST(NULL AS FILE)")
+  }
+
   test("FileRef equality, hash code and string representation") {
     val same = FileRefInternals.create(
       "s3://bucket/dir/doc.pdf", 10L, 2048L, "application/pdf", "MD5:abc123", Array[Byte](1, 2, 3))
@@ -224,7 +232,14 @@ class FileTypeOpsSuite extends SparkFunSuite with SQLHelper {
     assert(allFields.hashCode === same.hashCode)
     assert(allFields !== FileRefInternals.create(
       "s3://bucket/dir/doc.pdf", 10L, 2048L, "application/pdf", "MD5:abc123", Array[Byte](1, 2)))
-    assert(uriOnly !== new FileRef("/data/a.txt", 0L, null, null, null))
+    Seq(
+      new FileRef("/data/b.txt", null, null, null, null),
+      new FileRef("/data/a.txt", 0L, null, null, null),
+      new FileRef("/data/a.txt", null, 0L, null, null),
+      new FileRef("/data/a.txt", null, null, "text/plain", null),
+      new FileRef("/data/a.txt", null, null, null, "MD5:abc"),
+      FileRefInternals.create("/data/a.txt", null, null, null, null, Array.emptyByteArray))
+      .foreach(other => assert(uriOnly !== other, other))
     assert(allFields.toString === "FileRef{uri='s3://bucket/dir/doc.pdf', offset=10, size=2048, " +
       "contentType='application/pdf', checksum='MD5:abc123', inline=<3 bytes>}")
     assert(new FileRef(null, null, null, null, null).toString === "FileRef{}")
@@ -249,6 +264,7 @@ class FileTypeOpsSuite extends SparkFunSuite with SQLHelper {
 
     val schema = new StructType().add("f", FileType.external).add("fs", ArrayType(FileType()))
     val rowEnc = ExpressionEncoder(RowEncoder.encoderFor(schema)).resolveAndBind()
+    assert(rowEnc.schema === schema)
     val row = rowEnc.createDeserializer()(rowEnc.createSerializer()(Row(allFields, Seq(uriOnly))))
     assert(row.getFile(0) === allFields)
     assert(row.getSeq[FileRef](1) === Seq(uriOnly))
@@ -306,5 +322,36 @@ class FileTypeOpsSuite extends SparkFunSuite with SQLHelper {
       .foreach { v =>
         assertFileRow(v.asInstanceOf[InternalRow], new FileRef("/c.txt", null, 1L, null, null))
       }
+  }
+
+  // ==================== Hashing ====================
+
+  test("a non-null FILE value cannot be hashed, a null one keeps the seed") {
+    val ops = FileTypeOps(FileType())
+    val structType = new StructType().add("id", IntegerType).add("f", FileType())
+    def hashes(child: Expression): Seq[HashExpression[_]] =
+      Seq(Murmur3Hash(Seq(child), 42), XxHash64(Seq(child), 42L), HiveHash(Seq(child)))
+    Seq[(DataType, Any)](
+      FileType() -> ops.toCatalystImpl(uriOnly),
+      structType -> InternalRow(1, ops.toCatalystImpl(uriOnly))).foreach { case (dt, value) =>
+      val fileHashes = hashes(BoundReference(0, dt, nullable = true))
+      val seedHashes = hashes(BoundReference(0, IntegerType, nullable = true))
+      fileHashes.zip(seedHashes).foreach { case (hash, seedHash) =>
+        val projection = GenerateMutableProjection.generate(Seq(hash))
+        Seq[(String, InternalRow => Any)](
+          "interpreted" -> (row => hash.eval(row)),
+          "codegen" -> (row => projection(row).get(0, hash.dataType))
+        ).foreach { case (mode, evaluate) =>
+          withClue(s"$mode ${hash.prettyName} of $dt") {
+            checkError(
+              exception = intercept[SparkUnsupportedOperationException](
+                evaluate(InternalRow(value))),
+              condition = "UNSUPPORTED_DATATYPE",
+              parameters = Map("typeName" -> "\"FILE\""))
+            assert(evaluate(InternalRow(null)) === seedHash.eval(InternalRow(null)))
+          }
+        }
+      }
+    }
   }
 }

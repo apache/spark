@@ -52,7 +52,8 @@ class FileTypeApiOps(val ft: FileType) extends TypeApiOps {
     case _ => v.toString
   }
 
-  // FILE has no literal syntax, so this is for display only, such as in EXPLAIN output.
+  // FILE has no literal syntax, so this is for display only, such as in the SQL form of a
+  // literal (Literal.sql) used in generated column names.
   override def toSQLValue(v: Any): String = s"FILE ${format(v)}"
 
   // ==================== Row Encoding ====================
