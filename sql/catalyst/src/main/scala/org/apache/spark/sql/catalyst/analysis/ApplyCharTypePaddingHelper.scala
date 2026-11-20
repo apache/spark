@@ -201,23 +201,22 @@ object ApplyCharTypePaddingHelper {
     }
 
   /**
-   * Pads each CHAR value of an IN subquery and the CHAR column of the subquery it is compared
-   * with, as a comparison of two columns pads them. The columns are padded in a Project over the
-   * subquery, which gives them the raw type of the padded length.
+   * Pads each CHAR value or string literal of an IN subquery and the CHAR column of the subquery
+   * it is compared with, as a comparison with a column pads them. The columns are padded in a
+   * Project over the subquery, without the raw type, so that they are padded only once.
    */
   private def padInSubquery(i: InSubquery, padCharCol: Boolean): InSubquery = {
     val padded = i.values.zip(i.query.childOutputs).map {
       case (value @ CharOperand(metadata), col) =>
-        val valueType = CharVarcharUtils.getRawType(metadata)
-        val colType = CharVarcharUtils.getRawType(col.metadata)
         val Seq(newValue, newCol) = CharVarcharUtils.addPaddingInStringComparison(
-          Seq(value, col), Seq(valueType, colType), padCharCol)
-        val target = for {
-          v <- valueType
-          c <- colType
-          wider <- CharVarcharUtils.widerCharType(c, v)
-        } yield wider
-        (newValue, Some(newCol).filterNot(_ eq col).map((_, target)))
+          Seq(value, col),
+          Seq(CharVarcharUtils.getRawType(metadata), CharVarcharUtils.getRawType(col.metadata)),
+          padCharCol)
+        (newValue, Some(newCol).filterNot(_ eq col))
+      case (lit: Literal, col) =>
+        padAttrLitCmp(col, col.metadata, padCharCol, lit).map { case Seq(newCol, newLit) =>
+          (newLit, Some(newCol).filterNot(_ eq col))
+        }.getOrElse((lit, None))
       case (value, _) => (value, None)
     }
     if (padded.forall(_._2.isEmpty)) {
@@ -226,10 +225,10 @@ object ApplyCharTypePaddingHelper {
       val plan = i.query.plan
       // The plan can have more columns than values after de-correlation.
       val projectList = plan.output.zipWithIndex.map { case (col, idx) =>
-        padded.lift(idx).flatMap(_._2).map { case (newCol, target) =>
-          val metadata = target.map(CharVarcharUtils.withRawType(col.metadata, _))
-            .getOrElse(col.metadata)
-          Alias(newCol, col.name)(qualifier = col.qualifier, explicitMetadata = Some(metadata))
+        padded.lift(idx).flatMap(_._2).map { newCol =>
+          Alias(newCol, col.name)(
+            qualifier = col.qualifier,
+            explicitMetadata = Some(CharVarcharUtils.cleanMetadata(col.metadata)))
         }.getOrElse(col)
       }
       i.copy(values = padded.map(_._1), query = i.query.withNewPlan(Project(projectList, plan)))

@@ -89,10 +89,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
       padRowLevelConditions(padDeleteConditions(
         ApplyCharTypePaddingHelper.paddingForStringComparison(
-          padSetOperations(newPlan), padCharCol = false)))
+          padSetOperations(newPlan, padAllChildren = false), padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        padSetOperations(plan),
+        padSetOperations(plan, padAllChildren = true),
         padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }
   }
@@ -103,9 +103,11 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
    * [[Union.mergeChildOutputs]], as the SQL standard does for set operations of CHAR(n) and
    * CHAR(m). This pads the values of the shorter children to that length, so that they match the
    * values of the other children and comparisons padded to it. Like read-side padding, it does not
-   * truncate longer values. Then it narrows the columns of views that store a shorter length.
+   * truncate longer values. Without read-side padding, the values of the widest children can be
+   * shorter too, so `padAllChildren` pads them as well. Then it narrows the columns of views that
+   * store a shorter length.
    */
-  private def padSetOperations(plan: LogicalPlan): LogicalPlan = {
+  private def padSetOperations(plan: LogicalPlan, padAllChildren: Boolean): LogicalPlan = {
     val newPlan = plan.transformUpWithNewOutput({
       // An unresolved set operation, or one with children of different arity, fails in
       // CheckAnalysis.
@@ -117,7 +119,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           val newChildren = op.children.map { child =>
             val projectList = child.output.zip(rawTypes).map {
               case (attr, Some(rawType)) =>
-                CharVarcharUtils.padCharToWiderLength(attr, rawType).map {
+                CharVarcharUtils.padCharToWiderLength(attr, rawType, padAllChildren).map {
                   case (padded, paddedRawType) =>
                     Alias(padded, attr.name)(
                       qualifier = attr.qualifier,

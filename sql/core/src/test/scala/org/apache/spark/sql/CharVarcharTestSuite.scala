@@ -662,7 +662,7 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: union of char columns of different lengths") {
-    withTable("t3", "t5", "s3", "s5") {
+    withTable("t3", "t5", "s3", "s5", "m3", "m5") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
       sql("INSERT INTO t3 VALUES (1, 'a')")
@@ -685,6 +685,15 @@ trait CharVarcharTestSuite extends QueryTest {
       val df = sql("SELECT s FROM s3 UNION ALL SELECT s FROM s5")
       checkAnswer(df, Seq(Row(Row("a" + " ".repeat(4))), Row(Row("a" + " ".repeat(4)))))
       checkColType(df.schema(0), new StructType().add("c", CharType(5)))
+
+      // a struct with fields of other types
+      sql(s"CREATE TABLE m3(s STRUCT<id: INT, c: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE m5(s STRUCT<id: INT, c: CHAR(5)>) USING $format")
+      sql("INSERT INTO m3 SELECT named_struct('id', 1, 'c', 'a')")
+      sql("INSERT INTO m5 SELECT named_struct('id', 2, 'c', 'a')")
+      val mixed = sql("SELECT s FROM m3 UNION ALL SELECT s FROM m5")
+      checkAnswer(mixed, Seq(Row(Row(1, "a" + " ".repeat(4))), Row(Row(2, "a" + " ".repeat(4)))))
+      checkColType(mixed.schema(0), new StructType().add("id", IntegerType).add("c", CharType(5)))
     }
   }
 
@@ -737,6 +746,9 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(sql("SELECT id FROM t5 WHERE c IN (SELECT c FROM t3)"), Row(2))
       checkAnswer(sql("SELECT id FROM t3 WHERE c NOT IN (SELECT c FROM t5)"), Nil)
       checkAnswer(sql("SELECT id FROM t3 WHERE (id, c) IN (SELECT 1, c FROM t5)"), Row(1))
+      checkAnswer(sql(s"SELECT 1 WHERE 'a' IN ($union)"), Row(1))
+      checkAnswer(sql("SELECT 1 WHERE 'a' IN (SELECT c FROM t5)"), Row(1))
+      checkAnswer(sql("SELECT 1 WHERE 'abcdef' IN (SELECT c FROM t5)"), Nil)
       // scalar subqueries
       checkAnswer(
         sql("SELECT id FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5) " +
@@ -4293,14 +4305,14 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 
       // a struct built from the columns has the raw types in the metadata of its fields
       withView("vs") {
-        sql("CREATE VIEW vs AS SELECT id, named_struct('c', c) AS s " +
+        sql("CREATE VIEW vs AS SELECT id, named_struct('id', id, 'c', c) AS s " +
           "FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5)")
         val catalog = spark.sessionState.catalog
         val view = catalog.getTableMetadata(TableIdentifier("vs"))
         val storedSchema = StructType(view.schema.map {
-          case field @ StructField("s", StructType(Array(c)), _, _) =>
+          case field @ StructField("s", StructType(Array(id, c)), _, _) =>
             val metadata = CharVarcharUtils.withRawType(c.metadata, CharType(3))
-            field.copy(dataType = StructType(Array(c.copy(metadata = metadata))))
+            field.copy(dataType = StructType(Array(id, c.copy(metadata = metadata))))
           case field => field
         })
         catalog.alterTable(view.copy(schema = storedSchema))
@@ -4313,7 +4325,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  test("SPARK-61972: an IN subquery of char columns without read-side padding") {
+  test("SPARK-61972: char columns of different lengths without read-side padding") {
     withTempPath { dir =>
       withTable("t3", "t5") {
         sql("SELECT 'a' as c").write.format(format).save(dir.toString)
@@ -4322,6 +4334,12 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
           checkAnswer(sql("SELECT c FROM t3 WHERE c IN (SELECT c FROM t5)"), Row("a"))
           checkAnswer(sql("SELECT c FROM t5 WHERE c IN (SELECT c FROM t3)"), Row("a"))
+          checkAnswer(sql("SELECT 1 WHERE 'a' IN (SELECT c FROM t5)"), Row(1))
+          checkAnswer(
+            sql("SELECT c FROM t3 INTERSECT SELECT c FROM t5"), Row("a" + " ".repeat(4)))
+          checkAnswer(sql("SELECT c FROM t3 EXCEPT SELECT c FROM t5"), Nil)
+          checkAnswer(
+            sql("SELECT c FROM t3 UNION SELECT c FROM t5"), Row("a" + " ".repeat(4)))
         }
       }
     }

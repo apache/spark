@@ -460,11 +460,15 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * Pads the CHAR columns and fields of the given attribute that are shorter than those at the
    * same places of the given raw type, see [[widerCharRawType]]. Like read-side padding, it does
    * not truncate longer values. Returns the padded value and its raw type, which keeps the names
-   * of the attribute's fields, or None if the attribute is already as long.
+   * of the attribute's fields, or None if the attribute is already as long, unless `alwaysPad`,
+   * for values that the scan does not pad.
    */
-  def padCharToWiderLength(attr: Attribute, rawType: DataType): Option[(Expression, DataType)] = {
+  def padCharToWiderLength(
+      attr: Attribute,
+      rawType: DataType,
+      alwaysPad: Boolean = false): Option[(Expression, DataType)] = {
     getRawType(attr.metadata).flatMap { attrRawType =>
-      widerCharType(attrRawType, rawType).filter(_ != attrRawType).map { wider =>
+      widerCharType(attrRawType, rawType).filter(alwaysPad || _ != attrRawType).map { wider =>
         val padded = processStringForCharVarchar(
           attr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
         (padded, wider)
@@ -519,6 +523,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   // The CHAR types of toType where fromType is longer, and STRING elsewhere, with the field names
   // of toType. None if they are not both CHAR types, or structs and arrays of them, of one shape.
+  // Fields of other types must be the same.
   private def narrowerCharType(fromType: DataType, toType: DataType): Option[DataType] = {
     (fromType, toType) match {
       case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>
@@ -534,6 +539,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
       case (ArrayType(et1, _), ArrayType(et2, containsNull)) =>
         narrowerCharType(et1, et2).map(ArrayType(_, containsNull))
+      // other fields of a struct, such as an INT next to a CHAR
+      case _ if fromType == toType && !hasCharVarchar(toType) => Some(toType)
       case _ => None
     }
   }
@@ -547,7 +554,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   // Like typeWithWiderCharLength, but keeps the field names of type1, and None for types that are
-  // not both CHAR types, or structs and arrays of them, with the same shape.
+  // not both CHAR types, or structs and arrays of them, with the same shape. Fields of other types
+  // must be the same.
   private[sql] def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
     (type1, type2) match {
       // collation is None for the default collation, and collationId compares the effective one
@@ -560,6 +568,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         if (widerFields.forall(_.isDefined)) Some(StructType(widerFields.map(_.get))) else None
       case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
         widerCharType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+      // other fields of a struct, such as an INT next to a CHAR
+      case _ if type1 == type2 && !hasCharVarchar(type1) => Some(type1)
       case _ => None
     }
   }
