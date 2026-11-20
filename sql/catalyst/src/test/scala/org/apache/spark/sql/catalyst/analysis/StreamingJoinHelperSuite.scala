@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, EvalMode, Expression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, StringType, TimestampNTZType, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -90,6 +90,16 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     val ntzCast = Cast(leftNtz, TimestampType, Some("UTC"))
     assert(column(ntzCast > rightTime) === Some(ntzCast))
     assert(column(ntzCast > rightTime && expiry > rightTime) === Some(expiry))
+    // A cast that can fail in ANSI mode is not picked.
+    val leftString = AttributeReference("leftString", StringType)()
+    def stringCast(mode: EvalMode.Value): Cast =
+      Cast(leftString, TimestampType, Some("UTC"), mode)
+    Seq(EvalMode.ANSI -> None, EvalMode.LEGACY -> Some(stringCast(EvalMode.LEGACY))).foreach {
+      case (mode, picked) =>
+        assert(StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, leftString),
+          AttributeSet(Seq(rightTime)), Some(stringCast(mode) > rightTime), Some(10000L))
+          .map(_._1) === picked)
+    }
 
     // Among other TIMESTAMP columns, the first in input order wins.
     val deadline = AttributeReference("deadline", TimestampType)()

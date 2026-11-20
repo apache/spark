@@ -136,9 +136,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
         references.contains(a)
     }
+    // A cast that can fail, from STRING, FLOAT or DOUBLE in ANSI mode, is not picked: eviction
+    // would evaluate it on every row, but the condition only against rows that can match.
+    def canFail(a: Attribute, mode: EvalMode.Value) = mode == EvalMode.ANSI &&
+      (a.dataType.isInstanceOf[StringType] || a.dataType == FloatType || a.dataType == DoubleType)
     val casts = joinCondition.toSeq.flatMap(_.collect {
-      case c @ Cast(a: Attribute, TimestampType, _, _)
-          if inputAttributes.exists(_.semanticEquals(a)) => c
+      case c @ Cast(a: Attribute, TimestampType, _, mode)
+          if inputAttributes.exists(_.semanticEquals(a)) && !canFail(a, mode) => c
     })
     (candidates ++ casts).iterator.flatMap { e =>
       getStateValueWatermark(e.references, attributesWithEventWatermark, joinCondition,
