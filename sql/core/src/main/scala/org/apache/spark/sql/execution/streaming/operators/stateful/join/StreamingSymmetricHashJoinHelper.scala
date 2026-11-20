@@ -253,8 +253,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
+      // A checkpoint written without the join output watermark check keeps the shared key, as
+      // for an input evicted by another column below.
       val joinKeyOrdinalForWatermark = findStateKeyOrdinalForWatermark(
-        joinSide, leftKeys, rightKeys, useFirstEventTimeColumn)
+        joinSide, leftKeys, rightKeys, useFirstEventTimeColumn || !checkJoinOutputWatermark)
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 

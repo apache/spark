@@ -411,6 +411,41 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     }
   }
 
+  // An earlier version evicted the left input by la, and emitted the outer row of (60, 700) at
+  // the watermark 490 s, which the aggregation counted. A restarted query keeps that eviction.
+  test("a join with crossed watermarked keys keeps the earlier eviction from an older checkpoint") {
+    withJoinConf(2) {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF().toDF("a", "b")
+          .select(timestamp_seconds($"a").as("la"), timestamp_seconds($"b").as("lb"))
+          .withWatermark("la", "10 seconds")
+        val right = rightInput.toDF().toDF("a", "b")
+          .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
+          .withWatermark("rb", "10 seconds")
+        val result = left.join(right, expr("la = ra AND lb = rb"), "left_outer")
+          .groupBy(window($"la", "10 seconds")).count()
+          .select($"window.start".cast("long"), $"count")
+        val start = StartStream(checkpointLocation = checkpoint.getCanonicalPath)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
+          testStream(result)(start,
+            MultiAddData(leftInput, (60, 700))(rightInput, (900, 70)), CheckNewAnswer(),
+            StopStream)
+        }
+        removeCheckJoinOutputWatermark(checkpoint)
+        val logAppender = new LogAppender("join output watermark")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          testStream(result)(start,
+            MultiAddData(leftInput, (500, 800))(rightInput, (901, 500)), CheckNewAnswer(),
+            AddData(rightInput, (902, 500)), CheckNewAnswer((60L, 1L)))
+        }
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff on its event time")))
+      }
+    }
+  }
+
   test("a join evicted by another column before a window aggregation runs with the check " +
       "disabled") {
     withJoinConf(4) {

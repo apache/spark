@@ -1177,6 +1177,28 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  // An input evicted by another column, or by a key that the other input's watermark bounds, is
+  // flagged only in the default mode. The legacy mode evicts both inputs as earlier versions did.
+  test("join output watermark: inputs evicted by another column or key in the legacy mode") {
+    val Seq(expiry, otherLeftTime, otherRightTime) =
+      Seq("expiry", "lb", "ra").map(AttributeReference(_, TimestampType)())
+    Seq(
+      joinOf(Seq(leftKey, leftTime, expiry), Seq(rightKey, rightTime),
+        leftKey === rightKey && rightTime >= leftTime && rightTime <= expiry),
+      joinOf(Seq(leftTime, otherLeftTime), Seq(otherRightTime, rightTime),
+        leftTime === otherRightTime && otherLeftTime === rightTime)
+    ).foreach { join =>
+      val check = () => UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        Aggregate(Seq(leftTime), Seq(leftTime), join), Append)
+      val e = intercept[AnalysisException](check())
+      assert(e.getMessage.contains(
+        "the state of the left input of a stream-stream join has no cutoff on its event time"))
+      withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+        check()
+      }
+    }
+  }
+
   private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =
     TransformWithStateInPySpark(Literal(1), 1, Seq(att), Append, timeMode,
       TransformWithStateInPySpark.UserFacingDataType.PANDAS, child, hasInitialState = false,
