@@ -156,8 +156,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    // A sorted bucket with no sort columns is a bucket: resolve it as `bucket(numBuckets, col)`, as
-    // before literal parameters became children. With sort columns it stays `sorted_bucket`.
+    // A sorted bucket with no sort columns is a bucket, so it resolves as
+    // `bucket(numBuckets, col)`. With sort columns it stays `sorted_bucket`.
     case SortFreeBucket(bucket) =>
       toCatalystTransformOpt(bucket, query, funCatalogOpt)
     // Bucket resolves here too, so its count is a Literal child like any other parameter.
@@ -171,8 +171,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   }
 
   /**
-   * Whether `trans` is a V2 `bucket(numBuckets, col)`, the shape a dedicated bucket arm resolved
-   * before literal parameters became children. See `TransformExpression.fromBucketTransform`.
+   * Whether `trans` is a V2 `bucket(numBuckets, col)`: an integer count, then one column. See
+   * `TransformExpression.fromBucketTransform`.
    */
   private def isBucketTransform(trans: Transform): Boolean = trans match {
     case NamedTransform("bucket", Seq(count: V2Literal[_], _: NamedReference)) =>

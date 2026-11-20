@@ -121,9 +121,9 @@ public interface ReducibleFunction<I, O> {
 
   /**
    * This method is for the bucket function. Spark offers it only a pair of transforms both resolved
-   * from a {@code bucket(n, col)} transform, and only when the generalized overload is not
-   * implemented, or was not asked because a count's type differs from the one the function
-   * declares.
+   * from a {@code bucket(n, col)} transform, a sorted bucket with no sort columns included, and
+   * only when the generalized overload is not implemented, or was not asked because a count's type
+   * differs from the one the function declares.
    *
    * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.

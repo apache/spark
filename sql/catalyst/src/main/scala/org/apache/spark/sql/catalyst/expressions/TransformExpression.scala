@@ -147,8 +147,9 @@ case class TransformExpression(
 
   /**
    * The bucket count of a transform resolved from a V2 `bucket(numBuckets, col)`
-   * ([[fromBucketTransform]]), its first child; `None` for any other transform. What the field of
-   * this name held before literal parameters became children.
+   * ([[fromBucketTransform]]); `None` for any other transform. Such a transform's count is always
+   * its first child, since `V2ExpressionUtils` marks only that shape and a rebuild replaces only
+   * the column argument.
    */
   def numBucketsOpt: Option[Int] =
     if (fromBucketTransform) {

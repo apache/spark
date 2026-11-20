@@ -75,11 +75,14 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
     // needs. Kept by identity, since `multiTransformDown` also rewrites the children of what an
     // arm returns, so a check on the node's type alone would still reach the parameter one level
     // down.
-    val params = java.util.Collections.newSetFromMap(
-      new java.util.IdentityHashMap[Expression, java.lang.Boolean])
-    expr.foreach {
-      case t: TransformExpression => t.literalChildren.foreach(params.add)
-      case _ =>
+    val transforms = expr.collect { case t: TransformExpression => t }
+    val params: java.util.Set[Expression] = if (transforms.isEmpty) {
+      java.util.Set.of[Expression]()
+    } else {
+      val ps = java.util.Collections.newSetFromMap(
+        new java.util.IdentityHashMap[Expression, java.lang.Boolean])
+      transforms.foreach(_.literalChildren.foreach(ps.add))
+      ps
     }
     expr.multiTransformDown {
       // Mapping with aliases.
