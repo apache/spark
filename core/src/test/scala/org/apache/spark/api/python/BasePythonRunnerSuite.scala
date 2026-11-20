@@ -850,6 +850,19 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     checkEndMarkers(stream)
   }
 
+  test("SPARK-62067: the runner start time has sub-millisecond resolution on the wall clock") {
+    // Boot, init and total subtract this start time from the worker's timestamps. A millisecond
+    // clock scaled to nanoseconds would make them up to 1 ms too large, and the tests that run a
+    // Python worker would still pass.
+    val beforeMs = System.currentTimeMillis()
+    val readings = Seq.fill(100)(BasePythonRunner.currentTimeNanos())
+    val afterMs = System.currentTimeMillis()
+    // Nanoseconds since the epoch, like the worker's timestamps.
+    assert(readings.forall(ns => ns / 1000000 >= beforeMs && ns / 1000000 <= afterMs))
+    // A millisecond clock scaled to nanoseconds would always end in 000000.
+    assert(readings.exists(_ % 1000000 != 0))
+  }
+
   private val initErrorJson =
     "{\"error\":{\"message\":\"bad\",\"traceback\":\"Traceback ...\\nValueError: bad\"," +
       "\"errorClass\":\"ValueError\",\"isPayloadError\":true}}"

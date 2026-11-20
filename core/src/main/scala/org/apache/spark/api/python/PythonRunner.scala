@@ -516,6 +516,15 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   /**
+   * The current epoch time in nanoseconds, comparable with the worker's `time.time_ns()`.
+   * `System.nanoTime()` counts from an arbitrary origin, and `System.currentTimeMillis()` is
+   * only precise to a millisecond. This is a method rather than inline in `compute()` so that a
+   * test can check its precision, which the tests that run a Python worker cannot see.
+   */
+  private[python] def currentTimeNanos(): Long =
+    ChronoUnit.NANOS.between(Instant.EPOCH, Instant.now())
+
+  /**
    * Decode the init response that follows START_OF_INIT_RESPONSE: a length-prefixed JSON object
    * that is `{}` once the worker is initialized, or carries an `error` if initialization failed.
    * Unknown fields are ignored.
@@ -900,8 +909,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Iterator[OUT] = {
-    // Epoch time, to compare with the worker's time.time_ns() timestamps.
-    val startTimeNs = ChronoUnit.NANOS.between(Instant.EPOCH, Instant.now())
+    val startTimeNs = BasePythonRunner.currentTimeNanos()
     val env = SparkEnv.get
 
     // Log task context information at the start of computation
