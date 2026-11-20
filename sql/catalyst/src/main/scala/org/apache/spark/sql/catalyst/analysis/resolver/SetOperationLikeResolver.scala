@@ -98,7 +98,10 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(deduplicatedChildOutputs)
 
-    val output = mergeChildOutputs(unresolvedOperator, deduplicatedChildOutputs)
+    val output = mergeChildOutputs(
+      unresolvedOperator,
+      deduplicatedChildOutputs,
+      widenCharLengths = !deduplicatedChildren.exists(Union.readsRecursiveReference))
     scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
 
     OperatorWithUncomparableTypeValidator.validate(unresolvedOperator, output)
@@ -438,11 +441,12 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    */
   private def mergeChildOutputs(
       unresolvedPlan: LogicalPlan,
-      childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
+      childOutputs: Seq[Seq[Attribute]],
+      widenCharLengths: Boolean): Seq[Attribute] = {
     unresolvedPlan match {
-      case _: Union => Union.mergeChildOutputs(childOutputs)
-      case _: Except => Except.mergeChildOutputs(childOutputs)
-      case _: Intersect => Intersect.mergeChildOutputs(childOutputs)
+      case _: Union => Union.mergeChildOutputs(childOutputs, widenCharLengths)
+      case _: Except => Except.mergeChildOutputs(childOutputs, widenCharLengths)
+      case _: Intersect => Intersect.mergeChildOutputs(childOutputs, widenCharLengths)
       case other =>
         throw SparkException.internalError(
           s"Set operation resolver should not be used for ${other.nodeName}"

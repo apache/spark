@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Except, Intersect, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Union, View, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, EXCEPT, INTERSECT, REPLACE_DATA, UNION, WRITE_DELTA}
@@ -110,32 +112,33 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def padSetOperations(plan: LogicalPlan, padAllChildren: Boolean): LogicalPlan = {
     val newPlan = plan.transformUpWithNewOutput({
       // An unresolved set operation, or one with children of different arity, fails in
-      // CheckAnalysis.
-      case op @ (_: Union | _: Intersect | _: Except) if op.resolved =>
-        val rawTypes = op.children.map(_.output).transpose.map(CharVarcharUtils.widerCharRawType)
+      // CheckAnalysis. One that reads a recursive reference keeps its CHAR lengths.
+      case op @ (_: Union | _: Intersect | _: Except)
+          if op.resolved && !op.children.exists(Union.readsRecursiveReference) =>
+        val rawTypes = CharVarcharUtils.widerCharRawTypes(op.children.map(_.output))
         if (rawTypes.forall(_.isEmpty)) {
           op -> Nil
         } else {
           val newChildren = op.children.map { child =>
+            // A column at more than one position has one raw type, and gets one padded column.
+            val paddedColumns = mutable.HashMap.empty[ExprId, NamedExpression]
             val projectList = child.output.zip(rawTypes).map {
-              case (attr, Some(rawType)) =>
+              case (attr, Some(rawType)) => paddedColumns.getOrElseUpdate(attr.exprId,
                 CharVarcharUtils.padCharToWiderLength(attr, rawType, padAllChildren).map {
                   case (padded, paddedRawType) =>
                     Alias(padded, attr.name)(
                       qualifier = attr.qualifier,
                       explicitMetadata =
                         Some(CharVarcharUtils.withRawType(attr.metadata, paddedRawType)))
-                }.getOrElse(attr)
+                }.getOrElse(attr))
               case (attr, _) => attr
             }
             if (projectList == child.output) child else Project(projectList, child)
           }
           val newOp = op.withNewChildren(newChildren)
-          // A child can output a column more than once, which gets a padded column for each
-          // position. References to the column above refer to the first one.
           newOp -> op.output.zip(newOp.output)
-            .filterNot { case (a, b) => a == b }
             .distinctBy { case (a, _) => a.exprId }
+            .filterNot { case (a, b) => a == b }
         }
     }, skipCond = p => p.analyzed || !p.containsAnyPattern(UNION, INTERSECT, EXCEPT),
       canGetOutput = _.resolved)

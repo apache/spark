@@ -733,11 +733,13 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: set operations and IN subqueries of char columns of different lengths") {
-    withTable("t3", "t5", "tc") {
+    withTable("t3", "t5", "t35", "tc") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t35(c3 CHAR(3), c5 CHAR(5)) USING $format")
       sql("INSERT INTO t3 VALUES (1, 'a')")
       sql("INSERT INTO t5 VALUES (2, 'a')")
+      sql("INSERT INTO t35 VALUES ('a', 'a')")
       val union = "SELECT c FROM t3 UNION ALL SELECT c FROM t5"
       val padded = "a" + " ".repeat(4)
 
@@ -773,11 +775,35 @@ trait CharVarcharTestSuite extends QueryTest {
         checkAnswer(df, expected)
         df.schema.foreach(field => checkColType(field, CharType(5)))
       }
+      // The positions of a column that INTERSECT or EXCEPT outputs twice have the widest length of
+      // all of them. A Union gives the positions of a repeated column their own expression IDs
+      // first (DeduplicateUnionChildOutput), so they keep their own lengths.
+      Seq(
+        "UNION ALL" -> Seq(Row("a  ", padded), Row("a  ", padded)),
+        "INTERSECT" -> Seq(Row(padded, padded)),
+        "EXCEPT" -> Nil).foreach { case (op, expected) =>
+        val df = sql(s"SELECT * FROM (SELECT c, c FROM t3 $op SELECT c3, c5 FROM t35) s(p, q)")
+        checkAnswer(df, expected)
+        checkAnswer(df.where("p = 'a'"), expected)
+        checkColType(df.schema(0), CharType(if (op == "UNION ALL") 3 else 5))
+        checkColType(df.schema(1), CharType(5))
+      }
       Seq("SELECT c FROM t3 EXCEPT SELECT c FROM t5", s"SELECT c FROM t3 EXCEPT ($union)",
           "SELECT c FROM t5 EXCEPT SELECT c FROM t3").foreach { query =>
         checkAnswer(sql(query), Nil)
         checkColType(sql(query).schema(0), CharType(5))
       }
+
+      // a union in the recursive term of a recursive CTE that reads the recursive reference
+      // keeps the CHAR length of the reference, as the recursive CTE does
+      checkAnswer(
+        sql("""WITH RECURSIVE r(c, n) AS (
+               |  SELECT c, 0 FROM t3
+               |  UNION ALL
+               |  SELECT c, n + 1 FROM (SELECT c, n FROM r UNION ALL SELECT c, 10 FROM t5)
+               |  WHERE n < 2)
+               |SELECT n FROM r WHERE c = 'a'""".stripMargin),
+        Seq(Row(0), Row(1), Row(2)))
 
       // the default collation, implicit or explicit, is the same collation
       sql(s"CREATE TABLE tc(id INT, c CHAR(5) COLLATE UTF8_BINARY) USING $format")

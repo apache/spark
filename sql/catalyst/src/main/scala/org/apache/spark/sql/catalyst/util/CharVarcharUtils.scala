@@ -507,9 +507,31 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     getRawType(metadata).orElse(nested(dataType))
   }
 
-  /** The metadata of the first attribute, with the raw type of [[widerCharRawType]] if any. */
-  def widerCharMetadata(attrs: Seq[Attribute]): Metadata = {
-    widerCharRawType(attrs).map(withRawType(attrs.head.metadata, _)).getOrElse(attrs.head.metadata)
+  /**
+   * [[widerCharRawType]] for each position of the outputs of the children of a set operation. A
+   * child can output a column at more than one position, and a reference to the column can't tell
+   * them apart, so the positions that share a column in any child get one raw type: the widest of
+   * all of them. Returns None for every position if the outputs have different lengths.
+   */
+  def widerCharRawTypes(childOutputs: Seq[Seq[Attribute]]): Seq[Option[DataType]] = {
+    val width = childOutputs.head.length
+    if (childOutputs.exists(_.length != width)) {
+      Seq.fill(width)(None)
+    } else {
+      val columns = childOutputs.transpose
+      // The first position of each group of positions that share a column.
+      val group = Array.tabulate(width)(identity)
+      def find(i: Int): Int = if (group(i) == i) i else find(group(i))
+      childOutputs.foreach { output =>
+        output.indices.groupBy(i => output(i).exprId).values.foreach { positions =>
+          positions.tail.foreach(i => group(find(i)) = find(positions.head))
+        }
+      }
+      val rawTypes = columns.indices.groupBy(find).map { case (first, positions) =>
+        first -> widerCharRawType(positions.flatMap(columns))
+      }
+      columns.indices.map(i => rawTypes(find(i)))
+    }
   }
 
   /**
