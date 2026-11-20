@@ -739,8 +739,8 @@ class StreamRelationParserSuite extends AnalysisTest {
       sqlState = "42K0E",
       parameters = Map("expr" -> "\"col_name\""),
       context = ExpectedContext(
-        fragment = "FROM STREAM t CHANGES FROM TIMESTAMP col_name",
-        start = 9,
+        fragment = "STREAM t CHANGES FROM TIMESTAMP col_name",
+        start = 14,
         stop = 53))
   }
 
