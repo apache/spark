@@ -41,8 +41,9 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.{broadcast, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
   import testImplicits._
 
@@ -378,7 +379,7 @@ object PackV2ScanPartitionsSuite {
 }
 
 /** Re-run existing SPJ, ordering and reuse regressions with scan packing enabled. */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningPackScanPartitionsSuite extends KeyGroupedPartitioningSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 
@@ -388,13 +389,13 @@ class KeyGroupedPartitioningPackScanPartitionsSuite extends KeyGroupedPartitioni
     "SPARK-59671: an AQE local read over a split scan does not lose matches")
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningPackRuntimeFilterSuite
   extends KeyGroupedPartitioningRuntimeFilterSuite with PackV2ScanPartitionsRuntimeFilterTests {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningPackCatalystRuntimeFilterSuite
   extends KeyGroupedPartitioningCatalystRuntimeFilterSuite
   with PackV2ScanPartitionsRuntimeFilterTests {
@@ -402,45 +403,54 @@ class KeyGroupedPartitioningPackCatalystRuntimeFilterSuite
 }
 
 /** Re-run row-level operations, whose shuffled target scans can be packed. */
+@DataSourceV2Test
 class GroupBasedDeleteFromTablePackScanPartitionsSuite extends GroupBasedDeleteFromTableSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class GroupBasedNoMetadataDeleteFromTablePackScanPartitionsSuite
   extends GroupBasedNoMetadataDeleteFromTableSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DeltaBasedMergeIntoTablePackScanPartitionsSuite extends DeltaBasedMergeIntoTableSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
 /** Re-run DSv2 dynamic partition pruning, whose pruned scans can feed packed shuffles. */
+@DataSourceV2Test
 class DynamicPartitionPruningV2PackScanPartitionsSuiteAEOff
   extends DynamicPartitionPruningV2SuiteAEOff {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2PackScanPartitionsSuiteAEOn
   extends DynamicPartitionPruningV2SuiteAEOn {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2FilterPackScanPartitionsSuiteAEOff
   extends DynamicPartitionPruningV2FilterSuiteAEOff {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2FilterPackScanPartitionsSuiteAEOn
   extends DynamicPartitionPruningV2FilterSuiteAEOn {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2CatalystFilterPackScanPartitionsSuiteAEOff
   extends DynamicPartitionPruningV2CatalystFilterSuiteAEOff {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2CatalystFilterPackScanPartitionsSuiteAEOn
   extends DynamicPartitionPruningV2CatalystFilterSuiteAEOn {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
