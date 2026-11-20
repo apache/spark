@@ -182,18 +182,21 @@ object ApplyCharTypePaddingHelper {
 
       // Like the cases above, for a scalar subquery of a CHAR column compared with a string
       // literal, a column, or another scalar subquery.
+      // Unlike the cases above, these don't truncate values longer than their CHAR length.
       case b @ BinaryComparison(e @ CharScalarSubquery(metadata), lit) if lit.foldable =>
-        padAttrLitCmp(e, metadata, padCharCol, lit).map(b.withNewChildren).getOrElse(b)
+        padAttrLitCmp(e, metadata, padCharCol, lit, truncate = false)
+          .map(b.withNewChildren)
+          .getOrElse(b)
 
       case b @ BinaryComparison(lit, e @ CharScalarSubquery(metadata)) if lit.foldable =>
-        padAttrLitCmp(e, metadata, padCharCol, lit)
+        padAttrLitCmp(e, metadata, padCharCol, lit, truncate = false)
           .map(newChildren => b.withNewChildren(newChildren.reverse))
           .getOrElse(b)
 
       case b @ BinaryComparison(e1 @ CharOperand(m1), e2 @ CharOperand(m2))
           if e1.isInstanceOf[ScalarSubquery] || e2.isInstanceOf[ScalarSubquery] =>
         b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(
-          Seq(e1, e2), Seq(m1, m2).map(CharVarcharUtils.getRawType), padCharCol))
+          Seq(e1, e2), Seq(m1, m2).map(CharVarcharUtils.getRawType), padCharCol, truncate = false))
 
       case i: InSubquery if i.resolved => padInSubquery(i, padCharCol)
 
@@ -202,7 +205,8 @@ object ApplyCharTypePaddingHelper {
 
   /**
    * Pads each CHAR value or string literal of an IN subquery and the CHAR column of the subquery
-   * it is compared with, as a comparison with a column pads them. The columns are padded in a
+   * it is compared with, as a comparison with a column pads them, but without truncating values
+   * longer than their CHAR length, as read-side padding keeps them. The columns are padded in a
    * Project over the subquery, without the raw type, so that they are padded only once.
    */
   private def padInSubquery(i: InSubquery, padCharCol: Boolean): InSubquery = {
@@ -211,11 +215,12 @@ object ApplyCharTypePaddingHelper {
         val Seq(newValue, newCol) = CharVarcharUtils.addPaddingInStringComparison(
           Seq(value, col),
           Seq(CharVarcharUtils.getRawType(metadata), CharVarcharUtils.getRawType(col.metadata)),
-          padCharCol)
+          padCharCol,
+          truncate = false)
         (newValue, Some(newCol).filterNot(_ eq col))
       case (lit: Literal, col) =>
-        padAttrLitCmp(col, col.metadata, padCharCol, lit).map { case Seq(newCol, newLit) =>
-          (newLit, Some(newCol).filterNot(_ eq col))
+        padAttrLitCmp(col, col.metadata, padCharCol, lit, truncate = false).map {
+          case Seq(newCol, newLit) => (newLit, Some(newCol).filterNot(_ eq col))
         }.getOrElse((lit, None))
       case (value, _) => (value, None)
     }
@@ -239,26 +244,29 @@ object ApplyCharTypePaddingHelper {
       expr: Expression,
       metadata: Metadata,
       padCharCol: Boolean,
-      lit: Expression): Option[Seq[Expression]] = {
+      lit: Expression,
+      truncate: Boolean = true): Option[Seq[Expression]] = {
     if (expr.dataType.isInstanceOf[StringType]) {
       CharVarcharUtils.getRawType(metadata).flatMap {
         case c: CharType =>
+          // The literal is never longer than the length it is padded to.
+          def padExpr(length: Int): Expression = if (truncate) {
+            createStringRPad(expr, Literal(length))
+          } else {
+            CharVarcharUtils.createReadSidePadding(expr, CharType(length, c.collation))
+          }
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
             None
           } else {
             val stringLitLen = str.numChars()
             if (c.length < stringLitLen) {
-              Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
+              Some(Seq(padExpr(stringLitLen), lit))
             } else if (c.length > stringLitLen) {
-              val paddedExpr = if (padCharCol) {
-                createStringRPad(expr, Literal(c.length))
-              } else {
-                expr
-              }
+              val paddedExpr = if (padCharCol) padExpr(c.length) else expr
               Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
             } else if (padCharCol) {
-              Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
+              Some(Seq(padExpr(c.length), lit))
             } else {
               None
             }

@@ -131,7 +131,11 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             if (projectList == child.output) child else Project(projectList, child)
           }
           val newOp = op.withNewChildren(newChildren)
-          newOp -> op.output.zip(newOp.output).filterNot { case (a, b) => a == b }
+          // A child can output a column more than once, which gets a padded column for each
+          // position. References to the column above refer to the first one.
+          newOp -> op.output.zip(newOp.output)
+            .filterNot { case (a, b) => a == b }
+            .distinctBy { case (a, _) => a.exprId }
         }
     }, skipCond = p => p.analyzed || !p.containsAnyPattern(UNION, INTERSECT, EXCEPT),
       canGetOutput = _.resolved)

@@ -764,6 +764,15 @@ trait CharVarcharTestSuite extends QueryTest {
         checkAnswer(sql(query), Row(padded))
         checkColType(sql(query).schema(0), CharType(5))
       }
+      // a child that outputs a column twice
+      Seq(
+        "UNION ALL" -> Seq(Row(padded, padded), Row(padded, padded)),
+        "INTERSECT" -> Seq(Row(padded, padded)),
+        "EXCEPT" -> Nil).foreach { case (op, expected) =>
+        val df = sql(s"SELECT * FROM (SELECT c, c FROM t3 $op SELECT c, c FROM t5)")
+        checkAnswer(df, expected)
+        df.schema.foreach(field => checkColType(field, CharType(5)))
+      }
       Seq("SELECT c FROM t3 EXCEPT SELECT c FROM t5", s"SELECT c FROM t3 EXCEPT ($union)",
           "SELECT c FROM t5 EXCEPT SELECT c FROM t3").foreach { query =>
         checkAnswer(sql(query), Nil)
@@ -4278,10 +4287,10 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   test("SPARK-61972: a view of a union that stores a shorter char length") {
     withTable("t3", "t5") {
       withView("v") {
-        sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
-        sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
-        sql("INSERT INTO t3 VALUES (1, 'a')")
-        sql("INSERT INTO t5 VALUES (2, 'a'), (3, 'abcde')")
+        sql(s"CREATE TABLE t3(id INT, c CHAR(3), v VARCHAR(10)) USING $format")
+        sql(s"CREATE TABLE t5(id INT, c CHAR(5), v VARCHAR(10)) USING $format")
+        sql("INSERT INTO t3 VALUES (1, 'a', 'x')")
+        sql("INSERT INTO t5 VALUES (2, 'a', 'x'), (3, 'abcde', 'x')")
         sql("CREATE VIEW v AS SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5")
         // a view created before the union had the widest length stores the first child's length
         val catalog = spark.sessionState.catalog
@@ -4305,14 +4314,15 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 
       // a struct built from the columns has the raw types in the metadata of its fields
       withView("vs") {
-        sql("CREATE VIEW vs AS SELECT id, named_struct('id', id, 'c', c) AS s " +
-          "FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5)")
+        sql("CREATE VIEW vs AS SELECT id, named_struct('id', id, 'c', c, 'v', v) AS s " +
+          "FROM (SELECT id, c, v FROM t3 UNION ALL SELECT id, c, v FROM t5)")
         val catalog = spark.sessionState.catalog
         val view = catalog.getTableMetadata(TableIdentifier("vs"))
         val storedSchema = StructType(view.schema.map {
-          case field @ StructField("s", StructType(Array(id, c)), _, _) =>
+          case field @ StructField("s", StructType(Array(id, c, v)), _, _) =>
+            assert(CharVarcharUtils.getRawType(v.metadata).contains(VarcharType(10)))
             val metadata = CharVarcharUtils.withRawType(c.metadata, CharType(3))
-            field.copy(dataType = StructType(Array(id, c.copy(metadata = metadata))))
+            field.copy(dataType = StructType(Array(id, c.copy(metadata = metadata), v)))
           case field => field
         })
         catalog.alterTable(view.copy(schema = storedSchema))
@@ -4346,6 +4356,19 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 
   test("SPARK-61972: a union of char columns does not truncate over length values") {
+    withTempPath { dir =>
+      withTable("e3", "e5") {
+        sql("SELECT 'abcdef' as c").write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE e3 (c CHAR(3)) USING $format LOCATION '$dir'")
+        sql(s"CREATE TABLE e5 (c CHAR(5)) USING $format LOCATION '$dir'")
+        // subqueries
+        checkAnswer(sql("SELECT c FROM e3 WHERE c IN (SELECT c FROM e5)"), Row("abcdef"))
+        checkAnswer(sql("SELECT c FROM e5 WHERE c IN (SELECT c FROM e3)"), Row("abcdef"))
+        checkAnswer(sql("SELECT c FROM e3 WHERE c = (SELECT c FROM e5)"), Row("abcdef"))
+        checkAnswer(sql("SELECT 1 WHERE 'abcde' IN (SELECT c FROM e3)"), Nil)
+        checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM e3) = 'abcde'"), Nil)
+      }
+    }
     withTempPath { dir =>
       withTable("t", "t5") {
         sql("SELECT '123456' as c").write.format(format).save(dir.toString)

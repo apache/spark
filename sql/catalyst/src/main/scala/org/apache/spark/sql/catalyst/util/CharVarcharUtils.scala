@@ -77,6 +77,12 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     StringRPad(str, len, Literal.create(" ", str.dataType))
   }
 
+  /** Pads the given CHAR value to the length of `charType` as read-side padding does. */
+  private[sql] def createReadSidePadding(str: Expression, charType: CharType): Expression = {
+    processStringForCharVarchar(
+      str, charType, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
+  }
+
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
    * top-level StructField's data type is CharType/VarcharType or has nested CharType/VarcharType,
@@ -417,12 +423,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Like the method above, for expressions with the given raw types, such as a scalar subquery or
-   * a column of an IN subquery, whose raw type is the one of their column.
+   * a column of an IN subquery, whose raw type is the one of their column. With `truncate = false`,
+   * it pads like read-side padding, which keeps longer values instead of truncating them.
    */
   def addPaddingInStringComparison(
       exprs: Seq[Expression],
       rawTypes: Seq[Option[DataType]],
-      alwaysPad: Boolean): Seq[Expression] = {
+      alwaysPad: Boolean,
+      truncate: Boolean = true): Seq[Expression] = {
     if (rawTypes.exists(_.isEmpty)) {
       exprs
     } else if (exprs.exists(expr => !RowOrdering.isOrderable(expr.dataType))) {
@@ -433,7 +441,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     } else {
       val typeWithTargetCharLength = rawTypes.map(_.get).reduce(typeWithWiderCharLength)
       exprs.zip(rawTypes.map(_.get)).map { case (expr, rawType) =>
-        padCharToTargetLength(expr, rawType, typeWithTargetCharLength, alwaysPad).getOrElse(expr)
+        padCharToTargetLength(expr, rawType, typeWithTargetCharLength, alwaysPad, truncate)
+          .getOrElse(expr)
       }
     }
   }
@@ -540,7 +549,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case (ArrayType(et1, _), ArrayType(et2, containsNull)) =>
         narrowerCharType(et1, et2).map(ArrayType(_, containsNull))
       // other fields of a struct, such as an INT next to a CHAR
-      case _ if fromType == toType && !hasCharVarchar(toType) => Some(toType)
+      case _ if fromType == toType && !hasChar(toType) => Some(toType)
       case _ => None
     }
   }
@@ -552,6 +561,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType.catalogString)
       .build()
   }
+
+  private def hasChar(dt: DataType): Boolean = dt.existsRecursively(_.isInstanceOf[CharType])
 
   // Like typeWithWiderCharLength, but keeps the field names of type1, and None for types that are
   // not both CHAR types, or structs and arrays of them, with the same shape. Fields of other types
@@ -569,7 +580,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
         widerCharType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
       // other fields of a struct, such as an INT next to a CHAR
-      case _ if type1 == type2 && !hasCharVarchar(type1) => Some(type1)
+      case _ if type1 == type2 && !hasChar(type1) => Some(type1)
       case _ => None
     }
   }
@@ -593,10 +604,15 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       expr: Expression,
       rawType: DataType,
       typeWithTargetCharLength: DataType,
-      alwaysPad: Boolean): Option[Expression] = {
+      alwaysPad: Boolean,
+      truncate: Boolean = true): Option[Expression] = {
     (rawType, typeWithTargetCharLength) match {
       case (c: CharType, t: CharType) if alwaysPad || t.length > c.length =>
-        Some(createStringRPad(expr, Literal(t.length)))
+        Some(if (truncate) {
+          createStringRPad(expr, Literal(t.length))
+        } else {
+          createReadSidePadding(expr, CharType(t.length, c.collation))
+        })
 
       case (StructType(fields), StructType(targets)) =>
         assert(fields.length == targets.length)
@@ -607,7 +623,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           val field = fields(i)
           val fieldExpr = GetStructField(expr, i, Some(field.name))
           val padded = padCharToTargetLength(
-            fieldExpr, field.dataType, targets(i).dataType, alwaysPad)
+            fieldExpr, field.dataType, targets(i).dataType, alwaysPad, truncate)
           // Accumulate: any single field needing padding means the struct must be rebuilt,
           // otherwise the padding computed for earlier fields would be discarded.
           needPadding |= padded.isDefined
@@ -628,7 +644,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-        padCharToTargetLength(param, et, target, alwaysPad).map { padded =>
+        padCharToTargetLength(param, et, target, alwaysPad, truncate).map { padded =>
           val func = LambdaFunction(padded, Seq(param))
           ArrayTransform(expr, func)
         }
