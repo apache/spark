@@ -31,8 +31,8 @@ import org.apache.spark.annotation.Unstable
  * `"file unknown"` for `FileType()`, except that an external file in a struct field is the plain
  * `"file"`. A bare `"file"` is read as external inside a struct field and as unknown elsewhere.
  *
- * FileType is planned to be physically stored as a struct with the following fields (see
- * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
+ * FileType is physically stored as a struct with the following fields (see `FileType.FIELDS`),
+ * but it deliberately does not extend [[StructType]]. Its external value is [[FileRef]]:
  *   - uri (STRING): the URI of the referenced file, which may be absolute or relative
  *   - offset (BIGINT): the start of the referenced byte range
  *   - size (BIGINT): the length of the referenced byte range
@@ -52,8 +52,9 @@ import org.apache.spark.annotation.Unstable
  * `xxhash64`, the key of a map built in a query or of a map in the return type of a function, and
  * a partition, bucket, clustering or write-ordering column of a table. Aggregates that
  * deduplicate or hash their input, such as `count(DISTINCT f)`, `collect_set`,
- * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE, such
- * as `uri`, is planned together with its physical representation.
+ * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE in SQL,
+ * such as `uri`, is planned. A FILE casts only to a FILE of unknown mode: a cast to STRING or
+ * BINARY, which reads the referenced bytes, is planned as well.
  *
  * @param mode
  *   the mode for this FileType column

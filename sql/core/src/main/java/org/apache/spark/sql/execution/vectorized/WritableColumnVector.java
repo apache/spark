@@ -26,6 +26,7 @@ import java.util.Optional;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.internal.SQLConf;
@@ -585,7 +586,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * In all these cases, the return value is the rowId for the first appended element.
    */
   public final int appendNull() {
-    assert (!(dataType() instanceof StructType)); // Use appendStruct()
+    assert (!isStruct(dataType())); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNull(elementsAppended);
     return elementsAppended++;
@@ -598,7 +599,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct(dataType()));
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNulls(elementsAppended, count);
@@ -607,7 +608,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNotNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct(dataType()));
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNotNulls(elementsAppended, count);
@@ -802,7 +803,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType
+        if (isStruct(c.type) || c.type instanceof VariantType
             || c.type instanceof CalendarIntervalType
             || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
@@ -1075,6 +1076,14 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected abstract WritableColumnVector reserveNewInternalColumn(int capacity, DataType type);
 
+  /**
+   * Whether a vector of type `t` stores its values as a struct, with one child vector per field:
+   * a StructType, or a framework type whose row representation is one, such as FileType.
+   */
+  static boolean isStruct(DataType t) {
+    return TypeOps$.MODULE$.rowRepresentationOrSelf(t) instanceof StructType;
+  }
+
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
       type instanceof GeometryType || type instanceof GeographyType ||
@@ -1111,7 +1120,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
-    } else if (type instanceof StructType st) {
+    } else if (TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewInternalColumn(capacity, st.fields()[i].dataType());

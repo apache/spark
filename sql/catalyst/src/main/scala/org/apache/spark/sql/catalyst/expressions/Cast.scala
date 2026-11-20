@@ -97,6 +97,9 @@ object Cast extends QueryErrorsBase {
     // Geospatial types cannot be cast to/from other data types.
     case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
+    // A cast of a FILE to STRING is to read its bytes (SPARK-59132), which is not supported yet.
+    case (fromType, _: StringType) if fromType.existsRecursively(_.isInstanceOf[FileType]) =>
+      false
     case (_, _: StringType) => true
 
     case (_: StringType, _: BinaryType) => true
@@ -189,6 +192,8 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+    // A FILE casts to a FILE of unknown mode: the value does not change.
+    case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -260,6 +265,9 @@ object Cast extends QueryErrorsBase {
     // Geospatial types cannot be cast to/from other data types.
     case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
+    // A cast of a FILE to STRING is to read its bytes (SPARK-59132), which is not supported yet.
+    case (fromType, _: StringType) if fromType.existsRecursively(_.isInstanceOf[FileType]) =>
+      false
     case (_, _: StringType) => true
 
     case (_: StringType, BinaryType) => true
@@ -360,6 +368,8 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+    // A FILE casts to a FILE of unknown mode: the value does not change.
+    case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -1713,6 +1723,8 @@ case class Cast(
         case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
         case udt: UserDefinedType[_] if udt.acceptsType(from) =>
           identity[Any]
+        case ft: FileType if ft.acceptsType(from) =>
+          identity[Any]
         case _: UserDefinedType[_] =>
           throw QueryExecutionErrors.cannotCastError(from, to)
       }
@@ -1829,6 +1841,8 @@ case class Cast(
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_] if udt.acceptsType(from) =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
+    case ft: FileType if ft.acceptsType(from) =>
       (c, evPrim, evNull) => code"$evPrim = $c;"
     case _: UserDefinedType[_] =>
       throw QueryExecutionErrors.cannotCastError(from, to)
