@@ -360,12 +360,26 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
    * The value of `s` cast to `dt` if `s` is 'epoch', whose value depends neither on the time zone
    * nor on the current date, or None otherwise.
    */
-  private[sql] def epochValue(s: UTF8String, dt: DataType): Option[Literal] =
+  private def epochValue(s: UTF8String, dt: DataType): Option[Literal] =
     if (DateTimeUtils.isEpochSpecialValue(s.toString)) {
       conv.lift(dt).flatMap(_(s.toString, java.time.ZoneOffset.UTC)).map(Literal(_, dt))
     } else {
       None
     }
+
+  /**
+   * Replaces a cast of 'epoch' in `expression` with its value, as this rule does, unless Spark
+   * cannot tell that its string does not depend on the context, such as the current date. It
+   * keeps the other casts that this rule may replace, and does not look into them. An expression
+   * that the optimizer failed to fold is kept as it is, as Spark evaluates it.
+   */
+  private[sql] def withEpochValues(expression: Expression): Expression = expression match {
+    case e if !e.containsPattern(CAST) || e.containsTag(ConstantFolding.FAILED_TO_EVALUATE) => e
+    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
+      val special = if (e.contextIndependentFoldable) cast.specialDatetimeValue else None
+      special.flatMap(epochValue(_, dt)).getOrElse(cast)
+    case other => other.mapChildren(withEpochValues)
+  }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
     case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>

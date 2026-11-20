@@ -28,7 +28,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, Sessio
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, Filter, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
@@ -1181,6 +1183,29 @@ class DataSourceV2DataFrameSuite
           }
           assert(addExec.changes.map(_.asInstanceOf[AddColumn].defaultValue().getExpression) ==
             Seq(null), ansi)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60451: a pushed filter does not give a value to a cast of 'epoch' that fails") {
+    // The string is constant only after the optimizer substitutes `s`, so `SpecialDatetimeValues`
+    // keeps the cast, and Spark fails to evaluate it under ANSI mode. The filter is not pushed.
+    val t = "testcat.ns.t"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, d DATE) USING foo")
+        Seq(
+          "d >= CASE WHEN id > 0 THEN CAST(s AS DATE) ELSE DATE'2000-01-01' END",
+          "CASE WHEN id > 0 THEN upper(CAST(CAST(s AS DATE) AS STRING)) ELSE 'x' END = 'X'"
+        ).foreach { cond =>
+          val plan = sql(s"SELECT * FROM (SELECT id, d, 'epoch' AS s FROM $t) WHERE $cond")
+            .queryExecution.optimizedPlan
+          val conditions = plan.collect { case f: Filter => f.condition }
+          assert(conditions.exists(_.exists(_.isInstanceOf[Cast])), cond)
+          conditions.foreach { c =>
+            assert(new V2ExpressionBuilder(c, true).buildPredicate().isEmpty, cond)
+          }
         }
       }
     }

@@ -738,6 +738,21 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
           }
         }
+        // `SpecialDatetimeValues` reads the string of the outer cast before the cast of 'epoch'
+        // in it has a value, so giving the inner cast its value first would change the outer one.
+        // A string that reads the current date is 'epoch' only until that date changes.
+        Seq(
+          "d <= CAST(CASE WHEN CAST('epoch' AS DATE) IS NULL THEN 'today' ELSE '2000-01-01' END " +
+            "AS DATE)",
+          "d >= CAST(CASE WHEN current_date() > DATE'9999-01-01' THEN 'today' ELSE 'epoch' END " +
+            "AS DATE)"
+        ).foreach { cond =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            sql(s"CREATE TABLE $t (id INT, d DATE, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicate() == null, s"$cond $ansi")
+          }
+        }
       }
     }
   }

@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.expressions.variant.{VariantGet, VariantPathParser}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, SpecialDatetimeValues}
-import org.apache.spark.sql.catalyst.trees.TreePattern.CAST
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
@@ -39,16 +38,10 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
 
-  def build(): Option[V2Expression] = generateExpression(withEpochValues(e), isPredicate)
-
-  // Gives each cast of 'epoch' its value, so that the folding case also folds the expressions
-  // around it.
-  private def withEpochValues(expr: Expression): Expression =
-    expr.transformUpWithPruning(_.containsPattern(CAST)) {
-      case c: Cast =>
-        c.specialDatetimeValue.flatMap(SpecialDatetimeValues.epochValue(_, c.dataType))
-          .getOrElse(c)
-    }
+  // Gives casts of 'epoch' their values first, so that the folding case also folds the
+  // expressions around them.
+  def build(): Option[V2Expression] =
+    generateExpression(SpecialDatetimeValues.withEpochValues(e), isPredicate)
 
   def buildPredicate(): Option[V2Predicate] = {
     if (isPredicate) {
@@ -182,8 +175,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    // Only `SpecialDatetimeValues` gives such a cast its value. `build` gives a cast of 'epoch'
-    // its fixed value, and the others have no V2 form, like `current_date()`.
+    // Only `SpecialDatetimeValues` gives such a cast its value, so a cast left here has no V2
+    // form, like `current_date()`. `build` gives a cast of 'epoch' its value first if it can.
     case c: Cast if c.specialDatetimeValue.isDefined => None
     case Cast(child, dataType, _, evalMode)
         if evalMode == EvalMode.ANSI || Cast.canUpCast(child.dataType, dataType) =>
