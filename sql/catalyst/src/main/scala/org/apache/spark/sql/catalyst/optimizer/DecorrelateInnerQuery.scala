@@ -561,7 +561,18 @@ object DecorrelateInnerQuery extends PredicateHelper {
         plan match {
           case Filter(condition, child) =>
             val conditions = splitConjunctivePredicates(condition)
-            val (correlated, uncorrelated) = conditions.partition(containsOuter)
+            // A conjunct used as a join condition with the outer query is evaluated after the
+            // filter, or ahead of it once pushed into the outer query, and the conjuncts left in
+            // the filter are reordered. So the ones written up to the last one that may not be
+            // evaluated ahead of the others (see `splitMovable`, taking an outer reference as a
+            // column, which can not fail) stay first in the filter, in their written order, with
+            // their outer references replaced.
+            val (keptInPlace, rest) = {
+              val stayUp = splitMovable(conditions.map(stripOuterReference), Seq(child))._2.toSet
+              conditions.splitAt(
+                conditions.lastIndexWhere(cond => stayUp.contains(stripOuterReference(cond))) + 1)
+            }
+            val (correlated, uncorrelated) = rest.partition(containsOuter)
             // Find outer references that can be substituted by attributes from the inner
             // query using the equality predicates.
             // If we are under a set op, we never use the predicates directly to substitute outer
@@ -621,7 +632,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val (equalityCond, predicates) =
                 if (underSetOp) (Seq.empty[Expression], correlated)
                 else correlated.partition(canPullUpOverAgg)
-              val outerReferences = collectOuterReferences(predicates)
+              val outerReferences = collectOuterReferences(predicates ++ keptInPlace)
               val newOuterReferences =
                 parentOuterReferences ++ outerReferences -- equivalences.keySet
               val (newChild, joinCond, outerReferenceMap) =
@@ -630,9 +641,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               // Replace all outer references in the non-equality predicates.
               val newCorrelated = replaceOuterReferences(predicates, newOuterReferenceMap)
+              val newKeptInPlace = replaceOuterReferences(keptInPlace, newOuterReferenceMap)
               // The new filter condition is the original filter condition with correlated
               // equality predicates removed.
-              val newFilterCond = newCorrelated ++ uncorrelated
+              val newFilterCond = newKeptInPlace ++ newCorrelated ++ uncorrelated
               val newFilter = newFilterCond match {
                 case Nil => newChild
                 case conditions => Filter(conditions.reduce(And), newChild)
@@ -641,14 +653,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val newJoinCond = joinCond ++ equalityCond
               (newFilter, newJoinCond, newOuterReferenceMap)
             } else {
-              // Results of this sub-tree is not aggregated, so all correlated predicates
-              // can be directly used as outer query join conditions.
-              val newOuterReferences = parentOuterReferences -- equivalences.keySet
+              // Results of this sub-tree is not aggregated, so all correlated predicates that are
+              // not kept in place can be directly used as outer query join conditions.
+              val newOuterReferences = parentOuterReferences ++
+                collectOuterReferences(keptInPlace) -- equivalences.keySet
               val (newChild, joinCond, outerReferenceMap) =
                 decorrelate(child, newOuterReferences, aggregated, underSetOp)
               // Add the outer references mapping collected from the equality conditions.
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
-              val newFilter = uncorrelated match {
+              val newKeptInPlace = replaceOuterReferences(keptInPlace, newOuterReferenceMap)
+              val newFilter = (newKeptInPlace ++ uncorrelated) match {
                 case Nil => newChild
                 case conditions => Filter(conditions.reduce(And), newChild)
               }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DecimalType, IntegerType, LongType}
 
 class DecorrelateInnerQuerySuite extends PlanTest {
 
@@ -208,6 +208,37 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Filter(x > a,
           DomainJoin(Seq(x), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("SPARK-62142: keep the predicates up to the last one that may not move in the filter") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val outerPlan = testRelation2
+      val guard = If(b < 0, Cast(RaiseError(Literal("negative b")), BooleanType), b > 0)
+      // The remainder by an outer column can fail, so it stays in the filter after the throwable
+      // guard, and so does the equality written before the guard. The equality written after
+      // them can not fail, so it is still pulled up.
+      val minB = Alias(min(b), "min_b")()
+      val aggregated =
+        Aggregate(Nil, Seq(minB),
+          Filter(OuterReference(x) === a && guard && Literal(1) % OuterReference(y) === 0 &&
+              OuterReference(z) === c,
+            testRelation))
+      val aggregatedAnswer =
+        Aggregate(Seq(x, y, c), Seq(minB, x, y, c),
+          Filter(x === a && guard && Literal(1) % y === 0,
+            DomainJoin(Seq(x, y), testRelation)))
+      check(aggregated, outerPlan, aggregatedAnswer, Seq(x <=> x, y <=> y, z === c))
+
+      val notAggregated =
+        Project(Seq(b),
+          Filter(OuterReference(x) === a && guard,
+            testRelation))
+      val notAggregatedAnswer =
+        Project(Seq(b, x),
+          Filter(x === a && guard,
+            DomainJoin(Seq(x), testRelation)))
+      check(notAggregated, outerPlan, notAggregatedAnswer, Seq(x <=> x))
+    }
   }
 
   test("join with correlated equality predicates") {
