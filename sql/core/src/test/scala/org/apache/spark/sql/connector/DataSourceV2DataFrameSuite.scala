@@ -3461,13 +3461,8 @@ class DataSourceV2DataFrameSuite
   }
 
   // Column ID tests: Write operations
-  //
-  // [[writeTo().append()]] eagerly executes the command during the
-  // [[commandExecuted]] phase, before the refresh phase runs. As a result,
-  // column ID validation does not apply to the source DataFrame in a
-  // [[writeTo]] path. The append succeeds without throwing a
-  // COLUMNS_MISMATCH error.
-  test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
+
+  test("writeTo().append() rejects stale source after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3477,9 +3472,13 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // Command is eagerly executed before the refresh phase validates
-      // column IDs. No COLUMNS_MISMATCH exception is thrown.
-      source.writeTo(t).append()
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(t).append()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
 

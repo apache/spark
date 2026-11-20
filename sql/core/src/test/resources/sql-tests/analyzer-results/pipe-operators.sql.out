@@ -1051,6 +1051,458 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
+|> eval x = 1
+-- !query analysis
+Project [1 AS x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval z = 1
+-- !query analysis
+Project [x#x, y#x, 1 AS z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval z = x + length(y), x = x * 10, zz = z + x
+-- !query analysis
+Project [x#x, y#x, z#x, (z#x + x#x) AS zz#x]
++- Project [(x#x * 10) AS x#x, y#x, z#x]
+   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval c = 3, a = 1, b = 2
+-- !query analysis
+Project [x#x, y#x, c#x, a#x, 2 AS b#x]
++- Project [x#x, y#x, c#x, 1 AS a#x]
+   +- Project [x#x, y#x, 3 AS c#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0), (1) tab(col)
+|> eval col = col * 2, half = col / 2
+-- !query analysis
+Project [col#x, (cast(col#x as double) / cast(2 as double)) AS half#x]
++- Project [(col#x * 2) AS col#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [col#x]
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> eval duration_s = response_ms / 1000,
+        slow = if(duration_s > 2, 1, 0),
+        uri = lower(uri),
+        is_api = if(uri like '/api/%', 1, 0)
+-- !query analysis
+Project [uri#x, response_ms#x, duration_s#x, slow#x, if (uri#x LIKE /api/%) 1 else 0 AS is_api#x]
++- Project [lower(uri#x) AS uri#x, response_ms#x, duration_s#x, slow#x]
+   +- Project [uri#x, response_ms#x, duration_s#x, if ((duration_s#x > cast(2 as double))) 1 else 0 AS slow#x]
+      +- Project [uri#x, response_ms#x, (cast(response_ms#x as double) / cast(1000 as double)) AS duration_s#x]
+         +- SubqueryAlias web_logs
+            +- LocalRelation [uri#x, response_ms#x]
+
+
+-- !query
+table t
+|> eval z = 1, z = z + 1
+-- !query analysis
+Project [x#x, y#x, (z#x + 1) AS z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(true))
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, Z#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(false))
+
+
+-- !query
+table t
+|> eval z = x + 1
+|> where z > 1
+|> select z
+-- !query analysis
+Project [z#x]
++- Filter (z#x > 1)
+   +- PipeOperator
+      +- Project [x#x, y#x, (x#x + 1) AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval `x.y z` = x
+-- !query analysis
+Project [x#x, y#x, x#x AS x.y z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select col from st
+|> eval i1 = col.i1
+-- !query analysis
+Project [col#x, col#x.i1 AS i1#x]
++- Project [col#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> eval m = (select max(a) from other)
+-- !query analysis
+Project [x#x, y#x, scalar-subquery#x [] AS m#x]
+:  +- Aggregate [max(a#x) AS max(a)#x]
+:     +- SubqueryAlias spark_catalog.default.other
+:        +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval w = sum(x) over (order by x)
+-- !query analysis
+Project [x#x, y#x, w#xL]
++- Project [x#x, y#x, w#xL, w#xL]
+   +- Window [sum(x#x) windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS w#xL], [x#x ASC NULLS FIRST]
+      +- Project [x#x, y#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as v
+|> eval z = v.x + 1
+|> select v.x, z
+-- !query analysis
+Project [x#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- SubqueryAlias v
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval _metadata = x + 1
+|> select x, _metadata
+-- !query analysis
+Project [x#x, _metadata#x]
++- Project [x#x, y#x, (x#x + 1) AS _metadata#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as eval
+|> eval eval = eval + 1
+-- !query analysis
+Project [(eval#x + 1) AS eval#x]
++- Project [1 AS eval#x]
+   +- OneRowRelation
+
+
+-- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query analysis
+Project [named_struct(s, (col#x.i1 + col#x.i2)) AS col#x, x#x]
++- Project [col#x, x#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query analysis
+Project [0 AS x#x, y#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- Filter false
+      +- PipeOperator
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query analysis
+Project [(z#x + 1) AS x#x, y#x, z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+create or replace temporary view pipe_eval_view as
+table t
+|> eval z = x + 1
+-- !query analysis
+CreateViewCommand `pipe_eval_view`, table t
+|> eval z = x + 1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x, y#x, (x#x + 1) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from pipe_eval_view
+-- !query analysis
+Project [x#x, y#x, z#x]
++- SubqueryAlias pipe_eval_view
+   +- View (`pipe_eval_view`, [x#x, y#x, z#x])
+      +- Project [cast(x#x as int) AS x#x, cast(y#x as string) AS y#x, cast(z#x as int) AS z#x]
+         +- Project [x#x, y#x, (x#x + 1) AS z#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+drop view pipe_eval_view
+-- !query analysis
+DropTempViewCommand pipe_eval_view, false
+
+
+-- !query
+select (table t |> eval z = 1 |> select z |> limit 1) as z from values (0) as o(z)
+-- !query analysis
+Project [scalar-subquery#x [] AS z#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- PipeOperator
+:           +- Project [z#x]
+:              +- Project [x#x, y#x, 1 AS z#x]
+:                 +- SubqueryAlias spark_catalog.default.t
+:                    +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias o
+   +- LocalRelation [z#x]
+
+
+-- !query
+select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t
+-- !query analysis
+Project [x#x, scalar-subquery#x [x#x] AS m#x]
+:  +- Aggregate [max(z#x) AS max(z)#x]
+:     +- Project [a#x, b#x, (a#x + outer(x#x)) AS z#x]
+:        +- SubqueryAlias spark_catalog.default.other
+:           +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as a, 2 as a
+|> eval a = 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 35,
+    "fragment" : "select 1 as a, 2 as a\n|> eval a = 3"
+  } ]
+}
+
+
+-- !query
+select x, x from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
+  "messageParameters" : {
+    "number" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "(table t |> eval z = 1 |> limit 1)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval z = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1 as z
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select col from st
+|> eval col.i1 = 42
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> EVAL operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 38,
+    "fragment" : "col.i1 = 42"
+  } ]
+}
+
+
+-- !query
+table t
 |> drop y
 -- !query analysis
 Project [x#x]
@@ -4915,6 +5367,16 @@ Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
 
 
 -- !query
+table t
+| eval z = x + length(y), x = z
+-- !query analysis
+Project [z#x AS x#x, y#x, z#x]
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
@@ -5041,6 +5503,31 @@ drop temporary variable extend
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.extend
+
+
+-- !query
+select x | eval from values (1, 2) as v(x, eval)
+-- !query analysis
+Project [(x#x | eval#x) AS (x | eval)#x]
++- SubqueryAlias v
+   +- LocalRelation [x#x, eval#x]
+
+
+-- !query
+select x | eval as y from values (1, 2) as v(x, eval)
+-- !query analysis
+Project [(x#x | eval#x) AS y#x]
++- SubqueryAlias v
+   +- LocalRelation [x#x, eval#x]
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query analysis
+Project [x#x, eval#x]
++- Filter ((x#x | eval#x) = 3)
+   +- SubqueryAlias v
+      +- LocalRelation [x#x, eval#x]
 
 
 -- !query

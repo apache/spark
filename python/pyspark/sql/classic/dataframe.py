@@ -60,7 +60,10 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.dataframe import _validate_approx_quantile_probabilities
+from pyspark.sql.dataframe import (
+    _validate_approx_quantile_probabilities,
+    _validate_approx_quantile_relative_error,
+)
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -1724,24 +1727,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         probabilities = _validate_approx_quantile_probabilities(probabilities)
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
-        if not isinstance(relativeError, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "float or int",
-                    "arg_name": "relativeError",
-                    "arg_type": type(relativeError).__name__,
-                },
-            )
-        if relativeError < 0:
-            raise PySparkValueError(
-                errorClass="NEGATIVE_VALUE",
-                messageParameters={
-                    "arg_name": "relativeError",
-                    "arg_value": str(relativeError),
-                },
-            )
-        relativeError = float(relativeError)
+        relativeError = _validate_approx_quantile_relative_error(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         jaq_list = [list(j) for j in jaq]

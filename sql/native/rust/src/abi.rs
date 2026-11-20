@@ -20,10 +20,14 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem::{offset_of, size_of, MaybeUninit};
 use std::sync::Arc;
 
+use arrow_array::cast::AsArray;
+use arrow_array::ffi::from_ffi;
 pub use arrow_array::ffi::FFI_ArrowArray as ArrowArray;
 pub use arrow_array::ffi_stream::FFI_ArrowArrayStream as ArrowArrayStream;
+use arrow_array::{make_array, StructArray};
+use arrow_data::ArrayData;
 pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
-use arrow_schema::{Schema, SchemaRef};
+use arrow_schema::{ArrowError, Schema, SchemaRef};
 
 use crate::bridge::{c_message, provider_call};
 use crate::host::{self, LogEnabledFunction, LogFunction};
@@ -81,8 +85,7 @@ pub struct SparkDsPartitionsInfo {
     pub size: i64,
 }
 
-/// The domain of a column, which `push_domains` gets. The SDK binds it, so that the function
-/// table has the size of the header, but does not expose it yet (SPARK-61306).
+/// The domain of a column, which `push_domains` gets, and [`domains`] reads.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SparkDsDomain {
@@ -766,6 +769,60 @@ pub unsafe fn messages<'a>(
         .collect()
 }
 
+/// A domain that Spark pushes: the path of its column, by the index of the column in the
+/// schema that create_reader got and then of its field in each struct, and its ranges.
+pub struct PushedDomain {
+    pub path: Vec<usize>,
+    pub null_allowed: bool,
+    pub nan_allowed: bool,
+    pub ranges: Option<StructArray>,
+}
+
+/// Reads the domains that Spark pushes, moving their ranges to take ownership of them.
+///
+/// # Safety
+/// The arguments must follow the push_domains contract of the C header.
+pub unsafe fn domains(
+    domains: *const *const SparkDsDomain,
+    count: i64,
+) -> Result<Vec<PushedDomain>> {
+    unsafe { slice(domains, count)? }
+        .iter()
+        .map(|&domain| {
+            let domain = unsafe { input(domain)? };
+            let path = unsafe { slice(domain.path, domain.path_length)? }
+                .iter()
+                .map(|&index| {
+                    usize::try_from(index)
+                        .map_err(|_| format!("the path of a domain has a negative index {index}"))
+                })
+                .collect::<std::result::Result<_, _>>()?;
+            let ranges = if domain.ranges.is_null() {
+                None
+            } else {
+                if domain.ranges_schema.is_null() {
+                    return Err("the ranges of a domain have no schema".into());
+                }
+                let array = unsafe { ArrowArray::from_raw(domain.ranges) };
+                let schema = unsafe { ArrowSchema::from_raw(domain.ranges_schema) };
+                let data = align_and_validate(unsafe { from_ffi(array, &schema)? })
+                    .map_err(|e| format!("the ranges of a domain are not valid Arrow data: {e}"))?;
+                let ranges = make_array(data);
+                let ranges = ranges
+                    .as_struct_opt()
+                    .ok_or("the ranges of a domain are not structs");
+                Some(ranges?.clone())
+            };
+            Ok(PushedDomain {
+                path,
+                null_allowed: domain.null_allowed,
+                nan_allowed: domain.nan_allowed,
+                ranges,
+            })
+        })
+        .collect()
+}
+
 /// # Safety
 /// The sink must be valid on this thread for this call and synchronously copy the bytes.
 pub unsafe fn emit(callback: SparkDsSink, sink: *mut c_void, bytes: &[u8]) -> Result<()> {
@@ -789,6 +846,40 @@ pub unsafe fn export_schema(schema: &SchemaRef, output: *mut ArrowSchema) -> Res
     let schema = ArrowSchema::try_from(schema.as_ref())?;
     unsafe { output.write(schema) };
     Ok(())
+}
+
+/// Aligns and validates Arrow data that Spark passed, as imported from C data, which Arrow does
+/// not do on import, while the safe accessors of the connector rely on both. Arrow requires each
+/// buffer of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128` for a
+/// decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise, so
+/// this copies the buffers that are not aligned, and only those. It then validates the layout
+/// and values of the data: a Spark string may hold bytes that are not UTF-8, such as those of a
+/// cast from binary, which a Rust `&str` must not. It leaves nullability to Spark, for the reason
+/// that `validate` gives.
+pub fn align_and_validate(mut data: ArrayData) -> Result<ArrayData> {
+    data.align_buffers();
+    validate(&data)?;
+    Ok(data)
+}
+
+/// Validates `data` and its children as `ArrayData::validate_full` does, except that it does not
+/// check nulls against the nullability of fields. Arrow rejects any null in the child of a list
+/// or map whose element is not nullable, even one under a null slot, a layout that Spark accepts
+/// from a native scan: Spark checks nullability itself, masked by the parent, before it passes a
+/// batch to write.
+fn validate(data: &ArrayData) -> std::result::Result<(), ArrowError> {
+    data.validate()?;
+    if let Some(nulls) = data.nulls() {
+        let actual = nulls.len() - nulls.inner().count_set_bits();
+        if actual != nulls.null_count() {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "null count {} does not match the {actual} nulls of the validity buffer",
+                nulls.null_count()
+            )));
+        }
+    }
+    data.validate_values()?;
+    data.child_data().iter().try_for_each(validate)
 }
 
 #[cfg(test)]
