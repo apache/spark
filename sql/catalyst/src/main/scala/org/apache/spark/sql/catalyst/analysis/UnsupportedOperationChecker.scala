@@ -209,9 +209,11 @@ object UnsupportedOperationChecker extends Logging {
 
   // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
   // it: no watermark in the join keys, and no range condition that bounds the input by the
-  // watermark of the other input. A left semi join only emits left rows.
-  // TODO: An input evicted by another column is not checked yet, such as the right input of
-  //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
+  // watermark of the other input. With allowMultiple, an input that eviction picks another column
+  // for counts too, since its state keeps rows of any event time. A left semi join only emits
+  // left rows.
+  // TODO: An input evicted by a join key other than its event time is not checked yet, such as
+  //   the right input of `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs.
   private def joinInputWithoutStateCutoff(
       join: Join, counts: LogicalPlan => Boolean): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
@@ -219,9 +221,13 @@ object UnsupportedOperationChecker extends Logging {
       Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
         .filter { case (_, input, _) => counts(input) }
         .collectFirst {
-          case (side, input, other) if input.output.exists(hasEventTimeCol) &&
+          case (side, input, other) if input.output.exists(hasEventTimeCol) && (
               StreamingJoinHelper.getStateValueWatermark(
-                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
+                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty ||
+              SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) &&
+              StreamingJoinHelper.getStateValueWatermarkColumn(input.output, other.outputSet,
+                condition, Some(1000000)).exists { case (column, _) => !hasEventTimeCol(column) }
+              ) => side
         }
     case _ => None
   }

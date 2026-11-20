@@ -369,6 +369,38 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     }
   }
 
+  // The join evicts the left input by expiry, so its state keeps rows of any leftTime.
+  private def countJoinedByExpiry()
+      : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], DataFrame) = {
+    val (leftInput, left) = input("left")
+    val (rightInput, right) = input("right")
+    val result = left.withColumn("expiry", expr("leftTime + INTERVAL 10 MINUTES"))
+      .join(right, expr("leftKey = rightKey AND rightTime BETWEEN leftTime AND expiry"))
+      .groupBy(window($"leftTime", "10 seconds")).count()
+      .select($"window.start".cast("long"), $"count")
+    (leftInput, rightInput, result)
+  }
+
+  for (version <- Seq(2, 4)) {
+    test(s"reject a join evicted by another column before a window aggregation, V$version") {
+      withJoinConf(version) {
+        val (leftInput, _, result) = countJoinedByExpiry()
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+      }
+    }
+  }
+
+  test("a join evicted by another column before a window aggregation runs with the check " +
+      "disabled") {
+    withJoinConf(4) {
+      withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
+        val (leftInput, rightInput, result) = countJoinedByExpiry()
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer())
+      }
+    }
+  }
+
   test("a key-only join before a window aggregation only warns with the check disabled") {
     withJoinConf(4) {
       withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
