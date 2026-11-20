@@ -97,6 +97,13 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           AttributeSet(Seq(rightTime)), Some(rightTime <= expiry && rightTime <= deadline),
           Some(10000L)).map(_._1) === Some(expected))
       }
+
+    // A column that the condition bounds only from above is skipped.
+    val validFrom = AttributeReference("validFrom", TimestampType)()
+    val validTo = AttributeReference("validTo", TimestampType)()
+    assert(StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, validFrom, validTo),
+      AttributeSet(Seq(rightTime)), Some(rightTime >= validFrom && rightTime <= validTo),
+      Some(10000L)) === Some((validTo, 9999L)))
   }
 
   test("extract watermark from time condition") {

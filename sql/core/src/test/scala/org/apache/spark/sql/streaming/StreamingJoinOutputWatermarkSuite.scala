@@ -334,12 +334,12 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // The join evicts the left input by expiry, so its state keeps rows of any leftTime.
-  private def countJoinedByExpiry()
+  private def countJoinedByExpiry(joinType: String = "inner")
       : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], DataFrame) = {
     val (leftInput, left) = input("left")
     val (rightInput, right) = input("right")
     val result = left.withColumn("expiry", expr("leftTime + INTERVAL 10 MINUTES"))
-      .join(right, expr("leftKey = rightKey AND rightTime BETWEEN leftTime AND expiry"))
+      .join(right, expr("leftKey = rightKey AND rightTime BETWEEN leftTime AND expiry"), joinType)
       .groupBy(window($"leftTime", "10 seconds")).count()
       .select($"window.start".cast("long"), $"count")
     (leftInput, rightInput, result)
@@ -350,6 +350,52 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       withJoinConf(version) {
         val (leftInput, _, result) = countJoinedByExpiry()
         testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+      }
+    }
+  }
+
+  // The left input is bounded only through a DATE column cast to TIMESTAMP, so the join keeps
+  // evicting it by its event time.
+  for (version <- Seq(2, 4)) {
+    test(s"accept a join bounded through a cast column before a window aggregation, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (rightInput, right) = input("right")
+        val result = left.withColumn("leftDate", expr("date_add(to_date(leftTime), 1)"))
+          .join(right, expr("leftKey = rightKey AND " +
+            "rightTime BETWEEN leftTime AND CAST(leftDate AS TIMESTAMP)"))
+          .groupBy(window($"leftTime", "10 seconds")).count()
+          .select($"window.start".cast("long"), $"count")
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+          AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)))
+      }
+    }
+  }
+
+  // An earlier version evicted the left input by leftTime and emitted its outer row at the
+  // watermark 390 s, which the aggregation counted. A restarted query keeps that eviction.
+  test("a join evicted by another column keeps the earlier eviction from an older checkpoint") {
+    withJoinConf(2) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) = countJoinedByExpiry("left_outer")
+        val start = StartStream(checkpointLocation = checkpoint.getCanonicalPath)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
+          testStream(result)(start,
+            MultiAddData(leftInput, (1, 100L))(rightInput, (9, 100L)), CheckNewAnswer(),
+            StopStream)
+        }
+        removeCheckJoinOutputWatermark(checkpoint)
+        val logAppender = new LogAppender("join output watermark")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          testStream(result)(start,
+            MultiAddData(leftInput, (8, 400L))(rightInput, (9, 400L)), CheckNewAnswer(),
+            AddData(rightInput, (9, 400L)), CheckNewAnswer((100L, 1L)),
+            AddData(rightInput, (1, 460L)), CheckNewAnswer())
+        }
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff on its event time")))
       }
     }
   }

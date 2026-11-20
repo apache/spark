@@ -159,11 +159,12 @@ object UnsupportedOperationChecker extends Logging {
 
   /**
    * Checks, in append mode, for an operator that drops late rows after a stream-stream join, when
-   * its event time can come from an input of the join whose state has no cutoff, as
-   * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
-   * plan, whose join conditions eviction uses, and in which the optimizer has replaced every CTE
-   * reference, MATERIALIZED ones included. A query from a checkpoint without
-   * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   * its event time can come from an input of the join whose state has no cutoff on its event
+   * time, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the
+   * optimized plan, whose join conditions eviction uses, and in which the optimizer has replaced
+   * every CTE reference, MATERIALIZED ones included. A query from a checkpoint without
+   * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning, and its join keeps
+   * evicting by the event time an input that would otherwise be evicted by another column.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     // TODO: Update mode is not checked, although its aggregations also drop late rows.
@@ -191,10 +192,11 @@ object UnsupportedOperationChecker extends Logging {
               joinInputWithoutStateCutoff(j,
                   input => sources.forall(_.exists(input.outputSet.contains))).foreach { side =>
                 throwError("Detected pattern of possible 'correctness' issue: the state of the " +
-                  s"$side input of a stream-stream join has no cutoff, so the join can emit its " +
-                  "old rows below its output watermark, and a later stateful operator drops them " +
-                  "as late. Add a watermark in the join keys or a range condition that bounds " +
-                  "that input by the other input's watermark, or set " +
+                  s"$side input of a stream-stream join has no cutoff on its event time, so the " +
+                  "join can emit its old rows below its output watermark, and a later stateful " +
+                  "operator drops them as late. Add a watermark in the join keys or a range " +
+                  "condition that bounds the event time of that input by the other input's " +
+                  "watermark, or set " +
                   "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
               }
             case _ =>

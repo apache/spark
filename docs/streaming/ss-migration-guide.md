@@ -32,15 +32,17 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   emit outer join rows too early and lose matches. Such a join can emit rows below its output
   watermark, which still assumes eviction by the event time, so in append mode a new query fails
   when an operator that drops late rows follows it, as described below for an input whose state
-  is never evicted. In such a join, and in a time-interval join such as
+  is never evicted, unless the condition also bounds the event time of that input by the other
+  input's watermark. In such a join, and in a time-interval join such as
   `rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES`, a row whose eviction column is
   NULL can never match: an outer join now emits it when it arrives, and no join keeps it in state.
   With state format versions 1 to 3, such rows that a checkpoint of an earlier version holds are
-  evicted, and emitted by an outer join, after the upgrade. With state format version 4, a join
-  evicted by another column cannot restart from a checkpoint of an earlier version, or after a
-  change of `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint.
-  With state format versions 1 to 3, it restarts, and rows that an earlier version evicted are
-  not restored. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
+  evicted, and emitted by an outer join, after the upgrade. A query restarted from a checkpoint
+  of an earlier version keeps evicting an input that the new rule would evict by another column
+  by its event time, with the earlier handling of NULL values; start it with a new checkpoint to
+  use the new rule. With state format version 4, a join evicted by another column cannot restart
+  after a change of `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new
+  checkpoint. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
   the earlier behavior.
 
 - Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is

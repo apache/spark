@@ -218,7 +218,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       eventTimeWatermarkForEviction: Option[Long],
       eventTimeWatermarkForLateEvents: Option[Long],
       useFirstEventTimeColumn: Boolean,
-      isFirstBatch: Boolean = true): JoinStateWatermarkPredicates = {
+      isFirstBatch: Boolean = true,
+      checkJoinOutputWatermark: Boolean = true): JoinStateWatermarkPredicates = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
@@ -278,12 +279,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // column. The legacy mode with a single global watermark keeps applying a cutoff on any
         // column of this input to the event time. So does the default mode when the condition
         // bounds no TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
+        // So does a checkpoint written without the join output watermark check for an input that
+        // the default mode would evict by another column, since for such a checkpoint that check
+        // only warns about a later operator that drops the rows this eviction emits late.
         // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
         //  evicted by its event time with the cast column's cutoff, which can be too early.
         def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
             StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
-              AttributeSet(otherSideInputAttributes), condition, watermark)
+              AttributeSet(otherSideInputAttributes), condition, watermark).filter {
+              case (c, _) => checkJoinOutputWatermark || eventTime.exists(_.semanticEquals(c))
+            }
           }
           picked.map { case (c, w) => (c, w, true) }.orElse {
             for (e <- eventTime; w <- wholeInput(watermark)) yield (e, w, false)

@@ -756,6 +756,8 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     // Such a row is not stored, but an earlier version or the legacy mode can have stored one.
+    // TODO: [SPARK-62038] State format 4 evicts by ranges of its index, which stores a NULL at
+    //  timestamp 0, below the scan start, so it still keeps such rows.
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr @ LessThanOrEqual(column, _), _, _, true)) =>
         Predicate.create(Or(expr, IsNull(column)), inputAttributes).eval _
@@ -771,11 +773,18 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val skipsEvictingRightRow: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(p: JoinStateValueWatermarkPredicate) if p.conditionBoundsColumn &&
           joinType == LeftSemi && joinSide == RightSide =>
+        val eventTime = WatermarkSupport.findEventTimeColumn(inputAttributes,
+          allowMultipleEventTimeColumns = false)
         val cutoff = StreamingJoinHelper.getStateValueWatermark(AttributeSet(inputAttributes),
           AttributeSet(left.output), condition.full, eventTimeWatermarkForEviction)
-        WatermarkSupport.watermarkExpression(WatermarkSupport.findEventTimeColumn(inputAttributes,
-          allowMultipleEventTimeColumns = false), cutoff)
-          .map(Predicate.create(_, inputAttributes).eval _).getOrElse((_: UnsafeRow) => false)
+        // The value predicate gives the same answer when it tests the event time with that cutoff,
+        // since a row with a NULL in the picked column does not reach the completion check.
+        if (cutoff.contains(p.stateWatermark) && eventTime.exists(p.expr.references.contains)) {
+          stateValueWatermarkPredicateFunc
+        } else {
+          WatermarkSupport.watermarkExpression(eventTime, cutoff)
+            .map(Predicate.create(_, inputAttributes).eval _).getOrElse((_: UnsafeRow) => false)
+        }
       case _ => stateValueWatermarkPredicateFunc
     }
 
