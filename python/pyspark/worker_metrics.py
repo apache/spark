@@ -94,7 +94,7 @@ class WorkerMetrics:
 
     def reset(self) -> None:
         """Start fresh task state while keeping the singleton's identity."""
-        # Counters, spill byte counts, and epoch timestamps need no conversion at report time.
+        # Values from set, increment and set_current_timestamp, reported as stored.
         self._values_in_report_units: dict[str, int] = {}
         # Existing timers keep the old dictionary. A fresh dictionary keeps their
         # measurements out of the next task's report.
@@ -116,7 +116,10 @@ class WorkerMetrics:
         self._values_in_report_units[name] = self._values_in_report_units.get(name, 0) + value
 
     def measure(self, name: str) -> _WorkerTimer:
-        """Create a task-bound duration handle for with or add_duration_ns."""
+        """Create a task-bound duration handle for with or add_duration_ns.
+
+        The duration is reported in nanoseconds under name, so name should end in Ns.
+        """
         # Register zero so an empty supported task can still report this timing.
         self._duration_totals_ns.setdefault(name, 0)
         return _WorkerTimer(self._duration_totals_ns, name)
