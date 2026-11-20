@@ -661,6 +661,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugHandling(lowerMax, Seq(sum($"s"), count(Literal(1)), uncorrelatedScalar)) ==
       inDecorrelation)
+    // A grouped top aggregate returns a row for the group of the row of NULLs, but none for no
+    // rows.
+    assert(countBugHandling(lowerMax, Seq(collectList($"s"), uncorrelatedScalar), Seq($"s")) ==
+      inDecorrelation)
     // It is not tried for a lower aggregate with a function with a default result, which is
     // handled in decorrelation as before, even when the top aggregate does not use it or its
     // default result is NULL, for an uncorrelated lower aggregate, and with the legacy behavior.
