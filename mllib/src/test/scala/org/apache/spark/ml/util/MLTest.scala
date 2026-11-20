@@ -404,5 +404,37 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     )).toDF("label", "weight", "features")
     val e3 = intercept[Exception](f(df3))
     assert(e3.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
+
+    // sparse vectors contain NaN
+    val df4 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(1.0, 2.0))),
+      (0.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(Double.NaN, 2.0)))
+    )).toDF("label", "weight", "features")
+    val e4 = intercept[Exception](f(df4))
+    assert(e4.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
+
+    // sparse vectors contain Infinity
+    val df5 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(1.0, 2.0))),
+      (0.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(1.0, Double.PositiveInfinity)))
+    )).toDF("label", "weight", "features")
+    val e5 = intercept[Exception](f(df5))
+    assert(e5.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
+
+    // a column with both dense and sparse vectors: invalid value in the sparse one
+    val df6 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0, 3.0, 4.0)),
+      (0.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(1.0, Double.NaN)))
+    )).toDF("label", "weight", "features")
+    val e6 = intercept[Exception](f(df6))
+    assert(e6.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
+
+    // a column with both dense and sparse vectors: invalid value in the dense one
+    val df7 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.sparse(4, Array(1, 3), Array(1.0, 2.0))),
+      (0.0, 1.0, Vectors.dense(1.0, Double.PositiveInfinity, 3.0, 4.0))
+    )).toDF("label", "weight", "features")
+    val e7 = intercept[Exception](f(df7))
+    assert(e7.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
   }
 }

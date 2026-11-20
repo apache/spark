@@ -82,10 +82,24 @@ private[spark] object DatasetUtils extends Logging {
     case _ => lit(1.0)
   }
 
+  // Dense vectors are validated with a compiled UDF rather than the `exists` higher-order
+  // function: `ArrayExists` extends `CodegenFallback`, so its lambda is interpreted for every
+  // element, which costs several virtual calls per element. This is cheap where the JIT inlines
+  // those calls, but noticeably slower on JVMs that do not (e.g. OpenJ9 on s390x).
+  // Sparse vectors keep using `exists`: the UDF has to build a `SparseVector`, whose
+  // constructor validates the indices, which costs more than it saves.
+  private lazy val validateDenseVector = udf { vector: Vector =>
+    vector.asInstanceOf[DenseVector].values.forall(v => !v.isNaN && !v.isInfinity)
+  }
+
   private[ml] def checkNonNanVectors(vectorCol: Column): Column = {
+    val vector = unwrap_udt(vectorCol)
+    val isDense = vector.getField("type") === lit(1.toByte)  // 0 = sparse, 1 = dense
+    val hasInvalidValues = when(isDense, !validateDenseVector(vectorCol))
+      .otherwise(exists(vector.getField("values"),
+        v => v.isNaN || v === Double.NegativeInfinity || v === Double.PositiveInfinity))
     when(vectorCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
-      .when(exists(unwrap_udt(vectorCol).getField("values"),
-        v => v.isNaN || v === Double.NegativeInfinity || v === Double.PositiveInfinity),
+      .when(hasInvalidValues,
         raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
           vectorCol.cast(StringType))))
       .otherwise(vectorCol)
