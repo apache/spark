@@ -75,6 +75,36 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
   }
 
+  test("a cutoff solved for another column than the event time keeps the earlier minimum") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def cutoff(condition: Expression): Option[Long] = StreamingJoinHelper.getStateValueWatermark(
+      AttributeSet(Seq(leftTime, expiry)), AttributeSet(Seq(rightTime)), Some(condition),
+      Some(100000L))
+    val constant = leftTime.cast(LongType) > 10
+    // The cutoff from expiry applies to leftTime on the whole-input path, so the constant caps it.
+    assert(cutoff(rightTime <= expiry && constant) === Some(10000L))
+    // A cutoff on leftTime itself is not capped.
+    assert(cutoff(leftTime > rightTime && constant) === Some(100000L))
+    assert(cutoff(leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === None)
+  }
+
+  test("a cutoff through a truncating cast keeps the earlier minimum") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def cutoff(condition: Expression): Option[Long] = StreamingJoinHelper.getStateValueWatermark(
+      AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)), Some(condition), Some(100000L))
+    val truncating = leftTime.cast(LongType) >= rightTime.cast(LongType) - 5
+    assert(cutoff(truncating) === Some(94999L))
+    assert(cutoff(truncating && leftTime.cast(LongType) > 10) === Some(10000L))
+    // The sum gives no cutoff that rises with the watermark, so it does not count.
+    assert(cutoff(leftTime > rightTime &&
+      leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === Some(100000L))
+  }
+
   test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {
     val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
     val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
