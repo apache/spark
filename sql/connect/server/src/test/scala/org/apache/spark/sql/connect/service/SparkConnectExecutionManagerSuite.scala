@@ -88,6 +88,18 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
       s"Expected Canceled terminationReason for abandoned, got ${info.terminationReason}")
   }
 
+  test("execution that is created but not started yet is not orphaned") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val command = proto.Command.newBuilder().build()
+    val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    assert(!executeHolder.isOrphan(), "An execution that was not started is not orphaned")
+    assert(executionManager.getExecuteHolder(executeHolder.key).contains(executeHolder))
+
+    executionManager.removeExecuteHolder(executeHolder.key)
+    assert(!executeHolder.isOrphan(), "An interrupted execution is completed, not orphaned")
+  }
+
   test("inactiveOperations cache has correct state after normal removal") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val command = proto.Command.newBuilder().build()

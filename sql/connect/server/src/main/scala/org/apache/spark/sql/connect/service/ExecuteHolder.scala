@@ -156,9 +156,12 @@ private[connect] class ExecuteHolder(
 
   /**
    * Check if the execution was ended without finalizing the outcome and no further progress will
-   * be made. If the execution was delegated, this method always returns false.
+   * be made. If the execution was delegated, this method always returns false. An execution that
+   * was not started yet is not orphaned: it makes progress once start() is called.
    */
   def isOrphan(): Boolean = {
+    // hasStarted() is checked before isAlive(), so a thread started in between is seen as alive.
+    runner.hasStarted() &&
     !runner.isAlive() &&
     !runner.shouldDelegateCompleteResponse(request) &&
     !responseObserver.completed()
