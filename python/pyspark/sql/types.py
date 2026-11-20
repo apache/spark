@@ -4259,13 +4259,16 @@ class DatetimeConverter:
     def convert(self, obj: datetime.datetime, gateway_client: "GatewayClient") -> "JavaGateway":
         from py4j.java_gateway import JavaClass
 
-        Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (
             calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
         )
-        t = Timestamp(int(seconds) * 1000)
-        t.setNanos(obj.microsecond * 1000)
-        return t
+        DateTimeUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.DateTimeUtils",
+            gateway_client,
+        )
+        # Rebases to the hybrid Julian calendar of java.sql.Timestamp, which Spark undoes when
+        # it converts the Timestamp back to Proleptic Gregorian microseconds.
+        return DateTimeUtils.toJavaTimestamp(int(seconds) * 1000000 + obj.microsecond)
 
 
 class DatetimeNTZConverter:

@@ -3505,6 +3505,13 @@ class FunctionsTestsMixin:
         actual = self.spark.range(1).select(F.lit(t)).first()[0]
         self.assertEqual(actual, t)
 
+    def test_lit_datetime_before_gregorian_cutover(self):
+        for ts in [datetime.datetime(1000, 1, 1), datetime.datetime(1582, 10, 4, 23, 0, 0, 123)]:
+            self.assertEqual(self.spark.range(1).select(F.lit(ts)).first()[0], ts)
+            df = self.spark.createDataFrame([(ts,)], "t timestamp")
+            self.assertEqual(df.filter(F.col("t") == ts).count(), 1)
+            self.assertEqual(self.spark.sql("SELECT :t", args={"t": ts}).first()[0], ts)
+
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)
         actual = self.spark.range(1).select(F.lit(td)).first()[0]
