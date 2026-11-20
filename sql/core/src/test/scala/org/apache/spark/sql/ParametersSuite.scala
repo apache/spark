@@ -1424,6 +1424,26 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("a statement that the parameter substitution parsed with optional references is parsed " +
+    "with them after the substitution") {
+    // `:x?` selects optional references, so `DISTINCT ?` is an optional reference to the column
+    // `distinct` rather than a positional parameter marker. The substitution of `:x?` removes the
+    // `?` that selected them.
+    val query = "SELECT :x? AS a, first(DISTINCT ?) AS f FROM VALUES (2) AS t(`distinct`)"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        checkAnswer(spark.sql(query, Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql(query, Map("y" -> 1)), Row(null, 2))
+        checkAnswer(
+          spark.sql(s"EXECUTE IMMEDIATE '${query.replace("'", "''")}' USING 1 AS x"),
+          Row(1, 2))
+      }
+    }
+  }
+
   test("positional parameter values that a statement with optional references does not use") {
     Seq(false, true).foreach { constantsOnly =>
       withSQLConf(

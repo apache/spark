@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Sort
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{
@@ -33,6 +34,7 @@ import org.apache.spark.sql.metricview.serde.{
   SQLSource
 }
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType}
 
 /**
  * Tests of optional references (`x?`) that the golden file `optional-references.sql`, which covers
@@ -140,6 +142,46 @@ class OptionalReferencesSuite extends QueryTest with SharedSparkSession {
         sqlState = "0A000",
         parameters = Map("context" -> "DEFAULT"),
         context = ExpectedContext(fragment = "a?", start = 14, stop = 15))
+    }
+  }
+
+  test("SPARK-61494: a column definition of the Catalog API rejects optional references") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      def checkRejected(field: StructField, clause: String, reference: String): Unit = {
+        withTable("t") {
+          val e = intercept[AnalysisException] {
+            spark.catalog.createTable(
+              "t", "parquet", StructType(Seq(field)), Map.empty[String, String])
+          }
+          assert(e.getCondition == "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL", e.getMessage)
+          assert(e.getMessageParameters.get("context") == clause, e.getMessage)
+          assert(e.getQueryContext.map(_.fragment).toSeq == Seq(reference), e.getMessage)
+          assert(!spark.catalog.tableExists("t"))
+        }
+      }
+      // The API parses the expressions of a column on their own, so the parser does not see the
+      // clause that they belong to.
+      checkRejected(
+        StructField("v", IntegerType)
+          .withCurrentDefaultValue("missing?")
+          .withExistenceDefaultValue("NULL"),
+        "DEFAULT",
+        "missing?")
+      checkRejected(
+        StructField("v", IntegerType, metadata = new MetadataBuilder()
+          .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "missing? + 1")
+          .build()),
+        "GENERATED ALWAYS AS",
+        "missing?")
+
+      // So does a default that is stored in the metadata of a column when it is analyzed.
+      val e = intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(
+          StructField("v", IntegerType).withCurrentDefaultValue("coalesce(missing?, 1)"), "INSERT")
+      }
+      assert(e.getCondition == "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL", e.getMessage)
+      assert(e.getMessageParameters.get("context") == "DEFAULT", e.getMessage)
+      assert(e.getQueryContext.map(_.fragment).toSeq == Seq("missing?"), e.getMessage)
     }
   }
 }

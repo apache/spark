@@ -57,7 +57,17 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: DataTypeAstBuilder
 
-  protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+  protected def parse[T](command: String)(toResult: SqlBaseParser => T): T =
+    parse(command, withOptionalReferences = false)(toResult)
+
+  /**
+   * Parses `command` like [[parse]], with optional references (`x?`) from the start if
+   * `withOptionalReferences`, i.e. if `command` is the text that a parameter substitution
+   * returned for a statement that it parsed with optional references, see
+   * `ParameterSubstitution.parsedWithOptionalReferences`.
+   */
+  protected def parse[T](command: String, withOptionalReferences: Boolean)(
+      toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
@@ -69,6 +79,9 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
 
     // Use shared parser configuration to ensure consistency.
     AbstractParser.configureParser(parser, command, tokenStream, conf)
+    if (withOptionalReferences) {
+      AbstractParser.restartWithOptionalReferences(parser, tokenStream)
+    }
 
     try {
       AbstractParser.executeWithTwoStageStrategy(parser, tokenStream, toResult)
@@ -613,6 +626,16 @@ object AbstractParser extends Logging {
       parser.reset()
     }
     questionTokens.nonEmpty
+  }
+
+  /**
+   * Returns true if [[restartWithOptionalReferences]] prepared the statement of `tokenStream` for
+   * optional references.
+   */
+  private[parser] def parsedWithOptionalReferences(tokenStream: CommonTokenStream): Boolean = {
+    tokenStream.fill()
+    tokenStream.getTokens.asScala.exists(
+      _.getType == SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
   }
 
   /**

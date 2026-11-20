@@ -37,6 +37,23 @@ object ParameterExpectation extends Enumeration {
  * This parser finds parameter markers and substitutes them with provided values to produce
  * a modified SQL string ready for execution.
  */
+/**
+ * The result of a parameter substitution.
+ *
+ * @param sqlText The SQL text with the values of the parameter markers.
+ * @param consumedPositionalParams The number of positional values that were substituted.
+ * @param positionMapper Maps the positions in `sqlText` back to the original SQL text.
+ * @param parsedWithOptionalReferences Whether the original SQL text was parsed with optional
+ *   references (`x?`), see `AbstractParser.restartWithOptionalReferences`. The parser must parse
+ *   `sqlText` with them too: the substitution of an optional named parameter marker (`:x?`) can
+ *   remove the syntax that selected them, and every other `?` must keep its meaning.
+ */
+case class ParameterSubstitution(
+    sqlText: String,
+    consumedPositionalParams: Int,
+    positionMapper: PositionMapper,
+    parsedWithOptionalReferences: Boolean)
+
 class SubstituteParamsParser extends Logging {
 
   /**
@@ -57,10 +74,28 @@ class SubstituteParamsParser extends Logging {
       allParametersAreNamed: Boolean = true,
       originalArgs: Seq[Any] = Seq.empty,
       originalParamNames: Seq[String] = Seq.empty): (String, Int, PositionMapper) = {
+    val substitution = substituteParameters(sqlText, namedParams, positionalParams,
+      expectationType, allParametersAreNamed, originalArgs, originalParamNames)
+    (substitution.sqlText, substitution.consumedPositionalParams, substitution.positionMapper)
+  }
+
+  /**
+   * Same as [[substitute]], but also returns whether the statement was parsed with optional
+   * references, see [[ParameterSubstitution.parsedWithOptionalReferences]].
+   */
+  def substituteParameters(
+      sqlText: String,
+      namedParams: Map[String, String] = Map.empty,
+      positionalParams: List[String] = List.empty,
+      expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown,
+      allParametersAreNamed: Boolean = true,
+      originalArgs: Seq[Any] = Seq.empty,
+      originalParamNames: Seq[String] = Seq.empty): ParameterSubstitution = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
     if (!sqlText.contains("?") && !sqlText.contains(":")) {
-      return (sqlText, 0, PositionMapper.identity(sqlText))
+      return ParameterSubstitution(sqlText, 0, PositionMapper.identity(sqlText),
+        parsedWithOptionalReferences = false)
     }
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
@@ -143,7 +178,8 @@ class SubstituteParamsParser extends Logging {
     // Create position mapper for error context translation.
     val positionMapper = PositionMapper(sqlText, substitutedSql, appliedSubstitutions)
 
-    (substitutedSql, consumedPositionalParams, positionMapper)
+    ParameterSubstitution(substitutedSql, consumedPositionalParams, positionMapper,
+      parsedWithOptionalReferences = AbstractParser.parsedWithOptionalReferences(tokenStream))
   }
 
   /**

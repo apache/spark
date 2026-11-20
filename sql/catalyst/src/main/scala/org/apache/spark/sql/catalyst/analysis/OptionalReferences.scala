@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
-
 import scala.annotation.tailrec
 import scala.util.{Left => EitherLeft, Right => EitherRight}
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
+  AttributeSeq,
   Expression,
   ExtractValue,
   Literal,
@@ -38,10 +36,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   SupervisingCommand,
   WithWindowDefinition
 }
-import org.apache.spark.sql.catalyst.trees.{Origin, TreeNodeTag}
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, MetadataColumnHelper}
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.{DataType, NullType, StringType}
 
 /**
@@ -110,12 +106,6 @@ object OptionalReferences {
    */
   val RESOLVED_NULL_REFERENCE: TreeNodeTag[Origin] =
     TreeNodeTag[Origin]("optionalReferenceResolvedNull")
-
-  /** Qualifiers of session variables, which are valid prefixes of a variable reference. */
-  private val SESSION_VARIABLE_QUALIFIERS = Seq(
-    Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
-    Seq(CatalogManager.SESSION_NAMESPACE)
-  )
 
   /** Returns the indices of the optional name parts of `expression`. */
   def optionalNamePartIndices(expression: Expression): Set[Int] =
@@ -280,6 +270,39 @@ object OptionalReferences {
     expression.getTagValue(NULL_REFERENCE).isDefined
 
   /**
+   * Returns true if `expression`, or the child of the aliases that `expression` is, is a
+   * [[nullReference]]. An extraction from a [[nullReference]] is aliased with the text of the
+   * extraction, as in `arr?[0]`, see [[extractedFromNullReference]].
+   */
+  def holdsNullReference(expression: Expression): Boolean =
+    heldNullReference(expression).isDefined
+
+  private def heldNullReference(expression: Expression): Option[Expression] = expression match {
+    case _ if isNullReference(expression) && !isNullReferenceAlias(expression) => Some(expression)
+    case alias: Alias => heldNullReference(alias.child)
+    case _ => None
+  }
+
+  /**
+   * Returns `extracted`, the NULL that an extraction from `base` returned because `base` is NULL,
+   * as a [[nullReference]] with the position of the reference if `base` holds one: the extraction
+   * from a missing reference is missing too, so that an extraction from it is NULL in turn, as the
+   * VARIANT path in `arr?[0]:a`.
+   */
+  def extractedFromNullReference(base: Expression, extracted: Expression): Expression = {
+    heldNullReference(base) match {
+      case Some(reference) if !isNullReference(extracted) =>
+        val nullReference = CurrentOrigin.withOrigin(reference.origin) {
+          Literal(null, extracted.dataType)
+        }
+        nullReference.setTagValue(NULL_REFERENCE, ())
+        nullReference
+      case _ =>
+        extracted
+    }
+  }
+
+  /**
    * Returns the alias that gives `child`, the result of a top-level reference, the name `name` of
    * the reference, see [[markImplicitAlias]].
    */
@@ -342,76 +365,104 @@ object OptionalReferences {
 
   /**
    * Returns true if the optional multipart name `nameParts` resolves to [[nullReference]] after
-   * it failed to resolve against `attributes`, i.e. if its first name part that matches no
-   * reference path to `attributes` is optional. See [[firstUnmatchedNamePartIndex]].
+   * it failed to resolve against `attributeGroups`, i.e. if its first name part that continues no
+   * reference is optional. See [[firstUnmatchedNamePartIndex]].
    */
   def resolvesToNull(
       nameParts: Seq[String],
       optionalNamePartIndices: Set[Int],
-      attributes: Seq[Attribute],
+      attributeGroups: Seq[Seq[Attribute]],
       resolver: Resolver,
-      isViewQuery: Boolean): Boolean = {
+      isVariableQualifier: Seq[String] => Boolean): Boolean = {
     optionalNamePartIndices.nonEmpty &&
-    firstUnmatchedNamePartIndex(nameParts, attributes, resolver, isViewQuery).exists(
+    firstUnmatchedNamePartIndex(nameParts, attributeGroups, resolver, isVariableQualifier).exists(
       optionalNamePartIndices.contains
     )
   }
 
   /**
-   * Returns the index of the first name part of `nameParts` that does not continue any reference
-   * path to `attributes`, where a path is a suffix of the attribute qualifier, the attribute name,
-   * and then the names of nested fields. The qualifiers of session variables and of the variables
-   * of an active SQL scripting scope, i.e. the label of a compound statement or the variable of a
-   * FOR statement, are valid paths too, the latter except in the query of a view (`isViewQuery`),
-   * when the view is read or defined: a view cannot see the variables of the script, so a
-   * definition that resolves a label is rejected when the view is created rather than when it is
-   * read. A qualifier is not a reference by itself, so a name is on the path of a qualifier only
-   * if it has a name part after the whole qualifier. Otherwise `?` would turn a column or variable
-   * that exists into NULL, as in `default.id?` or `system.v?`, which fail without `?` because
-   * `default` and `system` alone are not qualifiers.
-   * Returns None if the whole name matches a path, which means that the name was found but was not
-   * usable, e.g. because it references a column that is not grouped.
+   * Returns the index of the first name part of `nameParts` that continues no reference, i.e. the
+   * length of the longest prefix of `nameParts` that is a reference or the qualifier of one. The
+   * name resolution of attributes, [[AttributeSeq.getCandidatesForResolution]], and of variables,
+   * `isVariableQualifier`, decide what a prefix is, so that `?` turns only a name that they
+   * resolve to nothing into NULL. A prefix is:
+   *  - a reference if it resolves to an attribute and the nested fields that follow it;
+   *  - a qualifier if a name part follows it, and if it qualifies a variable, see
+   *    `VariableResolution.isVariableQualifier`, or an attribute: if the prefix and the name of
+   *    the attribute resolve to the attribute. A qualifier is not a reference by itself, so
+   *    `default.id?` and `system.v?` fail like without `?`: `default` and `system` alone are
+   *    not qualifiers.
+   *
+   * `attributeGroups` are the groups of attributes that the name resolution tries one after the
+   * other, such as the SELECT list and then the input of the SELECT list for ORDER BY, so a name
+   * is ambiguous only within a group. Returns None if the whole name is a reference, which means
+   * that the name was found but was not usable, e.g. because it references a column that is not
+   * grouped, or if the longest prefix of a group that resolves to something resolves to more than
+   * one attribute of the group, whose ambiguity error stays.
    *
    * {{{
    *   -- `t` is the table `spark_catalog.default.t` with the columns `id` and
    *   -- `addr STRUCT<city STRING>`:
-   *   t.name          -- 1: `t` matches the qualifier of `id`, `name` matches nothing
+   *   t.name          -- 1: `t` qualifies `id`, `name` continues nothing
    *   default.t.name  -- 2
    *   ghost.id        -- 0
-   *   default.id      -- 0: `default` is not a qualifier without `t`
+   *   default.id      -- 0: `default` qualifies nothing without `t`
    *   addr.zip        -- 1
    *   t               -- 0: `t` is not a column
+   *   -- `l` and `r` both have a struct column `s`:
+   *   s.y             -- None: `s` is ambiguous
    * }}}
    */
   def firstUnmatchedNamePartIndex(
       nameParts: Seq[String],
-      attributes: Seq[Attribute],
+      attributeGroups: Seq[Seq[Attribute]],
       resolver: Resolver,
-      isViewQuery: Boolean): Option[Int] = {
-    val matchedNamePartCounts =
-      attributes.iterator.map(matchedNamePartCount(nameParts, _, resolver)) ++
-      SESSION_VARIABLE_QUALIFIERS.iterator.map(matchedQualifierPartCount(nameParts, _, resolver)) ++
-      Iterator(if (isViewQuery) 0 else matchedScriptingScopeLabelCount(nameParts))
-    val longestMatch = matchedNamePartCounts.max
-    if (longestMatch < nameParts.length) Some(longestMatch) else None
+      isVariableQualifier: Seq[String] => Boolean): Option[Int] = {
+    val prefixLengths = nameParts.length to 1 by -1
+    val variableQualifierLength = prefixLengths
+      .find(length => length < nameParts.length && isVariableQualifier(nameParts.take(length)))
+      .getOrElse(0)
+    val referenceLengths = attributeGroups.map(referencePrefixLength(nameParts, _, resolver))
+    if (referenceLengths.contains(None)) {
+      None
+    } else {
+      Some((variableQualifierLength +: referenceLengths.flatten).max)
+    }
   }
 
   /**
-   * Returns 1 if `nameParts` has at least two parts and its first part is the label of an active
-   * SQL scripting scope, so that the name can reference a variable of that scope and then the
-   * nested fields of that variable, and 0 otherwise.
+   * Returns the length of the longest prefix of `nameParts` that is a reference to `attributes`
+   * or a qualifier of one of them, see [[firstUnmatchedNamePartIndex]], or None if the whole name
+   * is a reference or if that prefix is ambiguous.
    */
-  private def matchedScriptingScopeLabelCount(nameParts: Seq[String]): Int = {
-    val isScopeLabel = nameParts.length >= 2 && {
-      // Scope labels are normalized like variable names, see `VariableResolution.lookupVariable`.
-      val label = if (SQLConf.get.caseSensitiveAnalysis) {
-        nameParts.head
-      } else {
-        nameParts.head.toLowerCase(Locale.ROOT)
-      }
-      SqlScriptingContextManager.get().flatMap(_.getVariableManager).exists(_.isScopeLabel(label))
+  private def referencePrefixLength(
+      nameParts: Seq[String],
+      attributes: Seq[Attribute],
+      resolver: Resolver): Option[Int] = {
+    val attributeSeq = new AttributeSeq(attributes)
+    lazy val attributeNames = attributes.map(_.name).distinct
+    def qualifiesAttribute(prefix: Seq[String]): Boolean = attributeNames.exists { name =>
+      val (candidates, nestedFields) =
+        attributeSeq.getCandidatesForResolution(prefix :+ name, resolver)
+      candidates.nonEmpty && nestedFields.isEmpty
     }
-    if (isScopeLabel) 1 else 0
+    // The longest prefix that resolves to something decides.
+    val decisions = (nameParts.length to 1 by -1).iterator.flatMap { length =>
+      val prefix = nameParts.take(length)
+      val (candidates, nestedFields) = attributeSeq.getCandidatesForResolution(prefix, resolver)
+      candidates.distinct match {
+        case Seq(_, _, _*) =>
+          Some(None)
+        case Seq(attribute)
+            if matchedFieldCount(attribute, nestedFields, resolver) == nestedFields.length =>
+          Some(Option.when(length < nameParts.length)(length))
+        case _ if length < nameParts.length && qualifiesAttribute(prefix) =>
+          Some(Some(length))
+        case _ =>
+          None
+      }
+    }
+    decisions.nextOption().getOrElse(Some(0))
   }
 
   /**
@@ -479,53 +530,6 @@ object OptionalReferences {
   private def isFieldNotFound(throwable: Throwable): Boolean = throwable match {
     case sparkThrowable: SparkThrowable => sparkThrowable.getCondition == "FIELD_NOT_FOUND"
     case _ => false
-  }
-
-  /**
-   * Returns the number of leading name parts of `nameParts` that match the longest reference path
-   * to `attribute`. A qualified-access-only attribute requires at least one qualifier part.
-   */
-  private def matchedNamePartCount(
-      nameParts: Seq[String],
-      attribute: Attribute,
-      resolver: Resolver): Int = {
-    val minQualifierLength = if (attribute.qualifiedAccessOnly) 1 else 0
-    (minQualifierLength to attribute.qualifier.length).iterator
-      .map { qualifierLength =>
-        val qualifier = attribute.qualifier.takeRight(qualifierLength)
-        val matchedQualifierParts = matchedQualifierPartCount(nameParts, qualifier, resolver)
-        if (matchedQualifierParts < qualifier.length) {
-          matchedQualifierParts
-        } else if (!resolver(attribute.name, nameParts(qualifier.length))) {
-          qualifier.length
-        } else {
-          qualifier.length + 1 +
-          matchedFieldCount(attribute, nameParts.drop(qualifier.length + 1), resolver)
-        }
-      }
-      .foldLeft(0)(math.max)
-  }
-
-  /**
-   * Returns the number of leading name parts of `nameParts` that match the leading parts of
-   * `qualifier`, or 0 if `nameParts` has no name part after a whole qualifier. A reference needs
-   * at least one name part after its qualifier, so a shorter name, such as `default.id` for the
-   * qualifier `default.t`, is not on a reference path of this qualifier at all.
-   */
-  private def matchedQualifierPartCount(
-      nameParts: Seq[String],
-      qualifier: Seq[String],
-      resolver: Resolver): Int = {
-    if (nameParts.length > qualifier.length) {
-      qualifier
-        .zip(nameParts)
-        .takeWhile {
-          case (qualifierPart, namePart) => resolver(qualifierPart, namePart)
-        }
-        .length
-    } else {
-      0
-    }
   }
 
   /**

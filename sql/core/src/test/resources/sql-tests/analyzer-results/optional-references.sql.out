@@ -1136,6 +1136,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT 1 FROM VALUES (named_struct('x', 1)) AS l(s) CROSS JOIN VALUES (named_struct('x', 2)) AS r(s)
+ORDER BY s.y?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`s`.`y`",
+    "proposal" : "`1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 111,
+    "stopIndex" : 114,
+    "fragment" : "s.y?"
+  } ]
+}
+
+
+-- !query
 SELECT addr.zip? FROM people GROUP BY id
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1588,6 +1610,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "system.unknown?"
   } ]
 }
+
+
+-- !query
+SET spark.sql.caseSensitive=true
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(true))
+
+
+-- !query
+SELECT SESSION.known?, SESSION.unknown?, SYSTEM.SESSION.unknown?
+-- !query analysis
+Project [variablereference(system.session.known=7) AS known#x, null AS unknown#x, null AS unknown#x]
++- OneRowRelation
+
+
+-- !query
+RESET spark.sql.caseSensitive
+-- !query analysis
+ResetCommand spark.sql.caseSensitive
 
 
 -- !query
@@ -2655,6 +2696,15 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLUMN_IS_NOT_VARIANT_TYPE",
   "sqlState" : "42K09"
 }
+
+
+-- !query
+SELECT CAST(arr?[0]:a AS STRING) AS a, CAST(missing?['k'].f:a AS STRING) AS b
+FROM VALUES (1) AS t(id)
+-- !query analysis
+Project [cast(null as string) AS a#x, cast(null as string) AS b#x]
++- SubqueryAlias t
+   +- LocalRelation [id#x]
 
 
 -- !query

@@ -23,25 +23,25 @@ import org.apache.spark.sql.catalyst.expressions.{
   LambdaFunction,
   LateralColumnAliasReference,
   NamedExpression,
-  PipeOperator,
   SubqueryExpression,
   UnaryExpression,
   Unevaluable
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
-  Distinct,
+  DefaultValueExpression,
   Filter,
+  GeneratedColumnExpression,
   LateralJoin,
   LogicalPlan,
   RepartitionByExpression,
   Sort,
-  SubqueryAlias,
   UnaryNode
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLAN_EXPRESSION}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -71,7 +71,9 @@ import org.apache.spark.sql.types.DataType
  * The rule never changes the plan that it is given, which can be analyzed again later, e.g. from a
  * plan cache: its decisions are nodes of the plan that it returns.
  */
-class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
+class ResolveOptionalReferences(
+    resolveAgain: LogicalPlan => LogicalPlan,
+    variableResolution: VariableResolution)
     extends Rule[LogicalPlan] {
   import ResolveOptionalReferences._
 
@@ -129,8 +131,8 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
           lateralJoin
         }
       case operator if operator.childrenResolved && !operator.resolved =>
-        lazy val attributes = visibleAttributes(operator)
-        operator.mapExpressions(replace(_, attributes, isTopLevel = true))
+        lazy val attributeGroups = visibleAttributeGroups(operator)
+        operator.mapExpressions(replace(_, attributeGroups, isTopLevel = true))
     }
   }
 
@@ -145,29 +147,37 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
    * }}}
    */
   private def replaceInAggregateExpressions(aggregate: Aggregate): Aggregate = {
-    lazy val attributes = visibleAttributes(aggregate)
+    lazy val attributeGroups = visibleAttributeGroups(aggregate)
     aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.map { expression =>
-      replace(expression, attributes, isTopLevel = true).asInstanceOf[NamedExpression]
+      replace(expression, attributeGroups, isTopLevel = true).asInstanceOf[NamedExpression]
     })
   }
 
   /**
-   * Replaces the optional references of `expression` that resolve to NULL against `attributes`.
+   * Replaces the optional references of `expression` that resolve to NULL against
+   * `attributeGroups`.
    * A top-level reference keeps its name through an [[Alias]] of its last name part.
    */
   private def replace(
       expression: Expression,
-      attributes: => Seq[Attribute],
+      attributeGroups: => Seq[Seq[Attribute]],
       isTopLevel: Boolean): Expression = expression match {
+    // The parser rejects optional references in these clauses of SQL text, but a column definition
+    // of an API, such as `Catalog.createTable`, parses its expressions on its own.
+    case default: DefaultValueExpression =>
+      rejectInDdl(default, "DEFAULT")
+    case generation: GeneratedColumnExpression =>
+      rejectInDdl(generation, "GENERATED ALWAYS AS")
     case unresolvedAttribute: UnresolvedAttribute
         if OptionalReferences.optionalNamePartIndices(unresolvedAttribute).nonEmpty &&
         OptionalReferences.resolvesToNull(
           nameParts = unresolvedAttribute.nameParts,
           optionalNamePartIndices = OptionalReferences.optionalNamePartIndices(unresolvedAttribute),
-          attributes = attributes,
+          attributeGroups = attributeGroups,
           resolver = conf.resolver,
-          isViewQuery = AnalysisContext.get.catalogAndNamespace.nonEmpty ||
-            AnalysisContext.get.isViewDefinition
+          isVariableQualifier = variableResolution.isVariableQualifier(
+            _,
+            includeScopeLabels = !isViewQuery)
         ) =>
       // The NULL keeps the position of the reference, e.g. for `CheckOptionalReferencesInDml`.
       CurrentOrigin.withOrigin(unresolvedAttribute.origin) {
@@ -187,9 +197,16 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     case subquery: SubqueryExpression if hasUnresolvedOptionalReferences(subquery.plan) =>
       wrapSubqueryPlan(subquery)
     case other if !other.resolved =>
-      other.mapChildren(replace(_, attributes, isTopLevel = false))
+      other.mapChildren(replace(_, attributeGroups, isTopLevel = false))
     case other =>
       other
+  }
+
+  private def rejectInDdl(expression: Expression, clause: String): Expression = {
+    OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
+      throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(clause, reference.origin)
+    }
+    expression
   }
 
   private def wrapSubqueryPlan[T <: SubqueryExpression](subquery: T): T = subquery.plan match {
@@ -243,48 +260,48 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
   }
 
   /**
-   * Returns the attributes that the name resolution of `operator` can match a multipart name
-   * against: the output of its children, the attributes that `Sort`, `Filter`, HAVING,
-   * DISTRIBUTE BY, and QUALIFY can reference from below their child, the output of the subquery
-   * of a lateral join, and the attributes of the outer query of a subquery.
+   * Returns the groups of attributes that the name resolution of `operator` can match a multipart
+   * name against, see `OptionalReferences.firstUnmatchedNamePartIndex`: the output of its children,
+   * with the output of the subquery of a lateral join, then the output of each operator below the
+   * child of a `Sort`, a `Filter`, DISTRIBUTE BY, or QUALIFY, or the input of the aggregate of
+   * HAVING, and then the attributes of the outer query of a subquery.
    */
-  private def visibleAttributes(operator: LogicalPlan): Seq[Attribute] = {
-    val localAttributes = operator.children.flatMap(namedAttributes)
-    val attributesFromBelow = operator match {
-      case sort: Sort => attributesForMissingReferences(sort.child)
-      case filter: Filter => attributesForMissingReferences(filter.child)
-      case repartition: RepartitionByExpression =>
-        attributesForMissingReferences(repartition.child)
-      case qualify: UnresolvedQualify => attributesForMissingReferences(qualify.child)
-      case UnresolvedHaving(_, aggregate: Aggregate) => namedAttributes(aggregate.child)
+  private def visibleAttributeGroups(operator: LogicalPlan): Seq[Seq[Attribute]] = {
+    val localAttributes = operator.children.flatMap(namedAttributes) ++ (operator match {
       case lateralJoin: LateralJoin => namedAttributes(lateralJoin.right.plan)
       case _ => Seq.empty
+    })
+    val attributeGroupsFromBelow = operator match {
+      case sort: Sort => attributeGroupsForMissingReferences(sort.child)
+      case filter: Filter => attributeGroupsForMissingReferences(filter.child)
+      case repartition: RepartitionByExpression =>
+        attributeGroupsForMissingReferences(repartition.child)
+      case qualify: UnresolvedQualify => attributeGroupsForMissingReferences(qualify.child)
+      case UnresolvedHaving(_, aggregate: Aggregate) => Seq(namedAttributes(aggregate.child))
+      case _ => Seq.empty
     }
-    val outerAttributes = AnalysisContext.get.outerPlan.toSeq.flatMap {
-      case having @ UnresolvedHaving(_, aggregate: Aggregate) =>
-        having.children.flatMap(namedAttributes) ++ namedAttributes(aggregate.child)
-      case outerPlan =>
-        outerPlan.children.flatMap(namedAttributes)
-    }
-    localAttributes ++ attributesFromBelow ++ outerAttributes
+    val outerAttributeGroups = AnalysisContext.get.outerPlan.toSeq
+      .flatMap(ColumnResolutionHelper.outerReferenceSources)
+      .map(_.children.flatMap(namedAttributes))
+    localAttributes +: (attributeGroupsFromBelow ++ outerAttributeGroups)
   }
 
   private def namedAttributes(plan: LogicalPlan): Seq[Attribute] =
     plan.output ++ plan.metadataOutput
 
   /**
-   * Returns the attributes below `plan` that a `Sort`, a `Filter`, DISTRIBUTE BY, or QUALIFY on
-   * top of `plan` can reference as missing attributes, mirroring
-   * `ColumnResolutionHelper.resolveExprsAndAddMissingAttrs`.
+   * Returns the output of each operator below `plan` that a `Sort`, a `Filter`, DISTRIBUTE BY, or
+   * QUALIFY on top of `plan` can reference as missing attributes: those that
+   * `ColumnResolutionHelper.resolveExprsAndAddMissingAttrs` resolves one operator after the other
+   * and adds to the output of `plan`.
    */
-  private def attributesForMissingReferences(plan: LogicalPlan): Seq[Attribute] = plan match {
-    case unary: UnaryNode
-        if !unary.isInstanceOf[Distinct] && !unary.isInstanceOf[SubqueryAlias] &&
-        !unary.isInstanceOf[PipeOperator] =>
-      namedAttributes(unary.child) ++ attributesForMissingReferences(unary.child)
-    case _ =>
-      Seq.empty
-  }
+  private def attributeGroupsForMissingReferences(plan: LogicalPlan): Seq[Seq[Attribute]] =
+    plan match {
+      case unary: UnaryNode if ColumnResolutionHelper.canAddMissingAttrsThrough(unary) =>
+        namedAttributes(unary.child) +: attributeGroupsForMissingReferences(unary.child)
+      case _ =>
+        Seq.empty
+    }
 }
 
 object ResolveOptionalReferences {
@@ -318,6 +335,14 @@ object ResolveOptionalReferences {
         other.children.exists(isOrHasUnresolvedOptionalReference)
     })
   }
+
+  /**
+   * Whether the plan is the query of a view that is read or defined. A view cannot see the
+   * variables of a SQL script, so a label does not qualify a name there, and a definition that
+   * depends on a label fails when the view is created rather than when it is read.
+   */
+  private def isViewQuery: Boolean =
+    AnalysisContext.get.catalogAndNamespace.nonEmpty || AnalysisContext.get.isViewDefinition
 
   private def isPlanOfSubquery: Boolean = AnalysisContext.get.isSubqueryPlan
 

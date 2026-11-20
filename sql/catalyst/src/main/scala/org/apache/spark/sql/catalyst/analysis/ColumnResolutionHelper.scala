@@ -55,10 +55,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       (exprs, plan)
     } else {
       plan match {
-        // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
-        // add attributes via its children.
-        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
-          && !u.isInstanceOf[PipeOperator] =>
+        case u: UnaryNode if ColumnResolutionHelper.canAddMissingAttrsThrough(u) =>
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
@@ -272,7 +269,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // stable column name; CleanupAliases later trims this alias where it's not a top-level
         // projection output.
         if (newChild.dataType == NullType) {
-          Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+          Alias(
+            OptionalReferences.extractedFromNullReference(newChild, extracted),
+            toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
         } else {
           extracted
         }
@@ -312,20 +311,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     if (outerPlan.isEmpty) return e
 
     def resolve(nameParts: Seq[String]): Option[Expression] = try {
+      val resolved = ColumnResolutionHelper.outerReferenceSources(outerPlan.get).iterator
+        .flatMap(_.resolveChildren(nameParts, conf.resolver))
+        .nextOption()
       outerPlan.get match {
-        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-        case u @ UnresolvedHaving(_, agg: Aggregate) =>
-          agg.resolveChildren(nameParts, conf.resolver)
-            .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map {
-              case alias: Alias =>
-                wrapOuterReference(alias.child)
-              case other => wrapOuterReference(other)
-            }
-        case other =>
-          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+        case UnresolvedHaving(_, _: Aggregate) =>
+          resolved.map {
+            case alias: Alias =>
+              wrapOuterReference(alias.child)
+            case other => wrapOuterReference(other)
+          }
+        case _ =>
+          resolved.map(wrapOuterReference)
       }
     } catch {
       case ae: AnalysisException =>
@@ -833,5 +830,30 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case n: NamedExpression =>
       n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
     case _ => false
+  }
+}
+
+object ColumnResolutionHelper {
+
+  /**
+   * Returns true if `resolveExprsAndAddMissingAttrs` can resolve a name below `plan` and add the
+   * attribute to the output of `plan`. It cannot for a `Distinct`, a `SubqueryAlias`, or a
+   * `PipeOperator`, nor for an operator with more than one child.
+   */
+  def canAddMissingAttrsThrough(plan: LogicalPlan): Boolean = plan match {
+    case _: Distinct | _: SubqueryAlias | _: PipeOperator => false
+    case _: UnaryNode => true
+    case _ => false
+  }
+
+  /**
+   * Returns the plans against whose children `resolveOuterRef` resolves a name of a subquery of
+   * `outerPlan`. A subquery in HAVING can reference grouping expressions and aggregate functions,
+   * so it resolves a name against the input of the aggregate first, and then against its output;
+   * `ResolveAggregateFunctions` pushes them down to the aggregate later, like `resolveColumns`.
+   */
+  def outerReferenceSources(outerPlan: LogicalPlan): Seq[LogicalPlan] = outerPlan match {
+    case having @ UnresolvedHaving(_, aggregate: Aggregate) => Seq(aggregate, having)
+    case other => Seq(other)
   }
 }

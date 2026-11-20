@@ -639,7 +639,7 @@ object SQLConf {
       .doc("When true, enables resolution of optional column, field, and variable references " +
         "(for example `col?`) in single-pass analyzer. Otherwise, resolution falls back to " +
         "fixed-point analyzer.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
@@ -8770,7 +8770,7 @@ object SQLConf {
         "DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
         "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
         "and OPTIONS clauses of table and function definitions reject optional references.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -8782,7 +8782,7 @@ object SQLConf {
         "subquery resolves names that are neither its parameters nor its own columns as " +
         "columns of the query around the subquery, before session variables. When false (the " +
         "default), the body does not reference the calling query, like the body of a view.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

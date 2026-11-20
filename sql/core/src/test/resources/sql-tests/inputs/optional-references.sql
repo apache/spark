@@ -134,6 +134,9 @@ SELECT addr.state? FROM people a JOIN people b ON a.id = b.id;
 SELECT id.missing? FROM people;
 SELECT missing? FROM people GROUP BY id;
 SELECT 1 AS c FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b ORDER BY x?;
+-- So is the error of a missing field of an ambiguous column.
+SELECT 1 FROM VALUES (named_struct('x', 1)) AS l(s) CROSS JOIN VALUES (named_struct('x', 2)) AS r(s)
+ORDER BY s.y?;
 
 -- An optional reference to an existing column is still subject to the usual rules, also where
 -- the column is below the operator that references it, and in a subquery.
@@ -180,6 +183,10 @@ SELECT session?;
 SELECT system.session?;
 SELECT system.known?;
 SELECT system.unknown?;
+-- The qualifiers of session variables are case insensitive, also in a case-sensitive analysis.
+SET spark.sql.caseSensitive=true;
+SELECT SESSION.known?, SESSION.unknown?, SYSTEM.SESSION.unknown?;
+RESET spark.sql.caseSensitive;
 SELECT known_struct.b;
 -- The name of a missing field of a variable is not a lateral column alias either.
 SELECT known_struct.b?, b + 1;
@@ -427,6 +434,9 @@ FROM orders;
 SELECT CAST(v?:a AS STRING) AS a, CAST(missing?:a AS STRING) AS b, missing?:a::INT AS i
 FROM VALUES (parse_json('{"a": 1}')) AS t(v);
 SELECT NULL:a;
+-- So is a path of a subscript or a field of a missing reference.
+SELECT CAST(arr?[0]:a AS STRING) AS a, CAST(missing?['k'].f:a AS STRING) AS b
+FROM VALUES (1) AS t(id);
 
 -- IDENTIFIER clause.
 SELECT IDENTIFIER('id')?, IDENTIFIER('name')? FROM people;

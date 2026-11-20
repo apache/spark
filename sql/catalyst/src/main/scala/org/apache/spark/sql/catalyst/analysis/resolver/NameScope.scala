@@ -667,18 +667,22 @@ class NameScope(
 
   /**
    * Returns the attributes that [[resolveMultipartName]] matches multipart names against with
-   * `parameters`, regardless of whether they can be referenced in the current clause: the main
-   * output, the metadata columns, and the hidden output if `parameters` allow resolving names by
-   * it. For example, used to find the first name part of an optional reference such as `t.col?`
-   * that does not resolve.
+   * `parameters`, regardless of whether they can be referenced in the current clause, in the
+   * groups that [[tryResolveMultipartNameByOutput]] tries one after the other: the main output,
+   * the metadata columns, and the hidden output if `parameters` allow resolving names by it. For
+   * example, used to find the first name part of an optional reference such as `t.col?` that does
+   * not resolve, see `OptionalReferences.firstUnmatchedNamePartIndex`.
    */
-  def attributesForNameMatching(parameters: NameResolutionParameters): Seq[Attribute] = {
+  def attributeGroupsForNameMatching(
+      parameters: NameResolutionParameters): Seq[Seq[Attribute]] = {
+    val attributes = attributesForResolution.attrs
     val hiddenAttributes = if (parameters.canResolveNameByHiddenOutput) {
-      hiddenOutput
+      getHiddenOutputCandidates(attributes, canReferenceAggregatedAccessOnlyAttributes = true)
     } else {
-      getMetadataOutputCandidates(hiddenOutput)
+      Seq.empty
     }
-    output ++ hiddenAttributes
+    Seq(getMainOutputCandidates(attributes), getMetadataOutputCandidates(attributes),
+      hiddenAttributes)
   }
 
   /**
@@ -1440,14 +1444,16 @@ class NameScopeStack(
       val outerScopeParameters = NameResolutionParameters(
         canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutputInSubquery
       )
-      val attributes = current.attributesForNameMatching(parameters) ++
-        outerScopes.flatMap(_.attributesForNameMatching(outerScopeParameters))
+      val attributeGroups = current.attributeGroupsForNameMatching(parameters) ++
+        outerScopes.flatMap(_.attributeGroupsForNameMatching(outerScopeParameters))
       if (OptionalReferences.resolvesToNull(
           nameParts = multipartName,
           optionalNamePartIndices = parameters.optionalNamePartIndices,
-          attributes = attributes,
+          attributeGroups = attributeGroups,
           resolver = conf.resolver,
-          isViewQuery = parameters.resolvingView
+          isVariableQualifier = variableResolution.isVariableQualifier(
+            _,
+            includeScopeLabels = !parameters.resolvingView)
         )) {
         Some(
           NameTarget(

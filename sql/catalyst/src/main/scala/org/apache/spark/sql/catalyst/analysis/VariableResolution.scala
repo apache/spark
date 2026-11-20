@@ -157,11 +157,7 @@ class VariableResolution(
    * @return Reference to the variable.
    */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
-    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
-      nameParts
-    } else {
-      nameParts.map(_.toLowerCase(Locale.ROOT))
-    }
+    val namePartsCaseAdjusted = normalizeNameParts(nameParts)
 
     SqlScriptingContextManager
       .get()
@@ -215,18 +211,44 @@ class VariableResolution(
     }
   }
 
+  /**
+   * Returns true if a variable that [[lookupVariable]] resolves can have the qualifier
+   * `qualifier`: `session` or `system.session` for a session variable, or, if
+   * `includeScopeLabels`, the label of an active SQL scripting scope for the variables of the
+   * scope, i.e. of a compound statement or a FOR statement.
+   */
+  def isVariableQualifier(qualifier: Seq[String], includeScopeLabels: Boolean): Boolean = {
+    isSessionVariableQualifier(qualifier) ||
+    includeScopeLabels && qualifier.length == 1 &&
+    !isForbiddenLabelOrForVariableName(qualifier.head) &&
+    SqlScriptingContextManager
+      .get()
+      .flatMap(_.getVariableManager)
+      .exists(_.isScopeLabel(normalizeNameParts(qualifier).head))
+  }
+
+  // Variable names and scope labels are case insensitive unless the analysis is case sensitive.
+  private def normalizeNameParts(nameParts: Seq[String]): Seq[String] = {
+    if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+  }
+
   // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
   private def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 || {
-      if (nameParts.length == 2) {
-        nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else if (nameParts.length == 3) {
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else {
-        false
-      }
-    }
+    nameParts.length == 1 || isSessionVariableQualifier(nameParts.init)
+  }
+
+  private def isSessionVariableQualifier(qualifier: Seq[String]): Boolean = qualifier match {
+    case Seq(namespace) =>
+      namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+    case Seq(catalog, namespace) =>
+      catalog.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+    case _ =>
+      false
   }
 
 }

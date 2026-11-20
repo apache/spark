@@ -51,7 +51,7 @@ case object ExtractSemiStructuredFields extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(SEMI_STRUCTURED_EXTRACT), ruleId) {
     case SemiStructuredExtract(column, field) if column.resolved =>
-      if (OptionalReferences.isNullReference(column)) {
+      if (OptionalReferences.holdsNullReference(column)) {
         // The column is an optional reference that is not found, so the field is NULL, like a
         // field of a missing struct column.
         OptionalReferences.nullReference(VariantType)

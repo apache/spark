@@ -64,19 +64,21 @@ object ParameterHandler {
   private def performSubstitution(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, PositionMapper) = {
+      positionalParams: List[String] = List.empty): ParameterSubstitution = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return (sqlText, PositionMapper.identity(sqlText))
+      return noSubstitution(sqlText)
     }
 
     val substitutor = new SubstituteParamsParser()
-    val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
+    substitutor.substituteParameters(sqlText,
       namedParams = namedParams, positionalParams = positionalParams)
-
-    (substituted, positionMapper)
   }
+
+  private def noSubstitution(sqlText: String): ParameterSubstitution =
+    ParameterSubstitution(sqlText, 0, PositionMapper.identity(sqlText),
+      parsedWithOptionalReferences = false)
 
   /**
    * Converts a value to an Expression, handling different input types safely.
@@ -156,6 +158,17 @@ object ParameterHandler {
   def substituteParameters(
       sqlText: String,
       context: ParameterContext): (String, PositionMapper) = {
+    val substitution = substituteParametersForParsing(sqlText, context)
+    (substitution.sqlText, substitution.positionMapper)
+  }
+
+  /**
+   * Same as [[substituteParameters]], but returns the whole [[ParameterSubstitution]], whose SQL
+   * text the parser has to parse with the optional references that the substitution chose.
+   */
+  def substituteParametersForParsing(
+      sqlText: String,
+      context: ParameterContext): ParameterSubstitution = {
     require(context != null, "Parameter context cannot be null")
 
     context match {
@@ -186,11 +199,11 @@ object ParameterHandler {
   private def handleHybridParameters(
       sqlText: String,
       args: Seq[Any],
-      paramNames: Seq[String]): (String, PositionMapper) = {
+      paramNames: Seq[String]): ParameterSubstitution = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return (sqlText, PositionMapper.identity(sqlText))
+      return noSubstitution(sqlText)
     }
 
     // Prepare parameters for both types.
@@ -205,11 +218,9 @@ object ParameterHandler {
 
     // Perform substitution; the substitutor validates parameter consistency internally.
     val substitutor = new SubstituteParamsParser()
-    val (substitutedSql, _, positionMapper) = substitutor.substitute(
+    substitutor.substituteParameters(
       sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
       hasOnlyNamedParams, args, paramNames)
-
-    (substitutedSql, positionMapper)
   }
 
   /**

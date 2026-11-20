@@ -62,7 +62,7 @@ class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
       column.dataType match {
         // The column is an optional reference that is not found, so the field is NULL, like a
         // field of a missing struct column.
-        case _ if OptionalReferences.isNullReference(column) =>
+        case _ if OptionalReferences.holdsNullReference(column) =>
           OptionalReferences.nullReference(VariantType)
         case _: VariantType =>
           val extractResult = VariantGet(

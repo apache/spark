@@ -900,7 +900,10 @@ class Analyzer(
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
     Batch("Resolve Optional References", fixedPoint,
-      new ResolveOptionalReferences(resolveAgain = executeResolutionBatch)),
+      new ResolveOptionalReferences(
+        resolveAgain = executeResolutionBatch,
+        variableResolution =
+          new VariableResolution(catalogManager.tempVariableManager, catalogManager))),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
