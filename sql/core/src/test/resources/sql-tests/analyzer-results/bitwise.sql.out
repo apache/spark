@@ -421,6 +421,27 @@ Project [cast(null as map<int,array<int>>) AS NULL#x, (20181117 >> 2) AS (201811
 
 
 -- !query
+select array(1), map(1, 2), struct(1), 20181117 >> 2, 20181117 >>> 2
+-- !query analysis
+Project [array(1) AS array(1)#x, map(1, 2) AS map(1, 2)#x, struct(col1, 1) AS struct(1)#x, (20181117 >> 2) AS (20181117 >> 2)#x, (20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1]' IS JSON ARRAY, 20181117 >> 2, 20181117 >>> 2
+-- !query analysis
+Project [is_json([1], Array) AS ([1] IS JSON ARRAY)#x, (20181117 >> 2) AS (20181117 >> 2)#x, (20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as array /* comment */ <array /* comment */ <int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
 select 1 << 1 + 2 as plus_over_shift
 -- !query analysis
 Project [(1 << (1 + 2)) AS plus_over_shift#x]
