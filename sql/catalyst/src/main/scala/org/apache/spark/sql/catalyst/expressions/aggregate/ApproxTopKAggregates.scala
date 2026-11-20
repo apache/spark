@@ -192,6 +192,9 @@ case class ApproxTopK(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k")
 }
@@ -650,6 +653,9 @@ case class ApproxTopKAccumulate(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_accumulate")
 }
@@ -988,6 +994,9 @@ case class ApproxTopKCombine(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_combine")

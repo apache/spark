@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.JsonValue
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -377,6 +377,28 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
         sql(s"SELECT $func('{}', CAST(NULL AS STRING))").collect()
       }
       assert(nullPath.getCondition == "DATATYPE_MISMATCH.UNEXPECTED_NULL", s"for $func")
+    }
+  }
+
+  test("invalid: a foldable path that throws when evaluated is a clean invalid-argument error") {
+    // A foldable path whose evaluation always fails: index 0 is invalid for element_at.
+    for {
+      func <- Seq("json_value", "json_query", "json_exists")
+      prefix <- Seq("", "builtin.", "system.builtin.")
+    } {
+      val call = s"$prefix$func('{}', element_at(array('$$.a'), 0))"
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT $call").collect()
+      }
+      checkError(
+        exception = e,
+        condition = "INVALID_PARAMETER_VALUE.EVALUATION_ERROR",
+        parameters = Map(
+          "functionName" -> s"`$func`",
+          "parameter" -> "`path`",
+          "invalidValue" -> "\"element_at(array($.a), 0)\""),
+        context = ExpectedContext(fragment = call, start = 7, stop = 6 + call.length))
+      assert(e.getCause.asInstanceOf[SparkThrowable].getCondition == "INVALID_INDEX_OF_ZERO")
     }
   }
 

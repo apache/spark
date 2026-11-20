@@ -32,6 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.StorageFilterImpl
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, DoubleType, LongType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Covers the storage-filter contract for a data source v2 scan. With
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types.{BinaryType, DoubleType, LongType, StructType}
  * `SupportsStorageFilters` gets the runtime bloom filter over those columns in every reader. The
  * bloom stays in the Filter above the scan, skipped on the rows the reader marks as checked.
  */
+@DataSourceV2Test
 class StorageFilterPushDownSuite
   extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper with PredicateHelper {
 

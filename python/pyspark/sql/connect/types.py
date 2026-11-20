@@ -31,6 +31,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     DecimalType,
     DoubleType,
+    FileType,
+    FileTypeMode,
     FloatType,
     GeographyType,
     GeometryType,
@@ -197,6 +199,11 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.array.contains_null = data_type.containsNull
     elif isinstance(data_type, VariantType):
         ret.variant.CopyFrom(pb2.DataType.Variant())
+    elif isinstance(data_type, FileType):
+        if data_type.mode == FileTypeMode.EXTERNAL:
+            ret.file.mode = pb2.DataType.FILE_TYPE_MODE_EXTERNAL
+        else:
+            ret.file.mode = pb2.DataType.FILE_TYPE_MODE_UNKNOWN
     elif isinstance(data_type, GeometryType):
         ret.geometry.srid = data_type.srid
     elif isinstance(data_type, GeographyType):
@@ -332,6 +339,10 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     elif schema.HasField("variant"):
         return VariantType()
+    elif schema.HasField("file"):
+        if schema.file.mode == pb2.DataType.FILE_TYPE_MODE_EXTERNAL:
+            return FileType.external()
+        return FileType()
     elif schema.HasField("geometry"):
         srid = schema.geometry.srid
         if srid == GeometryType.MIXED_SRID:

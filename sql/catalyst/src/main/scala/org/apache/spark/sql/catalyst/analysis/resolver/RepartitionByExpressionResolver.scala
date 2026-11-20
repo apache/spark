@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression}
-import org.apache.spark.sql.types.{DataType, VariantType}
+import org.apache.spark.sql.types.{DataType, FileType, VariantType}
 
 /**
  * Resolver class that resolves [[RepartitionByExpression]] operators.
@@ -97,6 +97,7 @@ class RepartitionByExpressionResolver(resolver: Resolver, expressionResolver: Ex
     )
 
     validateRepartitionByVariant(resolvedRepartitionByExpression)
+    validateRepartitionByFile(resolvedRepartitionByExpression)
 
     if (!resolvedChildWithMissingAttributes.eq(resolvedChild)) {
       retainOriginalOutput(
@@ -127,5 +128,25 @@ class RepartitionByExpressionResolver(resolver: Resolver, expressionResolver: Ex
 
   private def hasVariantType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
+
+  // FILE is not comparable, so it cannot be a DISTRIBUTE BY / repartition key.
+  private def validateRepartitionByFile(
+      repartitionByExpression: RepartitionByExpression): Unit = {
+    val fileExpressionInPartitionExpression =
+      repartitionByExpression.partitionExpressions.find(e => hasFileType(e.dataType))
+
+    if (fileExpressionInPartitionExpression.isDefined) {
+      val fileExpr = fileExpressionInPartitionExpression.get
+      repartitionByExpression.failAnalysis(
+        errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
+        messageParameters =
+          Map("expr" -> toSQLExpr(fileExpr), "dataType" -> toSQLType(fileExpr.dataType))
+      )
+    }
+  }
+
+  private def hasFileType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[FileType])
   }
 }

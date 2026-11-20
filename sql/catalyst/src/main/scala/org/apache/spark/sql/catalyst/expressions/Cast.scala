@@ -386,8 +386,8 @@ object Cast extends QueryErrorsBase {
    * (micro and nanosecond), TIME -> TIMESTAMP_NTZ (whose date fields come from CURRENT_DATE), and
    * both directions of TIME <-> TIMESTAMP_LTZ (the LTZ value is an absolute instant, so extracting
    * its time-of-day and attaching CURRENT_DATE to a TIME both depend on the session time zone).
-   * A cast to STRING is zone-dependent whenever one of those timestamps appears anywhere in the
-   * source type, including under ARRAY/MAP/STRUCT.
+   * A cast to STRING is zone-dependent whenever one of those timestamps, or a VARIANT, appears
+   * anywhere in the source type, including under ARRAY/MAP/STRUCT.
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
@@ -437,8 +437,8 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
-    // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ leaf with `zoneId`, while
-    // the complex-to-complex cases above only match a target of the same shape.
+    // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ or VARIANT leaf with
+    // `zoneId`, while the complex-to-complex cases above only match a target of the same shape.
     case (from, _: StringType) => from.existsRecursively(needsTimeZoneToString)
     case _ => false
   }
@@ -448,13 +448,11 @@ object Cast extends QueryErrorsBase {
    * ARRAY/MAP/STRUCT nodes return false; the caller uses `existsRecursively` to inspect
    * nested types, while Python UDTs recursively check their `sqlType`.
    *
-   * Only the LTZ families carry an absolute instant that has to be localized;
-   * TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders
-   * through `VariantVal.toString` at UTC (only a top-level VARIANT reads the zone,
-   * via the `(VariantType, _)` arm).
+   * Only the LTZ families and VARIANT (which can hold a TIMESTAMP) carry an absolute instant that
+   * has to be localized; TIMESTAMP_NTZ, DATE and TIME render on a fixed grid.
    */
   private def needsTimeZoneToString(dt: DataType): Boolean = dt match {
-    case TimestampType | _: TimestampLTZNanosType => true
+    case TimestampType | _: TimestampLTZNanosType | VariantType => true
     // A Python UDT renders through its `sqlType`; a Scala UDT through its `stringifyValue`.
     case pudt: PythonUserDefinedType => pudt.sqlType.existsRecursively(needsTimeZoneToString)
     case _ => false
@@ -610,8 +608,105 @@ object Cast extends QueryErrorsBase {
    */
   def isNoThrowLegacyCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (_: NumericType | BooleanType | _: StringType, _: NumericType | BooleanType) => true
+    case _ => isToPlainString(from, to)
+  }
+
+  /**
+   * Returns true if a cast from `from` type to `to` type in `evalMode` is total, as
+   * [[Expression.isTotal]] defines it: it never fails at runtime, and it gives equal results for
+   * equal values. The patterns matched reflect the current implementation in the Cast node and
+   * must stay in sync with it.
+   *
+   * A cast of a value with a FLOAT or DOUBLE in it to a type with a STRING or a VARIANT in it is
+   * left out whether or not it can fail, as it tells -0.0 from 0.0, which are equal. So is every
+   * cast from or to a type with a UDT in it, which renders its value with its own
+   * `stringifyValue`, or a Python UDT as its `sqlType`, which can tell apart values that are
+   * equal, and the checks here do not look inside it. The target is checked too, defensively,
+   * although only a UDT or a NULL can be cast to one.
+   *
+   * Among the other casts, the result is the union of the ones that can not fail in any eval mode
+   * and of the ones that can not fail in `evalMode`, so it does not depend on the order of the
+   * checks.
+   */
+  def isTotalCast(from: DataType, to: DataType, evalMode: EvalMode.Value): Boolean = {
+    // Whether a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`) is
+    // cast from or to.
+    val negativeScale = TypeUtils.hasNegativeScale(from) || TypeUtils.hasNegativeScale(to)
+    !tellsSignedZeros(from, to) && !hasUserDefinedType(from) && !hasUserDefinedType(to) &&
+      (cannotFailInAnyMode(from, to, negativeScale) ||
+        cannotFailInMode(from, to, evalMode, negativeScale))
+  }
+
+  // Whether the source type has a FLOAT or DOUBLE and the target type a STRING or VARIANT in it,
+  // so that the cast may keep the sign of a zero, e.g. -0.0 as '-0.0'. This is conservative: it
+  // does not match the fields of the types.
+  private def tellsSignedZeros(from: DataType, to: DataType): Boolean =
+    from.existsRecursively(t => t == FloatType || t == DoubleType) &&
+      to.existsRecursively(t => t.isInstanceOf[StringType] || t == VariantType)
+
+  // `existsRecursively` does not look inside a UDT, so neither does this.
+  private def hasUserDefinedType(dt: DataType): Boolean =
+    dt.existsRecursively(_.isInstanceOf[UserDefinedType[_]])
+
+  // The casts that can not fail in any eval mode, also in ANSI mode.
+  private def cannotFailInAnyMode(
+      from: DataType, to: DataType, negativeScale: Boolean): Boolean =
+    // A numeric up-cast holds also from or to a decimal of a negative scale, as a widening between
+    // decimals never calls `Decimal.toLong`; a change to a negative scale only checks that
+    // `spark.sql.legacy.allowNegativeScaleOfDecimal` is on. So does a decimal to a FLOAT or a
+    // DOUBLE. The other ones do not: `Decimal.toLong` raises for a decimal of a negative scale.
+    isNumericUpCast(from, to) || isDecimalToFloatOrDouble(from, to) ||
+      (!negativeScale && (isTimestampToDate(from, to) || isToPlainString(from, to)))
+
+  // The casts that can not fail in the given eval mode but can in another one: outside ANSI mode,
+  // the casts that return NULL, wrap or clamp for a value they can not convert.
+  private def cannotFailInMode(
+      from: DataType,
+      to: DataType,
+      evalMode: EvalMode.Value,
+      negativeScale: Boolean): Boolean = evalMode match {
+    // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast,
+    // and that one raises for a decimal of a negative scale.
+    case EvalMode.TRY => !negativeScale || !from.isInstanceOf[StringType]
+    // A cast of a date to a timestamp is left out also in LEGACY mode, as converting a date far
+    // from the epoch to microseconds overflows there.
+    case EvalMode.LEGACY =>
+      !negativeScale && (isStringToDatetime(from, to) || isNoThrowLegacyCast(from, to))
+    case EvalMode.ANSI => false
+  }
+
+  // Only the numeric pairs are taken from `canUpCast`, which also covers e.g. DATE to TIMESTAMP,
+  // which can overflow, and casts between complex types. Among the numeric ones, it only takes a
+  // decimal to an integral type whose values all fit.
+  private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: NumericType, _: NumericType) => canUpCast(from, to)
+    case _ => false
+  }
+
+  // `Decimal.toDouble` and `Decimal.toFloat` round through a `BigDecimal`, also for a negative
+  // scale, and do not check the range in ANSI mode.
+  private def isDecimalToFloatOrDouble(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: DecimalType, FloatType | DoubleType) => true
+    case _ => false
+  }
+
+  private def isTimestampToDate(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (TimestampType | TimestampNTZType, DateType) => true
+    case _ => false
+  }
+
+  // A CHAR or VARCHAR target checks the length of the string. A string to a STRING of another
+  // collation, as `CollationTypeCoercion` adds for an explicit `COLLATE`, keeps the value.
+  private def isToPlainString(from: DataType, to: DataType): Boolean = (from, to) match {
     case (_: NumericType | BooleanType | _: StringType, s: StringType) =>
       StringHelper.isPlainString(s)
+    case _ => false
+  }
+
+  // A string to a date or a timestamp does not raise in LEGACY mode: the parsers catch the errors
+  // and return None, which becomes NULL. `isNoThrowLegacyCast` does not cover it.
+  private def isStringToDatetime(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: StringType, DateType | TimestampType | TimestampNTZType) => true
     case _ => false
   }
 
@@ -740,6 +835,8 @@ case class Cast(
     containsTag(Cast.USER_SPECIFIED_CAST)
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
+
+  override def isTotal: Boolean = Cast.isTotalCast(child.dataType, dataType, evalMode)
 
   // CAST_TO_TIMESTAMP must be set on a superset of the targets accepted by
   // Cast.isTimeToTimestampNTZ / isTimeToTimestampLTZ. ComputeCurrentTime relies on

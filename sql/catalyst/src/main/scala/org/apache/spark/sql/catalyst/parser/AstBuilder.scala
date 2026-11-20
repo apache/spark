@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, UNRESOLVED_IDENTIFIER}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
@@ -2523,6 +2523,65 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Add an [[UnresolvedGapFill]] to a logical plan. The feature gate is checked later, by the
+   * analyzer rule `ResolveGapFill`.
+   */
+  private def withGapFill(
+      ctx: GapFillClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.ALIGN, "ALIGN TO", ctx)
+    checkDuplicateClauses(ctx.RANGE, "RANGE BETWEEN", ctx)
+    checkDuplicateClauses(ctx.gapFillFillClause, "FILL", ctx)
+    checkDuplicateClauses(ctx.MAX, "MAX GAP", ctx)
+    checkDuplicateClauses(ctx.BIN_START, "BIN_START", ctx)
+    checkDuplicateClauses(ctx.IS_GENERATED, "IS_GENERATED", ctx)
+
+    val gapFill = UnresolvedGapFill(
+      partitionColumns = ctx.partitionCol.asScala.map(gapFillColumnRef).toSeq,
+      timeColumn = gapFillColumnRef(ctx.timeCol),
+      binWidthExpr = expression(ctx.binWidth),
+      originExpr = Option(ctx.origin).map(expression),
+      rangeStartExpr = Option(ctx.rangeStart).map(expression),
+      rangeEndExpr = Option(ctx.rangeEnd).map(expression),
+      fillColumns = ctx.gapFillFillClause.asScala.flatMap(_.fillColumns.asScala).map { c =>
+        GapFillColumn(gapFillColumnRef(c.multipartIdentifier), toGapFillMethod(c.gapFillMethod))
+      }.toSeq,
+      maxGapExpr = Option(ctx.maxGap).map(expression),
+      binStart = ctx.BIN_START.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.binStartAlias).map(getIdentifierText))
+      },
+      isGenerated = ctx.IS_GENERATED.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.isGeneratedAlias).map(getIdentifierText))
+      },
+      child = query)
+
+    if (ctx.tblAlias != null) {
+      SubqueryAlias(getIdentifierText(ctx.tblAlias), gapFill)
+    } else {
+      gapFill
+    }
+  }
+
+  /** A GAP FILL column name with its own origin, so that an error about it points at it. */
+  private def gapFillColumnRef(ctx: MultipartIdentifierContext): Expression = withOrigin(ctx) {
+    UnresolvedAttribute(visitMultipartIdentifier(ctx))
+  }
+
+  private def toGapFillMethod(ctx: GapFillMethodContext): GapFillMethod = withOrigin(ctx) {
+    if (ctx.LINEAR != null) {
+      GapFillMethod.Linear
+    } else if (ctx.FFILL != null || ctx.FORWARD != null) {
+      GapFillMethod.ForwardFill
+    } else if (ctx.BFILL != null || ctx.BACKWARD != null) {
+      GapFillMethod.BackwardFill
+    } else if (ctx.fillValue != null) {
+      GapFillMethod.Constant(expression(ctx.fillValue))
+    } else {
+      GapFillMethod.Null
+    }
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -2587,6 +2646,8 @@ class AstBuilder extends DataTypeAstBuilder
         withPivot(extension.pivotClause(), left)
       } else if (extension.unpivotClause() != null) {
         withUnpivot(extension.unpivotClause(), left)
+      } else if (extension.gapFillClause() != null) {
+        withGapFill(extension.gapFillClause(), left)
       } else {
         assert(extension.binByClause() != null)
         withBinBy(extension.binByClause(), left)
@@ -3399,59 +3460,27 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx).map(c => c.sourceName.identifier.getText)
   }
 
-  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
-    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val relation = createUnresolvedRelation(
-      ctx = ctx,
-      ident = ident,
-      optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Set.empty,
-      isStreaming = true)
-
-    Option(ctx.streamChangesClause) match {
-      case Some(changesCtx) =>
-        // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
-        val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogContext = buildStreamChangelogContext(changesCtx, options)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        val namedChanges = NamedStreamingRelation.withUserProvidedName(
-          RelationChanges(relation, changelogContext), sourceNameOpt)
-        val table = mayApplyAliasPlan(ctx.tableAlias, namedChanges)
-        table.optionalMap(ctx.watermarkClause)(withWatermark)
-      case None =>
-        // Regular streaming relation
-        val table = mayApplyAliasPlan(ctx.tableAlias, relation)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        tableWithWatermark.transformUp {
-          case r: UnresolvedRelation =>
-            NamedStreamingRelation.withUserProvidedName(
-              r.copy(isStreaming = true), sourceNameOpt)
-        }
-    }
-  }
-
-  /**
-   * Create a logical plan for a stream TVF.
-   * Handles two forms:
-   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
-   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
-   *    table names
-   */
-  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+  override def visitStreamRelation(ctx: StreamRelationContext): LogicalPlan =
     withOrigin(ctx) {
-      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
-        // Form: STREAM tableFunctionCallWithTrailingClauses
-        val sourceName = extractSourceName(funcTable.identifiedByClause)
-        val tvfPlan = buildTvfFromTableFunctionCall(
-          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
-        tvfPlan.transformUp {
-          case tvf: UnresolvedTableValuedFunction =>
-            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+      val sourceName = extractSourceName(ctx.identifiedByClause)
+      Option(ctx.multipartIdentifier).map { multipartIdentifier =>
+        val ident = visitMultipartIdentifier(multipartIdentifier)
+        var relation: LogicalPlan = createUnresolvedRelation(
+          ctx = ctx,
+          ident = ident,
+          optionsClause = Option(ctx.optionsClause),
+          writePrivileges = Set.empty,
+          isStreaming = true)
+
+        Option(ctx.streamChangesClause).foreach { changesCtx =>
+          val options = resolveOptions(Option(ctx.optionsClause))
+          val changelogContext = buildStreamChangelogContext(changesCtx, options)
+          relation = RelationChanges(relation, changelogContext)
         }
+        relation = NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        relation = mayApplyAliasPlan(ctx.tableAlias, relation)
+        relation.optionalMap(ctx.watermarkClause)(withWatermark)
       }.getOrElse {
-        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
-        val sourceName = extractSourceName(ctx.identifiedByClause)
         val tvfPlan = buildTvfFromTableFunctionCall(
           ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
         tvfPlan.transformUp {
@@ -7194,6 +7223,26 @@ class AstBuilder extends DataTypeAstBuilder
         condition = condition)
     }
 
+  /**
+   * Whether a write that parses the condition of a CHECK constraint again can resolve it
+   * differently from the ALTER TABLE, so that the constraint keeps its predicate; see
+   * `CheckConstraint.withPredicateDecision`. A keyword such as `current_date` or `user` without
+   * parentheses parses as a name, or as the function under
+   * `spark.sql.ansi.enforceReservedKeywords`, which is the only way the parser builds these
+   * functions.
+   */
+  private def keepsCheckPredicate(condition: Expression): Boolean = {
+    val names = condition.collect {
+      case u: UnresolvedAttribute => u.nameParts
+      case v: UnresolvedNamedLambdaVariable => v.nameParts
+    }
+    condition.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+      names.exists(n => n.length > 1 || LiteralFunctionResolution.isLiteralFunction(n)) ||
+      condition.exists {
+        case _: CurrentDate | _: CurrentTimestamp | _: CurrentTime | _: CurrentUser => true
+        case _ => false
+      }
+  }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
@@ -7256,7 +7305,8 @@ class AstBuilder extends DataTypeAstBuilder
           case c: CheckConstraint =>
             val relation = createUnresolvedRelation(ctx.identifierReference)
             val child = Filter(Not(c.child), relation)
-            AddCheckConstraint(child, c)
+            val check = if (keepsCheckPredicate(c.child)) c.copy(omitPredicate = Some(false)) else c
+            AddCheckConstraint(child, check)
           case _ =>
             val child = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
             AddConstraint(child, namedConstraint)
@@ -8417,6 +8467,8 @@ class AstBuilder extends DataTypeAstBuilder
       withUnpivot(c, left)
     }.getOrElse(Option(ctx.binByClause()).map { c =>
       withBinBy(c, left)
+    }.getOrElse(Option(ctx.gapFillClause()).map { c =>
+      withGapFill(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
@@ -8428,7 +8480,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))))))
+    ))))))))))))))
   }
 
   private def visitOperatorPipeSet(

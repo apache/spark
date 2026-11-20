@@ -19,6 +19,11 @@ These assignments spread runner demand without ranking jobs by importance, and i
 
 [schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 
+### CI dashboard
+
+See the [Apache CI dashboard](https://ci-test.apache.org/#/project/spark) for an overview
+of Spark's CI usage.
+
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.

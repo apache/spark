@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.checkpointing
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.VERSION_NUM
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -74,7 +75,7 @@ object CheckpointVersionManager extends Logging {
     val minRequiredVersion = getMinRequiredOffsetLogVersion(sparkSessionForStream)
     val configuredVersion = sparkSessionForStream.sessionState.conf.streamingOffsetLogFormatVersion
     val result = List[Int](currentDefaultVersion, minRequiredVersion, configuredVersion).max
-    logInfo(s"Retrieved offset log writer version=$result")
+    logInfo(log"Retrieved offset log writer version=${MDC(VERSION_NUM, result)}")
     result
   }
 
@@ -123,7 +124,7 @@ object CheckpointVersionManager extends Logging {
    */
   private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
     val result = sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion
-    logInfo(s"Retrieved commit log writer version=$result")
+    logInfo(log"Retrieved commit log writer version=${MDC(VERSION_NUM, result)}")
     result
   }
 

@@ -24,6 +24,7 @@ from sparktestsupport.utils import (
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
+    determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
 )
 
@@ -35,6 +36,22 @@ class DetermineModulesForFilesTests(unittest.TestCase):
                 self.assertEqual(
                     determine_modules_for_files([".github/workflows/build_main.yml"]), expected
                 )
+
+    def test_lint_js_module_selection(self):
+        cases = {
+            "docs/js/main.js": {modules.docs, modules.lint_js},
+            "dev/lint-js": {modules.lint_js},
+            "dev/spark-test-image/lint/Dockerfile": {modules.lint_js},
+            "ui-test/tests/__snapshots__/utils.test.js.snap": {modules.lint_js},
+            "ui-test/package.json": set(),
+        }
+        for filename, expected in cases.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(determine_modules_for_files([filename]), expected)
+        self.assertNotIn(
+            modules.lint_js,
+            determine_modules_for_files(["python/docs/source/_static/copybutton.js"]),
+        )
 
 
 class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
@@ -136,6 +153,25 @@ class DetermineModulesToTestTests(unittest.TestCase):
         }
         result = determine_modules_to_test([modules.sql, modules.core], deduplicated=False)
         self.assertCountEqual([module.name for module in result], expected)
+
+
+class DetermineShellScriptTestGoalsTests(unittest.TestCase):
+    def test_preserves_order_and_deduplicates_goals(self):
+        a, b, c = (modules.ShellScriptTestGoal(f"dev/{name}") for name in "abc")
+        with mock.patch.object(modules, "all_modules", []):
+            first = modules.Module("first", [], [], shell_script_test_goals=[b, a])
+            duplicate_b = modules.ShellScriptTestGoal("./dev//b")
+            second = modules.Module("second", [], [], shell_script_test_goals=[c, duplicate_b])
+            self.assertEqual(
+                determine_shell_script_test_goals([first, second], modules.TestStage.PRE_BUILD),
+                (b, a, c),
+            )
+
+    def test_root_includes_test_dependencies(self):
+        self.assertIn(
+            modules.ShellScriptTestGoal("dev/test-dependencies.sh"),
+            determine_shell_script_test_goals([modules.root], modules.TestStage.PRE_BUILD),
+        )
 
 
 class DetermineDanglingPythonTestsTests(unittest.TestCase):

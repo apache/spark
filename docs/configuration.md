@@ -843,10 +843,7 @@ Apart from these, the following properties are also available, and may be useful
     cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
     <code>applyInPandasWithState</code> and <code>transformWithState</code>;
     <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
-    and read a streaming source. In-process Python UDFs share the executor process and reject
-    this configuration; set their environment before executor startup instead, using
-    <code>spark.executorEnv.[EnvironmentVariableName]</code>. In local mode, set these variables
-    in the launching environment instead, because the interpreter runs inside the driver JVM.
+    and read a streaming source.
     <br /><br />
     A running streaming query holds a configuration snapshot, because its batches run on a cloned
     session whose configurations are copied when the query starts. A change made while a query is
@@ -976,21 +973,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.python.inProcess.sitePackages</code></td>
-  <td>(none)</td>
-  <td>
-    Comma-separated executor directories for packages used by opt-in in-process Python UDFs.
-    JEP must be directly importable from these directories. Spark distribution paths and
-    process <code>PYTHONPATH</code> take precedence; <code>.pth</code> files are processed.
-    Paths cannot contain single quotes, newlines, NUL, surrogate characters (including
-    supplementary Unicode characters) or the platform path separator. Restart the executor
-    process before changing these directories, including after a failed Python bootstrap.
-    See the <a href="sql-pyspark-inprocess-udf.html">in-process Python UDF guide</a>
-    for plugin setup, native dependencies and limitations.
-  </td>
-  <td>4.4.0</td>
-</tr>
-<tr>
   <td><code>spark.python.factory.idleWorkerMaxPoolSize</code></td>
   <td>(none)</td>
   <td>
@@ -1094,6 +1076,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to specify the Ivy user directory, used for the local Ivy cache and package files from
     <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
     which defaults to ~/.ivy2.
+    <code>SparkSession.addArtifact</code> reads the local repository search path from the session
+    configuration. Its runtime cache and downloaded jars remain session-local.
   </td>
   <td>1.3.0</td>
 </tr>
@@ -1104,6 +1088,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to an Ivy settings file to customize resolution of jars specified using
     <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    <code>SparkSession.addArtifact</code> reads this setting from its session, including values
+    inherited from SparkConf. Updates through <code>spark.conf.set</code> are blocked by default.
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
@@ -1129,7 +1115,7 @@ Apart from these, the following properties are also available, and may be useful
     Connection timeout for Ivy repository requests made by
     <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -1139,7 +1125,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>

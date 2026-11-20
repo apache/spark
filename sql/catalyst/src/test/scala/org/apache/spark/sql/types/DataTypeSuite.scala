@@ -373,6 +373,11 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
+  checkDataTypeFromJson(StringType("UTF8_LCASE"))
+  checkDataTypeFromJson(StringType("UNICODE_CI"))
+  checkDataTypeFromJson(CharType(1, "UNICODE"))
+  checkDataTypeFromJson(VarcharType(10, "UNICODE_CI"))
+
   // GEOMETRY type with default fixed SRID.
   checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
   checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
@@ -1793,10 +1798,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson("\"file unknown\"") === FileType())
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson("\"file managed\"")
+        DataType.fromJson("\"file other\"")
       },
       condition = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> "file managed"))
+      parameters = Map("invalidType" -> "file other"))
 
     // Field shapes without metadata or nullable are still fields, so a bare "file" is external.
     val noMetadata = "{\"type\":\"struct\",\"fields\":[" +

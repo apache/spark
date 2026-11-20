@@ -504,6 +504,46 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Some("l.x".attr === "r.y".attr))
   }
 
+  test("SPARK-61823: a constraint over a column that can fail is not inferred as a filter") {
+    // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
+    // projection and the filter above them. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over the non-deterministic `r`,
+    // which is computed on every row, does.
+    val projected = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        (Rand(1) * $"k").as("r"))
+      .sample(0.0, 0.5, withReplacement = false, 1L)
+      .select($"k", $"i", IsNull($"i").as("j"), $"r")
+    val condition = $"i" === $"k" && $"k" > 0 && $"j" && $"r" > 0.5
+    comparePlans(
+      InferFiltersFromConstraints(projected.where($"k" > 1).where(condition).analyze),
+      projected.where(IsNotNull($"k") && $"k" > 1).where(IsNotNull($"r") && condition).analyze)
+  }
+
+  test("SPARK-61921: a constraint over a column that can fail through a sort, a limit, an " +
+    "offset, a join or an aggregate is not inferred as a filter") {
+    // `i` can fail as the cast does, also through the sort, the limits, the offset and the join,
+    // and so can the aggregate result `c`. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over `g`, a grouping key, `m`, an
+    // aggregate function, or `f`, a non-deterministic result computed for every group, does.
+    val left = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"))
+      .orderBy($"k".asc)
+      .limit(5)
+      .offset(1)
+    val right = LocalRelation($"g".int, $"t".string)
+      .groupBy($"g")($"g", max($"g").as("m"),
+        Cast(max($"t"), IntegerType, evalMode = EvalMode.ANSI).as("c"),
+        Cast(Rand(1) * max($"g"), IntegerType, evalMode = EvalMode.ANSI).as("f"))
+    val joined = left.join(right)
+    val condition =
+      $"i" === $"k" && $"k" > 0 && $"c" === $"m" && $"m" > 0 && $"f" > 0 && $"g" > 0
+    comparePlans(
+      InferFiltersFromConstraints(joined.where(condition).analyze),
+      joined.where(IsNotNull($"k") && IsNotNull($"m") && IsNotNull($"f") && IsNotNull($"g") &&
+        condition).analyze)
+  }
+
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
     "instead of the root level nested type") {
     val structTestRelation = LocalRelation($"a".struct(StructType(
@@ -645,4 +685,333 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  private val asOfLeft = LocalRelation($"lt".int, $"lk".int, $"la".int)
+  private val asOfRight = LocalRelation($"rt".int, $"rk".int, $"ra".int)
+  private val leftKey = asOfLeft.output(1)
+  private val rightKey = asOfRight.output(1)
+  private val leftOther = asOfLeft.output(2)
+  private val rightOther = asOfRight.output(2)
+
+  // A backward as-of join on lt >= rt, by default ON lk = rk.
+  private def asOfJoin(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      condition: Expression = leftKey === rightKey): LogicalPlan = {
+    AsOfJoin(left, right, asOfLeft.output(0), asOfRight.output(0), Some(condition), joinType,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
+  }
+
+  // `e IN (SELECT a FROM ...)`, which the subquery rewrite turns into a semi join.
+  private def inSubquery(e: Expression): Expression =
+    InSubquery(Seq(e), ListQuery(LocalRelation($"a".int).select($"a")))
+
+  test("as-of joins: a left filter on the ON key also filters the right side") {
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft.where(leftKey % 100 === 7), asOfRight, joinType)
+        .analyze
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey % 100 === 7),
+        asOfRight.where(IsNotNull(rightKey) && rightKey % 100 === 7),
+        joinType).analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("as-of joins: a right filter on the ON key filters the left side only for an inner join") {
+    val right = asOfRight.where(rightKey === 5)
+    val expectedRight = asOfRight.where(IsNotNull(rightKey) && rightKey === 5)
+    val innerQuery = asOfJoin(asOfLeft, right, Inner).analyze
+    val innerAnswer = asOfJoin(
+      asOfLeft.where(IsNotNull(leftKey) && leftKey === 5), expectedRight, Inner).analyze
+    comparePlans(Optimize.execute(innerQuery), innerAnswer)
+
+    // A left outer join keeps every left row, so its left side gets no filter.
+    val leftOuterQuery = asOfJoin(asOfLeft, right, LeftOuter).analyze
+    val leftOuterAnswer = asOfJoin(asOfLeft, expectedRight, LeftOuter).analyze
+    comparePlans(Optimize.execute(leftOuterQuery), leftOuterAnswer)
+  }
+
+  test("as-of joins: drop the rows with a null ON key") {
+    val innerQuery = asOfJoin(asOfLeft, asOfRight, Inner).analyze
+    val innerAnswer = asOfJoin(
+      asOfLeft.where(IsNotNull(leftKey)), asOfRight.where(IsNotNull(rightKey)), Inner).analyze
+    comparePlans(Optimize.execute(innerQuery), innerAnswer)
+
+    val leftOuterQuery = asOfJoin(asOfLeft, asOfRight, LeftOuter).analyze
+    val leftOuterAnswer = asOfJoin(asOfLeft, asOfRight.where(IsNotNull(rightKey)), LeftOuter)
+      .analyze
+    comparePlans(Optimize.execute(leftOuterQuery), leftOuterAnswer)
+  }
+
+  test("as-of joins: a null-safe ON key keeps the rows with a NULL key") {
+    // NULL <=> NULL is true, so a NULL key can match and must not be filtered out.
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft, asOfRight, joinType, leftKey <=> rightKey).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("as-of joins: an IN or NOT IN subquery on a left ON key does not filter the right side") {
+    val in = inSubquery(leftKey)
+    // An IN inside an OR becomes an existence join, so it is left out too.
+    for (joinType <- Seq(Inner, LeftOuter); predicate <- Seq(in, Not(in), leftKey === 1 || in)) {
+      withClue(s"$joinType, $predicate: ") {
+        val originalQuery = asOfJoin(asOfLeft.where(predicate), asOfRight, joinType).analyze
+        val expectedLeft = joinType match {
+          case Inner => asOfLeft.where(IsNotNull(leftKey) && predicate)
+          case _ => asOfLeft.where(predicate)
+        }
+        val correctAnswer =
+          asOfJoin(expectedLeft, asOfRight.where(IsNotNull(rightKey)), joinType).analyze
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      }
+    }
+  }
+
+  test("as-of joins: an IN or NOT IN subquery on a right ON key does not filter the left side") {
+    val in = inSubquery(rightKey)
+    Seq(in, Not(in)).foreach { predicate =>
+      withClue(s"$predicate: ") {
+        val originalQuery = asOfJoin(asOfLeft, asOfRight.where(predicate), Inner).analyze
+        val correctAnswer = asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey)),
+          asOfRight.where(IsNotNull(rightKey) && predicate),
+          Inner).analyze
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      }
+    }
+  }
+
+  test("as-of joins: a left-only IN in a left outer ON condition does not filter the right side") {
+    // A left outer join keeps this condition in the join, and the ON key carries it to the right.
+    val condition = leftKey === rightKey && inSubquery(leftKey)
+    val originalQuery = asOfJoin(asOfLeft, asOfRight, LeftOuter, condition).analyze
+    val correctAnswer =
+      asOfJoin(asOfLeft, asOfRight.where(IsNotNull(rightKey)), LeftOuter, condition).analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("as-of joins: a scalar subquery compared with the ON key still filters the other side") {
+    // A scalar subquery runs once and stays a plain filter, so no input has to be sorted again.
+    val scalar = ScalarSubquery(LocalRelation($"a".int).select(max($"a")))
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft.where(leftKey > scalar), asOfRight, joinType).analyze
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey > scalar),
+        asOfRight.where(IsNotNull(rightKey) && rightKey > scalar),
+        joinType).analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("as-of joins: a filter that can fail is not inferred, even with the legacy flag on") {
+    def fails(e: Expression): Expression = failable(Cast(e, DoubleType))
+    withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true") {
+      // The as-of case would infer fails(rk) from the left filter.
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        val originalQuery = asOfJoin(asOfLeft.where(fails(leftKey)), asOfRight, joinType).analyze
+        val correctAnswer = asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey) && fails(leftKey)),
+          asOfRight.where(IsNotNull(rightKey)),
+          joinType).analyze
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      }
+      // The as-of case would infer fails(lk) from the right filter.
+      comparePlans(
+        Optimize.execute(asOfJoin(asOfLeft, asOfRight.where(fails(rightKey)), Inner).analyze),
+        asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey)),
+          asOfRight.where(IsNotNull(rightKey) && fails(rightKey)),
+          Inner).analyze)
+      // The as-of case adds only IS NOT NULL, not lk = la, from which a later run of the rule
+      // would infer fails(lk) from the left filter.
+      val condition = leftKey === rightKey && rightKey === leftOther
+      val originalQuery =
+        asOfJoin(asOfLeft.where(fails(leftOther)), asOfRight, Inner, condition).analyze
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(IsNotNull(leftOther) && fails(leftOther) && IsNotNull(leftKey)),
+        asOfRight.where(IsNotNull(rightKey)),
+        Inner,
+        condition).analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      // Nor a literal, such as rk = 1.
+      comparePlans(
+        Optimize.execute(asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter).analyze),
+        asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+          asOfRight.where(IsNotNull(rightKey)),
+          LeftOuter).analyze)
+    }
+  }
+
+  test("as-of joins: no filter is inferred across them in the body of a correlated subquery") {
+    // The main plan inlines a correlated scalar or lateral body and runs this rule on it there,
+    // once. A correlated EXISTS or IN body is inlined after that batch, so it gets none.
+    val join = asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter).analyze
+    val leftFiltered = asOfLeft.where(IsNotNull(leftKey) && leftKey === 1)
+    comparePlans(
+      Optimize.execute(Subquery(join, correlated = true)),
+      Subquery(asOfJoin(leftFiltered, asOfRight, LeftOuter).analyze, correlated = true))
+    // The body of an uncorrelated subquery runs on its own, so it gets its filters here.
+    comparePlans(
+      Optimize.execute(Subquery(join, correlated = false)),
+      Subquery(
+        asOfJoin(leftFiltered, asOfRight.where(IsNotNull(rightKey) && rightKey === 1), LeftOuter)
+          .analyze,
+        correlated = false))
+  }
+
+  test("as-of joins: an input subquery filter is not inferred again from an added key filter") {
+    // The Filter case would rewrite the subquery filter of the input with the added equality or
+    // literal, so the input would run its subquery join twice.
+    val notIn = Not(inSubquery(rightOther))
+    // ON lk = rk AND lk = ra adds rk = ra to the right side.
+    val condition = leftKey === rightKey && leftKey === rightOther
+    comparePlans(
+      Optimize.execute(asOfJoin(asOfLeft, asOfRight.where(notIn), LeftOuter, condition).analyze),
+      asOfJoin(
+        asOfLeft,
+        asOfRight.where(notIn && rightKey === rightOther && IsNotNull(rightKey) &&
+          IsNotNull(rightOther)),
+        LeftOuter,
+        condition).analyze)
+
+    // A left literal adds rk = 1 to the right side.
+    val pairIn = InSubquery(
+      Seq(rightKey, rightOther), ListQuery(LocalRelation($"x".int, $"y".int).select($"x", $"y")))
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftKey === 1), asOfRight.where(pairIn), LeftOuter).analyze),
+      asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+        asOfRight.where(pairIn && rightKey === 1 && IsNotNull(rightKey)),
+        LeftOuter).analyze)
+
+    // For an inner join, ON lk = rk AND rk = la adds lk = la to the left side.
+    val leftNotIn = Not(inSubquery(leftOther))
+    val innerCondition = leftKey === rightKey && rightKey === leftOther
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftNotIn), asOfRight, Inner, innerCondition).analyze),
+      asOfJoin(
+        asOfLeft.where(leftNotIn && leftKey === leftOther && IsNotNull(leftKey) &&
+          IsNotNull(leftOther)),
+        asOfRight.where(IsNotNull(rightKey)),
+        Inner,
+        innerCondition).analyze)
+  }
+
+  test("as-of joins: the right side gets no filter when a right ON key can fail") {
+    // The scan reads the right row after each key group and computes its ON keys there. A right
+    // filter would change that row, so 10.0 / ra could fail on a row the scan did not read.
+    val fails = Divide(Literal(10.0), Cast(rightOther, DoubleType), EvalMode.ANSI)
+    val leftValue = Cast(leftOther, DoubleType)
+    // Both orders of a key equality.
+    Seq(leftValue === fails, fails === leftValue).foreach { keyEquality =>
+      withClue(s"$keyEquality: ") {
+        val condition = leftKey === rightKey && keyEquality
+        comparePlans(
+          Optimize.execute(
+            asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter, condition).analyze),
+          asOfJoin(asOfLeft.where(IsNotNull(leftKey) && leftKey === 1), asOfRight, LeftOuter,
+            condition).analyze)
+        // An inner join still filters its left side.
+        comparePlans(
+          Optimize.execute(
+            asOfJoin(asOfLeft, asOfRight.where(rightKey === 1), Inner, condition).analyze),
+          asOfJoin(
+            asOfLeft.where(leftKey === 1 && IsNotNull(leftKey) && IsNotNull(leftOther)),
+            asOfRight.where(IsNotNull(rightKey) && rightKey === 1),
+            Inner,
+            condition).analyze)
+      }
+    }
+    // A widening cast cannot fail, so the right side keeps its filter.
+    val castCondition =
+      leftKey === rightKey && Cast(leftOther, LongType) === Cast(rightOther, LongType)
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter, castCondition).analyze),
+      asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+        asOfRight.where(rightKey === 1 && IsNotNull(rightKey) && IsNotNull(rightOther)),
+        LeftOuter,
+        castCondition).analyze)
+  }
+
+  test("as-of joins: no filter is inferred across them with the flag off") {
+    val other = LocalRelation($"ok".int)
+    val otherKey = other.output(0)
+    withSQLConf(SQLConf.INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED.key -> "false") {
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        // The regular join in the right side still gets its filters.
+        val right = asOfRight.join(other, Inner, Some(rightKey === otherKey))
+        val originalQuery = asOfJoin(asOfLeft.where(leftKey === 1), right, joinType).analyze
+        val correctAnswer = asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+          asOfRight.where(IsNotNull(rightKey))
+            .join(other.where(IsNotNull(otherKey)), Inner, Some(rightKey === otherKey)),
+          joinType).analyze
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      }
+    }
+  }
+
+  test("as-of joins: the right side gets no filter when it computes an expression that can fail") {
+    // The join reads the right input lazily, so a right filter changes which rows reach the
+    // expression, and it could fail on a row the join did not read before.
+    def right(input: LogicalPlan): LogicalPlan =
+      input.select(input.output :+
+        (Divide(Literal(10.0), Cast(rightOther, DoubleType), EvalMode.ANSI) as "q"): _*)
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftKey === 1), right(asOfRight), LeftOuter).analyze),
+      asOfJoin(asOfLeft.where(IsNotNull(leftKey) && leftKey === 1), right(asOfRight), LeftOuter)
+        .analyze)
+    // An inner join still filters its left side.
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft, right(asOfRight.where(rightKey === 1)), Inner).analyze),
+      asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+        right(asOfRight.where(IsNotNull(rightKey) && rightKey === 1)),
+        Inner).analyze)
+  }
+
+  test("as-of joins: a correlated EXISTS in a left outer ON condition does not filter the right") {
+    // A left outer join keeps this condition in the join, and the ON key carries it to the right.
+    val sub = LocalRelation($"z".int)
+    val exists = Exists(sub, outerAttrs = Seq(leftKey), joinCond = Seq(sub.output.head === leftKey))
+    val condition = leftKey === rightKey && exists
+    comparePlans(
+      Optimize.execute(asOfJoin(asOfLeft, asOfRight, LeftOuter, condition)),
+      asOfJoin(asOfLeft, asOfRight.where(IsNotNull(rightKey)), LeftOuter, condition),
+      checkAnalysis = false)
+  }
+
+  test("as-of joins: a renamed or sorted right side still gets its filter") {
+    // An alias or a sort order cannot fail by itself, so the check looks at its child.
+    val renamedKey = Alias(rightKey, "rk2")()
+    def renamed(input: LogicalPlan): LogicalPlan =
+      input.select(asOfRight.output(0), renamedKey, rightOther)
+    val condition = leftKey === renamedKey.toAttribute
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftKey === 1), renamed(asOfRight), LeftOuter, condition).analyze),
+      asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+        renamed(asOfRight.where(IsNotNull(rightKey) && rightKey === 1)),
+        LeftOuter,
+        condition).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        asOfJoin(asOfLeft.where(leftKey === 1), asOfRight.orderBy(rightKey.asc), LeftOuter)
+          .analyze),
+      asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+        asOfRight.where(IsNotNull(rightKey) && rightKey === 1).orderBy(rightKey.asc),
+        LeftOuter).analyze)
+  }
 }

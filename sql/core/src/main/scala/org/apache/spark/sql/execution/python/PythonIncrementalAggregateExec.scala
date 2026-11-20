@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -47,7 +48,7 @@ import org.apache.spark.util.Utils
  * kept as an abstract class so the per-stage inputs, eval type, output attributes and final
  * projection stay explicit hooks.
  */
-abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with PythonSQLMetrics {
+abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with PythonPhaseMetrics {
 
   def groupingExpressions: Seq[NamedExpression]
   def aggExpressions: Seq[AggregateExpression]
@@ -200,7 +201,7 @@ case class PythonIncrementalAggregatePartialExec(
     groupingExpressions: Seq[NamedExpression],
     aggExpressions: Seq[AggregateExpression],
     bufferAttributes: Seq[Attribute],
-    child: SparkPlan) extends UnaryExecNode with PythonSQLMetrics {
+    child: SparkPlan) extends UnaryExecNode with PythonPhaseMetrics {
 
   private val udfExpressions: Seq[PythonAggregate] =
     aggExpressions.map(_.aggregateFunction.asInstanceOf[PythonAggregate])
@@ -371,6 +372,13 @@ object PythonIncrementalAggregateExec {
   /**
    * Builds the two-stage physical plan (PARTIAL -> [Exchange, inserted by EnsureRequirements] ->
    * FINAL) for a logical aggregation whose aggregate functions are all [[PythonAggregate]].
+   *
+   * A batch session window starts as one session per input row, `[ts, ts + gap)`, and the
+   * overlapping sessions of the same keys must be merged into one. SQL aggregate functions merge
+   * them after the partial aggregation, together with their buffers (`MergingSessionsExec`), but
+   * only the Python worker can merge these buffers. So, as for a DISTINCT aggregation, the sessions
+   * are merged before the PARTIAL stage instead: `UpdatingSessionsExec` sets the session column of
+   * each input row to its merged session, and both stages group by it.
    */
   def plan(
       groupingExpressions: Seq[NamedExpression],
@@ -384,7 +392,10 @@ object PythonIncrementalAggregateExec {
       AttributeReference(s"buf_${agg.resultId.id}", agg.bufferSchema, nullable = true)()
     }
     val partial = PythonIncrementalAggregatePartialExec(
-      groupingExpressions, aggExpressions, bufferAttributes, child)
+      groupingExpressions,
+      aggExpressions,
+      bufferAttributes,
+      AggUtils.mayAppendUpdatingSessionExec(groupingExpressions, child))
     // After the PARTIAL stage the grouping expressions are materialized as plain attributes.
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
     PythonIncrementalAggregateFinalExec(
