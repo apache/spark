@@ -5715,9 +5715,7 @@ object SQLConf {
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
-        "or a NumPy ndarray. " +
-        "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "or a NumPy ndarray.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
