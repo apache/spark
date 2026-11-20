@@ -654,7 +654,7 @@ object Cast extends QueryErrorsBase {
     // A numeric up-cast holds also from or to a decimal of a negative scale, as a widening between
     // decimals never calls `Decimal.toLong`; a change to a negative scale only checks that
     // `spark.sql.legacy.allowNegativeScaleOfDecimal` is on. So does a decimal to a FLOAT or a
-    // DOUBLE. The other ones do not: `Decimal.toLong` raises for a decimal of a negative scale.
+    // DOUBLE. The other ones are left out conservatively for a decimal of a negative scale.
     isNumericUpCast(from, to) || isDecimalToFloatOrDouble(from, to) ||
       (!negativeScale && (isTimestampToDate(from, to) || isToPlainString(from, to)))
 
@@ -665,8 +665,8 @@ object Cast extends QueryErrorsBase {
       to: DataType,
       evalMode: EvalMode.Value,
       negativeScale: Boolean): Boolean = evalMode match {
-    // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast,
-    // and that one raises for a decimal of a negative scale.
+    // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast;
+    // that one is left out conservatively for a decimal of a negative scale.
     case EvalMode.TRY => !negativeScale || !from.isInstanceOf[StringType]
     // A cast of a date to a timestamp is left out also in LEGACY mode, as converting a date far
     // from the epoch to microseconds overflows there.
