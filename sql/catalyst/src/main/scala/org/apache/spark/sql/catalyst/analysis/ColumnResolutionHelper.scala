@@ -245,8 +245,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  // Resolves `UnresolvedAttribute` to `OuterReference`.
-  protected def resolveOuterRef(e: Expression): Expression = {
+  // Resolves `UnresolvedAttribute` to `OuterReference`, except for the ones for which `skip`
+  // returns true.
+  protected def resolveOuterRef(
+      e: Expression,
+      skip: UnresolvedAttribute => Boolean = _ => false): Expression = {
     val outerPlan = AnalysisContext.get.outerPlan
     if (outerPlan.isEmpty) return e
 
@@ -274,7 +277,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     e.transformWithPruning(
       _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
-      case u: UnresolvedAttribute =>
+      case u: UnresolvedAttribute if !skip(u) =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
@@ -283,8 +286,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  // Resolves `UnresolvedAttribute` to its value.
-  protected def resolveVariables(e: Expression): Expression = {
+  // Resolves `UnresolvedAttribute` to its value, except for the ones for which `skip` returns true.
+  protected def resolveVariables(
+      e: Expression,
+      skip: UnresolvedAttribute => Boolean = _ => false): Expression = {
     val variableResolution =
       new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
@@ -299,7 +304,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) return e
       val resolved = e match {
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts) if !skip(u) =>
           val result = withPosition(u) {
             resolve(nameParts).getOrElse(u) match {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
@@ -507,6 +512,127 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    */
   protected def resolveColsLastResort(e: Expression): Expression = {
     resolveVariables(resolveOuterRef(e))
+  }
+
+  /**
+   * Applies [[resolveColsLastResort]] to a SELECT list (the project list of a `Project` or the
+   * aggregate expressions of an `Aggregate`), but keeps the columns that reference the output of
+   * a preceding generator in the same SELECT list unresolved, such as `tag` in
+   * `SELECT explode(tags) AS tag, upper(tag)`, or `col` in `SELECT explode(tags), upper(col)`.
+   * In a `Project`, the rule `ExtractGenerator` will pull the generator out into a `Generate`
+   * node below the `Project`, and then these columns are resolved to the generator output. In an
+   * `Aggregate`, the generator output can not be referenced, as `ExtractGenerator` puts the
+   * generator in a `Project` above the `Aggregate`. These columns stay unresolved, and the query
+   * fails with `UNRESOLVED_COLUMN` instead of reading an outer query column or a SQL variable.
+   *
+   * This follows the lateral column alias rule: the output of a generator has higher priority
+   * than outer references and SQL variables only for the SELECT items after the generator. A
+   * reference that comes before the generator, or in the arguments of the generator, keeps its
+   * current resolution.
+   *
+   * The output names of a generator are its alias names, or the field names of its element schema
+   * if it has no alias. As this runs before the rule `ResolveFunctions` in an analyzer iteration,
+   * the function call of a generator is not resolved yet in the first iteration, and a call to a
+   * built-in generator function is recognized by its name. If such a call has no alias, its
+   * output names are not known until it is resolved, so all the columns after it are kept
+   * unresolved in this iteration.
+   *
+   * TODO: A generator call that [[isBuiltinGeneratorCall]] can not recognize, such as a call to a
+   * temporary or persistent function, or a call with a qualified function name, is protected
+   * before it is resolved only through its alias names. A multi-alias is always protected by
+   * `generatorOutputNames`, and a single alias only by the lateral column alias resolution, while
+   * `spark.sql.lateralColumnAlias.enableImplicitResolution` is true. Without an alias, the
+   * references to its output names can still be resolved as outer references or SQL variables in
+   * the first analyzer iteration.
+   */
+  protected def resolveSelectListColsLastResort(selectList: Seq[Expression]): Seq[Expression] = {
+    if (!conf.getConf(SQLConf.PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE)) {
+      return selectList.map(resolveColsLastResort)
+    }
+    // The output names of the generators before the current SELECT item, or `None` if one of
+    // these generators has output names that are not known yet.
+    var precedingGeneratorOutputNames: Option[Seq[String]] = Some(Nil)
+    // Whether a column may reference the output of a generator before the current SELECT item.
+    // It is only rebuilt when a SELECT item changes `precedingGeneratorOutputNames`.
+    var isPrecedingGeneratorOutputRef: Option[UnresolvedAttribute => Boolean] = None
+    selectList.map { e =>
+      val result = isPrecedingGeneratorOutputRef match {
+        case Some(isRef) => resolveVariables(resolveOuterRef(e, isRef), isRef)
+        case None => resolveColsLastResort(e)
+      }
+      (precedingGeneratorOutputNames, generatorOutputNames(e)) match {
+        case (Some(precedingNames), Some(names)) if names.nonEmpty =>
+          val allNames = precedingNames ++ names
+          precedingGeneratorOutputNames = Some(allNames)
+          // Like lateral column alias, only the first name part is used to look up the generator
+          // output, as the generator output does not have qualifiers.
+          isPrecedingGeneratorOutputRef =
+            Some(u => allNames.exists(name => conf.resolver(name, u.nameParts.head)))
+        case (Some(_), None) =>
+          // Any column may reference the output of this generator. Keep them all unresolved
+          // until the generator is resolved in this analyzer iteration, and its output names are
+          // known in the next one.
+          precedingGeneratorOutputNames = None
+          isPrecedingGeneratorOutputRef = Some(_ => true)
+        case _ =>
+      }
+      result
+    }
+  }
+
+  /**
+   * Returns the output names of the generator in a SELECT item, or `None` if the SELECT item has
+   * a generator whose output names are not known yet. Returns an empty sequence if the SELECT
+   * item does not have a generator.
+   */
+  private def generatorOutputNames(selectItem: Expression): Option[Seq[String]] = {
+    // Looks through the wrappers around the expression of a SELECT item that hide its generator:
+    // `PipeExpression`, which wraps the items of the pipe operators `|> SELECT` and `|> EXTEND`
+    // until they are resolved, and `GeneratorOuter`, which is never resolved and which the rule
+    // `ExtractGenerator` replaces with the generator it wraps.
+    def unwrap(e: Expression): Expression = e match {
+      case PipeExpression(child, _, _) => unwrap(child)
+      case GeneratorOuter(g) => unwrap(g)
+      case other => other
+    }
+    selectItem match {
+      case Alias(child, name) => unwrap(child) match {
+        case _: Generator => Some(Seq(name))
+        // The function call of a generator is not resolved yet in the first analyzer iteration.
+        case f: UnresolvedFunction if isBuiltinGeneratorCall(f) => Some(Seq(name))
+        case _ => Some(Nil)
+      }
+      // `MultiAlias` is only allowed for generators, even if its child is not resolved yet.
+      case MultiAlias(_, names) if names.nonEmpty => Some(names)
+      case MultiAlias(child, _) => unwrap(child) match {
+        case g: Generator if g.resolved => Some(g.elementSchema.fieldNames.toSeq)
+        case _ => None
+      }
+      case UnresolvedAlias(child, _) => unwrap(child) match {
+        // Without an alias, the rule `ExtractGenerator` names the generator output with the field
+        // names of the element schema. See `GeneratorResolution.makeGeneratorOutput`.
+        case g: Generator if g.resolved => Some(g.elementSchema.fieldNames.toSeq)
+        case _: Generator => None
+        case f: UnresolvedFunction if isBuiltinGeneratorCall(f) => None
+        case _ => Some(Nil)
+      }
+      case _ => Some(Nil)
+    }
+  }
+
+  /**
+   * Returns whether an unresolved function call will be resolved to a built-in generator
+   * function, such as `explode`. Every built-in generator function is also a built-in table
+   * function, and no other built-in scalar function is. A temporary function of the same name can
+   * take precedence over the built-in function, depending on the function resolution order.
+   */
+  private def isBuiltinGeneratorCall(f: UnresolvedFunction): Boolean = f.nameParts match {
+    case Seq(name) if !f.isInternal =>
+      TableFunctionRegistry.functionSet.contains(
+        FunctionRegistry.builtinFunctionIdentifier(name)) &&
+        catalogManager.v1SessionCatalog.lookupBuiltinOrTempFunction(name)
+          .exists(_.getSource == "built-in")
+    case _ => false
   }
 
   /**
