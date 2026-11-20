@@ -105,7 +105,7 @@ object NestedColumnAliasing {
 
     case p if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(p) =>
       rewritePlanIfSubsetFieldsUsed(
-        plan, p.expressions, p.producedAttributes.toSeq)
+        plan, p.expressions, p.producedAttributes.toSeq, collectorBelow(p))
 
     case _ => None
   }
@@ -118,8 +118,7 @@ object NestedColumnAliasing {
       plan: LogicalPlan,
       exprList: Seq[Expression],
       exclusiveAttrs: Seq[Attribute],
-      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue(_))
-    : Option[LogicalPlan] = {
+      extractor: (Expression) => Seq[Expression]): Option[LogicalPlan] = {
     val attrToExtractValues = getAttributeToExtractValues(exprList, exclusiveAttrs, extractor)
     if (attrToExtractValues.isEmpty) {
       None
@@ -224,26 +223,36 @@ object NestedColumnAliasing {
   }
 
   /**
-   * The collector of the candidates to alias below `child`. Below a [[Join]], it does not return
-   * an access whose only sources of non-determinism are input file functions: see
-   * [[isNondeterministicOnlyThroughInputFile]].
+   * The collector of the candidates to alias below `operator`. When
+   * [[SQLConf.NESTED_COLUMN_ALIASING_EXCLUDE_NONDETERMINISTIC]] is false, it also returns the
+   * non-deterministic accesses that pass the other checks of canAlias, as before SPARK-62042.
+   * Otherwise, below a [[Join]], it does not return an access whose only sources of
+   * non-determinism are input file functions: see [[isNondeterministicOnlyThroughInputFile]].
    */
-  private def collectorBelow(child: LogicalPlan): (Expression) => Seq[Expression] = {
-    val exemptInputFile = !child.isInstanceOf[Join]
-    collectRootReferenceAndExtractValue(_, exemptInputFile)
+  private[optimizer] def collectorBelow(operator: LogicalPlan): (Expression) => Seq[Expression] = {
+    if (!SQLConf.get.getConf(SQLConf.NESTED_COLUMN_ALIASING_EXCLUDE_NONDETERMINISTIC)) {
+      collectRootReferenceAndExtractValue(_, aliasNondeterministic = true)
+    } else {
+      collectRootReferenceAndExtractValue(_, exemptInputFile = !operator.isInstanceOf[Join])
+    }
   }
 
-  private def canAlias(ev: Expression, exemptInputFile: Boolean): Boolean = {
+  private def canAlias(
+      ev: Expression,
+      aliasNondeterministic: Boolean,
+      exemptInputFile: Boolean): Boolean = {
     // we can not alias the attr from lambda variable whose expr id is not available
     !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1 &&
       // An alias is evaluated once per row of the operator's input. Below an operator that
       // repeats input rows, such as a Join, a Generate or a Sample with replacement, a
       // non-deterministic access would then give every row built from one input row the same
-      // value. So a non-deterministic access is not aliased, unless `exemptInputFile` is true
-      // and its only sources of non-determinism are input file functions. For an access that is
-      // not aliased, collectRootReferenceAndExtractValue returns the extractions and columns
-      // below it that canAlias accepts, which the callers may alias instead.
-      (ev.deterministic || (exemptInputFile && isNondeterministicOnlyThroughInputFile(ev)))
+      // value. So a non-deterministic access is not aliased, unless `aliasNondeterministic` is
+      // true, or `exemptInputFile` is true and its only sources of non-determinism are input file
+      // functions. For an access that is not aliased, collectRootReferenceAndExtractValue returns
+      // the extractions and columns below it that canAlias accepts, which the callers may alias
+      // instead.
+      (aliasNondeterministic || ev.deterministic ||
+        (exemptInputFile && isNondeterministicOnlyThroughInputFile(ev)))
   }
 
   /**
@@ -271,21 +280,23 @@ object NestedColumnAliasing {
    */
   private def collectRootReferenceAndExtractValue(
       e: Expression,
+      aliasNondeterministic: Boolean = false,
       exemptInputFile: Boolean = true): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
     case GetStructField(_: ExtractValue | _: AttributeReference, _, _)
-        if canAlias(e, exemptInputFile) => Seq(e)
+        if canAlias(e, aliasNondeterministic, exemptInputFile) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
                               _: AttributeReference, _, _, _, _)
-        if canAlias(e, exemptInputFile) => Seq(e)
+        if canAlias(e, aliasNondeterministic, exemptInputFile) => Seq(e)
     // TODO: For a non-deterministic index into an array of structs, such as
     // `s.arr[CAST(rand() * 10 AS INT)].x`, this returns `s.arr`, so the operator carries every
     // field of the elements. Aliasing `s.arr.x`, a GetArrayStructFields, and indexing it above
     // the operator would carry only `x`.
     case es if es.children.nonEmpty =>
-      es.children.flatMap(collectRootReferenceAndExtractValue(_, exemptInputFile))
+      es.children.flatMap(
+        collectRootReferenceAndExtractValue(_, aliasNondeterministic, exemptInputFile))
     case _ => Seq.empty
   }
 
@@ -410,7 +421,7 @@ object GeneratorNestedColumnAliasing {
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
-        projectList ++ g.generator.children, Seq.empty)
+        projectList ++ g.generator.children, Seq.empty, NestedColumnAliasing.collectorBelow(g))
       if (attrToExtractValues.isEmpty) {
         return None
       }
@@ -515,7 +526,7 @@ object GeneratorNestedColumnAliasing {
       // as a whole or partially by higher projection, pruning it here will cause unresolved
       // query plan.
       NestedColumnAliasing.rewritePlanIfSubsetFieldsUsed(
-        plan, g.generator.children, g.requiredChildOutput)
+        plan, g.generator.children, g.requiredChildOutput, NestedColumnAliasing.collectorBelow(g))
 
     case _ =>
       None

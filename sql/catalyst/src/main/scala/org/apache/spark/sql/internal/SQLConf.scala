@@ -6948,6 +6948,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_COLUMN_ALIASING_EXCLUDE_NONDETERMINISTIC =
+    buildConf("spark.sql.optimizer.nestedColumnAliasing.excludeNondeterministic")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, nested column aliasing evaluates a non-deterministic nested field " +
+        "access below an operator only if the operator is not a join and the only sources of " +
+        "non-determinism in the access are input file functions. When false, it can evaluate " +
+        "such an access below the operator, once for each input row of the operator, as before " +
+        "4.5.0; then every row that a join, a generator such as explode, an expand or a sample " +
+        "with replacement builds from one input row can get the same value. A streaming query " +
+        "restarted from a checkpoint uses the value recorded there, or false if the checkpoint " +
+        "does not record it.")
+      .version("4.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DECORRELATE_INNER_QUERY_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateInnerQuery.enabled")
       .internal()

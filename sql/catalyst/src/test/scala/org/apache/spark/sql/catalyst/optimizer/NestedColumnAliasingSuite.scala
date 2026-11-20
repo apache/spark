@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
@@ -1092,6 +1093,40 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       val planBelow =
         if (withFilter) aliasedJoin.select($"${aliases(0)}".as(aliases(0))) else aliasedJoin
       val expected = above(access($"${aliases(0)}"), planBelow).analyze
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-62042: Alias non-deterministic nested field accesses below the operator when " +
+      "excludeNondeterministic is false") {
+    // The plans of the queries above before SPARK-62042: the whole access is aliased below the
+    // Join or the Generate.
+    val other = LocalRelation($"rid".int)
+    val joinIndexes = Seq(randomIndex, Cast(InputFileBlockStart(), IntegerType))
+    withSQLConf(SQLConf.NESTED_COLUMN_ALIASING_EXCLUDE_NONDETERMINISTIC.key -> "false") {
+      joinIndexes.foreach { index =>
+        val access = elementX($"s".getField("arr"), index)
+        val optimized = Optimize.execute(withArray.join(other, condition = Some($"id" === $"rid"))
+          .select(access.as("v")).analyze)
+        val aliases = collectGeneratedAliases(optimized)
+        val expected = withArray.select($"id", access.as(aliases(0)))
+          .join(other, condition = Some($"id" === $"rid"))
+          .select($"${aliases(0)}".as("v"))
+          .analyze
+        comparePlans(optimized, expected)
+      }
+
+      val access = elementX($"s".getField("arr"), randomIndex)
+      val optimized = Optimize.execute(withArray
+        .generate(Explode($"seq"), outputNames = Seq("n"))
+        .select(access.as("v"), $"n")
+        .analyze)
+      val aliases = collectGeneratedAliases(optimized)
+      val expected = withArray
+        .select(access.as(aliases(0)), $"seq")
+        .generate(Explode($"seq"), unrequiredChildIndex = Seq(1), outputNames = Seq("n"))
+        .select($"${aliases(0)}".as("v"), $"n")
+        .analyze
       comparePlans(optimized, expected)
     }
   }
