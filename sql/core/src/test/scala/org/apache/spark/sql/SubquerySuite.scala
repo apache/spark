@@ -96,7 +96,8 @@ class SubquerySuite extends SharedSparkSession
   // keeps PullupCorrelatedPredicates from computing the result for an outer row without matching
   // rows before decorrelation, so the subquery needs the domain joins of DecorrelateInnerQuery.
   private def domainJoinCount(outer: String): String =
-    s"(SELECT COUNT(*) FROM (SELECT MAX(b.v) m FROM b WHERE b.k = $outer) WHERE m IS NULL OR m >= 0)"
+    s"(SELECT COUNT(*) FROM (SELECT MAX(b.v) m FROM b WHERE b.k = $outer) " +
+      "WHERE m IS NULL OR m >= 0)"
 
   private def checkNumJoins(plan: LogicalPlan, numJoins: Int): Unit = {
     val joins = plan.collect { case j: Join => j }
@@ -3948,8 +3949,8 @@ class SubquerySuite extends SharedSparkSession
         optimizedPlan(inInput, legacyNestedAggregate = true))
       // The result computed before decorrelation needs no domain joins: the same joins as before,
       // and the correct result for keys without matching rows.
-      val computed = "SELECT o.k, (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k)) c " +
-        "FROM (SELECT id k FROM range(1000, 3000) LIMIT 1000) o"
+      val computed = "SELECT o.k, (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b " +
+        "WHERE b.k = o.k)) c FROM (SELECT id k FROM range(1000, 3000) LIMIT 1000) o"
       checkNumJoins(optimizedPlan(computed, legacyNestedAggregate = false),
         optimizedPlan(computed, legacyNestedAggregate = true).collect { case j: Join => j }.size)
       checkAnswer(sql(s"SELECT DISTINCT c FROM ($computed)"), Row(1))
@@ -4049,8 +4050,10 @@ class SubquerySuite extends SharedSparkSession
       // aggregate or an inner join, with an uncorrelated EXISTS, a subquery decorrelated with a
       // domain join, and a LATERAL join in the outer input, with the domain joins and with the
       // result computed before decorrelation.
-      for (subquery <- Seq(domainJoinCount("o.k"),
-          "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"); query <- Seq(s"SELECT o.k, $subquery FROM (SELECT k, SUM(k) s FROM o GROUP BY k) o LIMIT 21",
+      val subqueries = Seq(domainJoinCount("o.k"),
+        "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))")
+      for (subquery <- subqueries; query <- Seq(
+          s"SELECT o.k, $subquery FROM (SELECT k, SUM(k) s FROM o GROUP BY k) o LIMIT 21",
           s"SELECT o.k, $subquery FROM o JOIN (SELECT k j FROM o) p ON o.k = p.j LIMIT 21",
           s"SELECT o.k, $subquery FROM o WHERE EXISTS (SELECT 1 FROM b)",
           s"SELECT o.k, $subquery FROM (SELECT o.*, (SELECT MAX(b.v) FROM b WHERE b.k > o.k) mx " +

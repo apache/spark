@@ -815,12 +815,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // Otherwise a correlated lower Aggregate without grouping expressions selects
         // decorrelation, except with LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR
         // and where the domain joins of DecorrelateInnerQuery are known not to work, so as not to
-        // make such queries worse than before: where the outer input, or a join of another subquery to it, may give other
-        // rows when computed again (see repeatableInput and mayMoveIntoOuterInput), and for outer
-        // references that are not orderable, for which the domain joins fail. So does a subquery
-        // with a scalar Python or external UDF in an expression of an operator of its plan when
-        // the conditional evaluation of SPARK-61482 is off, since one in a value over no rows
-        // would then run for every outer row.
+        // make such queries worse than before: where the outer input, or a join of another
+        // subquery to it, may give other rows when computed again (see repeatableInput and
+        // mayMoveIntoOuterInput), and for outer references that are not orderable, for which the
+        // domain joins fail. So does a subquery with a scalar Python or external UDF in an
+        // expression of an operator of its plan when the conditional evaluation of SPARK-61482 is
+        // off, since one in a value over no rows would then run for every outer row.
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =
@@ -1561,7 +1561,8 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _, _)
+      case s @ ScalarSubquery(
+          OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head
