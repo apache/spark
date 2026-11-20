@@ -2124,6 +2124,21 @@ table outer_gen_test
 |> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
 |> select id, t, e, p, v;
 
+-- The same, with alias list items whose generator arguments are columns, which resolve only
+-- after the input plan does.
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(arr) as (pos, b)
+|> select id, a, pos, b;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(tags) as (p, v)
+|> select id, t, e, p, v;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> aggregate posexplode_outer(collect_list(t)) as (p, v) group by author;
+
 -- Outer generators: negative tests.
 --------------------------------------
 

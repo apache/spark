@@ -8464,6 +8464,11 @@ class AstBuilder extends DataTypeAstBuilder
               a.copy(
                 child = PipeExpression(a.child, isAggregate = false, PipeOperators.extendClause))(
                 a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+            case (m: MultiAlias, _) =>
+              CurrentOrigin.withOrigin(m.origin) {
+                m.copy(
+                  child = PipeExpression(m.child, isAggregate = false, PipeOperators.extendClause))
+              }
             case (e: Expression, aliasFunc) =>
               UnresolvedAlias(
                 PipeExpression(e, isAggregate = false, PipeOperators.extendClause), aliasFunc)
@@ -8572,6 +8577,11 @@ class AstBuilder extends DataTypeAstBuilder
             a.copy(child =
               PipeExpression(a.child, isAggregate = true, PipeOperators.aggregateClause))(
               a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+          case (m: MultiAlias, _) =>
+            CurrentOrigin.withOrigin(m.origin) {
+              m.copy(
+                child = PipeExpression(m.child, isAggregate = true, PipeOperators.aggregateClause))
+            }
           case (e: Expression, aliasFunc) =>
             UnresolvedAlias(
               PipeExpression(e, isAggregate = true, PipeOperators.aggregateClause), aliasFunc)

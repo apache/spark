@@ -3430,12 +3430,11 @@ class Analyzer(
 
     /**
      * Returns the expression to report for a nested generator. A SQL pipe operator item keeps its
-     * PipeExpression, and in |> EXTEND and |> AGGREGATE also a MultiAlias, below the top-level
-     * alias, so strip those too to report the same expression as the equivalent plain SQL query.
+     * PipeExpression below the alias, so strip it too to report the same expression as the
+     * equivalent plain SQL query.
      */
     private def trimAliasAndPipeExpression(expr: NamedExpression): Expression =
       trimAlias(expr) match {
-        case PipeExpression(m: MultiAlias, _, _) => trimAlias(m)
         case PipeExpression(child, _, _) => child
         case other => other
       }

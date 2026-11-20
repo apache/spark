@@ -5397,6 +5397,46 @@ struct<id:int,t:string,e:int,p:int,v:int>
 
 
 -- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(arr) as (pos, b)
+|> select id, a, pos, b
+-- !query schema
+struct<id:int,a:int,pos:int,b:string>
+-- !query output
+1	1	0	a
+1	2	0	a
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(tags) as (p, v)
+|> select id, t, e, p, v
+-- !query schema
+struct<id:int,t:string,e:int,p:int,v:string>
+-- !query output
+1	spark	1	0	sql
+1	spark	1	1	spark
+1	sql	1	0	sql
+1	sql	1	1	spark
+2	delta	1	0	delta
+3	NULL	1	NULL	NULL
+4	NULL	1	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> aggregate posexplode_outer(collect_list(t)) as (p, v) group by author
+-- !query schema
+struct<author:string,p:int,v:string>
+-- !query output
+ann	0	sql
+ann	1	spark
+bob	0	delta
+
+
+-- !query
 table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query schema
@@ -5509,14 +5549,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "generatorouter(posexplode(tags#x)) AS (pos, tag)"
+    "expr" : "generatorouter(posexplode(tags#x))"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 35,
-    "stopIndex" : 70,
-    "fragment" : "posexplode_outer(tags) as (pos, tag)"
+    "stopIndex" : 56,
+    "fragment" : "posexplode_outer(tags)"
   } ]
 }
 
