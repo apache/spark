@@ -980,8 +980,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // rows happens to be its result, e.g. COUNT(*) FILTER (WHERE s IS NULL) over s = MAX for
         // a row with matching rows. So it is not used there, and the subquery keeps the result of
         // master.
-        val countBugResultKept = if (mayHaveCountBugOld.isEmpty && countBugResult.isDefined &&
-            !domainJoinsWork && decorrelatedPlan.exists(_.isInstanceOf[DomainJoin])) {
+        val countBugResultKept = if (countBugResult.isDefined && !domainJoinsWork &&
+            decorrelatedPlan.exists(_.isInstanceOf[DomainJoin])) {
           None
         } else {
           countBugResult

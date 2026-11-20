@@ -490,6 +490,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
           udfDeterministic = true)
         assert(countBugHandling(filtered(max($"d")).select(udfOnS.as("s"))) == inDecorrelation,
           enabled)
+        // But one in the top aggregate, whose value over no rows has it.
+        val udfOnSum = PythonUDF("udf", null, LongType, Seq(sum($"s")),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+        assert(countBugHandling(filtered(max($"d")), Seq(udfOnSum)) ==
+          (if (enabled) inDecorrelation else inLegacy), enabled)
       }
     }
     assert(countBugHandling(filtered(max($"d")), others = Seq($"a"),
