@@ -129,6 +129,8 @@ class RelationResolution(
    *      [[NoSuchTableException]] means neither exists.
    *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
    *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
+   *      For the session catalog, a view-like [[V1Table]] from `loadTable` resolves to a
+   *      [[ResolvedPersistentView]] over a [[V1View]].
    *      Catalogs without table support skip table lookup so MISSING_CATALOG_ABILITY.TABLES
    *      does not mask the view-resolution path.
    */
