@@ -69,11 +69,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   without a watermark in the join keys, whose only range condition has one of these forms, fail
   analysis, also when an existing query restarts. To run such a query, add a range condition that
   bounds the state, or a watermark in the join keys, and start it from a new checkpoint. A left
-  semi join of that kind still runs, as in earlier versions, but its state is not evicted. The
-  rule also applies with `spark.sql.streaming.statefulOperator.allowMultiple` set to false. There,
-  and for an input bounded only through a column cast to TIMESTAMP (SPARK-62044), a cutoff solved
-  for another column can now evict by the event time where a constant-only conjunct used to cap
-  it.
+  semi join of that kind still runs, as in earlier versions, but its state is not evicted. Such
+  conjuncts still hold back, as in earlier versions, a cutoff that goes through a cast to a whole
+  number, such as `CAST(leftTime AS LONG) >= CAST(rightTime AS LONG) - 5`, and a cutoff that
+  applies to the event time but is solved for another column.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 

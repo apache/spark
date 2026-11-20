@@ -95,6 +95,72 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
       }
     }
 
+    // The left input is evicted by its event time with a cutoff solved for another column: through
+    // a TIMESTAMP_NTZ column in the default mode, or through expiry in the legacy mode. The
+    // constant-only conjunct still caps that cutoff, as in earlier versions.
+    Seq(false, true).foreach { legacyMode =>
+      test(s"constant-only conjunct caps a cutoff solved for another column, V$version, " +
+          s"legacy mode $legacyMode") {
+        withJoinStateVersion(version) {
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> (!legacyMode).toString) {
+            val (leftInput, rightInput, input, right) = inputs()
+            val left = input.select($"leftKey", $"lt",
+              (expr("lt + INTERVAL 1000 SECONDS")).cast("timestamp_ntz").as("lntz"),
+              expr("lt + INTERVAL 10 MINUTES").as("lexp"))
+            val (bound, start, later) = if (legacyMode) {
+              ("rt BETWEEN lt AND lexp", 100L, 460L)
+            } else {
+              ("CAST(lntz AS TIMESTAMP) > rt - INTERVAL 5 SECONDS", 20L, 420L)
+            }
+            val joined = left
+              .join(right, expr(s"leftKey = rightKey AND $bound AND CAST(lt AS LONG) > 10"),
+                "left_outer")
+              .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+            testStream(joined)(
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (1, start), (8, 400L)), AddData(rightInput, (9, 400L)))),
+              CheckNewAnswer(),
+              // The watermark is 399 s. The constant keeps the left row (1, start) in state.
+              AddData(rightInput, (9, 400L)),
+              CheckNewAnswer(),
+              AddData(rightInput, (1, later)),
+              CheckNewAnswer(Row(1, start, later)))
+          }
+        }
+      }
+    }
+
+    test(s"constant-only conjunct caps a cutoff through a truncating cast, V$version") {
+      withJoinStateVersion(version) {
+        val leftInput = MemoryStream[(Int, Double)]
+        val rightInput = MemoryStream[(Int, Double)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("lt"))
+          .withWatermark("lt", "1 second")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rt"))
+          .withWatermark("rt", "1 second")
+        val condition = expr("leftKey = rightKey AND " +
+          "CAST(lt AS LONG) >= CAST(rt AS LONG) - 5 AND CAST(lt AS LONG) > 10")
+        val joined = left.join(right, condition, "left_outer")
+          .select($"leftKey", $"lt".cast("double"), $"rt".cast("double"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 14.2)), AddData(rightInput, (9, 14.2)))),
+          CheckNewAnswer(),
+          // The watermark becomes 19.5 s. The cast bound alone would give a cutoff of about
+          // 14.5 s, but CAST(14.2) = 14 >= CAST(19.6) - 5 = 14 still matches.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 20.5)), AddData(rightInput, (9, 20.5)))),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 20.6)),
+          CheckNewAnswer(),
+          AddData(rightInput, (1, 19.6)),
+          CheckNewAnswer(Row(1, 14.2, 19.6)))
+      }
+    }
+
     test(s"constant-only conjunct does not cap the state cutoff, V$version") {
       withJoinStateVersion(version) {
         val (leftInput, rightInput, left, right) = inputs()

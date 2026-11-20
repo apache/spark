@@ -96,6 +96,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
+    var truncatingCutoff = false
     val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
@@ -115,10 +116,24 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       if (stateWatermark.nonEmpty) {
         logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
           log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
+        truncatingCutoff ||= predicate.exists {
+          case Cast(c, _: IntegralType, _, _) => !c.dataType.isInstanceOf[IntegralType]
+          case _ => false
+        }
       }
       stateWatermark
     }
-    allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+    val cutoff = allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+    // A cutoff through a truncating cast, or one solved for another column on an input whose
+    // event time the rising-only rule leaves unbounded, keeps the minimum of earlier versions,
+    // constant-only conjuncts included.
+    val eventTime = attributesToFindStateWatermarkFor.filter(_.metadata.contains(delayKey))
+    val keepEarlierMinimum = risingCutoffsOnly && cutoff.isDefined && (truncatingCutoff ||
+      eventTime.nonEmpty && eventTime.size < attributesToFindStateWatermarkFor.size &&
+      getStateValueWatermark(eventTime, attributesWithEventWatermark, joinCondition,
+        eventWatermark).isEmpty)
+    if (!keepEarlierMinimum) cutoff else getStateValueWatermark(attributesToFindStateWatermarkFor,
+      attributesWithEventWatermark, joinCondition, eventWatermark, risingCutoffsOnly = false)
   }
 
   /**
