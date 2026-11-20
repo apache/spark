@@ -3777,4 +3777,24 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-62142: keep the written order of a throwable condition in a correlated subquery") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 (k INT, v INT) USING parquet")
+        sql("INSERT INTO t1 VALUES (1, 0)")
+        sql("CREATE TABLE t2 (k INT, g INT) USING parquet")
+        sql("INSERT INTO t2 VALUES (1, 0), (2, 1)")
+        // The guard removes the row (1, 0) of t2, the only one with t2.k = t1.k, before a
+        // condition written after it divides by t1.v.
+        val cond =
+          "t2.k = t1.k AND CASE WHEN g < 0 THEN raise_error('negative g') ELSE g > 0 END AND " +
+            "1 / t1.v > 0"
+        checkAnswer(
+          sql(s"SELECT * FROM t1 WHERE (SELECT max(g) FROM t2 WHERE $cond) IS NOT NULL"),
+          Nil)
+        checkAnswer(sql(s"SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE $cond)"), Nil)
+      }
+    }
+  }
 }
