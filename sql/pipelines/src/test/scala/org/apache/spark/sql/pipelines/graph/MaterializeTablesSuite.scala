@@ -1662,6 +1662,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       assert(props.get("p.keep") == "v")
       assert(props.get("p.external") == "e")
       assert(declaredKeysRecord("t").contains("""["p.keep"]"""))
+      assert(!declaredKeysRecord("t").exists(_.contains("p.external")))
     }
   }
 
