@@ -988,7 +988,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         }
         // With handleCountBugInDecorrelate, noDefaultResultCountBugAgg says that the count bug is
         // handled in DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
-        val newPlan = if (handleCountBugInDecorrelate && noDefaultResultCountBugAgg) {
+        // A subquery that uses countBugResult keeps the domain joins that decorrelation adds
+        // anyway, but needs them to have every outer row too (see above), which a LIMIT pushed
+        // into the outer input that they compute again could break.
+        val newPlan = if ((handleCountBugInDecorrelate && noDefaultResultCountBugAgg) ||
+            countBugResultKept.isDefined) {
           decorrelatedPlan.transform { case d: DomainJoin => d.copy(keepLimitAbove = true) }
         } else {
           decorrelatedPlan

@@ -4063,6 +4063,23 @@ class SubquerySuite extends SharedSparkSession
           assert(limitsInLeftOuterRight(optimizedPlan(query, legacyNestedAggregate = false)) > 0)
         }
       }
+      // A subquery that uses the result computed before decorrelation keeps the domain joins that
+      // decorrelation adds anyway, here for a non-equality correlation and for a correlation below
+      // a UNION ALL, but they do not get the LIMIT: an outer row that they miss would get that
+      // result instead of its own.
+      val nestedNonEquality = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b WHERE b.k > o.k))"
+      val nestedUnionAll = "(SELECT COUNT(*) FROM (SELECT MAX(u.v) s FROM (SELECT b.v FROM b " +
+        "WHERE b.k = o.k UNION ALL SELECT c.v FROM b c WHERE c.k = o.k) u))"
+      Seq(nestedNonEquality, nestedUnionAll).foreach { s =>
+        val query = s"SELECT o.k, $s FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
+        val fixed = optimizedPlan(query, legacyNestedAggregate = false)
+        val legacy = optimizedPlan(query, legacyNestedAggregate = true)
+        withClue(query) {
+          assert(joins(fixed) === joins(legacy))
+          assert(limitsInLeftOuterRight(legacy) > 0)
+          assert(limitsInLeftOuterRight(fixed) === 0)
+        }
+      }
       // Pins the default, under which a non-aggregated subquery becomes a left single join.
       withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
         val nonAggregate = "(SELECT b.v FROM b WHERE b.k = o.k)"

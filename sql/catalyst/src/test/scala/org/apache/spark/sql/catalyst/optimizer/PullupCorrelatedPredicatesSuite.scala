@@ -235,20 +235,20 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // A lower aggregate with a function with a default result is handled in decorrelation, as
     // before, also when it is uncorrelated.
     assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
-    // Only the domain joins of a subquery that is handled in decorrelation since SPARK-60501 keep
-    // a LIMIT above; the ones that decorrelation gave before do not: over a lower COUNT, and for
-    // a non-equality correlation, which gets a domain join also in a single aggregate, also
-    // when countBugResult or the legacy conf keeps constructLeftJoins.
+    // Only the domain joins of a subquery that is handled in decorrelation since SPARK-60501, or
+    // that uses countBugResult, keep a LIMIT above; the ones that decorrelation gave before do
+    // not: over a lower COUNT, and for a non-equality correlation, which gets a domain join also
+    // in a single aggregate, also when the legacy conf keeps constructLeftJoins.
     def countOver(lower: LogicalPlan): LogicalPlan = lower.groupBy()(count(Literal(1)).as("r"))
     val nonEquality = testRelation2.where($"a" > $"c").groupBy()(max($"d").as("s"))
     assert(keepLimitAbove(countOver(filtered(max($"d")))).toSet == Set(true))
     assert(keepLimitAbove(countOver(nonEquality.where($"s" > 0))).toSet == Set(true))
     assert(keepLimitAbove(countOver(correlated(max($"d")))).isEmpty)
-    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
+    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(true))
     assert(keepLimitAbove(countOver(correlated(count($"d")))).toSet == Set(false))
     assert(keepLimitAbove(countOver(uncorrelated(count($"d")))).toSet == Set(false))
     assert(keepLimitAbove(nonEquality).toSet == Set(false))
-    assert(keepLimitAbove(nonEquality.groupBy()(sum($"s").as("r"))).toSet == Set(false))
+    assert(keepLimitAbove(nonEquality.groupBy()(sum($"s").as("r"))).toSet == Set(true))
     withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
       assert(countBugHandling(correlated(max($"d"))) == (Some(true), false))
       assert(countBugResult(correlated(max($"d"))).isEmpty)
@@ -256,6 +256,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(correlated(count($"d"))) == (Some(false), true))
       assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
       assert(keepLimitAbove(countOver(nonEquality.where($"s" > 0))).toSet == Set(false))
+      assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
     }
     // The rest of this test is about subqueries that need the domain joins of
     // DecorrelateInnerQuery, such as `filtered`. Those joins compute the outer input again, so
