@@ -52,6 +52,23 @@ object ArrowWriter {
     new ArrowWriter(root, children.toArray)
   }
 
+  /**
+   * Packs a nanosecond timestamp into Arrow `timestamp[ns]` epoch-nanoseconds, raising
+   * `DATETIME_OVERFLOW` outside the supported range. Unlike Parquet and Avro, the int64 minimum is
+   * out of range: pandas/numpy reserve it for `NaT`, so a non-null value would read back as null.
+   */
+  private[arrow] def timestampNanosToArrowEpochNanos(v: TimestampNanosVal, isNtz: Boolean): Long = {
+    def overflow = QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+      v, isNtz, sink = "Arrow INT64", minInstant = "1677-09-21T00:12:43.145224193Z")
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException => throw overflow
+    }
+    if (nanos == Long.MinValue) throw overflow
+    nanos
+  }
+
   private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
     val dt = ArrowUtils.fromArrowField(field)
@@ -425,15 +442,8 @@ private[sql] class TimestampNTZNanosWriter(
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    val v = input.getTimestampNTZNanos(ordinal)
-    val nanos = try {
-      DateTimeUtils.timestampNanosToEpochNanos(v)
-    } catch {
-      case _: ArithmeticException =>
-        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
-          v, isNtz = true, sink = "Arrow INT64")
-    }
-    valueVector.setSafe(count, nanos)
+    valueVector.setSafe(count, ArrowWriter.timestampNanosToArrowEpochNanos(
+      input.getTimestampNTZNanos(ordinal), isNtz = true))
   }
 }
 
@@ -445,15 +455,8 @@ private[sql] class TimestampLTZNanosWriter(
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    val v = input.getTimestampLTZNanos(ordinal)
-    val nanos = try {
-      DateTimeUtils.timestampNanosToEpochNanos(v)
-    } catch {
-      case _: ArithmeticException =>
-        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
-          v, isNtz = false, sink = "Arrow INT64")
-    }
-    valueVector.setSafe(count, nanos)
+    valueVector.setSafe(count, ArrowWriter.timestampNanosToArrowEpochNanos(
+      input.getTimestampLTZNanos(ordinal), isNtz = false))
   }
 }
 

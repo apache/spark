@@ -25,6 +25,9 @@ SELECT make_timestamp(1, 1, 1, 1, 1, null);
 SELECT make_timestamp(1, 1, 1, 1, 1, 59.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999);
+-- SPARK-60743: seconds whose microseconds do not fit an int must not wrap to a valid value.
+SELECT make_timestamp(1, 1, 1, 1, 1, 4324.967296);
+SELECT try_make_timestamp(1, 1, 1, 1, 1, 4324.967296);
 
 -- SPARK-51415: timestamp date constructor.
 SELECT make_timestamp(make_date(2021, 07, 11));

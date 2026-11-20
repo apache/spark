@@ -196,31 +196,55 @@ case class JoinEstimation(join: Join) extends Logging {
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
       val rightKeyStat = rightStats.attributeStats(rightKey)
-      val lInterval = ValueInterval(leftKeyStat.min, leftKeyStat.max, leftKey.dataType)
-      val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
+      val lInterval = keyInterval(leftKey, leftKeyStat)
+      val rInterval = keyInterval(rightKey, rightKeyStat)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
+        val lRangeKnown = lInterval.isInstanceOf[NumericValueInterval]
+        val rRangeKnown = rInterval.isInstanceOf[NumericValueInterval]
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
-          case (Some(l: Histogram), Some(r: Histogram)) =>
+          // Histograms are trimmed to the intersected range, so both keys need a known range.
+          case (Some(l: Histogram), Some(r: Histogram))
+              if canEstimateWithHistogram(leftKey.dataType) && lRangeKnown && rRangeKnown =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
         keyStatsAfterJoin +=
-          // Histograms are propagated as unchanged. During future estimation, they should be
-          // truncated by the updated max/min. In this way, only pointers of the histograms are
-          // propagated and thus reduce memory consumption.
-          (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
-            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
+          // A histogram is propagated as unchanged, so that only a pointer to it is kept. Later
+          // estimates bound it by the min/max of the joined keys, and do not use it without them.
+          // If only one key has a known range, the joined keys take it, and the histogram of the
+          // other key, which may not cover that range, is neither used above nor propagated.
+          (leftKey -> joinStat.copy(
+            histogram = leftKeyStat.histogram.filter(_ => lRangeKnown || !rRangeKnown))) +=
+            (rightKey -> joinStat.copy(
+              histogram = rightKeyStat.histogram.filter(_ => rRangeKnown || !lRangeKnown)))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
-        // One of the join key pairs is disjoint, thus the two sides of join is disjoint.
+        // One of the join key pairs is disjoint or has no non-null values, thus the two sides
+        // of join is disjoint.
         joinCard = 0
       }
       i += 1
     }
     (joinCard, AttributeMap(keyStatsAfterJoin))
+  }
+
+  /**
+   * Returns the value range of a join key. A key with a distinct count of 0 holds only nulls and
+   * overlaps no key, whatever its type. A key with distinct values but no min/max (a data source
+   * may not report them, and a union drops them for some types) has an unknown range, as a string
+   * or binary key does, and overlaps any key that has values.
+   */
+  private def keyInterval(key: AttributeReference, keyStat: ColumnStat): ValueInterval = {
+    if (keyStat.distinctCount.contains(BigInt(0))) {
+      new NullValueInterval()
+    } else if (!keyStat.hasMinMaxStats) {
+      new DefaultValueInterval()
+    } else {
+      ValueInterval(keyStat.min, keyStat.max, key.dataType)
+    }
   }
 
   /** Returns join cardinality and the column stat for this pair of join keys. */
@@ -263,9 +287,8 @@ case class JoinEstimation(join: Join) extends Logging {
     val overlappedRanges = getOverlappedRanges(
       leftHistogram = leftHistogram,
       rightHistogram = rightHistogram,
-      // Only numeric values have equi-height histograms.
-      lowerBound = newMin.get.toString.toDouble,
-      upperBound = newMax.get.toString.toDouble)
+      lowerBound = toDouble(newMin.get, leftKey.dataType),
+      upperBound = toDouble(newMax.get, leftKey.dataType))
 
     var card: BigDecimal = 0
     var totalNdv: Double = 0

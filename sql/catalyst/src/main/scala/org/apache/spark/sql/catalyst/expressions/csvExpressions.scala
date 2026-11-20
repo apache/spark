@@ -55,6 +55,15 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
   """,
+  note = """
+    A CHAR `csvStr` is not rtrimmed. Padding is parsed as trailing spaces and can create
+    extra fields or attach to the last unquoted field; use ignoreTrailingWhiteSpace to trim
+    the last field. CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class
+    (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
+    a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING.
+  """,
   since = "3.0.0",
   group = "csv_funcs")
 // scalastyle:on line.size.limit
@@ -66,8 +75,7 @@ case class CsvToStructs(
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes
-  with SupportTrimmedCharInput {
+  with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
   override def nullIntolerant: Boolean = true
@@ -113,12 +121,12 @@ case class CsvToStructs(
   override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(trimStringInput(input.asInstanceOf[UTF8String]))
+    evaluator.evaluate(input.asInstanceOf[UTF8String])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = stringInput.genCode(ctx)
+    val eval = child.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
@@ -153,6 +161,11 @@ case class CsvToStructs(
       > SELECT _FUNC_('1,abc');
        STRUCT<_c0: INT, _c1: STRING>
   """,
+  note = """
+    A CHAR `csv` argument is not rtrimmed. When CHAR is first-class, padding can change
+    the inferred field count and types; for example CAST('1' AS CHAR(3)) infers DOUBLE
+    with the default comma delimiter.
+  """,
   since = "3.0.0",
   group = "csv_funcs")
 case class SchemaOfCsv(
@@ -161,8 +174,7 @@ case class SchemaOfCsv(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase
-  with SupportTrimmedCharInput {
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -210,8 +222,8 @@ case class SchemaOfCsv(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(stringInput),
-    Seq(stringInput.dataType),
+    Seq(child),
+    Seq(child.dataType),
     returnNullable = false)
 }
 

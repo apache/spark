@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, JoinHint, LogicalPlan, Union}
 import org.apache.spark.sql.types._
 
 class UnionEstimationSuite extends StatsEstimationTestBase {
@@ -363,5 +364,26 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       "hasCountStats should be true when both distinctCount and nullCount are defined")
     assert(keyStat.distinctCount === Some(15))
     assert(keyStat.nullCount === Some(3))
+  }
+
+  test("SPARK-61724: join on a union of TIMESTAMP_NTZ or ANSI interval columns") {
+    // The union keeps the min/max of these types, and a join on its output uses them.
+    Seq[(DataType, Int => Any)](
+      (TimestampNTZType, _.toLong),
+      (YearMonthIntervalType(), identity),
+      (DayTimeIntervalType(), _.toLong)).foreach { case (dt, value) =>
+      def child(min: Int, max: Int): LogicalPlan = {
+        val key = AttributeReference("k", dt)()
+        StatsTestPlan(Seq(key), rowCount = 5, AttributeMap(Seq(key -> ColumnStat(
+          distinctCount = Some(5), min = Some(value(min)), max = Some(value(max)),
+          nullCount = Some(0)))))
+      }
+      val union = Union(Seq(child(1, 5), child(6, 10)))
+      val other = child(1, 5)
+      val join = Join(union, other, Inner, Some(EqualTo(union.output.head, other.output.head)),
+        JoinHint.NONE)
+      // 10 x 5 rows with 5 distinct values on each side.
+      assert(join.stats.rowCount.contains(BigInt(10)), dt)
+    }
   }
 }

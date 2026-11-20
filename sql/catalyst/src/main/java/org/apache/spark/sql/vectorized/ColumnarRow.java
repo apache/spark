@@ -41,10 +41,18 @@ public final class ColumnarRow extends InternalRow {
   private final int numFields;
 
   public ColumnarRow(ColumnVector data, int rowId) {
-    assert (data.dataType() instanceof StructType);
     this.data = data;
     this.rowId = rowId;
-    this.numFields = ((StructType) data.dataType()).size();
+    DataType dt = data.dataType();
+    if (dt instanceof StructType) {
+      this.numFields = ((StructType) dt).size();
+    } else {
+      // Struct-backed framework types map to PhysicalStructType but are not StructType.
+      PhysicalDataType pdt = PhysicalDataType.apply(dt);
+      assert pdt instanceof PhysicalStructType :
+        "ColumnarRow requires a struct-backed type, got: " + dt;
+      this.numFields = ((PhysicalStructType) pdt).fields().length;
+    }
   }
 
   @Override

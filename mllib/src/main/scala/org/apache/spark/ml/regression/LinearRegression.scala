@@ -58,7 +58,8 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth with HasLoss with HasMaxBlockSizeInMB {
+    with HasAggregationDepth with HasLoss with HasMaxBlockSizeInMB
+    with HasIntermediateStorageLevel {
 
   import LinearRegression._
 
@@ -326,13 +327,23 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /**
+   * Sets the storage level for intermediate training data on the iterative training path.
+   * Has no effect on normal-equation training, including when [[solver]] is "auto" and selects
+   * that path, or when training returns early for a constant label.
+   *
+   * @group expertSetParam
+   */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, solver, tol,
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss,
-      epsilon, maxBlockSizeInMB)
+      epsilon, maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
@@ -549,7 +560,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     if ($(fitIntercept) && $(loss) == Huber) {

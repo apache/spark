@@ -878,7 +878,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest {
         conf = conf,
         localRootDir = Utils.createTempDir(),
         hadoopConf = hadoopConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]",
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]",
         useColumnFamilies = true,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
         partitionId = 0,

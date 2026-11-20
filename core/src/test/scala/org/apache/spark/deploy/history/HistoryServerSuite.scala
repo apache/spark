@@ -18,6 +18,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL}
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
@@ -354,16 +355,38 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     holdStatus._3 should be (Some("Hold status not available through the history server."))
   }
 
+  test("SPARK-61841: app UI action endpoints are not attached at global paths") {
+    // Start with no app loaded, so that the codes below come from the history server itself.
+    stop()
+    init()
+
+    // The paths the UI's forms post to. The trailing slash matters: without it, a handler
+    // attached at the path only redirects to add the slash, which hides the leak.
+    val actionPaths = Seq("/jobs/job/kill/", "/stages/stage/kill/", "/jobs/hold/", "/jobs/resume/")
+    def postCodes(basePath: String = ""): Seq[Int] = actionPaths.map { path =>
+      TestUtils.httpResponseCode(new URI(s"http://$localhost:$port$basePath$path").toURL, "POST")
+    }
+    val codesWithoutApp = postCodes()
+
+    // Loading an app attaches its UI handlers to the history server.
+    val appBasePath = "/history/local-1422981780767"
+    HistoryServerSuite.getUrl(new URI(s"http://$localhost:$port$appBasePath/jobs/").toURL)
+    assert(postCodes() === codesWithoutApp)
+    // They are attached under the app's base path instead, where a POST without the CSRF token
+    // is rejected.
+    assert(postCodes(appBasePath) === actionPaths.map(_ => HttpServletResponse.SC_FORBIDDEN))
+  }
+
   test("automatically retrieve uiRoot from request through Knox") {
     assert(sys.props.get("spark.ui.proxyBase").isEmpty,
       "spark.ui.proxyBase is defined but it should not for this UT")
     assert(sys.env.get("APPLICATION_WEB_PROXY_BASE").isEmpty,
       "APPLICATION_WEB_PROXY_BASE is defined but it should not for this UT")
-    val page = new HistoryPage(server)
+    val pages = Seq(new HistoryPage(server), new LogPage(new SparkConf(false)))
     val requestThroughKnox = mock[HttpServletRequest]
     val knoxBaseUrl = "/gateway/default/sparkhistoryui"
     when(requestThroughKnox.getHeader("X-Forwarded-Context")).thenReturn(knoxBaseUrl)
-    val responseThroughKnox = page.render(requestThroughKnox)
+    val responseThroughKnox = pages.flatMap(_.render(requestThroughKnox))
 
     val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
     val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
@@ -372,7 +395,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     }
 
     val directRequest = mock[HttpServletRequest]
-    val directResponse = page.render(directRequest)
+    val directResponse = pages.flatMap(_.render(directRequest))
 
     val directUrls = directResponse \\ "@href" map (_.toString)
     val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
@@ -383,12 +406,12 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
-    val page = new HistoryPage(server)
+    val pages = Seq(new HistoryPage(server), new LogPage(new SparkConf(false)))
     val request = mock[HttpServletRequest]
 
     // when
     System.setProperty("spark.ui.proxyBase", uiRoot)
-    val response = page.render(request)
+    val response = pages.flatMap(_.render(request))
 
     // then
     val urls = response \\ "@href" map (_.toString)
@@ -775,9 +798,34 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     assert(conn.getResponseCode === 302)
     assert(conn.getHeaderField("Location") === "/")
   }
+
+  test("SPARK-59613: /static/sql resources are served on startup without loading any app") {
+    stop()
+    init()
+
+    val port = server.boundPort
+    Seq(
+      "allexecutionspage.js",
+      "executionpage.js",
+      "spark-sql-viz.css",
+      "spark-sql-viz.js",
+      "sql-table-utils.js").foreach { name =>
+      val url = new URI(s"http://$localhost:$port/static/sql/$name").toURL
+      assert(HistoryServerSuite.getUrl(url) === HistoryServerSuite.bundledStaticFile(s"sql/$name"),
+        s"$url did not return the bundled file")
+    }
+    assert(server.cacheMetrics.loadCount.getCount === 0, "no apps should be loaded")
+  }
 }
 
 object HistoryServerSuite {
+
+  /** Returns a file bundled under the core static resource dir, e.g. "sql/spark-sql-viz.js". */
+  def bundledStaticFile(relativePath: String): String = {
+    val in = getClass.getResourceAsStream(s"/${SparkUI.STATIC_RESOURCE_DIR}/$relativePath")
+    assert(in != null, s"missing bundled static file $relativePath")
+    Utils.tryWithResource(in)(s => new String(s.readAllBytes(), StandardCharsets.UTF_8))
+  }
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)

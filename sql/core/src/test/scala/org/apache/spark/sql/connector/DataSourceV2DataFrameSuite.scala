@@ -44,8 +44,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with SessionQueryTest
@@ -1551,7 +1553,7 @@ class DataSourceV2DataFrameSuite
   // Unlike the disabled case above, this behavior is not parameterized over ANSI: reserved keyword
   // enforcement (enforceReservedKeywords = ansiEnabled && ENFORCE_RESERVED_KEYWORDS) can only be on
   // when ANSI is enabled. With ANSI disabled the conf is a no-op.
-  test("generation expression resolves a reserved keyword to the function when " +
+  test("generation expression with a reserved keyword is rejected when " +
     "enforceReservedKeywords is enabled") {
     val tableName = "testcat.ns1.ns2.tbl"
     withSQLConf(
@@ -1559,21 +1561,26 @@ class DataSourceV2DataFrameSuite
         SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       withTable(tableName) {
         // With reserved keyword enforcement on, the unquoted `current_date` in the generation
-        // expression binds to the built-in CURRENT_DATE function rather than the same-named
-        // column. This matches the SQL standard.
-        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-          sql(
-            s"""CREATE TABLE $tableName (
-               |  `current_date` DATE,
-               |  c2 DATE GENERATED ALWAYS AS (current_date)
-               |) USING foo""".stripMargin)
-        }
-        val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
-        assert(genExpr != null)
-        assert(genExpr.getSql == "current_date")
-        // CURRENT_DATE has no V2 representation, so the connector falls back to the SQL form. A
-        // non-null field reference here would mean the column incorrectly took priority.
-        assert(genExpr.getExpression == null)
+        // expression binds to the built-in CURRENT_DATE function. A write reads the stored text
+        // without the enforcement and would bind it to the same-named column instead.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""CREATE TABLE $tableName (
+                 |  `current_date` DATE,
+                 |  c2 DATE GENERATED ALWAYS AS (current_date)
+                 |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "c2",
+            "expressionStr" -> "current_date",
+            "reason" -> ("a write reads it with the default values of the parser configs, " +
+              "such as spark.sql.parser.escapedStringLiterals and " +
+              "spark.sql.ansi.enforceReservedKeywords, and this session reads it differently")))
+
+        // CURDATE is not a reserved keyword, so it reads as the function in both cases.
+        sql(s"CREATE TABLE $tableName (c2 DATE GENERATED ALWAYS AS (curdate())) USING foo")
       }
     }
   }
@@ -3454,13 +3461,8 @@ class DataSourceV2DataFrameSuite
   }
 
   // Column ID tests: Write operations
-  //
-  // [[writeTo().append()]] eagerly executes the command during the
-  // [[commandExecuted]] phase, before the refresh phase runs. As a result,
-  // column ID validation does not apply to the source DataFrame in a
-  // [[writeTo]] path. The append succeeds without throwing a
-  // COLUMNS_MISMATCH error.
-  test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
+
+  test("writeTo().append() rejects stale source after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3470,9 +3472,13 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // Command is eagerly executed before the refresh phase validates
-      // column IDs. No COLUMNS_MISMATCH exception is thrown.
-      source.writeTo(t).append()
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(t).append()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
 
