@@ -2150,6 +2150,51 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of an inner join") {
+    // The divisions are built in ANSI mode, where they can fail. An inner or cross join
+    // evaluates its condition before the filter above it, so after the throwable conjunct of the
+    // join condition, a filter condition that can fail stays above the join, whichever sides it
+    // reads. A condition that can not fail is pushed, or moved into the join condition.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val throwing = IsNull(RaiseError(Literal("boom")))
+    Seq(Inner, Cross).foreach { joinType =>
+      val originalQuery = testRelation
+        .join(testRelation1, joinType, Some($"a" === $"d" && throwing))
+        .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1 && $"b" > 1 &&
+          $"c" === $"d")
+
+      val correctAnswer = testRelation.where($"b" > 1)
+        .join(testRelation1, joinType, Some($"c" === $"d" && $"a" === $"d" && throwing))
+        .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1)
+        .analyze
+
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
+    }
+  }
+
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of a left semi or left anti join") {
+    // The division is built in ANSI mode, where it can fail. The condition of a left semi or
+    // left anti join decides which left rows reach the filter above it, so after the throwable
+    // conjunct of the join condition, a filter condition that can fail stays above the join. A
+    // condition that can not fail is pushed. A left outer join keeps every left row, so both are
+    // pushed below it.
+    val divide = Divide($"b", Literal(2), NumericEvalContext(EvalMode.ANSI))
+    val condition = Some($"a" === $"d" && IsNull(RaiseError(Literal("boom"))))
+    Seq(LeftSemi, LeftAnti, LeftOuter).foreach { joinType =>
+      val originalQuery = testRelation.join(testRelation1, joinType, condition)
+        .where(divide > 1 && $"c" > 1)
+      val correctAnswer = if (joinType == LeftOuter) {
+        testRelation.where(divide > 1 && $"c" > 1).join(testRelation1, joinType, condition)
+      } else {
+        testRelation.where($"c" > 1).join(testRelation1, joinType, condition).where(divide > 1)
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
@@ -3344,6 +3389,19 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-61938: do not push down throwable predicates of a join condition") {
+    val x = testStringRelation.subquery("x")
+    val y = testStringRelation.subquery("y")
+
+    // `(x.a = 1 AND rx) OR x.a = 3` and `y.a = 2 OR (y.a = 4 AND ry)` below the join would
+    // evaluate `rx` and `ry` also on the rows that have no match on `b`.
+    val rx = IsNull(RaiseError($"x.e"))
+    val ry = IsNull(RaiseError($"y.e"))
+    val query = x.join(y, condition = Some($"x.b" === $"y.b" &&
+      (($"x.a" === 1 && rx && $"y.a" === 2) || ($"x.a" === 3 && $"y.a" === 4 && ry)))).analyze
+    comparePlans(Optimize.execute(query), query)
   }
 
   test("push down predicates(with NOT predicate) through inner join") {

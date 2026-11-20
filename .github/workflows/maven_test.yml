@@ -142,7 +142,7 @@ jobs:
           - >-
             core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#utils-java,common#config,common#variant
           - >-
-            graphx,streaming,hadoop-cloud
+            graphx,graph,streaming,hadoop-cloud
           - >-
             mllib-local,mllib,sql#pipelines
           - >-
