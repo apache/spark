@@ -521,20 +521,6 @@ class ConstantPropagationSuite extends PlanTest {
     }
   }
 
-  test("SPARK-61437: A filter whose condition does not change is returned as it is") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      // The check folds `7 < 3 OR 10 / x > 1` each time the rule runs on the filter, so the rule
-      // returns the filter itself, which the batch then does not run it on again.
-      val plan = projected.where(
-        $"id" === 7L && ($"id" < 3L || tenDividedBy($"x") > 1.0) && $"i" === 1).analyze
-      assert(ConstantPropagation(plan) eq plan)
-      // Also where it changes the condition, from the next time on.
-      val moved = ConstantPropagation(projected.where(
-        ($"id" < 3L || tenDividedBy($"x") > 1.0) && $"i" === 1 && $"id" === 7L).analyze)
-      assert(ConstantPropagation(moved) eq moved)
-    }
-  }
-
   test("SPARK-61437: An equality over a column that can fail is handled as before when the " +
       "condition with all of the constants fails to fold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
@@ -902,6 +888,14 @@ class ConstantPropagationSuite extends PlanTest {
           $"id" === 7L),
         Not($"id" === 7L) || Not(If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType))) ||
           Not($"u" === "A"))
+      // There, a constant that a later iteration folds goes in if the literal does, also for a
+      // nullable expression, as in the next iteration: here `d = 7` makes the `IF` FALSE.
+      val withD = LocalRelation($"s".string.notNull, $"d".int.notNull, $"x".long.notNull)
+        .select($"d", $"x", Upper($"s").as("u"))
+      val nullableSeven = If(Literal(true), Literal(7), Literal(null, IntegerType))
+      val underNot = withD.where(Not($"u" === "X" && $"d" === nullableSeven &&
+        If($"d" > 10, tenDividedBy($"x"), Literal(0.0)) > 1.0)).analyze
+      comparePlans(ConstantPropagation(underNot), withD.where(Not(Literal(false))).analyze)
     }
   }
 

@@ -171,10 +171,11 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
           new FailableColumns(failableColumnsOf(f.child, childColumns),
             if (propagatesFoldables) foldableColumnsOf(f.child, childColumns)
             else AttributeMap.empty))
-        // The filter itself, where the condition does not change, so that the batch does not
-        // apply the rule to it again until it or a plan below it changes.
-        newCondition.filterNot(_.fastEquals(f.condition))
-          .map(c => f.copy(condition = c)).getOrElse(f)
+        if (newCondition.isDefined) {
+          f.copy(condition = newCondition.get)
+        } else {
+          f
+        }
     }
   }
 
@@ -311,8 +312,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * conjuncts again each time it runs on the filter, e.g. for `id = 7 AND (id < 3 OR 10 / x > 1)
    * AND i = 1`, where [[replaceConstants]] keeps `id` in the operand before the division, it
    * folds `7 < 3 OR 10 / x > 1` to `10 / x > 1` each time, only to tell whether that is FALSE or
-   * fails to fold. Where the condition does not change, the rule returns the filter as it is, so
-   * the batch runs it on the filter again only once the filter or a plan below it changes.
+   * fails to fold.
    */
   private def propagateInPlace(
       condition: Expression,
@@ -398,10 +398,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       nullIsFalse: Boolean): Seq[(Attribute, (Literal, BinaryComparison))] = {
     def equality(b: BinaryComparison, a: AttributeReference, e: Expression) =
       if (!e.isInstanceOf[Literal] && e.foldable && !equalityPredicates.contains(a)) {
-        // `safeToReplace` gets the comparison with the literal, as for the other equalities.
-        fold(e).filter(l => l.value != null && safeToReplace(
-          b.withNewChildren(b.children.map(c => if (c eq e) l else c)).asInstanceOf[
-            BinaryComparison], a, nullIsFalse)).map(l => (a: Attribute) -> (l, b))
+        fold(e).filter { l =>
+          // `safeToReplace` gets the comparison with the literal, as for the other equalities.
+          val withLiteral = b.withNewChildren(b.children.map(c => if (c eq e) l else c))
+          l.value != null &&
+            safeToReplace(withLiteral.asInstanceOf[BinaryComparison], a, nullIsFalse)
+        }.map(l => (a: Attribute) -> (l, b))
       } else {
         None
       }
@@ -773,7 +775,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Not `computeIfAbsent`: `compute` adds the values of the plans below to the same map, which
-  // the mapping function of `Map.computeIfAbsent` must not do.
+  // the mapping function of `Map.computeIfAbsent` should not do.
   private def cached[T](cache: java.util.IdentityHashMap[LogicalPlan, T], plan: LogicalPlan)(
       compute: => T): T = {
     val value = cache.get(plan)
@@ -1916,8 +1918,8 @@ object FoldablePropagation extends Rule[LogicalPlan] with AliasHelper {
    * does not propagate them, in which case `childMaps` is not evaluated.
    *
    * `ConstantPropagation` also uses this to find the foldable columns of the child of a filter,
-   * with `withoutAliases`. Then a column is foldable also if its expression is once the aliases
-   * below its top one are removed, as `CleanupAliases` does, e.g. one that renames a foldable
+   * with `withoutAliases`. Then a column is foldable also if its expression is foldable once the
+   * aliases below its top one are removed, as `CleanupAliases` does, e.g. one that renames a foldable
    * column or is computed from one, which this rule finds only in its next application, and its
    * alias has those aliases removed.
    */
