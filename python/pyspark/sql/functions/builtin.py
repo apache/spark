@@ -580,7 +580,8 @@ def try_abs(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column of the same type as the input.
+        A column of the type that :meth:`abs` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
 
     See Also
     --------
@@ -953,7 +954,8 @@ def try_negative(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column of the same type as the input.
+        A column of the type that :meth:`negative` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
 
     See Also
     --------

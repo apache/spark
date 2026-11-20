@@ -4735,7 +4735,8 @@ object functions {
    * @group math_funcs
    * @since 4.5.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column of the same type as `abs` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
    */
   def try_abs(e: Column): Column = Column.fn("try_abs", e)
 
@@ -4819,7 +4820,8 @@ object functions {
    * @group math_funcs
    * @since 4.5.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column of the same type as `negative` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
    */
   def try_negative(e: Column): Column = Column.fn("try_negative", e)
 

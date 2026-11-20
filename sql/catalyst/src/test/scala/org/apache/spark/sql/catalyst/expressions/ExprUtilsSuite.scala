@@ -326,6 +326,11 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       evalEach(t, values)(UnaryMinus(_, failOnError = true))
       evalEach(t, values)(Abs(_, failOnError = true))
     }
+    // The null-on-overflow forms of try_abs and try_negative.
+    for ((t, values) <- Seq(longs, ints, shorts, bytes)) {
+      evalEach(t, values)(AbsOrNull(_))
+      evalEach(t, values)(NegateOrNull(_))
+    }
     for ((t, values) <- nonDecimals ++ Seq(decimals, smallDecimals)) {
       Seq(legacy, tryMode).foreach(ctx => evalPairs(t, values)(Remainder(_, _, ctx)))
       evalPairs(t, values)(Pmod(_, _, legacy))
@@ -614,7 +619,7 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       Year(date), YearOfWeek(date), Quarter(date), Month(date), DayOfMonth(date),
       DayOfYear(date), DayOfWeek(date), WeekDay(date), WeekOfYear(date), MonthName(date),
       DayName(date), Hour(ts, Some("UTC")), Minute(ts, Some("UTC")), Second(ts, Some("UTC")),
-      SecondWithFraction(ts, Some("UTC")))
+      SecondWithFraction(ts, Some("UTC")), AbsOrNull(a), NegateOrNull(a))
     always.foreach { e =>
       assert(e.isInstanceOf[NoThrow], e)
       assert(e.isTotal, e)
@@ -725,11 +730,12 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
     val (always, others) = classes.partition(classOf[NoThrow].isAssignableFrom)
     always.foreach(c => assert(!Modifier.isAbstract(c.getModifiers), c))
     assert(always.map(_.getSimpleName).sorted === Seq(
-      "And", "Coalesce", "Collate", "Contains", "CreateArray", "CreateNamedStruct", "DayName",
-      "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith", "EqualNullSafe", "EqualTo",
+      "AbsOrNull", "And", "Coalesce", "Collate", "Contains", "CreateArray", "CreateNamedStruct",
+      "DayName", "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith", "EqualNullSafe", "EqualTo",
       "GetArrayStructFields", "GetMapValue", "GetStructField", "GreaterThan",
       "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull", "Length",
-      "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "Not", "NullIf",
+      "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "NegateOrNull", "Not",
+      "NullIf",
       "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith",
       "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
     // The ones that decide it by their input types or eval mode.

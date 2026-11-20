@@ -244,20 +244,26 @@ abstract class UnaryArithmeticOrNull extends UnaryExpression with ExpectsInputTy
   /** The Java code of the result for `value`, which is not the minimum value of its type. */
   protected def opCode(value: String): String
 
-  protected override def nullSafeEval(input: Any): Any = dataType match {
-    case ByteType =>
+  /** The interpreted evaluation of a non-null input for the input type. */
+  protected def nonNullEvaluator: Any => Any = dataType match {
+    case ByteType => input =>
       val v = input.asInstanceOf[Byte]
       if (v == Byte.MinValue) null else op(v).toByte
-    case ShortType =>
+    case ShortType => input =>
       val v = input.asInstanceOf[Short]
       if (v == Short.MinValue) null else op(v).toShort
-    case IntegerType | _: YearMonthIntervalType =>
+    case IntegerType | _: YearMonthIntervalType => input =>
       val v = input.asInstanceOf[Int]
       if (v == Int.MinValue) null else op(v).toInt
-    case LongType | _: DayTimeIntervalType =>
+    case LongType | _: DayTimeIntervalType => input =>
       val v = input.asInstanceOf[Long]
       if (v == Long.MinValue) null else op(v)
   }
+
+  // Resolved once, rather than for every row.
+  private lazy val evalNonNull = nonNullEvaluator
+
+  protected override def nullSafeEval(input: Any): Any = evalNonNull(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
@@ -304,15 +310,15 @@ case class NegateOrNull(child: Expression) extends UnaryArithmeticOrNull with No
 
   override protected def opCode(value: String): String = s"-($value)"
 
-  protected override def nullSafeEval(input: Any): Any = dataType match {
-    case CalendarIntervalType =>
+  override protected def nonNullEvaluator: Any => Any = dataType match {
+    case CalendarIntervalType => input =>
       val v = input.asInstanceOf[CalendarInterval]
       if (v.months == Int.MinValue || v.days == Int.MinValue || v.microseconds == Long.MinValue) {
         null
       } else {
         IntervalUtils.negate(v)
       }
-    case _ => super.nullSafeEval(input)
+    case _ => super.nonNullEvaluator
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
