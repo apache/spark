@@ -2866,12 +2866,21 @@ class WholeStageCodegenSuite extends SharedSparkSession
       s"Expected SortMergeJoinExec inside WholeStageCodegenExec, but plan was:\n$plan")
   }
 
+  /** Whether the SMJ in `df`'s stages extracts its streamed columns into fields. */
+  private def takesFieldPath(df: DataFrame): Boolean =
+    genCode(df).exists(c => "smj_streamVar_\\d".r.findFirstIn(c.body).nonEmpty)
+
+  private def assertFieldPath(df: DataFrame): Unit = {
+    assertSMJCodegenUsed(df)
+    assert(takesFieldPath(df), "Expected the SMJ to take the field-based extraction path")
+  }
+
   test("SPARK-59787: wide inner SortMergeJoin with mixed nullable columns") {
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(100, WIDE_COLS, "l")
       val right = wideDF(100, WIDE_COLS, "r")
-      def joined = left.join(right, left("id") === right("id"))
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"))
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
     }
   }
@@ -2880,8 +2889,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(100, WIDE_COLS, "l")
       val right = wideDF(100, WIDE_COLS, "r").where($"id" >= 50)
-      def joined = left.join(right, left("id") === right("id"), "left_outer")
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"), "left_outer")
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       val nullCount = joined.where(right("id").isNull).count()
       assert(nullCount == 50, s"Expected 50 null-output rows, got $nullCount")
@@ -2892,8 +2901,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(100, WIDE_COLS, "l").where($"id" >= 50)
       val right = wideDF(100, WIDE_COLS, "r")
-      def joined = left.join(right, left("id") === right("id"), "right_outer")
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"), "right_outer")
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       val nullCount = joined.where(left("id").isNull).count()
       assert(nullCount == 50, s"Expected 50 null-output rows, got $nullCount")
@@ -2904,8 +2913,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(100, WIDE_STREAMED_COLS, "l")
       val right = wideDF(100, NARROW_COLS, "r").where($"id" >= 50)
-      def joined = left.join(right, left("id") === right("id"), "left_semi")
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"), "left_semi")
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       assert(joined.count() == 50)
     }
@@ -2915,8 +2924,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(100, WIDE_STREAMED_COLS, "l")
       val right = wideDF(100, NARROW_COLS, "r").where($"id" >= 50)
-      def joined = left.join(right, left("id") === right("id"), "left_anti")
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"), "left_anti")
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       assert(joined.count() == 50)
     }
@@ -2930,13 +2939,15 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val right = wideDF(100, NARROW_COLS, "r").where($"id" >= 50)
       left.createOrReplaceTempView("wide_left")
       right.createOrReplaceTempView("wide_right")
-      def joined = spark.sql(
-        "SELECT wide_left.*, EXISTS (SELECT 1 FROM wide_right WHERE wide_left.id = wide_right.id)" +
-        " AS has_match FROM wide_left")
-      assertSMJCodegenUsed(joined)
+      // The streamed-only conjunct keeps the wide columns below the join; without it they are
+      // computed above it and the SMJ's streamed child is only `id`.
+      def joined: DataFrame = spark.sql(
+        "SELECT wide_left.*, EXISTS (SELECT 1 FROM wide_right WHERE wide_left.id = wide_right.id" +
+        " AND wide_left.l_c2 > 60) AS has_match FROM wide_left")
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       val matchCount = joined.where($"has_match").count()
-      assert(matchCount == 50)
+      assert(matchCount == 41)
     }
   }
 
@@ -2945,9 +2956,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val left = wideDF(100, WIDE_COLS, "l")
       val right = wideDF(100, WIDE_COLS, "r")
       // Condition references both sides and rejects ~1/3 of pairs
-      def joined = left.join(right,
+      def joined: DataFrame = left.join(right,
         left("id") === right("id") && (left("l_c0") + right("r_c0")) % 3 =!= 0)
-      assertSMJCodegenUsed(joined)
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       // Verify some pairs were actually rejected
       assert(joined.count() < 100, "Condition should reject some pairs")
@@ -2960,10 +2971,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val left = wideDF(100, WIDE_COLS, "l")
       val right = wideDF(100, WIDE_COLS, "r")
       // Cross-side condition that rejects some matched pairs
-      def joined = left.join(right,
+      def joined: DataFrame = left.join(right,
         left("id") === right("id") && (left("l_c0") + right("r_c0")) % 3 =!= 0,
         "left_outer")
-      assertSMJCodegenUsed(joined)
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       // All 100 left rows present (outer join), but some with null right side
       assert(joined.count() == 100)
@@ -2978,10 +2989,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val right = wideDF(100, NARROW_COLS, "r")
       // Pairs rejected by the condition make the streamed row an anti-join hit; all of its
       // columns (not just the condition's) must be extracted before it is output.
-      def joined = left.join(right,
+      def joined: DataFrame = left.join(right,
         left("id") === right("id") && (left("l_c0") + right("r_c0")) % 3 =!= 0,
         "left_anti")
-      assertSMJCodegenUsed(joined)
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
       assert(joined.count() > 0, "Condition should reject some pairs")
     }
@@ -2991,8 +3002,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(50, WIDE_COLS, "l")
       val right = wideDF(50, WIDE_COLS, "r")
-      def joined = left.join(right, Seq("id"))
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, Seq("id"))
+      assertFieldPath(joined)
       checkAnswer(joined, withoutWholeStage(joined))
     }
   }
@@ -3004,9 +3015,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
       withSplitAlways {
         val left = wideDF(10, WIDE_COLS, "l")
         val right = wideDF(10, WIDE_COLS, "r")
-        def df = left.join(right, Seq("id"))
+        def df: DataFrame = left.join(right, Seq("id"))
           .selectExpr("*", s"${largeCaseWhen("r_c0", 2000)} AS v")
-        assertSMJCodegenUsed(df)
+        assertFieldPath(df)
         checkAnswer(df, withoutWholeStage(df))
       }
     }
@@ -3016,10 +3027,68 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(wideSMJConf: _*) {
       val left = wideDF(10, WIDE_COLS, "l")
       val right = wideDF(10, WIDE_COLS, "r")
-      def joined = left.join(right, left("id") === right("id"))
-      assertSMJCodegenUsed(joined)
+      def joined: DataFrame = left.join(right, left("id") === right("id"))
+      assertFieldPath(joined)
       assert(maxStageMethodSize(joined) <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT,
         "processNext() bytecode should stay under 8K with field-based extraction")
+    }
+  }
+
+  test("SPARK-59787: wide left semi SortMergeJoin with extra join condition") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, WIDE_STREAMED_COLS, "l")
+      val right = wideDF(100, NARROW_COLS, "r")
+      def joined: DataFrame = left.join(right,
+        left("id") === right("id") && (left("l_c0") + right("r_c0")) % 3 =!= 0,
+        "left_semi")
+      assertFieldPath(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+      assert(joined.count() > 0 && joined.count() < 100)
+    }
+  }
+
+  test("SPARK-59787: wide SortMergeJoin with streamed-side condition guard") {
+    withSQLConf(
+      (wideSMJConf :+ (SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> "true")): _*
+    ) {
+      val left = wideDF(100, WIDE_STREAMED_COLS, "l")
+      val right = wideDF(100, NARROW_COLS, "r")
+      // `l_c2 > 40` is hoisted into the guard; the cross-side conjunct stays in the loop.
+      val cond = left("id") === right("id") && left("l_c2") > 40 &&
+        (left("l_c0") + right("r_c0")) % 3 =!= 0
+      Seq("left_outer", "left_anti").foreach { joinType =>
+        def joined: DataFrame = left.join(right, cond, joinType)
+        assertFieldPath(joined)
+        assert(genCode(joined).exists(c =>
+          "streamedOnlyValue_\\d".r.findFirstIn(c.body).nonEmpty),
+          s"Expected the streamed-side guard in the $joinType join")
+        checkAnswer(joined, withoutWholeStage(joined))
+      }
+    }
+  }
+
+  test("SPARK-59787: narrow SortMergeJoin is not split") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, NARROW_COLS, "l")
+      val right = wideDF(100, NARROW_COLS, "r")
+      def joined: DataFrame = left.join(right,
+        left("id") === right("id") && (left("l_c0") + right("r_c0")) % 3 =!= 0)
+      assertSMJCodegenUsed(joined)
+      assert(!takesFieldPath(joined), "A narrow join should keep the local-variable path")
+      checkAnswer(joined, withoutWholeStage(joined))
+    }
+  }
+
+  test("SPARK-59787: wide SortMergeJoin is not split with whole stage splitting off") {
+    withSQLConf(
+      (wideSMJConf :+ (SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false")): _*
+    ) {
+      val left = wideDF(10, WIDE_COLS, "l")
+      val right = wideDF(10, WIDE_COLS, "r")
+      def joined: DataFrame = left.join(right, left("id") === right("id"))
+      assertSMJCodegenUsed(joined)
+      assert(!takesFieldPath(joined), "With the conf off the join should take master's path")
+      checkAnswer(joined, withoutWholeStage(joined))
     }
   }
 

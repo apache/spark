@@ -33,27 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.collection.BitSet
 
-object SortMergeJoinExec {
-  // Bytecode of an inner SMJ's processNext() measured on master per output column.
-  private val NULLABLE_COLUMN_BYTES = 58
-  private val NON_NULLABLE_FIXED_WIDTH_COLUMN_BYTES = 28
-  private val NON_NULLABLE_VARIABLE_WIDTH_COLUMN_BYTES = 50
-  private val BASE_BYTES = 160
-
-  /** Estimated bytecode size of processNext() when the join outputs `columns`. */
-  private[joins] def estimatedProcessNextBytes(columns: Seq[Attribute]): Int = {
-    BASE_BYTES + columns.map { a =>
-      if (a.nullable) {
-        NULLABLE_COLUMN_BYTES
-      } else if (UnsafeRow.isFixedLength(a.dataType)) {
-        NON_NULLABLE_FIXED_WIDTH_COLUMN_BYTES
-      } else {
-        NON_NULLABLE_VARIABLE_WIDTH_COLUMN_BYTES
-      }
-    }.sum
-  }
-}
-
 /**
  * Performs a sort merge join of two child relations.
  */
@@ -485,7 +464,7 @@ case class SortMergeJoinExec(
    *
    * Returns (exprCodes, perColumnExtraction) where exprCodes reference the class fields
    * (marked as globals so all codegen policies read them in place) and perColumnExtraction
-   * is one extraction snippet per output column — the caller partitions these by condition
+   * is one extraction snippet per output column; the caller partitions these by condition
    * references and calls splitExpressions on each group.
    * No separate variable declarations are needed since the fields are class members.
    */
@@ -565,17 +544,13 @@ case class SortMergeJoinExec(
     val bufferedRow = ctx.freshName("bufferedRow")
     val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
 
-    // Use field-based extraction only when the join's output would push processNext() past the
-    // JVM's 8K JIT limit. Only output columns count: semi/anti/existence don't emit buffered ones.
-    // The estimate is linear, but local variable slots past 255 need wider instructions, so keep
-    // 20% headroom.
+    // Under whole stage codegen, the join takes field-based extraction only where its stage's
+    // processNext() is past the JIT limit and the split lowers it (`chooseCode`).
     val outputColumns = joinType match {
       case LeftExistence(_) => streamedPlan.output
       case _ => streamedPlan.output ++ bufferedPlan.output
     }
-    val useFieldBasedExtraction =
-      SortMergeJoinExec.estimatedProcessNextBytes(outputColumns) * 6 / 5 >
-        CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+    val (splitMarker, useFieldBasedExtraction) = ctx.wholeStageOperatorSplit(outputColumns)
 
     // Create variables for both sides.
     val (streamedVars, streamedSnippets, bufferedVars, bufferedSnippets, streamedDecls) =
@@ -717,23 +692,22 @@ case class SortMergeJoinExec(
           conditionForCodegen.get,
           streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
 
-        val streamedVarDecl = streamedDecls.mkString("\n")
         val before = joinType match {
           case LeftAnti =>
-            s"""
-               |$streamedVarDecl
-               |$streamedBefore
-             """.stripMargin.trim
+            // No need to initialize `loaded` variable for Left Anti join.
+            streamedBefore.trim
           case _ =>
             s"""
                |boolean $loaded = false;
-               |$streamedVarDecl
                |$streamedBefore
              """.stripMargin
         }
 
         val loadStreamedAfterCond = joinType match {
-          case LeftAnti => ""
+          case LeftAnti =>
+            // No need to evaluate columns not used by condition from streamed side, as for Left
+            // Anti join, streamed row with match is not outputted.
+            ""
           case _ =>
             s"""
                |if (!$loaded) {
@@ -743,6 +717,7 @@ case class SortMergeJoinExec(
              """.stripMargin
         }
         val loadBufferedAfterCond = joinType match {
+          // No need to evaluate columns not used by condition from buffered side
           case LeftExistence(_) => ""
           case _ => bufferedAfter
         }
@@ -769,10 +744,8 @@ case class SortMergeJoinExec(
           bufferedSnippets, "extractJoinVars", Seq(("InternalRow", bufferedRow)))
         (sAllExtract, bAllExtract, "")
       } else {
-        val streamedVarDecl = streamedDecls.mkString("\n")
-        val streamedEval = evaluateVariables(streamedVars)
         // Leave buffered columns to consume() so they are read lazily, as before.
-        (s"$streamedVarDecl\n$streamedEval", "", "")
+        (evaluateVariables(streamedVars), "", "")
       }
     }
 
@@ -780,6 +753,7 @@ case class SortMergeJoinExec(
 
     val beforeLoopWithoutGuard =
       s"""
+         |${streamedDecls.mkString("\n")}
          |${streamedBeforeLoop.trim}
          |$streamedOnlyPre
          |$existsVarDecl
@@ -855,6 +829,7 @@ case class SortMergeJoinExec(
       s"$helperCls.recordSpillSizeOnTaskCompletion($matches, ${metricTerm(ctx, "spillSize")});"
 
     s"""
+       |$splitMarker
        |if (!$initJoin) {
        |  $initJoin = true;
        |  $addHookToRecordMetrics

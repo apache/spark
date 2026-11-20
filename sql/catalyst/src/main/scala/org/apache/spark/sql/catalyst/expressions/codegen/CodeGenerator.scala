@@ -1600,6 +1600,33 @@ class CodegenContext extends Logging {
     }
   }
 
+  /**
+   * For an operator that generates different code when whole stage codegen splits it, rather than
+   * a block of code [[splitExpressionsWithSources]] moves into methods: returns a marker to put
+   * in the operator's code and whether to generate the split code. The marker is empty except
+   * where `wholeStageSplit` records, where it lets `WholeStageCodegenExec.chooseCode` find the
+   * method the operator's code lands in; the operator is split where that method is past the
+   * limit and the split lowers its size, or where every expression is split.
+   *
+   * @param sources the expressions the operator's code is generated for, which tell it from other
+   *                operators in the stage.
+   */
+  private[sql] def wholeStageOperatorSplit(sources: Seq[Expression]): (String, Boolean) = {
+    wholeStageSplit match {
+      case WholeStageSplit.Off => ("", false)
+      case WholeStageSplit.Record =>
+        val key = nextWholeStageSplitKey(Seq(("", sources)))
+        val marker = CodeGenerator.wholeStageSplitMarker(wholeStageSplitsRecorded.length)
+        wholeStageSplitsRecorded += key
+        (marker, false)
+      case WholeStageSplit.Split(only) =>
+        val key = nextWholeStageSplitKey(Seq(("", sources)))
+        val split = only.forall(_.contains(key))
+        if (split) wholeStageBlocksSplit += 1
+        ("", split)
+    }
+  }
+
   /** The whole stage split of `splitExpressionsWithSources`. */
   private def splitWholeStage(
       pieces: Seq[(String, Seq[Expression])],

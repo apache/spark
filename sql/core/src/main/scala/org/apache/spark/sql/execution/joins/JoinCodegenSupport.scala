@@ -124,7 +124,7 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
    *
    * Returns (exprCodes, perColumnExtraction) where exprCodes reference the class fields
    * (marked as globals so all codegen policies read them in place) and perColumnExtraction
-   * is one extraction snippet per output column — the caller partitions these by condition
+   * is one extraction snippet per output column; the caller partitions these by condition
    * references and calls splitExpressions on each group.
    */
   protected def genOneSideJoinVarsAsFields(
