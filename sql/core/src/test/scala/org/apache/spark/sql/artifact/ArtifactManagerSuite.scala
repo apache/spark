@@ -19,13 +19,18 @@ package org.apache.spark.sql.artifact
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.{AnalysisException, Artifact}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, QueryExecutionThread, StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -763,6 +768,63 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(count4 == count3,
         s"$msg: codegen should not happen again as classloader is not changed")
     }
+  }
+
+  /**
+   * Runs one micro-batch of a streaming query of `session`, and returns the query with the
+   * artifact states that its stream thread saw while it planned the batch.
+   */
+  private def artifactStatesWhilePlanningStream(
+      session: SparkSession): (StreamExecution, Seq[Option[JobArtifactState]]) = {
+    import testImplicits._
+    val states = new ConcurrentLinkedQueue[Option[JobArtifactState]]()
+    object RecordArtifactState extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+        if (Thread.currentThread().isInstanceOf[QueryExecutionThread]) {
+          states.add(JobArtifactSet.getCurrentJobArtifactState)
+        }
+        Nil
+      }
+    }
+    session.experimental.extraStrategies = RecordArtifactState :: Nil
+    val input = MemoryStream[Int](session)
+    val query = input.toDF().writeStream.format("noop").start()
+    try {
+      input.addData(1)
+      query.processAllAvailable()
+    } finally {
+      query.stop()
+    }
+    (query.asInstanceOf[StreamingQueryWrapper].streamingQuery, states.asScala.toSeq)
+  }
+
+  test("SPARK-61959: Streaming query plans its batches with the artifact state of its session") {
+    val session = spark.newSession()
+    val (query, states) = artifactStatesWhilePlanningStream(session)
+    // The batches run in a clone of the session, which has its own copy of the artifacts.
+    val streamState = query.sparkSessionForStream.artifactManager.state
+    assert(streamState.uuid !== session.sessionUUID)
+    assert(states.nonEmpty)
+    assert(states.forall(_.contains(streamState)), states)
+  }
+
+  test("SPARK-61959: Streaming query plans with no artifact state without propagation") {
+    val session = spark.newSession()
+    session.conf.set(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key, "false")
+    val (query, states) = artifactStatesWhilePlanningStream(session)
+    // The previous behavior: the stream thread has no artifact state, even with isolation on.
+    assert(query.sparkSessionForStream.artifactManager.state !== null)
+    assert(states.nonEmpty)
+    assert(states.forall(_.isEmpty), states)
+  }
+
+  test("SPARK-61959: Streaming query without artifact isolation plans with no artifact state") {
+    val session = spark.newSession()
+    session.conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, "false")
+    val (query, states) = artifactStatesWhilePlanningStream(session)
+    assert(query.sparkSessionForStream.artifactManager.state === null)
+    assert(states.nonEmpty)
+    assert(states.forall(_.isEmpty), states)
   }
 }
 

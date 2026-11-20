@@ -215,9 +215,6 @@ abstract class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  /* Make sure we propagate the ArtifactSet to the micro batch thread. */
-  private val jobArtifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
-
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
@@ -233,7 +230,27 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runStream()
+        // The batches run in `sparkSessionForStream`, a clone of the session with its own copy
+        // of the artifacts. `SQLExecution` applies its artifact state only to run the jobs, but
+        // the batches are planned before that, and some plan nodes keep the state they are built
+        // with, for example the Python UDFs.
+        // TODO(SPARK-61997): Spark Connect builds the Python foreach writer on the request
+        //  thread, under the artifact state of the session that starts the query, so its Python
+        //  worker does not see the files of this stream's session yet.
+        // TODO(SPARK-61998): With artifact isolation on, each run gives its Python workers its
+        //  own artifact UUID, so each executor that runs its Python tasks keeps one more Python
+        //  worker pool until it stops.
+        // TODO(SPARK-62045): The Python workers that StreamingPythonRunner starts on the driver,
+        //  for the transformWithState pre-init step and for Spark Connect foreachBatch, get no
+        //  artifact UUID or files root, so they do not see the session's files yet.
+        if (sparkSessionForStream.sessionState.conf.getConf(
+            SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
+          JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {
+            runStream()
+          }
+        } else {
+          runStream()
+        }
       }
     }
 
