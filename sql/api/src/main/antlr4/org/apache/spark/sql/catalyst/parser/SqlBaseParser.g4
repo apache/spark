@@ -85,7 +85,32 @@ options { tokenVocab = SqlBaseLexer; }
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
            (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
-            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY);
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY) ||
+           (la == EVAL && isOperatorPipeEvalAssignment());
+  }
+
+  /**
+   * Checks if `| EVAL` is followed by an assignment: a column name and then `=`, or `.` for a
+   * multi-part key, which the parser captures to report a dedicated error. Otherwise `eval` is a
+   * column in a bitwise OR, as in `a | eval`, `(a | eval) = 1` or `CASE ... THEN a | eval END = 1`.
+   * So a token that ends an expression can't start the name, and a column named end needs
+   * backquotes after `|`.
+   */
+  private boolean isOperatorPipeEvalAssignment() {
+    int nameStart = _input.LA(3); // LA(1) is the pipe and LA(2) is EVAL.
+    if (nameStart == RIGHT_PAREN || nameStart == RIGHT_BRACKET || nameStart == END) {
+      return false;
+    }
+    int afterName = 4;
+    if (nameStart == IDENTIFIER_KW && _input.LA(4) == LEFT_PAREN) {
+      // IDENTIFIER('name'): its argument has no parentheses, so the name ends at the next one.
+      afterName = 5;
+      while (_input.LA(afterName) != RIGHT_PAREN && _input.LA(afterName) != Token.EOF) {
+        afterName++;
+      }
+      afterName++;
+    }
+    return _input.LA(afterName) == EQ || _input.LA(afterName) == DOT;
   }
 
   /**
@@ -2415,6 +2440,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | EVAL operatorPipeSetAssignmentSeq
     | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
@@ -2568,6 +2594,7 @@ ansiNonReserved
     | ENFORCED
     | ERROR
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -3021,6 +3048,7 @@ nonReserved
     | ERROR
     | ESCAPE
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
