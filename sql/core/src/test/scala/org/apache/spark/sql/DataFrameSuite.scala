@@ -3172,7 +3172,7 @@ class DataFrameSuite extends SharedSparkSession
   }
 
   test("SPARK-60731: a condition that cannot fail written after the one that ends the split is " +
-    "evaluated before it") {
+    "evaluated before it, and one that can fail is not") {
     // With short regex aliases without `(`, `\` or `{`, which cannot fail and version 0 of the
     // estimate treats as expensive, `g != j` needs every expensive alias not computed yet, so it
     // ends the split, but `j` is still filtered on below it: the split computes f, then j, then g,

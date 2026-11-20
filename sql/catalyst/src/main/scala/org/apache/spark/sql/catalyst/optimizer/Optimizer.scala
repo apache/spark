@@ -3270,16 +3270,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * alias for a later one and none of the aliases it leaves shares expensive work with one it
    * computes, which would then run twice; a condition that would break this stays above. So the
    * layer itself only drops rows earlier. It can compute an alias on rows that a later rewrite of
-   * the condition ending the split, or a check inferred for it, would have dropped first, which
-   * costs time but cannot fail. For example, with `f` and `g` the only expensive aliases, LIKE or
-   * RLIKE with such a pattern under version 0 of the regex pattern cost estimate, `f != g AND f`
-   * computes `f` and filters on `f` below `f != g`, which stays above the projection. The check is
-   * conservative: when the layer would compute an alias that can fail, such as a UDF, or a
-   * condition after the one ending the split can fail or reads a column below that can fail,
-   * nothing is filtered on below it. Later passes split each layer the same way, so in a layer's
-   * filter a condition that cannot fail can likewise be filtered on below the first one, when that
-   * one needs every expensive alias the layer computes: with `j` expensive too,
-   * `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the conditions that
+   * the condition ending the split would have dropped first, which costs time but cannot fail. For
+   * example, with `f` and `g` the only expensive aliases, LIKE or RLIKE with such a pattern under
+   * version 0 of the regex pattern cost estimate, `f != g AND f` computes `f` and filters on `f`
+   * below `f != g`, which stays above the projection. The check is conservative: when the layer
+   * would compute an alias that can fail, such as a UDF, or a condition after the one ending the
+   * split can fail or reads a column below that can fail, nothing is filtered on below it. Later
+   * passes split each layer the same way, so in a layer's filter a condition that cannot fail can
+   * likewise be filtered on below the first one, when that one needs every expensive alias the
+   * layer computes: with `j` expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`,
+   * then on `j`. Among the conditions that
    * cannot fail, the split does not otherwise order by cost: in this example, and in
    * `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
    * (SPARK-61680).
