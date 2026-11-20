@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, uiRoot */
 
 var baseParams;
 
@@ -63,7 +63,7 @@ function getRESTEndPoint() {
   if (ind > 0) {
     return words.slice(0, ind + 2).join('/') + "/log";
   }
-  return "/log"
+  return uiRoot + "/log";
 }
 
 /* eslint-disable no-unused-vars */

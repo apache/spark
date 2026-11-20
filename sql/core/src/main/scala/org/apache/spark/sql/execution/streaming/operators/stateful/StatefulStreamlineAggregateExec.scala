@@ -174,20 +174,34 @@ case class StatefulStreamlineAggregateExec(
       // one is produced.
       //
       // flushDirtyWrites is aggIter's completion action, so it runs when aggIter is exhausted and
-      // BEFORE store.commit() in every mode below: Complete drains aggIter (line ~191) ahead of the
-      // commit iterator; Append drains it (~222) ahead of its own; Update chains it inside the
-      // outer CompletionIterator whose completion commits, and draining the outer drains aggIter
-      // first. This ordering is what lets flushDirtyWrites surface a state-write failure (see its
-      // rethrow) in time to fail the task before the batch commits -- a partial write can never be
-      // committed.
+      // BEFORE store.commit() in every mode below: the Complete branch drains aggIter ahead of
+      // the commit iterator; the Append branch drains it ahead of its own; Update chains it
+      // inside the outer CompletionIterator whose completion commits, and draining the outer
+      // drains aggIter first. This ordering is what lets flushDirtyWrites surface a state-write
+      // failure (see its rethrow) in time to fail the task before the batch commits -- a partial
+      // write can never be committed.
       var tmpRow: UnsafeRow = null
-      val aggIter = CompletionIterator[UnsafeRow, Iterator[UnsafeRow]](
-        baseIterator.map { row =>
-          allUpdatesTimeMs += timeTakenMs {
-            tmpRow = aggProcessor.process(row)
+      val processedIter: Iterator[UnsafeRow] =
+        if (groupingExpressions.isEmpty && !baseIterator.hasNext) {
+          // A global aggregation still produces its result for a batch without input, as
+          // HashAggregateExec does for the ordinary plan. The required AllTuples distribution
+          // runs this operator on a single partition, so this fires exactly once per empty batch.
+          Iterator.single(()).map { _ =>
+            allUpdatesTimeMs += timeTakenMs {
+              tmpRow = aggProcessor.processEmptyGroupingKey()
+            }
+            tmpRow
           }
-          tmpRow
-        },
+        } else {
+          baseIterator.map { row =>
+            allUpdatesTimeMs += timeTakenMs {
+              tmpRow = aggProcessor.process(row)
+            }
+            tmpRow
+          }
+        }
+      val aggIter = CompletionIterator[UnsafeRow, Iterator[UnsafeRow]](
+        processedIter,
         aggProcessor.flushDirtyWrites() // Lazily evaluated
       )
 
@@ -286,10 +300,6 @@ case class StatefulStreamlineAggregateExec(
             incrementalEvictionIter.foreach { evictionIter =>
               allRemovalsTimeMs += timeTakenMs {
                 var numRemovalsCurrRecord = 0
-                // NOTE: EvictionIterator removes (and counts) a row inside hasNext, not next(), so
-                //  a bare hasNext already deletes and bumps the metrics. To stop at exactly
-                //  incrementalCleanupFactor removals per input we must re-check the count before
-                //  each hasNext rather than draining the iterator.
                 while (numRemovalsCurrRecord < incrementalCleanupFactor
                   && evictionIter.hasNext) {
                   // The removal happens inside of the iterator; in Update mode,
@@ -405,8 +415,8 @@ class StatefulStreamlineAggregationProcessor(
   // Guava logs and SWALLOWS any exception a removal listener throws (see the
   // CacheBuilder.removalListener scaladoc), so the put below cannot fail the task on its own --
   // without this capture a failed write would be silently dropped and the batch would still commit,
-  // losing that key's update. flushDirtyWrites rethrows it so the task fails instead of committing
-  // partial state.
+  // losing that key's update. Processing and flushing must propagate the captured failure instead
+  // of continuing with potentially stale state or committing partial state.
   private var writeFailure: Option[Throwable] = None
 
   // The writes which did not go into state store yet. We also leverage this dirty writes to the
@@ -446,6 +456,13 @@ class StatefulStreamlineAggregationProcessor(
     throw new UnsupportedOperationException(
       "next is not supported for StatefulStreamlineAggregationProcessor")
 
+  private def throwIfWriteFailed(): Unit = {
+    writeFailure.foreach { e =>
+      throw new IllegalStateException(
+        "Failed to write an aggregation update to the state store", e)
+    }
+  }
+
   /**
    * Flush the dirty writes to state store. This should be called at the end of each microbatch.
    *
@@ -454,13 +471,12 @@ class StatefulStreamlineAggregationProcessor(
    */
   def flushDirtyWrites(): Unit = {
     dirtyWrites.invalidateAll()
-    writeFailure.foreach { e =>
-      throw new IllegalStateException(
-        "Failed to write an aggregation update to the state store", e)
-    }
+    throwIfWriteFailed()
   }
 
   def process(newInput: InternalRow): UnsafeRow = {
+    throwIfWriteFailed()
+
     // groupingProjection hands back the same UnsafeRow on every call, overwriting its bytes, so the
     // key has to be copied before the cache can store it. Without the copy, one shared row becomes
     // the key of every entry: each entry is then only findable through the hash captured when it
@@ -470,12 +486,32 @@ class StatefulStreamlineAggregationProcessor(
     val buffer = newAggregationBuffer()
 
     val existingValueRef = dirtyWrites.get(groupingKey)
+    // A lookup can evict an entry and capture a write failure in the removal listener.
+    throwIfWriteFailed()
 
     if (existingValueRef.getRow != null) {
       processRow(buffer, existingValueRef.getRow)
     }
 
     processRow(buffer, newInput)
+
+    val output = generateOutput(groupingKey, buffer)
+    existingValueRef.putRow(output.copy())
+    output
+  }
+
+  /**
+   * Merges no input into the empty grouping key of a global aggregation: the result is the stored
+   * value if one exists, otherwise the initialized buffer, which is also written to state.
+   */
+  def processEmptyGroupingKey(): UnsafeRow = {
+    val groupingKey = groupingProjection.apply(InternalRow.empty).copy()
+    val buffer = newAggregationBuffer()
+
+    val existingValueRef = dirtyWrites.get(groupingKey)
+    if (existingValueRef.getRow != null) {
+      processRow(buffer, existingValueRef.getRow)
+    }
 
     val output = generateOutput(groupingKey, buffer)
     existingValueRef.putRow(output.copy())

@@ -22,7 +22,9 @@ import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, I
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class RuntimeNullChecksV2Writes extends SharedSparkSession {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

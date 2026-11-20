@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{ExplainUtils, ProjectedBroadcastValueSubq
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests that [[PartitionPredicate]] instances are pushed via iterative runtime filtering
@@ -53,6 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 11. supportsIterativePushdown is false -> no PartitionPredicate
  * 12. Partition col not in filterAttributes -> no PartitionPredicate
  */
+@DataSourceV2Test
 class DataSourceV2EnhancedRuntimePartitionFilterSuite
   extends SharedSparkSession with BeforeAndAfter {
 
@@ -84,9 +86,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
 
     withTable(fact, codes, selectors) {
       sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (part <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($part, $part)")
-      }
+      val values = (0 until 5).map(part => s"($part, $part)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
 
       sql(s"CREATE TABLE $codes (join_id INT, part INT) USING parquet")
       sql(s"INSERT INTO $codes VALUES (1, 2), (2, 3), (3, 4)")
@@ -171,9 +172,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val dim = s"$catalogName.dim"
     withTable(fact, dim) {
       sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 
@@ -197,9 +197,10 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     withTable(fact, dim) {
       sql(s"CREATE TABLE $fact (id INT, p1 INT, p2 INT) " +
         s"USING $v2Source PARTITIONED BY (p1, p2)")
-      for (i <- 0 until 5; j <- 0 until 2) {
-        sql(s"INSERT INTO $fact VALUES (${i * 2 + j}, $i, $j)")
-      }
+      val values = (for (i <- 0 until 5; j <- 0 until 2) yield {
+        s"(${i * 2 + j}, $i, $j)"
+      }).mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (1, 'one')")
 
@@ -219,14 +220,66 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
+  test("mixed partitioning: DPP on the identity col next to a bucket transform -> " +
+    "PartitionPredicate") {
+    val fact = s"$catalogName.fact_mixed"
+    val dim = s"$catalogName.dim_mixed"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part, bucket(4, id))")
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+             |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 1)
+        assertScanReturnsPartitionKeys(df, Set("2/2"))
+        assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part", "bucket(4, id)"))
+      }
+    }
+  }
+
+  test("mixed partitioning: DPP on the source col of a bucket transform -> " +
+    "no PartitionPredicate") {
+    val fact = s"$catalogName.fact_mixed2"
+    val dim = s"$catalogName.dim_mixed2"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part, bucket(4, id))")
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+             |ON f.id = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        // Spark cannot evaluate `id IN (...)` against the bucket value, so no PartitionPredicate
+        // is derived and the scan keeps every partition.
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 0)
+        assertScanReturnsPartitionKeys(df, Set("0/0", "1/1", "2/2", "3/3", "4/0"))
+      }
+    }
+  }
+
   test("case 3: scalar subquery translatable, rejected in 1st pass -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl"
     val dim = s"$catalogName.dim"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -245,9 +298,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val dim = s"$catalogName.dim_complex"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2)")
 
@@ -266,10 +318,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val dim = s"$catalogName.dim_rlike"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part STRING) USING $v2Source PARTITIONED BY (part)")
-      sql(s"INSERT INTO $tbl VALUES (1, 'abc')")
-      sql(s"INSERT INTO $tbl VALUES (2, 'def')")
-      sql(s"INSERT INTO $tbl VALUES (3, 'abx')")
-      sql(s"INSERT INTO $tbl VALUES (4, 'xyz')")
+      sql(s"INSERT INTO $tbl VALUES (1, 'abc'), (2, 'def'), (3, 'abx'), (4, 'xyz')")
 
       sql(s"CREATE TABLE $dim (pattern STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('^ab')")
@@ -289,10 +338,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val dim = s"$catalogName.dim_udf"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part STRING) USING $v2Source PARTITIONED BY (part)")
-      sql(s"INSERT INTO $tbl VALUES (1, 'a')")
-      sql(s"INSERT INTO $tbl VALUES (2, 'A')")
-      sql(s"INSERT INTO $tbl VALUES (3, 'b')")
-      sql(s"INSERT INTO $tbl VALUES (4, 'B')")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'A'), (3, 'b'), (4, 'B')")
 
       sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('A')")
@@ -319,10 +365,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     withTable(fact, dim1, dim2) {
       sql(s"CREATE TABLE $fact (id INT, p1 INT, p2 STRING) " +
         s"USING $v2Source PARTITIONED BY (p1, p2)")
-      sql(s"INSERT INTO $fact VALUES (1, 1, 'a')")
-      sql(s"INSERT INTO $fact VALUES (2, 1, 'b')")
-      sql(s"INSERT INTO $fact VALUES (3, 2, 'a')")
-      sql(s"INSERT INTO $fact VALUES (4, 2, 'b')")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, 1, 'a'), (2, 1, 'b'), (3, 2, 'a'), (4, 2, 'b')")
 
       sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim1 VALUES (1)")
@@ -352,10 +396,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, p0 INT, p1 STRING, p2 INT) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
-      sql(s"INSERT INTO $tbl VALUES (1, 1, 'a', 10)")
-      sql(s"INSERT INTO $tbl VALUES (2, 1, 'b', 10)")
-      sql(s"INSERT INTO $tbl VALUES (3, 2, 'a', 20)")
-      sql(s"INSERT INTO $tbl VALUES (4, 2, 'b', 20)")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, 1, 'a', 10), (2, 1, 'b', 10), (3, 2, 'a', 20), (4, 2, 'b', 20)")
 
       sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('a')")
@@ -381,10 +423,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 STRING) " +
         s"USING $v2Source PARTITIONED BY (p1, p2) " +
         "TBLPROPERTIES('accept-v2-predicates' = 'true')")
-      sql(s"INSERT INTO $tbl VALUES (1, 1, 'a')")
-      sql(s"INSERT INTO $tbl VALUES (2, 1, 'b')")
-      sql(s"INSERT INTO $tbl VALUES (3, 2, 'a')")
-      sql(s"INSERT INTO $tbl VALUES (4, 2, 'b')")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, 1, 'a'), (2, 1, 'b'), (3, 2, 'a'), (4, 2, 'b')")
 
       sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim1 VALUES (1)")
@@ -426,9 +466,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
         "PARTITIONED BY (part) " +
         "TBLPROPERTIES('accept-v2-predicates' = 'true')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 
@@ -452,9 +491,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source " +
         "PARTITIONED BY (part) " +
         "TBLPROPERTIES('accept-v2-predicates' = 'true')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -473,9 +511,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, data INT, part INT) " +
         s"USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, ${i * 10}, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, ${i * 10}, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (30)")
 
@@ -497,9 +534,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
         sql(s"CREATE TABLE $tbl (id INT, part INT) " +
           s"USING $v2Source PARTITIONED BY (part) " +
           s"TBLPROPERTIES('supports-iterative-pushdown' = 'false')")
-        for (i <- 0 until 5) {
-          sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-        }
+        val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+        sql(s"INSERT INTO $tbl VALUES $values")
         sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
         sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -520,10 +556,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) " +
         s"USING $v2Source PARTITIONED BY (p1, p2) " +
         "TBLPROPERTIES('filter-attributes' = 'p1')")
-      sql(s"INSERT INTO $tbl VALUES (1, 1, 10)")
-      sql(s"INSERT INTO $tbl VALUES (2, 1, 20)")
-      sql(s"INSERT INTO $tbl VALUES (3, 2, 10)")
-      sql(s"INSERT INTO $tbl VALUES (4, 2, 20)")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, 1, 10), (2, 1, 20), (3, 2, 10), (4, 2, 20)")
 
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (10)")
@@ -547,9 +581,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val dim = s"$catalogName.dim_nopushed"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 

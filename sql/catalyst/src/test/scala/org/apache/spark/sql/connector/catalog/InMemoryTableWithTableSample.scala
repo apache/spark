@@ -20,12 +20,16 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{InputPartition, SampleMethod, Scan, ScanBuilder, SupportsPushDownJoin, SupportsPushDownTableSample, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.SupportsPushDownJoin.ColumnWithAlias
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -365,5 +369,71 @@ class InMemoryTableWithLegacyTableSample(
         upperBound: Double,
         withReplacement: Boolean,
         seed: Long): Boolean = true
+  }
+}
+
+/**
+ * Sample table plus inferred Catalyst filters. V1 `SupportsPushDownFilters` cannot
+ * mix with `SupportsPushDownCatalystFilters` (`pushedFilters` return types clash),
+ * so this wraps the sample builder. The inferred filter SQL is specified by the
+ * `inferred-filter` property.
+ */
+class InMemoryTableWithTableSampleAndInferredFilters(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String])
+  extends InMemoryTableWithTableSample(name, columns, partitioning, properties) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new SampleAndInferredScanBuilder(new InMemoryTableSampleScanBuilder(schema, options), schema)
+  }
+
+  private class SampleAndInferredScanBuilder(
+      inner: InMemoryTableSampleScanBuilder,
+      tableSchema: StructType)
+    extends ScanBuilder
+      with SupportsPushDownTableSample
+      with SupportsPushDownCatalystFilters {
+
+    override def pushTableSample(
+        lowerBound: Double,
+        upperBound: Double,
+        withReplacement: Boolean,
+        seed: Long): Boolean =
+      inner.pushTableSample(lowerBound, upperBound, withReplacement, seed)
+
+    override def pushTableSample(
+        lowerBound: Double,
+        upperBound: Double,
+        withReplacement: Boolean,
+        seed: Long,
+        sampleMethod: SampleMethod): Boolean =
+      inner.pushTableSample(lowerBound, upperBound, withReplacement, seed, sampleMethod)
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def inferredFilters: Seq[Expression] =
+      InMemoryTableWithTableSampleAndInferredFilters.parseInferred(properties, tableSchema)
+
+    override def build(): Scan = inner.build
+  }
+}
+
+object InMemoryTableWithTableSampleAndInferredFilters {
+  val INFERRED_FILTER_PROP: String = "inferred-filter"
+
+  def parseInferred(
+      properties: util.Map[String, String],
+      tableSchema: StructType): Seq[Expression] = {
+    Option(properties.get(INFERRED_FILTER_PROP)).filter(_.nonEmpty).map { sql =>
+      CatalystSqlParser.parseExpression(sql).transformUp {
+        case u: UnresolvedAttribute =>
+          val field = tableSchema(u.name)
+          AttributeReference(field.name, field.dataType, field.nullable)()
+      }
+    }.toSeq
   }
 }

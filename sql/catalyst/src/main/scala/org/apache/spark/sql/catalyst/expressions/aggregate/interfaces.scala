@@ -652,6 +652,21 @@ abstract class TypedAggregateWithHashMapAsBuffer
 
   protected def child: Expression
 
+  /**
+   * Returns the buffer key for a value of `child.dataType`: a binary value (of BinaryType, or of
+   * a UDT backed by it) is wrapped in a [[BinaryKey]], and any other value is its own key.
+   */
+  protected final def toBufferKey(value: Any): AnyRef = value match {
+    case bytes: Array[Byte] => new BinaryKey(bytes)
+    case _ => value.asInstanceOf[AnyRef]
+  }
+
+  /** Returns the value that a buffer key stands for: the inverse of `toBufferKey`. */
+  protected final def fromBufferKey(key: AnyRef): AnyRef = key match {
+    case binaryKey: BinaryKey => binaryKey.bytes
+    case _ => key
+  }
+
   private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
 
   override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
@@ -661,7 +676,7 @@ abstract class TypedAggregateWithHashMapAsBuffer
     try {
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
-        val row = InternalRow.apply(key, count)
+        val row = InternalRow.apply(fromBufferKey(key), count)
         val unsafeRow = projection.apply(row)
         out.writeInt(unsafeRow.getSizeInBytes)
         unsafeRow.writeToStream(out, buffer)
@@ -689,7 +704,7 @@ abstract class TypedAggregateWithHashMapAsBuffer
         val row = new UnsafeRow(2)
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
-        val key = row.get(0, child.dataType)
+        val key = toBufferKey(row.get(0, child.dataType))
         val count = row.get(1, LongType).asInstanceOf[Long]
         counts.update(key, count)
         sizeOfNextRow = ins.readInt()
@@ -700,5 +715,19 @@ abstract class TypedAggregateWithHashMapAsBuffer
       ins.close()
       bis.close()
     }
+  }
+}
+
+/**
+ * A [[TypedAggregateWithHashMapAsBuffer]] buffer key for a binary value. Java byte arrays use
+ * referential equality and identity hash codes, so this compares and hashes the bytes by content
+ * instead. It wraps the array without copying it.
+ */
+private[aggregate] final class BinaryKey(val bytes: Array[Byte]) {
+  override def hashCode(): Int = java.util.Arrays.hashCode(bytes)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: BinaryKey => java.util.Arrays.equals(bytes, that.bytes)
+    case _ => false
   }
 }

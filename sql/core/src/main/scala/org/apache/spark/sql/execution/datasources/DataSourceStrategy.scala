@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.PushableExpression
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -143,20 +143,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      ResolveDefaultColumns.validateTableProviderForDefaultValue(
-        tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
-
-      if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "generated columns")
-      }
-
-      if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "identity columns")
-      }
-
-      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      CreateTableHelper.createDataSourceTableCommand(tableDesc, mode)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
@@ -343,16 +330,16 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // is processed first but doesn't match the case above due to the !isStreaming guard,
     // so the NamedStreamingRelation case here can match.
     // We pass the sourceIdentifyingName directly to getStreamingRelation.
-    case NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
-      getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
+    case named @ NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
+      named.copy(child = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName))
 
     // Handle NamedStreamingRelation wrapping SubqueryAlias(UnresolvedCatalogRelation)
     // - this happens when resolving streaming tables from catalogs where the table lookup
     // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
-    case NamedStreamingRelation(
+    case named @ NamedStreamingRelation(
         SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
       val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
-      SubqueryAlias(alias, resolved)
+      named.copy(child = SubqueryAlias(alias, resolved))
 
     // Fallback for streaming UnresolvedCatalogRelation that is NOT wrapped in
     // NamedStreamingRelation (e.g., from .readStream.table() API path).
@@ -573,10 +560,13 @@ object DataSourceStrategy
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
       attributes: Seq[Attribute]): Seq[Expression] = {
+    if (exprs.isEmpty) return exprs
+
+    val attributeMap = AttributeMap(attributes.reverse.map(a => a -> a.name))
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
-          a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
+          a.withName(attributeMap.getOrElse(a, a.name))
       }
     }
   }

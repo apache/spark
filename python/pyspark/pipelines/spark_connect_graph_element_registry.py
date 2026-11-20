@@ -150,6 +150,11 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             except_column_list=to_plans(flow.except_column_list),
             track_history_column_list=to_plans(flow.track_history_column_list),
             track_history_except_column_list=to_plans(flow.track_history_except_column_list),
+            ignore_null_updates=flow.ignore_null_updates,
+            ignore_null_updates_column_list=to_plans(flow.ignore_null_updates_column_list),
+            ignore_null_updates_except_column_list=to_plans(
+                flow.ignore_null_updates_except_column_list
+            ),
         )
         if flow.stored_as_scd_type is not None:
             scd_type_by_value = {

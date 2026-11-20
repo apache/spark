@@ -18,36 +18,86 @@ package org.apache.spark.sql.connect.utils
 
 import java.util.UUID
 
-import com.google.rpc.Code
+import com.google.rpc.{Code, ErrorInfo}
 import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ErrorUtilsSuite extends SharedSparkSession {
 
-  test("handleError fallback uses throwable class when fatal throwable has no message") {
+  for (fatalError <- Seq(new InterruptedException(), new StackOverflowError())) {
+    test(s"handleError keeps the UNKNOWN fallback for ${fatalError.getClass.getSimpleName}") {
+      val observer = new StreamObserver[Unit] {
+        override def onNext(value: Unit): Unit = {
+          fail(s"Unexpected response: $value")
+        }
+
+        override def onError(t: Throwable): Unit = {
+          throw t
+        }
+
+        override def onCompleted(): Unit = {
+          fail("Unexpected completion")
+        }
+      }
+
+      val error = intercept[StatusRuntimeException] {
+        ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(
+          fatalError)
+      }
+
+      assert(error.getStatus.getCode == Status.Code.UNKNOWN)
+      assert(error.getStatus.getDescription == fatalError.getClass.getName)
+      assert(StatusProto.fromThrowable(error).getDetailsCount == 0)
+    }
+  }
+
+  test("handleError preserves linkage error details when session-state initialization fails") {
+    val linkageError = new NoSuchMethodError("incompatible session extension")
+    val session = new SparkSession(spark.sparkContext)
+    session.sqlConf.setConf(Connect.CONNECT_ENRICH_ERROR_ENABLED, true)
+    session.sqlConf.setConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED, true)
+    var parserBuilds = 0
+    session.extensions.injectParser { (_, _) =>
+      parserBuilds += 1
+      throw linkageError
+    }
+    val holder = SessionHolder("user1", UUID.randomUUID().toString, session)
+    SparkConnectService.sessionManager.putSessionForTesting(holder)
+    var callbackCalled = false
     val observer = new StreamObserver[Unit] {
-      override def onNext(value: Unit): Unit = {
-        fail(s"Unexpected response: $value")
-      }
-
-      override def onError(t: Throwable): Unit = {
-        throw t
-      }
-
-      override def onCompleted(): Unit = {
-        fail("Unexpected completion")
-      }
+      override def onNext(value: Unit): Unit = fail("Unexpected response")
+      override def onError(t: Throwable): Unit = throw t
+      override def onCompleted(): Unit = fail("Unexpected completion")
     }
-
-    val error = intercept[StatusRuntimeException] {
-      ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(
-        new InterruptedException())
+    try {
+      assert(intercept[NoSuchMethodError](session.sessionState) eq linkageError)
+      val error = intercept[StatusRuntimeException] {
+        ErrorUtils.handleError(
+          "execute",
+          observer,
+          holder.userId,
+          holder.sessionId,
+          callback = Some(() => callbackCalled = true))(linkageError)
+      }
+      assert(error.getStatus.getCode == Status.Code.INTERNAL)
+      assert(error.getStatus.getDescription == linkageError.getMessage)
+      val info = StatusProto.fromThrowable(error).getDetails(0).unpack(classOf[ErrorInfo])
+      assert(info.getReason == linkageError.getClass.getName)
+      val errorId = info.getMetadataOrThrow("errorId")
+      assert(holder.errorIdToError.getIfPresent(errorId) eq linkageError)
+      assert(info.getMetadataOrThrow("stackTrace").contains(linkageError.getMessage))
+      assert(parserBuilds == 1)
+      assert(callbackCalled)
+    } finally {
+      SparkConnectService.sessionManager.closeSession(holder.key)
     }
-
-    assert(error.getStatus.getCode == Status.Code.UNKNOWN)
-    assert(error.getStatus.getDescription == classOf[InterruptedException].getName)
   }
 
   test("buildStatusFromThrowable uses throwable class when non-fatal throwable has no message") {

@@ -396,7 +396,7 @@ org.apache.spark.SparkArithmeticException
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
-    "value" : "2.14748365E9"
+    "value" : "2.1474836E9"
   }
 }
 
@@ -422,7 +422,7 @@ org.apache.spark.SparkArithmeticException
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
-    "value" : "-2.1474839E9"
+    "value" : "-2.147484E9"
   }
 }
 

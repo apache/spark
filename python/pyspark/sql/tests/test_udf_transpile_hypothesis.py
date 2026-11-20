@@ -68,6 +68,7 @@ from pyspark.sql import Row
 from pyspark.sql.types import (
     BooleanType,
     LongType,
+    StringType,
     StructField,
     StructType,
 )
@@ -143,6 +144,25 @@ if _have_hypothesis:
 
     _bool_strategy = st.one_of(st.none(), st.booleans())
 
+    # Case mappings come from CPython's Unicode database on the interpreted
+    # side and from ICU on the transpiled side, and the two can ship different
+    # Unicode versions (e.g. U+019B gained an uppercase in Unicode 16). The
+    # ``upper`` / ``lower`` tests therefore draw from Basic Latin through Latin
+    # Extended-A, whose case mappings are long stable, plus the Greek sigmas
+    # for the context-sensitive final-sigma rule (SPARK-59816).
+    _case_str_strategy = st.one_of(
+        st.none(),
+        st.text(st.one_of(st.characters(max_codepoint=0x17F), st.sampled_from("Σσς"))),
+    )
+    _str_strategy = st.one_of(st.none(), st.text())
+    # Independent strings only match ``startswith`` / ``endswith`` by chance,
+    # so two of the three arms build ``p`` as a prefix or a suffix of ``s``.
+    _str_pair_strategy = st.one_of(
+        st.tuples(_str_strategy, _str_strategy),
+        st.tuples(st.text(), st.text()).map(lambda t: (t[0] + t[1], t[0])),
+        st.tuples(st.text(), st.text()).map(lambda t: (t[0] + t[1], t[1])),
+    )
+
     # 32-bit signed boundaries. Values round-trip through LongType, but the
     # int32 limits are where narrowing / off-by-one bugs in parameter-index
     # plumbing and boundary handling tend to hide, so we always seed them.
@@ -205,6 +225,20 @@ if _have_hypothesis:
         (_LONG_BOUND, 1),
         (1, -_LONG_BOUND),
     )
+    # NULL, empty, both cases, and the two full-mapping cases the unit test
+    # pins: sharp s (one char uppercases to two) and final sigma.
+    _STR_EDGES = (None, "", "abc", "ABC", "straße", "ΟΔΟΣ")
+    # NULL combinations plus empty, proper, and longer-than-receiver affixes.
+    _STR_PAIR_EDGES = (
+        (None, None),
+        (None, "a"),
+        ("a", None),
+        ("", ""),
+        ("abc", ""),
+        ("abc", "ab"),
+        ("abc", "bc"),
+        ("ab", "abc"),
+    )
 
     def _seed_examples(values, key="value"):
         """Stack one ``@example`` decorator per seed value."""
@@ -256,10 +290,9 @@ def is_none_branch(x):
         return x
 
 
-def truthy_bool_branch(x):
-    # The transpiler currently mishandles ``if x:`` for nullable bool inputs:
-    # Python treats ``None`` as falsy and takes the else branch, but a naive
-    # SQL lowering can produce NULL. This test is the canonical regression.
+def truthy_bool_branch(x: bool):
+    # bare ``if x:`` on a bool-annotated parameter transpiles via
+    # coalesce(x, False), correctly treating NULL as falsy.
     if x:
         return 1
     else:
@@ -342,6 +375,28 @@ def eq_pair(x, y):
 def neq_pair(x, y):
     # Sister of ``eq_pair`` for ast.Compare(NotEq).
     return x != y
+
+
+def str_upper(s):
+    # Exercises str.upper (SPARK-59816). No None guard, so a NULL input runs
+    # through the transpiler's raise guard and Python's AttributeError.
+    return s.upper()
+
+
+def str_lower(s):
+    # Sister of ``str_upper`` for str.lower.
+    return s.lower()
+
+
+def str_startswith(s, p):
+    # Exercises str.startswith (SPARK-59816) with a column prefix, so a NULL
+    # on either side runs through the raise guard.
+    return s.startswith(p)
+
+
+def str_endswith(s, p):
+    # Sister of ``str_startswith`` for str.endswith.
+    return s.endswith(p)
 
 
 # A lambda captured at module scope so ``inspect.getsource`` can read
@@ -504,27 +559,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_hyp_settings
         @given(value=_bool_strategy)
         @_seed_examples(_BOOL_EDGES)
-        def test_truthy_bool_branch_falls_back(self, value):
-            # `if x:` on a bare parameter name is a bare truthiness test whose
-            # type is unknown at transpile time. The transpiler must refuse to
-            # lower it (Spark's coalesce(x, false) is unsound for non-boolean
-            # columns) and fall back to interpreted Python instead.
+        def test_truthy_bool_branch_matches_python(self, value):
+            # bare ``if x:`` on a bool-annotated parameter transpiles correctly.
+            # NULL is treated as falsy (coalesce(x, False)), matching Python's
+            # ``None is falsy`` semantics.
             df = self._single_arg_df(value, BooleanType())
-            with self.sql_conf(
-                {
-                    "spark.sql.experimental.optimizer.transpilePyUDFs": True,
-                    "spark.sql.ansi.enabled": True,
-                }
-            ):
-                pudf = UserDefinedFunction(truthy_bool_branch, LongType())
-                self.assertEqual(
-                    [],
-                    pudf.transpiled,
-                    "truthy_bool_branch: bare truthiness test must NOT transpile",
-                )
-                interpreted = df.select(pudf("a")).collect()[0][0]
-            expected = 1 if value else 2
-            self.assertEqual(interpreted, expected, f"truthy_bool_branch mismatch on {value!r}")
+            transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
 
         @_hyp_settings
         @given(value=_long_arith_strategy)
@@ -678,6 +719,38 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(lambda_plus_four, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"lambda_plus_four mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_case_str_strategy)
+        @_seed_examples(_STR_EDGES)
+        def test_str_upper_matches_python(self, value):
+            df = self._single_arg_df(value, StringType())
+            transpiled, interpreted = self._run(str_upper, StringType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"str_upper mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_case_str_strategy)
+        @_seed_examples(_STR_EDGES)
+        def test_str_lower_matches_python(self, value):
+            df = self._single_arg_df(value, StringType())
+            transpiled, interpreted = self._run(str_lower, StringType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"str_lower mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_startswith_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_startswith, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_startswith mismatch on {pair!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_endswith_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_endswith, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_endswith mismatch on {pair!r}")
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):

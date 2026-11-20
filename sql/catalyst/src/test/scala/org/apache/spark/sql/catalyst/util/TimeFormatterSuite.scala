@@ -207,4 +207,21 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         "targetType" -> "\"TIME(6)\"",
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
+
+  test("parseOptional returns None instead of throwing on unparseable times") {
+    // The default (pattern-less) formatter delegates to stringToTime.
+    val defaultFormatter = new DefaultTimeFormatter(
+      locale = DateFormatter.defaultLocale,
+      isParsing = true)
+    assert(defaultFormatter.parseOptional("01:02:03").contains(defaultFormatter.parse("01:02:03")))
+    assert(defaultFormatter.parseOptional("x123").isEmpty)
+
+    // The Iso8601 formatter uses parseUnresolved and must consume the whole input.
+    val isoFormatter = new Iso8601TimeFormatter("HH:mm:ss", DateFormatter.defaultLocale,
+      isParsing = true)
+    assert(isoFormatter.parseOptional("01:02:03").contains(isoFormatter.parse("01:02:03")))
+    assert(isoFormatter.parseOptional("abc").isEmpty)
+    // A prefix/partial match must be rejected (full-string consumption).
+    assert(isoFormatter.parseOptional("01:02:03xxx").isEmpty)
+  }
 }

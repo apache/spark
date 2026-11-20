@@ -197,6 +197,32 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-60533: renamed file check detects a rename that did not produce the file") {
+    import LostRenameFileSystem.scheme
+    val hadoopConf = new Configuration()
+    hadoopConf.set(s"fs.$scheme.impl", classOf[LostRenameFileSystem].getName)
+    hadoopConf.set(s"fs.$scheme.impl.disable.cache", "true")
+    withTempDir { temp =>
+      val dir = new Path(s"$scheme://${temp.toURI.getPath}")
+      val fm = new FileSystemBasedCheckpointFileManager(dir, hadoopConf)
+      val file = new Path(dir, "1.delta")
+      def write(): Unit = {
+        val out = fm.createAtomic(file, overwriteIfPossible = true)
+        out.write(1)
+        out.close()
+      }
+
+      // By default, the write succeeds silently and no file is created.
+      write()
+      assert(!fm.exists(file))
+
+      withSQLConf(SQLConf.CHECKPOINT_RENAMEDFILE_CHECK_ENABLED.key -> "true") {
+        val e = intercept[IllegalStateException](write())
+        assert(e.getMessage.contains(s"But $file does not exist"))
+      }
+    }
+  }
 }
 
 abstract class CheckpointFileManagerTestsOnLocalFs
@@ -294,4 +320,15 @@ private class CheckpointFileManagerSuiteFileSystem extends RawLocalFileSystem {
 
 private object CheckpointFileManagerSuiteFileSystem {
   val scheme = s"CheckpointFileManagerSuiteFileSystem${math.abs(Random.nextInt())}"
+}
+
+/** A local file system whose rename reports success without moving the file. */
+private class LostRenameFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = URI.create(s"${LostRenameFileSystem.scheme}:///")
+
+  override def rename(src: Path, dst: Path): Boolean = true
+}
+
+private object LostRenameFileSystem {
+  val scheme = s"LostRenameFileSystem${math.abs(Random.nextInt())}"
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
@@ -63,6 +64,30 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
     val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     new KubernetesExecutorBuilder().buildFromFeatures(conf, client, defaultProfile).pod
+  }
+
+  test("SPARK-58910: keep the service account named by the executor pod template") {
+    // The template the other tests here load names its account in the deprecated `serviceAccount`
+    // field, which every version keeps, so this pins the path the fix is about: a template naming
+    // `serviceAccountName`, loaded by the builder, with an account configured.
+    val client = mockKubernetesClient(
+      new PodBuilder()
+        .withNewMetadata()
+          .withName("template-pod")
+          .endMetadata()
+        .withNewSpec()
+          .withServiceAccountName("template-name")
+          .addNewContainer()
+            .withName("executor-container")
+            .endContainer()
+          .endSpec()
+        .build())
+    val sparkConf = baseConf.clone()
+      .set(templateFileConf.key, "template-file.yaml")
+      .set(Config.KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME.key, "executor-name")
+    val spec = buildPod(sparkConf, client).pod.getSpec
+    assert(spec.getServiceAccountName === "template-name")
+    assert(spec.getServiceAccount === "template-name")
   }
 }
 

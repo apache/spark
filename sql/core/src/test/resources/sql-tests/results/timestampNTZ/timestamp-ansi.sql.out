@@ -209,6 +209,29 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+SELECT make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 4324"
+  }
+}
+
+
+-- !query
+SELECT try_make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query schema
+struct<try_make_timestamp(1, 1, 1, 1, 1, 4324.967296):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
 SELECT make_timestamp(make_date(2021, 07, 11))
 -- !query schema
 struct<make_timestamp(make_date(2021, 7, 11)):timestamp>
@@ -1496,6 +1519,23 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "stopIndex" : 64,
     "fragment" : "timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')"
   } ]
+}
+
+
+-- !query
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`TIMESTAMPDIFF`",
+    "invalidValue" : "'NANOSECOND'",
+    "parameter" : "`unit`"
+  }
 }
 
 

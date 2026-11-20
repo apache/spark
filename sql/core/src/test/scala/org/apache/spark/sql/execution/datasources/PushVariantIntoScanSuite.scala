@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
   override def sparkConf: SparkConf =
@@ -154,6 +154,20 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     assert(outputs.length == 1,
       s"Expected exactly one scan relation but found ${outputs.length}:\n$plan")
     outputs.head
+  }
+
+  gridTest("Variant path escapes in pushed scans")(Seq(false, true)) { legacy =>
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+      withVariantParquetData(
+        "v variant",
+        """(parse_json(r'{"a\nb":1,"a\\nb":2}'))""") {
+        val pushed = sql("""select variant_get(v, r'$["a\nb"]', 'int') from T""")
+        withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> (!legacy).toString) {
+          assertShreddedStruct(scanColumnType(pushed.queryExecution.optimizedPlan, "v"))
+          checkAnswer(pushed, Row(if (legacy) 2 else 1))
+        }
+      }
+    }
   }
 
   test("aggregate function argument variant_get is hoisted below the aggregate and shredded") {
@@ -2720,13 +2734,14 @@ abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariant
 }
 
 // V2 DataSource tests - Row-based reader
-@ExtendedSQLTest
+@DataSourceV2Test
 class PushVariantIntoScanV2Suite extends PushVariantIntoScanV2SuiteBase {
   override protected def vectorizedReaderEnabled: Boolean = false
   override protected def readerName: String = "row-based reader"
 }
 
 // V2 DataSource tests - Vectorized reader
+@DataSourceV2Test
 class PushVariantIntoScanV2VectorizedSuite extends PushVariantIntoScanV2SuiteBase {
   override protected def vectorizedReaderEnabled: Boolean = true
   override protected def readerName: String = "vectorized reader"
