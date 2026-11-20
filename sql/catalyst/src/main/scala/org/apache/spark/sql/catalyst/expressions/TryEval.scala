@@ -71,8 +71,9 @@ private[expressions] object TryUnaryArithmetic {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of `expr`, and NULL if it is not " +
-    "representable in the type of `expr`. The acceptable input types are the same as for `abs`.",
+  usage = "_FUNC_(expr) - Returns the absolute value of `expr`. Under ANSI mode, it returns " +
+    "NULL instead of raising an overflow error when `expr` is the minimum value of an integral " +
+    "type. Otherwise it is the same as `abs`.",
   arguments = """
     Arguments:
       * expr - The numeric or interval value to take the absolute value of.
@@ -82,8 +83,8 @@ private[expressions] object TryUnaryArithmetic {
     Examples:
       > SELECT _FUNC_(-1);
        1
-      > SELECT _FUNC_(-2147483648);
-       NULL
+      > SELECT _FUNC_(-2147483647);
+       2147483647
       > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
        1-1
   """,
@@ -103,9 +104,9 @@ case class TryAbs(expr: Expression, replacement: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the negated value of `expr`, and NULL if it is not " +
-    "representable in the type of `expr`. The acceptable input types are the same as for " +
-    "`negative`.",
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`. Under ANSI mode, it returns " +
+    "NULL instead of raising an overflow error when `expr` is the minimum value of an integral " +
+    "type. Otherwise it is the same as `negative`.",
   arguments = """
     Arguments:
       * expr - The expression to negate.
@@ -115,8 +116,8 @@ case class TryAbs(expr: Expression, replacement: Expression)
     Examples:
       > SELECT _FUNC_(1);
        -1
-      > SELECT _FUNC_(-2147483648);
-       NULL
+      > SELECT _FUNC_(2147483647);
+       -2147483647
       > SELECT _FUNC_(INTERVAL '1-1' YEAR TO MONTH);
        -1-1
   """,

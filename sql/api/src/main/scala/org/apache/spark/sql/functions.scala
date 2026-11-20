@@ -4727,8 +4727,9 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
-   * Returns the absolute value of `e`, and null if it is not representable in the type of `e`.
-   * The acceptable input types are the same as for `abs`.
+   * Returns the absolute value of `e`. Under ANSI mode, it returns null instead of raising an
+   * overflow error when `e` is the minimum value of an integral type. Otherwise it is the same as
+   * `abs`.
    *
    * @param e
    *   a column that evaluates to a numeric or interval.
@@ -4811,8 +4812,9 @@ object functions {
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
 
   /**
-   * Returns the negated value of `e`, and null if it is not representable in the type of `e`.
-   * The acceptable input types are the same as for `negative`.
+   * Returns the negated value of `e`. Under ANSI mode, it returns null instead of raising an
+   * overflow error when `e` is the minimum value of an integral type. Otherwise it is the same as
+   * `negative`.
    *
    * @param e
    *   a column that evaluates to a numeric or interval.

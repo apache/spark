@@ -121,6 +121,7 @@ SELECT try_abs(-9223372036854775808L), try_negative(-9223372036854775808L);
 SELECT try_abs(-2147483647), try_negative(2147483647);
 SELECT try_abs(-1.5D), try_negative(1.5D);
 SELECT try_abs(-12.34BD), try_negative(-12.34BD);
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD);
 SELECT try_abs(NULL), try_negative(NULL);
 SELECT try_abs("-1"), try_negative("1");
 SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c);

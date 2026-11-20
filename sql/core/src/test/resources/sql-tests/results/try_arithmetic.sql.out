@@ -954,6 +954,14 @@ struct<try_abs(-12.34):decimal(4,2),try_negative(-12.34):decimal(4,2)>
 
 
 -- !query
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD)
+-- !query schema
+struct<try_abs(-99999999999999999999999999999999999999):decimal(38,0),try_negative(99999999999999999999999999999999999999):decimal(38,0)>
+-- !query output
+99999999999999999999999999999999999999	-99999999999999999999999999999999999999
+
+
+-- !query
 SELECT try_abs(NULL), try_negative(NULL)
 -- !query schema
 struct<try_abs(NULL):double,try_negative(NULL):double>

@@ -667,6 +667,13 @@ Project [try_abs(-12.34) AS try_abs(-12.34)#x, try_negative(-12.34) AS try_negat
 
 
 -- !query
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD)
+-- !query analysis
+Project [try_abs(-99999999999999999999999999999999999999) AS try_abs(-99999999999999999999999999999999999999)#x, try_negative(99999999999999999999999999999999999999) AS try_negative(99999999999999999999999999999999999999)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_abs(NULL), try_negative(NULL)
 -- !query analysis
 Project [try_abs(null) AS try_abs(NULL)#x, try_negative(null) AS try_negative(NULL)#x]
