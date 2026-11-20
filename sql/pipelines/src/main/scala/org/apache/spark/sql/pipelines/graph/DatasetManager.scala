@@ -721,6 +721,8 @@ object DatasetManager extends Logging {
         log"${MDC(LogKeys.TABLE_NAME, tableIdentifier)}: " +
         log"${MDC(LogKeys.PROPERTY_NAME, userPropertiesToRemove.sorted.mkString(", "))}.")
     }
+    // The record lists only the removable keys the definition declares. Once none are left it
+    // would describe nothing, so it is removed too; while one remains, the set below replaces it.
     val recordToRemove =
       Seq(recordKey).filter(k => !properties.contains(k) && existingProperties.containsKey(k))
     val propertiesToRemove =
