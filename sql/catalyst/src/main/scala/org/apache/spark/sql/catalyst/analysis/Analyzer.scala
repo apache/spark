@@ -289,7 +289,7 @@ object AnalysisContext {
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
-    try f finally { set(originContext) }
+    try withoutSuppliedObjects(f) finally { set(originContext) }
   }
 
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
@@ -315,8 +315,17 @@ object AnalysisContext {
         },
       collation = function.collation)
     set(context)
-    try f finally { set(originContext) }
+    try withoutSuppliedObjects(f) finally { set(originContext) }
   }
+
+  /**
+   * A stored view or SQL function body reads the objects it was defined over, so the relations
+   * and variables a caller supplies for its statement do not apply inside it.
+   */
+  private def withoutSuppliedObjects[A](f: => A): A =
+    SuppliedRelationRegistry.create(Nil).runWith {
+      SuppliedVariableRegistry.create(Nil).runWith(f)
+    }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -734,6 +743,7 @@ class Analyzer(
       ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
+      ResolveInsertIntoSuppliedRelation ::
       ResolveRelations ::
       ResolveChangelogTable ::
       ResolvePartitionSpec ::
@@ -1340,8 +1350,13 @@ class Analyzer(
       }
     }
 
-    def apply(plan: LogicalPlan)
-        : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      SuppliedRelationRegistry.markCatalogTargets(plan)
+      applyRule(plan)
+    }
+
+    private def applyRule(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
@@ -1465,6 +1480,8 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
+      // Caller-supplied relations are not consulted here. DDL and misc commands act on the
+      // catalog's own objects, so a supplied relation cannot make them fail.
       relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
@@ -1555,6 +1572,77 @@ class Analyzer(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
         insert.toInsertIntoStatement(target.toUnresolvedRelation)
+    }
+  }
+
+  /**
+   * Resolve an INSERT whose target is a caller-supplied relation into
+   * [[InsertIntoSuppliedRelation]]. No other rule resolves [[InsertIntoStatement]] for such a
+   * target, so without this rule the statement would stay unresolved.
+   */
+  object ResolveInsertIntoSuppliedRelation extends ResolveInsertionBase {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (SuppliedRelationRegistry.get().isEmpty) {
+        plan
+      } else {
+        plan.resolveOperatorsUp {
+          case i: InsertIntoStatement
+              if i.query.resolved && SuppliedRelationRegistry.isSupplied(i.table) =>
+            EliminateSubqueryAliases(i.table) match {
+              case local: LocalRelation => resolveInsert(i, local)
+              case _ => i
+            }
+        }
+      }
+    }
+
+    private def resolveInsert(
+        i: InsertIntoStatement,
+        local: LocalRelation): LogicalPlan = {
+      val name = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).getOrElse(Nil).quoted
+      i.replaceCriteriaOpt.foreach {
+        case criteria if criteria.isReplaceOnOrUsing =>
+          throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(name)
+        case InsertReplaceWhere(cond) =>
+          // Same check as a DSv2 table's REPLACE WHERE: the condition resolves against the
+          // target's columns and must be boolean.
+          val condition = resolveExpressionByPlanOutput(cond, local, throws = true)
+          if (condition.dataType != BooleanType) {
+            condition.failAnalysis(
+              errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+              messageParameters = Map(
+                "sqlExpr" -> toSQLExpr(condition),
+                "filter" -> toSQLExpr(condition),
+                "type" -> toSQLType(condition.dataType)))
+          }
+        case _ =>
+      }
+      val byName = i.byName || i.userSpecifiedCols.nonEmpty
+      val query =
+        if (i.userSpecifiedCols.nonEmpty) createProjectForByNameQuery(name, i) else i.query
+      val staticPartitions = i.partitionSpec.collect { case (col, Some(value)) =>
+        val attr = local.resolve(Seq(col), this.resolver).getOrElse(
+          throw QueryCompilationErrors.unresolvedAttributeError(
+            "UNRESOLVED_COLUMN", col, local.output.map(_.name), i.origin))
+        attr.name -> Alias(Cast(Literal(value), attr.dataType), attr.name)()
+      }
+      val withPartitions = if (staticPartitions.isEmpty) {
+        query
+      } else if (byName) {
+        Project(query.output ++ staticPartitions.values, query)
+      } else {
+        val dynamic = query.output.iterator
+        val columns = local.output.flatMap { attr =>
+          staticPartitions.collectFirst {
+            case (col, value) if this.resolver(col, attr.name) => value
+          }.orElse(if (dynamic.hasNext) Some(dynamic.next()) else None)
+        }
+        Project(columns ++ dynamic, query)
+      }
+      val newQuery = TableOutputResolver.resolveOutputColumns(
+        name, local.output, withPartitions, byName, conf,
+        TableOutputResolver.DefaultValueFillMode.FILL)
+      InsertIntoSuppliedRelation(local, newQuery)
     }
   }
 

@@ -24,7 +24,8 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, SuppliedRelationRegistry}
 import org.apache.spark.sql.connector.catalog.{
   Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog
 }
@@ -34,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{
   UnboundProcedure
 }
 import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.util.Utils
@@ -59,6 +60,8 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
   private val jsonString: JObject = JObject(
     "name" -> JString("string"),
     "collation" -> JString("UTF8_BINARY"))
+
+  private val jsonBoolean: JObject = jsonType("boolean")
 
   test("ANALYZE types selected columns and PARSE does not") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
@@ -205,6 +208,14 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
 
   private def errorClass(statement: JObject): JValue = statement \ "error" \ "errorClass"
 
+  private def queryContext(statement: JObject): JObject =
+    statement \ "error" \ "queryContext" match {
+      case JArray(List(ctx: JObject)) => ctx
+      case other => fail(s"expected one query context, got: $other")
+    }
+
+  private val emoji = new String(Character.toChars(0x1F600))
+
   test("ANALYZE does not run CALL, directly or through EXECUTE IMMEDIATE") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       spark.conf.set("spark.sql.catalog.parse_sql_cat", classOf[InMemoryCatalog].getName)
@@ -261,6 +272,23 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE rejects an argument that does not fold, such as a UDF over literals") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      spark.udf.register("parse_sql_identity", (s: String) => s)
+      try {
+        val e = intercept[AnalysisException](
+          spark.sql("SELECT parse_sql(parse_sql_identity('SELECT 1'), 'ANALYZE')").collect())
+        assert(e.getCondition === "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+        val folded = evalCall(
+          "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', NULL, " +
+            "concat(current_schema(), ''))")
+        assert(folded.head \ "analyze_success" === JBool(true), folded)
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("parse_sql_identity", ignoreIfNotExists = true)
+      }
+    }
+  }
+
   test("ANALYZE does not execute SQL scripts") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_script_t", "parse_sql_script_u") {
@@ -278,6 +306,259 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         assert(spark.table("parse_sql_script_t").count() === 0)
         assert(spark.catalog.tableExists("parse_sql_script_u"))
         assert(spark.sql("SELECT current_schema()").head().getString(0) === schema)
+      }
+    }
+  }
+
+  test("ANALYZE does not execute a SQL script wrapped in named parameter markers") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_wrap_t", "parse_sql_wrap_u") {
+        sql("CREATE TABLE parse_sql_wrap_t (a INT) USING parquet")
+        sql("CREATE TABLE parse_sql_wrap_u (a INT) USING parquet")
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'BEGIN
+            |  INSERT INTO parse_sql_wrap_t VALUES (:p);
+            |  DROP TABLE parse_sql_wrap_u;
+            |END',
+            |  'ANALYZE',
+            |  parameter_markers => array(named_struct('name', 'p', 'type', 'INT')))
+            |""".stripMargin).head().getString(0)
+        val j = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(j \ "parse_success" === JBool(true))
+        assert(j \ "analyze_success" === JBool(false))
+        assert(errorClass(j) === JString("PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT"))
+        assert(spark.table("parse_sql_wrap_t").count() === 0)
+        assert(spark.catalog.tableExists("parse_sql_wrap_u"))
+      }
+    }
+  }
+
+  test("ANALYZE overlays match session and catalog names under case-sensitive analysis") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable("parse_sql_cs_t") {
+        sql("CREATE TABLE parse_sql_cs_t (a INT) USING parquet")
+        withTempView("parse_sql_cs_v") {
+          sql("CREATE TEMP VIEW parse_sql_cs_v AS SELECT 1 AS a")
+          val sessionJson = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM SYSTEM.SESSION.parse_sql_cs_v',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'system.session.parse_sql_cs_v',
+              |    'schema', 'a STRING')))
+              |""".stripMargin).head().getString(0)
+          val sessionHit = parse(sessionJson) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(sessionHit \ "analyze_success" === JBool(true))
+          assert(sessionHit \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("a"))), "type" -> jsonString))))
+
+          val catalogJson = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM spark_catalog.default.parse_sql_cs_t',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'SPARK_CATALOG.default.parse_sql_cs_t',
+              |    'schema', 'a STRING')))
+              |""".stripMargin).head().getString(0)
+          val catalogHit = parse(catalogJson) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(catalogHit \ "analyze_success" === JBool(true))
+          assert(catalogHit \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("a"))), "type" -> jsonString))))
+        }
+      }
+    }
+  }
+
+  test("ANALYZE qualifies created temp views, table-valued builtins and temp functions") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_q_v") {
+        sql("CREATE TEMPORARY FUNCTION parse_sql_q_f(x INT) RETURNS INT RETURN x + 1")
+        sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN x + 100")
+        try {
+          val created = evalStatement("CREATE TEMP VIEW parse_sql_q_v AS SELECT 1 AS a")
+          assert(created \ "analyze_success" === JBool(true))
+          assert(created \ "target_table_references" === JArray(List(
+            ref("system", "session", "parse_sql_q_v"))))
+
+          val tvf = evalStatement("SELECT * FROM range(3)")
+          assert(tvf \ "function_references" === JArray(List(
+            ref("system", "builtin", "range"))))
+
+          val tempFn = evalStatement("SELECT parse_sql_q_f(1) AS y")
+          assert(tempFn \ "function_references" === JArray(List(
+            ref("system", "session", "parse_sql_q_f"))))
+
+          // Under the default function resolution order a builtin wins over a temp function.
+          val shadowed = evalStatement("SELECT abs(-1) AS z")
+          assert(shadowed \ "function_references" === JArray(List(
+            ref("system", "builtin", "abs"))))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS parse_sql_q_f")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
+        }
+      }
+    }
+  }
+
+  test("ANALYZE current_path leaves the invoker's SET PATH unchanged") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val before = spark.sql("SELECT current_path()").head().getString(0)
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT 1 AS a',
+            |  'ANALYZE',
+            |  current_path => 'system.builtin, spark_catalog.default')""".stripMargin)
+          .head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true), json)
+        assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("ANALYZE unqualified session variables follow the SQL path") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val missedJson = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT v AS x',
+            |  'ANALYZE',
+            |  current_path => 'spark_catalog.default, system.builtin',
+            |  variables => array(named_struct(
+            |    'name', 'system.session.v',
+            |    'type', 'INT')))
+            |""".stripMargin).head().getString(0)
+        val miss = parse(missedJson) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(miss \ "analyze_success" === JBool(false))
+
+        val hitJson = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT v AS x',
+            |  'ANALYZE',
+            |  current_path => 'system.session, spark_catalog.default, system.builtin',
+            |  variables => array(named_struct(
+            |    'name', 'system.session.v',
+            |    'type', 'INT')))
+            |""".stripMargin).head().getString(0)
+        val hit = parse(hitJson) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(hit \ "analyze_success" === JBool(true))
+        assert(hit \ "select_list" === JArray(List(
+          JObject("name" -> JArray(List(JString("x"))), "type" -> jsonInt))))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("ANALYZE current_path does not change the path feature or the invoker's path") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val pathEnabled = spark.conf.get(SQLConf.PATH_ENABLED.key)
+      val before = spark.sql("SELECT current_path()").head().getString(0)
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT abs(-1) AS x',
+          |  'ANALYZE',
+          |  current_path => 'system.builtin')""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(true))
+      assert(spark.conf.get(SQLConf.PATH_ENABLED.key) === pathEnabled)
+      assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+    }
+  }
+
+  test("ANALYZE errors on a bound parameter marker do not report the outer parse_sql call") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql('SELECT * FROM range(10) LIMIT :n', 'ANALYZE',
+          |  parameter_markers => array(named_struct('name', 'n', 'type', 'INT')))""".stripMargin)
+        .head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(false), json)
+      assert(analyzed \ "error" \ "errorClass" ===
+        JString("INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL"), json)
+      // The context must not be the outer parse_sql(...) call text.
+      assert((analyzed \ "error" \ "queryContext").children.isEmpty, json)
+    }
+  }
+
+  test("ANALYZE DDL does not see caller-supplied relations and keeps later statements") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'ALTER TABLE parse_sql_ddl_missing RENAME COLUMN a TO b;
+          |   SELECT a FROM parse_sql_ddl_missing',
+          |  'ANALYZE',
+          |  relations => array(named_struct('name', 'parse_sql_ddl_missing', 'schema', 'a INT')))
+          |""".stripMargin).head().getString(0)
+      val statements = parse(json) match {
+        case JArray(values) => values.map(_.asInstanceOf[JObject])
+        case other => fail(s"expected a statement array, got: $other")
+      }
+      assert(statements.length === 2)
+      assert(statements(0) \ "parse_success" === JBool(true))
+      assert(statements(0) \ "analyze_success" === JBool(false))
+      assert(errorClass(statements(0)) === JString("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(statements(1) \ "analyze_success" === JBool(true))
+    }
+  }
+
+  test("ANALYZE DDL on a real table is not replaced by a same-named supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_ddl_t") {
+        sql("CREATE TABLE parse_sql_ddl_t (a INT) USING parquet")
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'ALTER TABLE parse_sql_ddl_t ADD COLUMN b INT',
+            |  'ANALYZE',
+            |  relations => array(named_struct('name', 'parse_sql_ddl_t', 'schema', 'a STRING')))
+            |""".stripMargin).head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true), json)
+        // The catalog table is the target, not the supplied relation.
+        assert(analyzed \ "target_table_references" ===
+          JArray(List(JArray(List(
+            JString("spark_catalog"), JString("default"), JString("parse_sql_ddl_t"))))), json)
+        // ANALYZE does not run the statement.
+        assert(spark.table("parse_sql_ddl_t").columns.toSeq === Seq("a"))
       }
     }
   }
@@ -918,6 +1199,984 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       }
       assert(statement \ "analyze_success" === JBool(true))
       assert(statement \ "select_list" === typedColumns("d" -> jsonType("date")))
+    }
+  }
+
+  test("ANALYZE current_schema applies to one call and leaves the session unchanged") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_a")
+      sql("CREATE DATABASE parse_sql_per_call_b")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_a.t (a INT) USING parquet")
+        sql("CREATE TABLE parse_sql_per_call_b.t (a STRING) USING parquet")
+        val before = spark.catalog.currentDatabase
+        val inA = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_a')")
+        val inB = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_b')")
+        assert(inA.head \ "analyze_success" === JBool(true))
+        assert(inA.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_a", "t"))))
+        assert(inA.head \ "select_list" === typedColumns("a" -> jsonInt))
+        assert(inB.head \ "analyze_success" === JBool(true))
+        assert(inB.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_b", "t"))))
+        assert(inB.head \ "select_list" === typedColumns("a" -> jsonString))
+        assert(spark.catalog.currentDatabase === before)
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_a CASCADE")
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_b CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE of a missing current_schema is an error and keeps the session") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val before = spark.catalog.currentDatabase
+      intercept[NoSuchNamespaceException] {
+        spark.sql("SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, " +
+          "'parse_sql_per_call_missing')").collect()
+      }
+      assert(spark.catalog.currentDatabase === before)
+    }
+  }
+
+  test("ANALYZE current_schema does not change the invoker's later resolution") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_c")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_c.t (a INT) USING parquet")
+        val overridden = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_c')")
+        assert(overridden.head \ "analyze_success" === JBool(true))
+        // A later call with no context still resolves against the invoker's database.
+        val inherited = evalStatement("SELECT a FROM t")
+        assert(inherited \ "analyze_success" === JBool(false))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_c CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_catalog matches the session catalog in any case") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_d")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_d.t (a INT) USING parquet")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM t; SELECT a FROM parse_sql_missing_t', " +
+            "'ANALYZE', 'SPARK_CATALOG', 'parse_sql_per_call_d')")
+        assert(result.head \ "analyze_success" === JBool(true))
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_d", "t"))))
+        // A statement that fails analysis is still qualified with the call's schema.
+        assert(result(1) \ "analyze_success" === JBool(false))
+        assert(result(1) \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_d", "parse_sql_missing_t"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_d CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_schema qualifies persistent function references with the call") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_e")
+      try {
+        sql("CREATE FUNCTION parse_sql_per_call_e.parse_sql_f() RETURNS INT RETURN 1")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT parse_sql_f() AS x', 'ANALYZE', NULL, " +
+            "'parse_sql_per_call_e')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "function_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_e", "parse_sql_f"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_e CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_path expands PATH to the invoker's path") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_f")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_f.parse_sql_path_t (a INT) USING parquet")
+        sql("SET PATH = spark_catalog.parse_sql_per_call_f, system.builtin")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_path_t', 'ANALYZE', " +
+            "current_path => 'PATH, system.session')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_f", "parse_sql_path_t"))))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_f CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_path qualifies a persistent function found on the path") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_g")
+      try {
+        sql("CREATE FUNCTION parse_sql_per_call_g.parse_sql_g() RETURNS INT RETURN 1")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT parse_sql_g() AS x', 'ANALYZE', " +
+            "current_path => 'system.builtin, SPARK_CATALOG.PARSE_SQL_PER_CALL_G')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "function_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_g", "parse_sql_g"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_g CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_path orders a temp function before a builtin of the same name") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      spark.udf.register("upper", (s: String) => s.length)
+      try {
+        val builtinFirst = evalCall(
+          "SELECT parse_sql('SELECT upper(''a'') AS x', 'ANALYZE', " +
+            "current_path => 'system.builtin, system.session')")
+        assert(builtinFirst.head \ "select_list" === typedColumns("x" -> jsonString),
+          builtinFirst)
+        assert(builtinFirst.head \ "function_references" === JArray(List(
+          ref("system", "builtin", "upper"))))
+        val sessionFirst = evalCall(
+          "SELECT parse_sql('SELECT upper(''a'') AS x', 'ANALYZE', " +
+            "current_path => 'system.session, system.builtin')")
+        assert(sessionFirst.head \ "select_list" === typedColumns("x" -> jsonInt),
+          sessionFirst)
+        assert(sessionFirst.head \ "function_references" === JArray(List(
+          ref("system", "session", "upper"))))
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a temp view read by a temp view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_tv_base", "parse_sql_tv_outer") {
+        sql("CREATE TEMPORARY VIEW parse_sql_tv_base AS SELECT 1 AS a")
+        sql("CREATE TEMPORARY VIEW parse_sql_tv_outer AS SELECT * FROM parse_sql_tv_base")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT * FROM parse_sql_tv_outer; SELECT * FROM parse_sql_tv_base', " +
+            "'ANALYZE', relations => array(named_struct(" +
+            "'name', 'system.session.parse_sql_tv_base', 'schema', 'b STRING')))")
+        assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        assert(result(1) \ "select_list" === typedColumns("b" -> jsonString), result)
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a session variable read by a temp view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("DECLARE VARIABLE parse_sql_view_var INT DEFAULT 1")
+      try {
+        withTempView("parse_sql_var_v") {
+          sql("CREATE TEMPORARY VIEW parse_sql_var_v AS SELECT parse_sql_view_var AS x")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT x FROM parse_sql_var_v; SELECT parse_sql_view_var AS y', " +
+              "'ANALYZE', variables => array(named_struct(" +
+              "'name', 'parse_sql_view_var', 'type', 'STRING')))")
+          assert(result.head \ "select_list" === typedColumns("x" -> jsonInt), result)
+          assert(result(1) \ "select_list" === typedColumns("y" -> jsonString), result)
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS parse_sql_view_var")
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a table read by a SQL function body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_fn_base") {
+        withUserDefinedFunction("parse_sql_fn" -> false) {
+          sql("CREATE TABLE parse_sql_fn_base (a INT) USING parquet")
+          sql("CREATE FUNCTION parse_sql_fn() RETURNS TABLE (a INT) " +
+            "RETURN SELECT a FROM parse_sql_fn_base")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT a FROM parse_sql_fn()', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_fn_base', 'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        }
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a table read by a scalar SQL function body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_sfn_base") {
+        withUserDefinedFunction("parse_sql_sfn" -> false) {
+          sql("CREATE TABLE parse_sql_sfn_base (a INT) USING parquet")
+          sql("CREATE FUNCTION parse_sql_sfn() RETURNS INT " +
+            "RETURN (SELECT max(a) FROM parse_sql_sfn_base)")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT parse_sql_sfn() AS x', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_sfn_base', 'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("x" -> jsonInt), result)
+        }
+      }
+    }
+  }
+
+  test("ANALYZE overlays apply to the statement an EXECUTE IMMEDIATE runs") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT b FROM parse_sql_ei_t''', 'ANALYZE', " +
+          "relations => array(named_struct(" +
+          "'name', 'spark_catalog.default.parse_sql_ei_t', 'schema', 'b STRING')))")
+      assert(result.head \ "analyze_success" === JBool(true), result)
+    }
+  }
+
+  test("ANALYZE overlays do not replace a table read by a persistent view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_view_base") {
+        withView("parse_sql_evolving_v") {
+          sql("CREATE TABLE parse_sql_view_base (a INT) USING parquet")
+          sql("CREATE VIEW parse_sql_evolving_v WITH SCHEMA EVOLUTION AS " +
+            "SELECT * FROM parse_sql_view_base")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT * FROM parse_sql_evolving_v', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_view_base', " +
+              "'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+          // A view WITH SCHEMA EVOLUTION would write an overlay's schema to the catalog.
+          val stored = spark.sessionState.catalog.getTableMetadata(
+            TableIdentifier("parse_sql_evolving_v"))
+          assert(stored.schema.fieldNames.toSeq === Seq("a"))
+        }
+      }
+    }
+  }
+
+  test("supplied relation identities are canonical under case-sensitive analysis") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val mgr = spark.sessionState.catalogManager
+      val globalDb = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("SYSTEM", "SESSION", "v")) ===
+        Seq("system", "session", "v"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("System", "Session", "v")) ===
+        SuppliedRelationRegistry.sessionIdentity("v"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("SPARK_CATALOG", "default", "t")) ===
+        Seq("spark_catalog", "default", "t"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("GLOBAL_TEMP", "v")) ===
+        Seq(globalDb, "v"))
+      // Idempotent, so a stored identity and a looked-up identity agree.
+      val once = SuppliedRelationRegistry.canonicalize(mgr, Seq("SPARK_CATALOG", "default", "t"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, once) === once)
+    }
+  }
+
+  test("ANALYZE resolves injected session variables and restores the invoker") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("DECLARE VARIABLE parse_sql_existing_v INT DEFAULT 1")
+      try {
+        // The overlay shadows the declared variable with a STRING type for this call only.
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT system.session.parse_sql_existing_v AS x',
+            |  'ANALYZE',
+            |  variables => array(named_struct(
+            |    'name', 'system.session.parse_sql_existing_v', 'type', 'STRING')))
+            |""".stripMargin).head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true), json)
+        assert(analyzed \ "select_list" === JArray(List(
+          JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
+        // The overlay is gone after the call, so the declared INT variable is typed as before.
+        assert(spark.sql("SELECT parse_sql_existing_v").schema.head.dataType ===
+          DataTypes.IntegerType)
+        assert(spark.sql("SELECT parse_sql_existing_v").head().getInt(0) === 1)
+      } finally {
+        sql("DROP TEMPORARY VARIABLE parse_sql_existing_v")
+      }
+    }
+  }
+
+
+  test("ANALYZE resolves injected procedure variables") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+          val json = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT proc.parm1 AS x',
+              |  'ANALYZE',
+              |  variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING')))
+              |""".stripMargin).head().getString(0)
+          val analyzed = parse(json) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(analyzed \ "analyze_success" === JBool(true), json)
+          assert(analyzed \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
+        }
+      }
+    }
+  }
+
+
+  test("ANALYZE supplied session variables shadow persisted ones without mutating them") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("DECLARE VARIABLE parse_sql_shadow_v INT DEFAULT 1")
+      try {
+        Seq("false", "true").foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+            val json = spark.sql(
+              """SELECT parse_sql(
+                |  'SELECT parse_sql_shadow_v AS x',
+                |  'ANALYZE',
+                |  variables => array(named_struct(
+                |    'name', 'parse_sql_shadow_v',
+                |    'type', 'STRING')))
+                |""".stripMargin).head().getString(0)
+            val analyzed = parse(json) match {
+              case JArray(List(value: JObject)) => value
+              case other => fail(s"expected one statement object, got: $other")
+            }
+            assert(analyzed \ "analyze_success" === JBool(true), json)
+            assert(analyzed \ "select_list" === JArray(List(
+              JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
+            assert(spark.sql("SELECT parse_sql_shadow_v").head().getInt(0) === 1)
+          }
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE parse_sql_shadow_v")
+      }
+    }
+  }
+
+
+  test("ANALYZE binds supplied local variables by identity") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT proc.parm1 AS x; SELECT parm1 AS x',
+          |  'ANALYZE',
+          |  variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING')))
+          |""".stripMargin).head().getString(0)
+      val (hit, miss) = parse(json) match {
+        case JArray(List(first: JObject, second: JObject)) => (first, second)
+        case other => fail(s"expected two statement objects, got: $other")
+      }
+      assert(hit \ "analyze_success" === JBool(true), json)
+      assert(hit \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))), json)
+      assert(miss \ "analyze_success" === JBool(false), json)
+    }
+  }
+
+  test("ANALYZE resolves injected relations from a DDL column list") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT a, b FROM t',
+          |  'ANALYZE',
+          |  relations => array(named_struct('name', 't', 'schema', 'a INT, b STRING')))
+          |""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(true))
+      assert(analyzed \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("a"))), "type" -> jsonInt),
+        JObject("name" -> JArray(List(JString("b"))), "type" -> jsonString))))
+      assert(analyzed \ "source_table_references" === JArray(List(JArray(List(
+        JString("spark_catalog"), JString("default"), JString("t"))))))
+    }
+  }
+
+
+  test("ANALYZE one-part overlays eclipse persistent tables; PATH still prefers temp views") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE TABLE parse_sql_overlay_t (a BIGINT) USING parquet")
+      try {
+        Seq("false", "true").foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+          val supplied = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM parse_sql_overlay_t',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'parse_sql_overlay_t',
+              |    'schema', 'a STRING')))
+              |""".stripMargin).head().getString(0)
+          val suppliedJson = parse(supplied) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(suppliedJson \ "analyze_success" === JBool(true))
+          assert(suppliedJson \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("a"))), "type" -> jsonString))))
+          }
+          sql("CREATE OR REPLACE TEMP VIEW parse_sql_overlay_t AS SELECT true AS a")
+          try {
+            withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+            val temp = spark.sql(
+              """SELECT parse_sql(
+                |  'SELECT a FROM parse_sql_overlay_t',
+                |  'ANALYZE',
+                |  relations => array(named_struct(
+                |    'name', 'parse_sql_overlay_t',
+                |    'schema', 'a STRING')))
+                |""".stripMargin).head().getString(0)
+            val tempJson = parse(temp) match {
+              case JArray(List(value: JObject)) => value
+              case other => fail(s"expected one statement object, got: $other")
+            }
+            assert(tempJson \ "analyze_success" === JBool(true))
+            assert(tempJson \ "select_list" === JArray(List(
+              JObject("name" -> JArray(List(JString("a"))), "type" -> jsonBoolean))))
+            }
+          } finally {
+            sql("DROP VIEW parse_sql_overlay_t")
+          }
+        }
+      } finally {
+        sql("DROP TABLE parse_sql_overlay_t")
+      }
+    }
+  }
+
+
+  test("ANALYZE system.session overlay eclipses a temp view as source and INSERT target") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_v") {
+        sql("CREATE OR REPLACE TEMP VIEW parse_sql_v AS SELECT 1 AS a")
+        Seq("false", "true").foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+            val source = spark.sql(
+              """SELECT parse_sql(
+                |  'SELECT b FROM parse_sql_v',
+                |  'ANALYZE',
+                |  relations => array(named_struct(
+                |    'name', 'system.session.parse_sql_v',
+                |    'schema', 'b INT')))
+                |""".stripMargin).head().getString(0)
+            val sourceJson = parse(source) match {
+              case JArray(List(value: JObject)) => value
+              case other => fail(s"expected one statement object, got: $other")
+            }
+            assert(sourceJson \ "analyze_success" === JBool(true))
+            assert(sourceJson \ "select_list" === JArray(List(
+              JObject("name" -> JArray(List(JString("b"))), "type" -> jsonInt))))
+            assert(sourceJson \ "source_table_references" === JArray(List(JArray(List(
+              JString("system"), JString("session"), JString("parse_sql_v"))))))
+          }
+        }
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+          val insert = spark.sql(
+            """SELECT parse_sql(
+              |  'INSERT INTO parse_sql_v VALUES (2)',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'system.session.parse_sql_v',
+              |    'schema', 'b INT')))
+              |""".stripMargin).head().getString(0)
+          val insertJson = parse(insert) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(insertJson \ "analyze_success" === JBool(true), insert)
+          assert(insertJson \ "target_table_references" === JArray(List(JArray(List(
+            JString("system"), JString("session"), JString("parse_sql_v"))))))
+        }
+      }
+    }
+  }
+
+
+  test("ANALYZE binds qualified relation overlays by identity, not session temp names") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_rel_db")
+      try {
+        val qualified = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT a FROM spark_catalog.parse_sql_rel_db.t',
+            |  'ANALYZE',
+            |  relations => array(named_struct(
+            |    'name', 'spark_catalog.parse_sql_rel_db.t',
+            |    'schema', 'a INT')))
+            |""".stripMargin).head().getString(0)
+        val hit = parse(qualified) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(hit \ "analyze_success" === JBool(true))
+        assert(hit \ "source_table_references" === JArray(List(JArray(List(
+          JString("spark_catalog"), JString("parse_sql_rel_db"), JString("t"))))))
+        assert(hit \ "select_list" === JArray(List(
+          JObject("name" -> JArray(List(JString("a"))), "type" -> jsonInt))))
+
+        // The overlay is a different schema; unqualified t in default does not bind.
+        val missedJson = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT a FROM t',
+            |  'ANALYZE',
+            |  relations => array(named_struct(
+            |    'name', 'spark_catalog.parse_sql_rel_db.t',
+            |    'schema', 'a INT')))
+            |""".stripMargin).head().getString(0)
+        val miss = parse(missedJson) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(miss \ "analyze_success" === JBool(false))
+        assert(miss \ "source_table_references" === JArray(List(JArray(List(
+          JString("spark_catalog"), JString("default"), JString("t"))))))
+
+        val viaSchema = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT a FROM t',
+            |  'ANALYZE',
+            |  current_schema => 'parse_sql_rel_db',
+            |  relations => array(named_struct(
+            |    'name', 'spark_catalog.parse_sql_rel_db.t',
+            |    'schema', 'a INT')))
+            |""".stripMargin).head().getString(0)
+        val via = parse(viaSchema) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(via \ "analyze_success" === JBool(true))
+        assert(via \ "source_table_references" === JArray(List(JArray(List(
+          JString("spark_catalog"), JString("parse_sql_rel_db"), JString("t"))))))
+
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql("SET PATH = spark_catalog.parse_sql_rel_db, system.builtin")
+          try {
+            val viaPath = spark.sql(
+              """SELECT parse_sql(
+                |  'SELECT a FROM t',
+                |  'ANALYZE',
+                |  relations => array(named_struct(
+                |    'name', 'spark_catalog.parse_sql_rel_db.t',
+                |    'schema', 'a INT')))
+                |""".stripMargin).head().getString(0)
+            val path = parse(viaPath) match {
+              case JArray(List(value: JObject)) => value
+              case other => fail(s"expected one statement object, got: $other")
+            }
+            assert(path \ "analyze_success" === JBool(true))
+            assert(path \ "select_list" === JArray(List(
+              JObject("name" -> JArray(List(JString("a"))), "type" -> jsonInt))))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      } finally {
+        sql("DROP DATABASE parse_sql_rel_db")
+      }
+    }
+  }
+
+
+  test("ANALYZE reports invalid variable types as JSON") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT 1 AS a',
+          |  'ANALYZE',
+          |  variables => array(named_struct('name', 'v', 'type', '!!!')))
+          |""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "parse_success" === JBool(true))
+      assert(analyzed \ "analyze_success" === JBool(false))
+      assert((analyzed \ "error" \ "errorClass").asInstanceOf[JString].s ===
+        "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT")
+    }
+  }
+
+  test("ANALYZE reports a variable name with too many parts as JSON") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      Seq("a.system.session.v", "a.b.v").foreach { name =>
+        val result = evalCall(
+          "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', variables => array(named_struct(" +
+            s"'name', '$name', 'type', 'INT')))")
+        assert(result.head \ "analyze_success" === JBool(false), name)
+        assert(result.head \ "error" \ "errorClass" ===
+          JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"), name)
+      }
+    }
+  }
+
+  test("ANALYZE resolves UPDATE, DELETE, and MERGE targets to a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val target = JArray(List(ref("spark_catalog", "default", "parse_sql_ovl")))
+      def analyze(stmt: String): JObject = evalCall(
+        s"SELECT parse_sql('$stmt', 'ANALYZE', relations => array(named_struct(" +
+          "'name', 'spark_catalog.default.parse_sql_ovl', 'schema', 'a INT, b STRING')))").head
+      Seq(
+        "UPDATE parse_sql_ovl SET a = 1 WHERE b = ''x''",
+        "DELETE FROM parse_sql_ovl WHERE a = 1",
+        "MERGE INTO parse_sql_ovl USING (SELECT 1 AS a) s ON parse_sql_ovl.a = s.a " +
+          "WHEN MATCHED THEN UPDATE SET b = ''y''").foreach { stmt =>
+        val result = analyze(stmt)
+        assert(result \ "analyze_success" === JBool(true), result)
+        assert(result \ "target_table_references" === target, result)
+      }
+      val missing = analyze("UPDATE parse_sql_ovl SET c = 1")
+      assert(missing \ "analyze_success" === JBool(false))
+      assert(missing \ "error" \ "errorClass" ===
+        JString("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+    }
+  }
+
+
+  test("ANALYZE binds supplied positional and named parameter markers") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+          val pos = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT abs(?) AS x',
+              |  'ANALYZE',
+              |  parameter_markers => array(named_struct('name', '?', 'type', 'INT')))
+              |""".stripMargin).head().getString(0)
+          val posJson = parse(pos) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(posJson \ "analyze_success" === JBool(true))
+          assert(posJson \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("x"))), "type" -> jsonInt))))
+          assert(posJson \ "parameter_markers" \ "unnamed_count" === JInt(1))
+
+          val named = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT :p AS x',
+              |  'ANALYZE',
+              |  parameter_markers => array(named_struct('name', 'p', 'type', 'STRING')))
+              |""".stripMargin).head().getString(0)
+          val namedJson = parse(named) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(namedJson \ "analyze_success" === JBool(true))
+          assert(namedJson \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
+          assert(namedJson \ "parameter_markers" \ "named" ===
+            JArray(List(JString("p"))))
+        }
+      }
+    }
+  }
+
+
+  test("ANALYZE reports invalid parameter marker types as JSON") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT 1 AS a',
+          |  'ANALYZE',
+          |  parameter_markers => array(named_struct('name', '?', 'type', '!!!')))
+          |""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(false))
+      assert((analyzed \ "error" \ "errorClass").asInstanceOf[JString].s ===
+        "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT")
+    }
+  }
+
+
+  test("PARSE ignores injected parameter markers") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT ? AS x',
+          |  'PARSE',
+          |  parameter_markers => array(named_struct('name', '?', 'type', 'INT')))
+          |""".stripMargin).head().getString(0)
+      val parsed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(parsed \ "parse_success" === JBool(true))
+      assert(parsed \ "analyze_success" === JNothing)
+      assert(parsed \ "parameter_markers" \ "unnamed_count" === JInt(1))
+    }
+  }
+
+
+  test("PARSE ignores injected relations") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT a FROM missing_parse_sql_rel',
+          |  'PARSE',
+          |  relations => array(named_struct('name', 'missing_parse_sql_rel', 'schema', 'a INT')))
+          |""".stripMargin).head().getString(0)
+      val parsed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(parsed \ "parse_success" === JBool(true))
+      assert(parsed \ "analyze_success" === JNothing)
+    }
+  }
+
+
+  test("ANALYZE INSERT into an overlay honors a column list") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val results = evalCall(
+        """SELECT parse_sql(
+          |  'INSERT INTO t (b, a) VALUES (''x'', 1); INSERT INTO t (b) VALUES (''y'')',
+          |  'ANALYZE',
+          |  relations => array(named_struct('name', 't', 'schema', 'a INT, b STRING')))
+          |""".stripMargin)
+      assert(results.map(_ \ "analyze_success") === List(JBool(true), JBool(true)))
+    }
+  }
+
+
+  test("ANALYZE binds parameter markers in subqueries and CTEs") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val results = evalCall(
+        """SELECT parse_sql(
+          |  'SELECT (SELECT :p) AS x; WITH c AS (SELECT :p AS v) SELECT v FROM c',
+          |  'ANALYZE',
+          |  parameter_markers => array(named_struct('name', 'p', 'type', 'INT')))
+          |""".stripMargin)
+      assert(results.map(_ \ "analyze_success") === List(JBool(true), JBool(true)))
+      assert(results(0) \ "select_list" === typedColumns("x" -> jsonInt))
+      assert(results(1) \ "select_list" === typedColumns("v" -> jsonInt))
+    }
+  }
+
+
+  test("ANALYZE reports a supplied global temp relation under the global temp database") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val globalDb = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val result = evalCall(
+        s"SELECT parse_sql('SELECT a FROM $globalDb.parse_sql_gt; " +
+          s"INSERT INTO $globalDb.parse_sql_gt SELECT 1', 'ANALYZE', " +
+          s"relations => array(named_struct('name', '$globalDb.parse_sql_gt', 'schema', 'a INT')))")
+      assert(result.head \ "source_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_gt"))), result)
+      assert(result(1) \ "analyze_success" === JBool(true), result)
+      assert(result(1) \ "target_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_gt"))), result)
+    }
+  }
+
+  test("ANALYZE reports an INSERT target on a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('INSERT INTO parse_sql_ins SELECT 1, ''x''', 'ANALYZE', " +
+          "relations => array(named_struct('name', 'parse_sql_ins', 'schema', 'a INT, b STRING')))")
+      assert(result.head \ "analyze_success" === JBool(true), result)
+      assert(result.head \ "target_table_references" === JArray(List(
+        ref("spark_catalog", "default", "parse_sql_ins"))), result)
+      assert(result.head \ "select_list" === typedColumns("a" -> jsonInt, "b" -> jsonString),
+        result)
+    }
+  }
+
+  test("ANALYZE qualifies an unqualified supplied relation with the call's schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_rs") {
+        sql("CREATE DATABASE parse_sql_rs")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_rs_u', 'ANALYZE', " +
+            "current_schema => 'parse_sql_rs', " +
+            "relations => array(named_struct('name', 'parse_sql_rs_u', 'schema', 'a INT')))")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_rs", "parse_sql_rs_u"))), result)
+      }
+    }
+  }
+
+  test("ANALYZE resolves a view body in the view's own schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_vw_a", "parse_sql_vw_b") {
+        sql("CREATE DATABASE parse_sql_vw_a")
+        sql("CREATE DATABASE parse_sql_vw_b")
+        sql("CREATE TABLE parse_sql_vw_a.t (a INT) USING parquet")
+        sql("CREATE TABLE parse_sql_vw_b.t (a STRING) USING parquet")
+        // The body names `t` unqualified, so it is created while parse_sql_vw_a is current.
+        sql("USE parse_sql_vw_a")
+        try {
+          sql("CREATE VIEW v AS SELECT a FROM t")
+        } finally {
+          sql("USE default")
+        }
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_vw_a.v', 'ANALYZE', " +
+            "current_schema => 'parse_sql_vw_b')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+      }
+    }
+  }
+
+  test("ANALYZE resolves an EXECUTE IMMEDIATE body under the call's schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_ei_s") {
+        sql("CREATE DATABASE parse_sql_ei_s")
+        sql("CREATE TABLE parse_sql_ei_s.parse_sql_ei_t (a INT) USING parquet")
+        withTable("parse_sql_ei_t") {
+          sql("CREATE TABLE parse_sql_ei_t (a STRING) USING parquet")
+          val result = evalCall(
+            "SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT a FROM parse_sql_ei_t''', " +
+              "'ANALYZE', current_schema => 'parse_sql_ei_s')")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          // The default table is a STRING, so the INT type shows the call's schema was used.
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        }
+      }
+    }
+  }
+
+  test("ANALYZE hides supplied locals from an EXECUTE IMMEDIATE body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "variables => array(named_struct('name', 'proc.p', 'type', 'INT'))"
+      val direct = evalCall(s"SELECT parse_sql('SELECT proc.p AS x', 'ANALYZE', $overlay)")
+      assert(direct.head \ "analyze_success" === JBool(true), direct)
+      val dynamic = evalCall(
+        s"SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT proc.p AS x''', 'ANALYZE', $overlay)")
+      assert(dynamic.head \ "analyze_success" === JBool(false), dynamic)
+    }
+  }
+
+  test("ANALYZE shows session variables to an EXECUTE IMMEDIATE body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "variables => array(named_struct('name', 'v', 'type', 'INT'))"
+      val dynamic = evalCall(
+        s"SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT v AS x''', 'ANALYZE', $overlay)")
+      assert(dynamic.head \ "analyze_success" === JBool(true), dynamic)
+      assert(dynamic.head \ "select_list" === typedColumns("x" -> jsonInt), dynamic)
+    }
+  }
+
+  test("ANALYZE checks the REPLACE forms of an INSERT into a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_rep', 'schema', 'a INT'))"
+      def analyzeInsert(insert: String): JObject =
+        evalCall(s"SELECT parse_sql('$insert', 'ANALYZE', $overlay)").head
+
+      val where = analyzeInsert("INSERT INTO parse_sql_rep REPLACE WHERE a > 0 SELECT 1")
+      assert(where \ "analyze_success" === JBool(true), where)
+
+      val notBoolean = analyzeInsert("INSERT INTO parse_sql_rep REPLACE WHERE a SELECT 1")
+      assert(notBoolean \ "analyze_success" === JBool(false), notBoolean)
+      assert(errorClass(notBoolean) === JString("DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN"),
+        notBoolean)
+
+      val usingForm = analyzeInsert("INSERT INTO parse_sql_rep REPLACE USING (a) SELECT 1")
+      assert(usingForm \ "analyze_success" === JBool(false), usingForm)
+    }
+  }
+
+  test("ANALYZE types an INSERT with a static partition or BY NAME on a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_part', " +
+        "'schema', 'a INT, b STRING'))"
+      val partition = evalCall(
+        s"SELECT parse_sql('INSERT INTO parse_sql_part PARTITION (b = ''x'') SELECT 1', " +
+          s"'ANALYZE', $overlay)")
+      assert(partition.head \ "analyze_success" === JBool(true), partition)
+      val byName = evalCall(
+        s"SELECT parse_sql('INSERT INTO parse_sql_part BY NAME SELECT ''y'' AS b, 1 AS a', " +
+          s"'ANALYZE', $overlay)")
+      assert(byName.head \ "analyze_success" === JBool(true), byName)
+    }
+  }
+
+  test("ANALYZE does not let a supplied relation stand in for a catalog command target") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_tgt', 'schema', 'a INT'))"
+      val statements = Seq(
+        "ALTER TABLE parse_sql_tgt ADD CONSTRAINT c CHECK (a > 0)",
+        "CACHE TABLE parse_sql_tgt",
+        "UNCACHE TABLE parse_sql_tgt")
+      statements.foreach { statement =>
+        // The catalog has no parse_sql_tgt, so the target must not resolve to the overlay.
+        val j = evalCall(s"SELECT parse_sql('$statement', 'ANALYZE', $overlay)").head
+        assert(j \ "analyze_success" === JBool(false), j)
+        assert(errorClass(j) === JString("TABLE_OR_VIEW_NOT_FOUND"), j)
+      }
+    }
+  }
+
+  test("ANALYZE binds markers inside EXPLAIN and DESCRIBE QUERY") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val explain = evalCall(
+        "SELECT parse_sql('EXPLAIN SELECT ? AS x', 'ANALYZE', " +
+          "parameter_markers => array(named_struct('name', '?', 'type', 'INT')))")
+      assert(explain.head \ "analyze_success" === JBool(true), explain)
+      val describe = evalCall(
+        "SELECT parse_sql('DESCRIBE QUERY SELECT :p AS x', 'ANALYZE', " +
+          "parameter_markers => array(named_struct('name', 'p', 'type', 'STRING')))")
+      assert(describe.head \ "analyze_success" === JBool(true), describe)
+    }
+  }
+
+  test("ANALYZE names a NULL context field without quotes") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[Exception] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', relations => array(" +
+          "named_struct('name', CAST(NULL AS STRING), 'schema', 'a INT')))").collect()
+      }
+      assert(e.getMessage.contains("but got NULL name"), e.getMessage)
+      assert(!e.getMessage.contains("'NULL name'"), e.getMessage)
+    }
+  }
+
+  test("ANALYZE reports a malformed relation schema on each statement") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('SELECT 1; SELECT 2', 'ANALYZE', " +
+          "relations => array(named_struct('name', 'parse_sql_bad', 'schema', 'a')))")
+      assert(result.length === 2, result)
+      result.foreach { j =>
+        assert(j \ "analyze_success" === JBool(false), j)
+        assert(errorClass(j) === JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"), j)
+      }
+    }
+  }
+
+  test("ANALYZE fails the outer query for a blank current_catalog") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[Exception] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', current_catalog => ' ')").collect()
+      }
+      assert(e.getMessage.contains("PARSE_SQL_CONTEXT"), e.getMessage)
+    }
+  }
+
+  test("ANALYZE rejects a column as a context argument") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[AnalysisException] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', current_schema => c) " +
+          "FROM VALUES ('s') AS t(c)").collect()
+      }
+      assert(e.getMessage.contains("current_schema"), e.getMessage)
     }
   }
 

@@ -96,11 +96,18 @@ class SessionCatalog(
     hadoopConf: Configuration,
     val parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
-    functionExpressionBuilder: FunctionExpressionBuilder,
+    private[sql] val functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
     defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import SessionCatalog._
+
+  /**
+   * The monitor guarding the function registries this catalog shares with the session. A per-call
+   * copy of the session catalog (see parse_sql ANALYZE) points it at the session catalog, so the
+   * copy and the session serialize their registry loads on one lock.
+   */
+  @volatile private[sql] var registryMonitor: AnyRef = this
   import CatalogTypes.TablePartitionSpec
 
   private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
@@ -2809,7 +2816,7 @@ class SessionCatalog(
         }
 
         // Builder factory - loads resources only on first invoke()
-        val builderFactory: () => FunctionBuilder = () => synchronized {
+        val builderFactory: () => FunctionBuilder = () => registryMonitor.synchronized {
           // Re-check cache (another thread may have loaded it)
           functionRegistry.lookupFunctionBuilder(qualifiedIdent).getOrElse {
             if (funcMetadata.isUserDefinedFunction) {
@@ -2836,7 +2843,7 @@ class SessionCatalog(
    */
   def resolvePersistentTableFunction(
       name: FunctionIdentifier,
-      arguments: Seq[Expression]): LogicalPlan = synchronized {
+      arguments: Seq[Expression]): LogicalPlan = registryMonitor.synchronized {
     val qualifiedIdent = qualifyIdentifier(name)
     if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
       // Already cached

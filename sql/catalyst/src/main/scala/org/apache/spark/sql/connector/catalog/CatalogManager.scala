@@ -44,9 +44,10 @@ import org.apache.spark.sql.internal.SQLConf
  * namespace in both `SessionCatalog` and `CatalogManager`, implementations set/get the
  * current database of `SessionCatalog` when the current catalog is the session catalog.
  *
- * Two implementations exist: [[DefaultCatalogManager]] owns the mutable session state;
+ * Three implementations exist: [[DefaultCatalogManager]] owns the mutable session state;
  * [[TransactionAwareCatalogManager]] wraps another manager and redirects catalog lookups to the
- * active transaction's catalog.
+ * active transaction's catalog; [[AnalysisCatalogManager]] wraps another manager with a fixed,
+ * read-only catalog, namespace and path for one `parse_sql` ANALYZE call.
  */
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
