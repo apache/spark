@@ -102,6 +102,10 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
           // then, so its submission did not record the accumulator of its current attempt.
           recordBytesReadAccum(stage, stageInfo)
         }
+        // Cancelling only reaches the jobs that are active at that time, and the execution may
+        // start more of them before it fails. A job may submit no stage for a long time, when
+        // it waits for a stage that a job of another execution is running.
+        if (execution.bytesReadOverLimit.isDefined) cancel(execution)
       }
     }
   }
@@ -118,9 +122,6 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
       // A stage is submitted for the earliest active job that depends on it. That job may be of
       // an execution without a limit, while a job of an execution with one waits for the stage.
       stages.get(stageId).foreach(recordBytesReadAccum(_, event.stageInfo))
-      // Cancelling only reaches the jobs that are active at that time, and the execution may
-      // submit more of them before it fails.
-      execution.filter(_.bytesReadOverLimit.isDefined).foreach(cancel)
     }
   }
 

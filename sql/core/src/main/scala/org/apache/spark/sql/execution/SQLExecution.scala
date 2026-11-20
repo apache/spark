@@ -260,7 +260,9 @@ object SQLExecution extends Logging {
       // nor the queries that their sources run on the thread of the stream while they plan a
       // batch, with whichever session they hold. The thread of a stream has its query ID for as
       // long as it runs. A thread inherits both local properties from the thread that starts it,
-      // so the queries on a thread started during a query or a stream are not limited either.
+      // so the queries on a thread started during a stream are not limited either. The ones on
+      // a thread started during a query are nested in it: they count towards its limit while it
+      // runs, and are not limited after it ends.
       val hasScanLimit = existingRootId == null && maxScanBytes >= 0 &&
         sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null
       // sparkContext.getCallSite() would first try to pick up any call site that was previously

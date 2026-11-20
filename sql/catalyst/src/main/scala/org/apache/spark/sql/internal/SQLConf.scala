@@ -2711,9 +2711,11 @@ object SQLConf {
       "Streaming queries are not limited, but under Spark Connect the queries that a Python " +
       "foreachBatch function runs are queries of their own, which are limited. A thread " +
       "inherits the local properties of the thread that starts it, so the queries that run on " +
-      "a thread started while a query or a streaming query runs, such as a thread that a " +
-      "foreachBatch function starts, are taken as part of that query, even after it ends, and " +
-      "are not limited. -1 (the default) means no limit.")
+      "a thread started while a query runs are taken as part of that query: while it runs, " +
+      "what they read counts against its limit and they are cancelled with it, and after it " +
+      "ends they are not limited. The queries on a thread started while a streaming query " +
+      "runs, such as a thread that a foreachBatch function starts, are not limited. -1 (the " +
+      "default) means no limit.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .bytesConf(ByteUnit.BYTE)

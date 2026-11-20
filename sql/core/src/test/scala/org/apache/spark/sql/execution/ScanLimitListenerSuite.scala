@@ -173,13 +173,15 @@ class ScanLimitListenerSuite extends SparkFunSuite {
     assert(listener.bytesReadOverLimit(executionId).contains(101))
   }
 
-  test("cancels the jobs that an execution submits after it went over the limit") {
+  test("cancels the jobs that an execution starts after it went over the limit") {
     listener.register(executionId, maxScanBytes = 100, jobTag)
     submitStage(stageId = 0)
     endTask(stageId = 0, taskId = 1, partitionId = 0, bytesRead = 101)
     assert(cancelledTags.toSeq == Seq(jobTag))
 
-    submitStage(stageId = 1)
+    // The job waits for a stage that a job of another execution is running, and submits none.
+    submitStage(stageId = 1, rootExecutionId = executionId + 1)
+    startJob(stageIds = Seq(1, 2), rootExecutionId = executionId)
     assert(cancelledTags.toSeq == Seq(jobTag, jobTag))
   }
 
