@@ -65,7 +65,7 @@
  *   the columns to read and the location of the checkpoint of the source, and keeps it until the
  *   streaming query stops. When the checkpoint does not have the initial offset of the source yet,
  *   Spark asks for it with initial_offset, and keeps it in the checkpoint. For each micro-batch, it
- *   asks for the latest_offset, with the offset that the micro-batch starts after, plans the
+ *   asks for the latest_offset, with the starting progress boundary of the micro-batch, plans the
  *   partitions with stream_partitions, which also returns the state of the stream reader, then
  *   calls read on the executors. With Trigger.AvailableNow, a run reads the data that was
  *   available when it started: Spark asks for the latest_offset without a limit once, before the
@@ -119,10 +119,11 @@
  *   the same when the query restarts from its checkpoint, so the ID of the query and the epoch ID
  *   identify the output of a micro-batch, also when other queries write to the same destination. A
  *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
- *   the previous stream writer of the query when the query creates a new one. Spark is not told
- *   when a streaming query stops, so it closes the last stream writer of the query once the writer
- *   is no longer referenced, or when the query is restarted. Streaming writes are micro-batch only:
- *   a query with continuous processing fails before create_writer.
+ *   it once it committed or aborted the micro-batch, as for a batch write. A stream writer that
+ *   Spark neither commits nor aborts is closed before the query calls create_writer for its next
+ *   one, or, since Spark is not told when a streaming query stops, once the writer is no longer
+ *   referenced. Streaming writes are micro-batch only: a query with continuous processing fails
+ *   before create_writer.
  *
  * Conventions
  * -----------
@@ -137,10 +138,11 @@
  *   NULL handle as an error. Spark releases each handle exactly once, with the close function of
  *   its kind: close, close_reader, close_stream_reader, close_writer or close_data_writer, and no
  *   other function releases a handle. A handle is not always released right after its last use: a
- *   batch reader whose partitions are never planned and the last stream writer of a query are
- *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
- *   must not depend on the data source handle it was created from, because Spark closes the data
- *   source handle right after creating it.
+ *   batch reader whose partitions are never planned may only be released once it is no longer
+ *   referenced, and a stream writer that is neither committed nor aborted before the query
+ *   creates its next one or once it is no longer referenced (see Lifecycle above). A reader or
+ *   writer handle must not depend on the data source handle it was created from, because Spark
+ *   closes the data source handle right after creating it.
  * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
  *   handle than its close function, except that it aborts a writer whose commit failed and a data
  *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
@@ -201,8 +203,8 @@
  * - Threads. Spark calls the library from multiple threads, and calls on different handles may
  *   run concurrently. Calls on the same handle never run concurrently. A handle may be released
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
- *   releases a handle once it is no longer referenced, for example the last stream writer of a
- *   streaming query. A SparkDsSink must be called on the thread of the call that it was passed
+ *   releases a handle once it is no longer referenced, for example a batch reader whose partitions
+ *   are never planned. A SparkDsSink must be called on the thread of the call that it was passed
  *   to, during that call. The functions of SparkDsHost and SparkDsTaskContext, and the callbacks
  *   of the stream that read initializes, can be called from any thread. The callbacks of the
  *   stream never run concurrently.
@@ -482,7 +484,7 @@ typedef struct SparkDsLatestOffsetInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
   /*
-   * The offset, as JSON, that the next micro-batch starts after: the end of the last micro-batch,
+   * The starting progress boundary, as JSON: the end of the last micro-batch,
    * or the initial offset before the first one, for every trigger. With Trigger.AvailableNow,
    * Spark asks for the latest offset without a limit once, before the first micro-batch that it
    * plans, and reads up to it: in a single micro-batch, or with a limit, in micro-batches of
@@ -515,7 +517,12 @@ typedef struct SparkDsLatestOffsetInfo {
 typedef struct SparkDsStreamPartitionsInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
-  /* The offsets, as JSON, that the micro-batch reads the data after, up to and including end. */
+  /*
+   * The starting and ending progress boundaries, as JSON. The library defines how offsets map
+   * to records: if an offset is the next row to read, {"next":10} to {"next":13} reads rows
+   * 10, 11, and 12, the range [10, 13). Equal boundaries describe no data, and adjacent ranges
+   * must neither repeat nor skip records.
+   */
   const char* start;
   const char* end;
 } SparkDsStreamPartitionsInfo;
@@ -524,7 +531,7 @@ typedef struct SparkDsStreamPartitionsInfo {
 typedef struct SparkDsCommitOffsetInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
-  /* The offset, as JSON, up to and including which Spark processed the data. */
+  /* The progress boundary, as JSON, of the data that Spark processed. */
   const char* end;
 } SparkDsCommitOffsetInfo;
 
@@ -536,8 +543,12 @@ typedef struct SparkDsCommitOffsetInfo {
  * Spark itself may read a stream on a thread that the task does not wait for, for example the one
  * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
  * returns true once the task failed or completed, so the library may stop reading then. Such an
- * engine may also keep the arrays and the schemas of the stream after it released the stream, so
- * the release of an array or a schema must not use the stream or the task.
+ * engine may also keep the arrays and the schemas of the stream after it released the stream, and
+ * so may Spark: when a query stops reading a stream before its end, as with a LIMIT, Spark may
+ * release the last array that it read only once it no longer references the batch, from a JVM
+ * Cleaner thread. So the release of an array or a schema must not use the stream or the task. It
+ * should also be quick and not block, e.g. on a lock or on a runtime that another thread holds:
+ * Spark shares that thread with the release of the other objects that it no longer references.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -811,7 +822,7 @@ typedef struct SparkDsLibrary {
    * Returns the most recent offset available after start, within the limit and up to the end of
    * the run in its info. Spark may call it more than once for a micro-batch, see Streaming reads.
    *
-   * info: the offset that the next micro-batch starts after, the limit, and the end of the run
+   * info: the starting progress boundary of the next micro-batch, the limit, and the end of the run
    * set_offset: called once with the offset, as compact JSON on a single line
    */
   int (*latest_offset)(void* reader, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
@@ -822,7 +833,7 @@ typedef struct SparkDsLibrary {
    * both sides of a union of the source with itself, read the partitions of a single call, with
    * the state that it returned.
    *
-   * info: the offsets that the micro-batch reads the data after, up to and including the end
+   * info: the progress boundaries of the micro-batch, as described by SparkDsStreamPartitionsInfo
    * add_partition: called with each partition, serialized in a format defined by the library
    * set_state: called once with the state of the stream reader that read needs on the executors
    *            to read these partitions, or not at all if there is none
@@ -831,8 +842,8 @@ typedef struct SparkDsLibrary {
                            SparkDsSink add_partition, SparkDsSink set_state, void* sink);
 
   /*
-   * Tells the library that Spark has processed all the data up to and including an offset, and
-   * will not ask for it again.
+   * Tells the library that Spark has processed all the data before an offset's progress
+   * boundary, and will not ask for that data again.
    *
    * info: the offset
    */

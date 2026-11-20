@@ -29,7 +29,7 @@ import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.min.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const vizPath = join(
   __dirname,
-  '../../sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/spark-sql-viz.js');
+  '../../core/src/main/resources/org/apache/spark/ui/static/sql/spark-sql-viz.js');
 const src = readFileSync(vizPath, 'utf8');
 
 document.body.innerHTML = '<button id="plan-viz-download-btn"></button>';

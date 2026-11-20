@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
 
 class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
@@ -47,6 +48,36 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, BooleanType), Literal(30))
+
+  test("SPARK-61482: drop the EvalOnlyWhen marker once its child has no UDF") {
+    // The marker's condition equals the enclosing If's condition, so when the child keeps no
+    // Python/external UDF the marker is redundant and the plan matches the one without it.
+    assertEquivalent(
+      If($"c", EvalOnlyWhen($"c", $"a"), $"b"),
+      If($"c", $"a", $"b"))
+    // A marker whose condition folded to a constant simplifies on its own.
+    assertEquivalent(EvalOnlyWhen(TrueLiteral, $"a"), $"a")
+    assertEquivalent(EvalOnlyWhen(FalseLiteral, $"a"), Literal.create(null, IntegerType))
+  }
+
+  test("SPARK-61482: keep the EvalOnlyWhen marker when the If and marker conditions differ") {
+    // $"c" and the extra boolean are different, so the marker is not redundant.
+    val cond2 = $"a" > 0
+    val plan = If($"c", EvalOnlyWhen(cond2, $"a"), $"b")
+    assertEquivalent(plan, plan)
+  }
+
+  test("SPARK-61482: keep the EvalOnlyWhen marker when a UDF remains in its child") {
+    val udf = PythonUDF("udf", null, LongType, Seq($"a".cast(LongType)),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val plan = If($"c", EvalOnlyWhen($"c", udf), Literal(0L))
+    assertEquivalent(plan, plan)
+  }
+
+  test("SPARK-61482: a marker whose condition folds to null becomes null") {
+    assertEquivalent(EvalOnlyWhen(Literal.create(null, BooleanType), $"a"),
+      Literal.create(null, IntegerType))
+  }
 
   test("simplify if") {
     assertEquivalent(

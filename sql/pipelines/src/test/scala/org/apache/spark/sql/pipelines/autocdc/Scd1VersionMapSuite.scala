@@ -60,6 +60,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = IntegerType,
         resolver = caseSensitiveResolution
@@ -89,6 +90,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -122,6 +124,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -156,6 +159,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -190,6 +194,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseInsensitiveResolution
@@ -199,6 +204,37 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result, Row(Map[String, Any](encodedPath("Value") -> null)))
   }
 
+  test("buildVersionMap gives omitted leaves null entries inside and outside the selection") {
+    val userDataSchema = new StructType()
+      .add("carried", StringType)
+      .add("omitted", StringType)
+      .add("profile", new StructType()
+        .add("carried", StringType)
+        .add("omitted", StringType))
+    val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", LongType))
+    val input = dataFrameOf(inputSchema)(Row(null, "ignored", Row("value", "ignored"), 10L))
+    val ignoreNullSelection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
+
+    val result = input.select(
+      Scd1VersionMap.buildVersionMap(
+        schema = userDataSchema,
+        ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set(Seq("omitted"), Seq("profile", "omitted")),
+        authorshipSequence = F.col("seq"),
+        sequencingType = LongType,
+        resolver = caseSensitiveResolution
+      )
+    )
+
+    checkAnswer(result, Row(Map[String, Any](
+      encodedPath("carried") -> 10L,
+      encodedPath("omitted") -> null,
+      encodedPath("profile", "carried") -> 10L,
+      encodedPath("profile", "omitted") -> null
+    )))
+  }
+
   test("buildVersionMap produces a typed empty map for an empty schema") {
     val input = dataFrameOf(new StructType().add("seq", LongType))(Row(10L))
 
@@ -206,6 +242,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = new StructType(),
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -229,6 +266,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
         Scd1VersionMap.buildVersionMap(
           schema = userDataSchema,
           ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+          omittedLeafPaths = Set.empty,
           authorshipSequence = F.col("seq"),
           sequencingType = sequencingType,
           resolver = caseSensitiveResolution
@@ -279,6 +317,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -302,6 +341,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -328,6 +368,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
@@ -358,6 +399,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
+        omittedLeafPaths = Set.empty,
         authorshipSequence = F.col("seq"),
         sequencingType = sequencingType,
         resolver = caseSensitiveResolution

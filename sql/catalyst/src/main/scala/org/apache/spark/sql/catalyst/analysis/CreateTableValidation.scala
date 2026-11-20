@@ -18,15 +18,19 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.V2CreateTablePlan
-import org.apache.spark.sql.catalyst.util.{TypeUtils, WriteDistributionAndOrdering}
+import org.apache.spark.sql.catalyst.plans.logical.{V2CreateTableAsSelectPlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.util.{FileTypeColumnUsage, TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, NamedReference, SortedBucketTransform}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
-/** Validates partition references, column types, write ordering and generated columns. */
+/**
+ * Validates partition references, column types (including the FILE type rules), write ordering
+ * and generated columns.
+ */
 private[sql] object CreateTableValidation {
   def validateV2CreateTablePlan(create: V2CreateTablePlan, conf: SQLConf): Unit = {
     val references = create.partitioning.flatMap(_.references).toSet
@@ -61,6 +65,36 @@ private[sql] object CreateTableValidation {
     create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
     TypeUtils.failUnsupportedDataType(create.tableSchema, conf)
     SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
+    create match {
+      // The columns of CREATE TABLE AS SELECT come from its query, not from DDL.
+      case ctas: V2CreateTableAsSelectPlan =>
+        TypeUtils.checkNoUnknownFileTypeWrite(ctas.query.schema)
+      case _ =>
+        TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
+    }
+    // FILE is not comparable, so it cannot be a partition, bucket, bucket sort, clustering or
+    // write-ordering column.
+    def checkNoFileTypeInColumns(refs: Seq[NamedReference], usage: FileTypeColumnUsage): Unit =
+      refs.foreach { ref =>
+        create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+          case (parentPath, field) =>
+            TypeUtils.checkNoFileTypeInColumnUsage(parentPath :+ field.name, field.dataType, usage)
+        }
+      }
+    create.partitioning.foreach {
+      case clusterBy: ClusterByTransform =>
+        checkNoFileTypeInColumns(clusterBy.references.toSeq, FileTypeColumnUsage.ClusteringColumn)
+      case bucket: BucketTransform =>
+        checkNoFileTypeInColumns(bucket.columns, FileTypeColumnUsage.BucketColumn)
+      case bucket: SortedBucketTransform =>
+        checkNoFileTypeInColumns(bucket.columns, FileTypeColumnUsage.BucketColumn)
+        checkNoFileTypeInColumns(bucket.sortedColumns, FileTypeColumnUsage.BucketSortColumn)
+      case transform =>
+        checkNoFileTypeInColumns(transform.references.toSeq, FileTypeColumnUsage.PartitionColumn)
+    }
+    checkNoFileTypeInColumns(
+      create.writeOrdering.toSeq.flatMap(_.expression.references.toSeq),
+      FileTypeColumnUsage.WriteOrderingColumn)
 
     // Validate generated column expressions
     create.columns.foreach { col =>

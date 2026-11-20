@@ -169,6 +169,27 @@ abstract class Expression extends TreeNode[Expression] {
   lazy val throwable: Boolean = children.exists(_.throwable)
 
   /**
+   * Returns true if this expression is total by itself, whatever its children are: it cannot
+   * raise an error for any values of its children of their current types, and it gives equal
+   * results for equal children of a binary-stable type (strings of a non-binary collation are
+   * guarded by the callers). This is about this node only, not about its children, and it is the
+   * declaration that [[ExprUtils.isTotalOperator]] and [[ExprUtils.canEvaluateUnconditionally]]
+   * read: the optimizer evaluates a total expression on rows it would otherwise not see, and
+   * replaces a child of it with a value equal to that child.
+   *
+   * Unlike [[throwable]], this is false unless an expression says otherwise, so an expression
+   * that says nothing is only left out of some optimizations. An expression that is always total
+   * mixes in [[NoThrow]]. An expression that is total only for some input types or in some eval
+   * modes, such as [[Cast]] and the arithmetic expressions, overrides this method instead. Before
+   * returning true, check every path of `eval` and of the generated code, in every eval mode and
+   * for every input type the expression accepts.
+   *
+   * This is meant for resolved expressions: an override may read the data types of the children,
+   * which fails for an unresolved one.
+   */
+  def isTotal: Boolean = false
+
+  /**
    * Returns a copy of this expression where all stateful expressions are replaced with fresh
    * uninitialized copies. If the expression contains no stateful expressions then the original
    * expression is returned.
@@ -562,6 +583,29 @@ trait Nondeterministic extends Expression {
   }
 
   protected def evalInternal(input: InternalRow): Any
+}
+
+/**
+ * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
+ * For example, UDFs, [[AssertTrue]], etc can throw an exception when they are executed.
+ * In such case, it is necessary to call [[Expression.eval]], and the optimization rule should
+ * not ignore it.
+ *
+ * This trait can be used in an optimization rule such as
+ * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that
+ * do not need to execute, for example, `size(array(c0, c1, c2))`. That rule only does so for
+ * [[CreateArray]] and [[CreateNamedStruct]] for now.
+ *
+ * Mixing it in is a promise by the author of the expression that it is always total, as
+ * [[Expression.isTotal]] defines it: it must not raise for any input of its children, in any eval
+ * mode, and it must give equal results for equal children of a binary-stable type. The promise
+ * covers every subclass of the expression that mixes it in, which cannot override
+ * [[Expression.isTotal]] any more, so mix it into concrete expressions and not into a base class
+ * or trait that other expressions may extend later. An expression that is total only for some
+ * input types or in some eval modes overrides [[Expression.isTotal]] instead.
+ */
+trait NoThrow extends Expression {
+  final override def isTotal: Boolean = true
 }
 
 /**

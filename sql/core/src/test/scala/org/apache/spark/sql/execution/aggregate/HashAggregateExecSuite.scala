@@ -110,7 +110,7 @@ class HashAggregateExecSuite extends SparkFunSuite with SharedSparkSession {
       val keys = Seq("apple", "banana", "cherry")
       insert(map, keys)
 
-      val sorter = HashAggregateExec.spillHashMapToSorter(map, null)
+      val sorter = HashAggregateCodegenHelper.spillHashMapToSorter(map, null)
 
       assert(sorter != null)
       assert(drainKeys(sorter) === keys.sorted)
@@ -122,12 +122,12 @@ class HashAggregateExecSuite extends SparkFunSuite with SharedSparkSession {
       val firstKeys = Seq("apple", "banana", "cherry")
       val secondKeys = Seq("damson", "elderberry", "fig")
       insert(map, firstKeys)
-      val sorter = HashAggregateExec.spillHashMapToSorter(map, null)
+      val sorter = HashAggregateCodegenHelper.spillHashMapToSorter(map, null)
 
       // The map keeps accepting keys after being destructed, so the second spill hits the merge
       // branch with a sorter already in hand.
       insert(map, secondKeys)
-      val merged = HashAggregateExec.spillHashMapToSorter(map, sorter)
+      val merged = HashAggregateCodegenHelper.spillHashMapToSorter(map, sorter)
 
       // The same sorter comes back, now holding the keys of both spills.
       assert(merged eq sorter)

@@ -40,6 +40,7 @@ from pyspark.eval_handlers._base import (
     GroupedEvalTypeHandler,
 )
 from pyspark.eval_handlers.utils import (
+    WindowAggResults,
     extract_key_value_indexes,
     hashable_grouping_key,
     wrap_kwargs_support,
@@ -57,12 +58,10 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
 )
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType, fail_on_stopiteration
-from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -592,11 +591,13 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
 
 class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
-    ``Aggregator``. The operator sends each frame -- the whole partition for an
-    unbounded frame, or per-row ``[begin, end)`` slices for a bounded one -- and each
-    frame's rows are folded with ``reduce`` (from a fresh ``zero``) and finished with
-    ``finish``, one output value per input row. A window has no shuffle, so the
-    intermediate buffer never leaves the worker; ``merge`` is not used here."""
+    ``Aggregator``. A window partition is evaluated within one task after the exchange, so
+    there is no PARTIAL/FINAL split and ``merge`` is not used. The operator streams each
+    partition. An unbounded frame is the whole partition: it is folded with ``reduce`` from
+    ``zero`` once, and its ``finish`` value is repeated for every row. For a bounded frame,
+    each row also carries its frame's ``[begin, end)`` bounds, and each row's frame is folded
+    from ``zero`` -- or, while the lower bound stays fixed, by extending the previous row's
+    buffer -- and finished."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
     _multi_udf = True
@@ -655,7 +656,12 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                     # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
                     # advanced (a row left the window, which ``reduce`` cannot subtract) or the
                     # frame shrank -- refold the frame from ``zero``.
-                    results = []
+                    #
+                    # ``reduce`` may update the running buffer in place, so an earlier row's
+                    # ``finish`` result can share state with it, e.g. a list that ``reduce``
+                    # appends to. ``results`` converts such results to Arrow before the buffer
+                    # is extended again; a refold starts from a new buffer, which needs none.
+                    results = WindowAggResults(result_type)
                     have_running = False
                     running: Any = None
                     prev_begin = -1
@@ -664,13 +670,17 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                         begin = begin_col[i].as_py()
                         end = end_col[i].as_py()
                         if have_running and begin == prev_begin and end >= prev_end:
+                            if end > prev_end:
+                                results.flush()
                             running = fold(agg, running, value_cols, prev_end, end)
+                            refolded = False
                         else:
                             running = fold(agg, agg.zero(), value_cols, begin, end)
+                            refolded = True
                         have_running = True
                         prev_begin, prev_end = begin, end
-                        results.append(agg.finish(running))
-                    result_arrays.append(pa.array(results, type=result_type))
+                        results.append(agg.finish(running), refolded)
+                    result_arrays.append(results.to_array())
                 else:
                     raise PySparkRuntimeError(
                         errorClass="INVALID_WINDOW_BOUND_TYPE",
@@ -826,6 +836,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = False
     _multi_udf = True
+    _supports_detailed_timing = True
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 
@@ -866,28 +877,10 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             for f in eval_conf.input_type  # type: ignore[union-attr]
         ]
 
-    @property
-    def serializer(self) -> ArrowStreamSerializer:
-        return ArrowStreamSerializer(
-            write_start_stream=True,
-            collect_timing=self._runner_conf.detailed_timing_enabled,
-        )
-
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
         runner_conf = self._runner_conf
-        metrics = WorkerMetrics()
-        if runner_conf.detailed_timing_enabled:
-            phase_timers = (
-                metrics.measure("pythonInputPreparationTime"),
-                metrics.measure("pythonUDFExecutionTime"),
-                metrics.measure("pythonOutputPreparationTime"),
-            )
-            metrics.set("pythonNumTimingReports", 1)
-            metrics.set("pythonNumTimedBatches", 0)
-        else:
-            phase_timers = None
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func: Any, args: list[list[Any]], num_rows: int) -> list[Any]:
@@ -915,7 +908,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         num_udfs = len(self._udf_infos)
         try:
             for input_batch in data:
-                if phase_timers is not None:
+                if self._detailed_timing_enabled:
                     num_timed_batches += 1
                     input_start_ns = clock()
                 num_rows = input_batch.num_rows
@@ -933,16 +926,16 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 # --- Process: evaluate each UDF row-by-row ---
                 output_arrays: list[pa.Array] = []
                 for udf_func, offsets, arrow_return_type, result_conv in self._udf_infos:
-                    if phase_timers is not None and output_arrays:
+                    if self._detailed_timing_enabled and output_arrays:
                         # Reuse the batch start for the first UDF, avoiding another clock read.
                         # Later UDFs start input after the loop transition.
                         input_start_ns = clock()
                     args = [columns[o] for o in offsets]
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         udf_start_ns = clock()
                         input_duration_ns += udf_start_ns - input_start_ns
                     results = _evaluate_batch_udf(udf_func, args, num_rows)
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         output_start_ns = clock()
                         udf_duration_ns += output_start_ns - udf_start_ns
                     verify_result_row_count(len(results), num_rows)
@@ -961,16 +954,15 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     # All UDF results for this batch are ready; time its assembly as output.
                     if len(output_arrays) == num_udfs:
                         output_batch = pa.RecordBatch.from_arrays(output_arrays, self._col_names)
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         output_duration_ns += clock() - output_start_ns
 
                 yield output_batch
                 del output_batch
         finally:
             # Publish the count and completed intervals if the generator closes early or raises.
-            if phase_timers is not None:
-                metrics.set("pythonNumTimedBatches", num_timed_batches)
-                input_timer, udf_timer, output_timer = phase_timers
-                input_timer.add_duration_ns(input_duration_ns)
-                udf_timer.add_duration_ns(udf_duration_ns)
-                output_timer.add_duration_ns(output_duration_ns)
+            if self._detailed_timing_enabled:
+                self._metrics.set("pythonNumTimedBatches", num_timed_batches)
+                self._input_preparation_timer.add_duration_ns(input_duration_ns)
+                self._udf_execution_timer.add_duration_ns(udf_duration_ns)
+                self._output_preparation_timer.add_duration_ns(output_duration_ns)

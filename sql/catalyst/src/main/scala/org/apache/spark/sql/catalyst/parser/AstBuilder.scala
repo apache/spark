@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, UNRESOLVED_IDENTIFIER}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
@@ -2523,6 +2523,65 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Add an [[UnresolvedGapFill]] to a logical plan. The feature gate is checked later, by the
+   * analyzer rule `ResolveGapFill`.
+   */
+  private def withGapFill(
+      ctx: GapFillClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.ALIGN, "ALIGN TO", ctx)
+    checkDuplicateClauses(ctx.RANGE, "RANGE BETWEEN", ctx)
+    checkDuplicateClauses(ctx.gapFillFillClause, "FILL", ctx)
+    checkDuplicateClauses(ctx.MAX, "MAX GAP", ctx)
+    checkDuplicateClauses(ctx.BIN_START, "BIN_START", ctx)
+    checkDuplicateClauses(ctx.IS_GENERATED, "IS_GENERATED", ctx)
+
+    val gapFill = UnresolvedGapFill(
+      partitionColumns = ctx.partitionCol.asScala.map(gapFillColumnRef).toSeq,
+      timeColumn = gapFillColumnRef(ctx.timeCol),
+      binWidthExpr = expression(ctx.binWidth),
+      originExpr = Option(ctx.origin).map(expression),
+      rangeStartExpr = Option(ctx.rangeStart).map(expression),
+      rangeEndExpr = Option(ctx.rangeEnd).map(expression),
+      fillColumns = ctx.gapFillFillClause.asScala.flatMap(_.fillColumns.asScala).map { c =>
+        GapFillColumn(gapFillColumnRef(c.multipartIdentifier), toGapFillMethod(c.gapFillMethod))
+      }.toSeq,
+      maxGapExpr = Option(ctx.maxGap).map(expression),
+      binStart = ctx.BIN_START.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.binStartAlias).map(getIdentifierText))
+      },
+      isGenerated = ctx.IS_GENERATED.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.isGeneratedAlias).map(getIdentifierText))
+      },
+      child = query)
+
+    if (ctx.tblAlias != null) {
+      SubqueryAlias(getIdentifierText(ctx.tblAlias), gapFill)
+    } else {
+      gapFill
+    }
+  }
+
+  /** A GAP FILL column name with its own origin, so that an error about it points at it. */
+  private def gapFillColumnRef(ctx: MultipartIdentifierContext): Expression = withOrigin(ctx) {
+    UnresolvedAttribute(visitMultipartIdentifier(ctx))
+  }
+
+  private def toGapFillMethod(ctx: GapFillMethodContext): GapFillMethod = withOrigin(ctx) {
+    if (ctx.LINEAR != null) {
+      GapFillMethod.Linear
+    } else if (ctx.FFILL != null || ctx.FORWARD != null) {
+      GapFillMethod.ForwardFill
+    } else if (ctx.BFILL != null || ctx.BACKWARD != null) {
+      GapFillMethod.BackwardFill
+    } else if (ctx.fillValue != null) {
+      GapFillMethod.Constant(expression(ctx.fillValue))
+    } else {
+      GapFillMethod.Null
+    }
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -2587,6 +2646,8 @@ class AstBuilder extends DataTypeAstBuilder
         withPivot(extension.pivotClause(), left)
       } else if (extension.unpivotClause() != null) {
         withUnpivot(extension.unpivotClause(), left)
+      } else if (extension.gapFillClause() != null) {
+        withGapFill(extension.gapFillClause(), left)
       } else {
         assert(extension.binByClause() != null)
         withBinBy(extension.binByClause(), left)
@@ -3399,59 +3460,27 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx).map(c => c.sourceName.identifier.getText)
   }
 
-  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
-    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val relation = createUnresolvedRelation(
-      ctx = ctx,
-      ident = ident,
-      optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Set.empty,
-      isStreaming = true)
-
-    Option(ctx.streamChangesClause) match {
-      case Some(changesCtx) =>
-        // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
-        val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogContext = buildStreamChangelogContext(changesCtx, options)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        val namedChanges = NamedStreamingRelation.withUserProvidedName(
-          RelationChanges(relation, changelogContext), sourceNameOpt)
-        val table = mayApplyAliasPlan(ctx.tableAlias, namedChanges)
-        table.optionalMap(ctx.watermarkClause)(withWatermark)
-      case None =>
-        // Regular streaming relation
-        val table = mayApplyAliasPlan(ctx.tableAlias, relation)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        tableWithWatermark.transformUp {
-          case r: UnresolvedRelation =>
-            NamedStreamingRelation.withUserProvidedName(
-              r.copy(isStreaming = true), sourceNameOpt)
-        }
-    }
-  }
-
-  /**
-   * Create a logical plan for a stream TVF.
-   * Handles two forms:
-   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
-   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
-   *    table names
-   */
-  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+  override def visitStreamRelation(ctx: StreamRelationContext): LogicalPlan =
     withOrigin(ctx) {
-      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
-        // Form: STREAM tableFunctionCallWithTrailingClauses
-        val sourceName = extractSourceName(funcTable.identifiedByClause)
-        val tvfPlan = buildTvfFromTableFunctionCall(
-          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
-        tvfPlan.transformUp {
-          case tvf: UnresolvedTableValuedFunction =>
-            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+      val sourceName = extractSourceName(ctx.identifiedByClause)
+      Option(ctx.multipartIdentifier).map { multipartIdentifier =>
+        val ident = visitMultipartIdentifier(multipartIdentifier)
+        var relation: LogicalPlan = createUnresolvedRelation(
+          ctx = ctx,
+          ident = ident,
+          optionsClause = Option(ctx.optionsClause),
+          writePrivileges = Set.empty,
+          isStreaming = true)
+
+        Option(ctx.streamChangesClause).foreach { changesCtx =>
+          val options = resolveOptions(Option(ctx.optionsClause))
+          val changelogContext = buildStreamChangelogContext(changesCtx, options)
+          relation = RelationChanges(relation, changelogContext)
         }
+        relation = NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        relation = mayApplyAliasPlan(ctx.tableAlias, relation)
+        relation.optionalMap(ctx.watermarkClause)(withWatermark)
       }.getOrElse {
-        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
-        val sourceName = extractSourceName(ctx.identifiedByClause)
         val tvfPlan = buildTvfFromTableFunctionCall(
           ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
         tvfPlan.transformUp {
@@ -4249,9 +4278,9 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   // Whether `ctx` is a lexical value of an enclosing JSON constructor (a JSON_ARRAY element or a
-  // JSON_OBJECT value). Such a nested constructor stays on the direct path so the parent can splice
-  // it raw before analyzer rewrites wrap it in a Cast. A JSON_OBJECT key is excluded: keys are
-  // never spliced raw, so a nested constructor there may route through resolution and be shadowed.
+  // JSON_OBJECT value). A clause-free call there still routes, but as a routed wrapper, so the
+  // parent stays a JSON constructor that decides the splice once this call's owner is known. A
+  // JSON_OBJECT key is excluded: keys are never spliced, so a call there is a plain function call.
   // Transparent wrappers (parentheses, a postfix COLLATE, a bare predicate) are walked through.
   private def isDirectJsonConstructorArgument(ctx: RuleContext): Boolean = {
     @scala.annotation.tailrec
@@ -4334,9 +4363,12 @@ class AstBuilder extends DataTypeAstBuilder
     val jsonExpr = expression(ctx.jsonExpr)
     val path = string(visitStringLit(ctx.path))
     if (ctx.returning == null && ctx.wrapper == null && ctx.quotes == null &&
-        ctx.emptyBehavior == null && ctx.errorBehavior == null &&
-        !isDirectJsonConstructorArgument(ctx)) {
-      UnresolvedFunction("json_query", Seq(jsonExpr, Literal(path)), isDistinct = false)
+        ctx.emptyBehavior == null && ctx.errorBehavior == null) {
+      if (isDirectJsonConstructorArgument(ctx)) {
+        UnresolvedRoutedJsonQuery(jsonExpr, path)
+      } else {
+        UnresolvedFunction("json_query", Seq(jsonExpr, Literal(path)), isDistinct = false)
+      }
     } else {
       // Default RETURNING is STRING. JSON_QUERY returns the fragment verbatim (no length-enforcing
       // cast), so a CHAR/VARCHAR RETURNING is normalized to STRING: the result type must not
@@ -4391,25 +4423,27 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitJsonArray(ctx: JsonArrayContext): Expression = withOrigin(ctx) {
     val arrayValues = ctx.values.asScala.map(v => expression(v.value)).toSeq
-    // Route a flat, clause-free call through routine resolution so it can be shadowed. Cheap
-    // clause/nesting checks come first to skip the recursive per-value FORMAT scans when a clause
-    // already forces direct construction.
-    val routeThroughResolution =
-      ctx.returning == null && ctx.nullBehavior == null && !isDirectJsonConstructorArgument(ctx) &&
-        !ctx.values.asScala.exists(_.FORMAT() != null) &&
-        !arrayValues.exists(JsonArray.isImplicitlyJson)
-    if (routeThroughResolution) {
+    // A clause-free call (no RETURNING, no ON NULL, no explicit FORMAT JSON) routes through
+    // function resolution, so a routine can shadow it.
+    val clauseFree = ctx.returning == null && ctx.nullBehavior == null &&
+      !ctx.values.asScala.exists(_.FORMAT() != null)
+    if (clauseFree && !arrayValues.exists(ImplicitlyFormattedAsJson.isImplicitlyJson) &&
+        !isDirectJsonConstructorArgument(ctx)) {
       UnresolvedFunction("json_array", arrayValues, isDistinct = false)
+    } else if (clauseFree) {
+      // A nested JSON producer argument, or a call that is itself a constructor's value: the call
+      // still routes, but the wrapper keeps the splice flags for the built-in.
+      UnresolvedRoutedJsonArray(
+        arrayValues, arrayValues.map(ImplicitlyFormattedAsJson.isLexicallySpliced))
     } else {
-      // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later
-      // rewrite that wraps or swaps the child cannot change them (see [[JsonArray]]):
-      //  - `formatJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON` clause,
-      //    or a lexically nested JSON constructor (via `JsonArray.isImplicitlyJson`).
-      //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only
-      //    an explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+      // The parser's FORMAT JSON flags; analysis can still add a splice for a resolved
+      // qualified or routed constructor (see [[StockJsonConstructor]]):
+      //  - `formatJson`: splice the value -- an explicit `FORMAT JSON` or a nested constructor.
+      //  - `needsValidation`: validate the text at eval -- an explicit `FORMAT JSON` on a value
+      //    that is not a constructor.
       val formatArgs = ctx.values.asScala.zip(arrayValues).map { case (v, expr) =>
         val explicit = v.FORMAT() != null
-        val implicitlyJson = JsonArray.isImplicitlyJson(expr)
+        val implicitlyJson = ImplicitlyFormattedAsJson.isLexicallySpliced(expr)
         (explicit || implicitlyJson, explicit && !implicitlyJson)
       }.toSeq
       val formatJson = formatArgs.map(_._1)
@@ -4429,7 +4463,7 @@ class AstBuilder extends DataTypeAstBuilder
       val nullBehavior = Option(ctx.nullBehavior)
         .map(buildJsonConstructorNullBehavior)
         .getOrElse(JsonConstructorNullBehavior.Absent)
-      JsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
+      UnresolvedJsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
     }
   }
 
@@ -4455,39 +4489,34 @@ class AstBuilder extends DataTypeAstBuilder
       }.toSeq
     }
     val members = taggedMembers.map { case (k, v, _) => (k, v) }
-    // Freeze each value's splice decision from the lexical argument so a later optimizer rewrite
-    // that swaps the child cannot change it (see [[ImplicitlyFormattedAsJson]]):
+    // The parser's splice flags; analysis can still add a splice for a resolved qualified or
+    // routed producer (see [[StockJsonConstructor]]):
     //  - `rawJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON`, or a lexically
-    //    nested JSON constructor (via `rawJsonValue`, seen through a pass-through `COLLATE` but not
-    //    a `CAST(... AS STRING)`, which cancels splicing).
+    //    nested built-in-owned JSON constructor (seen through a pass-through `COLLATE` but not a
+    //    `CAST(... AS STRING)`, which cancels splicing). A routed one is decided after resolution.
     //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only an
     //    explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
     val formatArgs = taggedMembers.map { case (_, v, explicit) =>
-      val implicitlyJson = JsonObjectExpr.rawJsonValue(v).isDefined
+      val implicitlyJson = ImplicitlyFormattedAsJson.isLexicallySpliced(v)
       (explicit || implicitlyJson, explicit && !implicitlyJson)
     }
     val rawJson = formatArgs.map(_._1)
     val needsValidation = formatArgs.map(_._2)
-    // Route a clause-free call through routine resolution so a same-named routine can shadow it,
-    // mirroring JSON_ARRAY. The comma form (the pre-existing MySQL-style spelling a user routine
-    // may match) routes even with a nested JSON producer value, so argument shape no longer removes
-    // routine candidates; the unshadowed built-in still splices it raw via the carrier attached
-    // below. Explicit FORMAT JSON and the dedicated VALUE form keep a raw value on the direct path
-    // (its lexical splice must stay frozen; VALUE syntax has no pre-existing routine call anyway).
-    val isCommaForm = standardMembers.isEmpty
+    // As in JSON_ARRAY, a clause-free call routes so a routine can shadow it, in every spelling
+    // (comma, VALUE, colon). A call with a nested producer, or one that is itself a constructor's
+    // value, keeps its splice flags in a wrapper.
+    // Explicit FORMAT JSON stays with the built-in, since its validation flag cannot be passed as
+    // an ordinary argument.
+    val hasExplicitFormatJson = taggedMembers.exists(_._3)
     val routeThroughResolution =
-      body.returning == null && body.nullBehavior == null &&
-        !isDirectJsonConstructorArgument(ctx) &&
-        (isCommaForm || !rawJson.contains(true))
-    if (routeThroughResolution) {
-      // Carry a nested producer's lexical raw eligibility to the built-in; transparent, so a
-      // shadowing routine and qualified/generic calls are unaffected.
-      val routedArgs = members.flatMap { case (k, v) =>
-        val carried =
-          if (JsonObjectExpr.rawJsonValue(v).isDefined) JsonImplicitFormatCarrier(v) else v
-        Seq(k, carried)
-      }
-      UnresolvedFunction("json_object", routedArgs, isDistinct = false)
+      body.returning == null && body.nullBehavior == null && !hasExplicitFormatJson
+    val mayHoldJsonProducer =
+      members.exists { case (_, v) => ImplicitlyFormattedAsJson.isImplicitlyJson(v) }
+    if (routeThroughResolution && !mayHoldJsonProducer && !isDirectJsonConstructorArgument(ctx)) {
+      UnresolvedFunction("json_object", members.flatMap { case (k, v) => Seq(k, v) },
+        isDistinct = false)
+    } else if (routeThroughResolution) {
+      UnresolvedRoutedJsonObject(members, rawJson)
     } else {
       // Default RETURNING is STRING (the result is JSON text). A CHAR/VARCHAR RETURNING is
       // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a
@@ -4501,7 +4530,7 @@ class AstBuilder extends DataTypeAstBuilder
       // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
       val nullBehavior = Option(body.nullBehavior)
         .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
-      JsonObjectExpr(members, rawJson, needsValidation, nullBehavior, returning)
+      UnresolvedJsonObject(members, rawJson, needsValidation, nullBehavior, returning)
     }
   }
 
@@ -7194,6 +7223,26 @@ class AstBuilder extends DataTypeAstBuilder
         condition = condition)
     }
 
+  /**
+   * Whether a write that parses the condition of a CHECK constraint again can resolve it
+   * differently from the ALTER TABLE, so that the constraint keeps its predicate; see
+   * `CheckConstraint.withPredicateDecision`. A keyword such as `current_date` or `user` without
+   * parentheses parses as a name, or as the function under
+   * `spark.sql.ansi.enforceReservedKeywords`, which is the only way the parser builds these
+   * functions.
+   */
+  private def keepsCheckPredicate(condition: Expression): Boolean = {
+    val names = condition.collect {
+      case u: UnresolvedAttribute => u.nameParts
+      case v: UnresolvedNamedLambdaVariable => v.nameParts
+    }
+    condition.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+      names.exists(n => n.length > 1 || LiteralFunctionResolution.isLiteralFunction(n)) ||
+      condition.exists {
+        case _: CurrentDate | _: CurrentTimestamp | _: CurrentTime | _: CurrentUser => true
+        case _ => false
+      }
+  }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
@@ -7256,7 +7305,8 @@ class AstBuilder extends DataTypeAstBuilder
           case c: CheckConstraint =>
             val relation = createUnresolvedRelation(ctx.identifierReference)
             val child = Filter(Not(c.child), relation)
-            AddCheckConstraint(child, c)
+            val check = if (keepsCheckPredicate(c.child)) c.copy(omitPredicate = Some(false)) else c
+            AddCheckConstraint(child, check)
           case _ =>
             val child = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
             AddConstraint(child, namedConstraint)
@@ -8417,6 +8467,8 @@ class AstBuilder extends DataTypeAstBuilder
       withUnpivot(c, left)
     }.getOrElse(Option(ctx.binByClause()).map { c =>
       withBinBy(c, left)
+    }.getOrElse(Option(ctx.gapFillClause()).map { c =>
+      withGapFill(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
@@ -8428,7 +8480,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))))))
+    ))))))))))))))
   }
 
   private def visitOperatorPipeSet(

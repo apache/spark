@@ -41,8 +41,10 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import time
 import traceback
 from typing import Iterator, List, Optional, Union
 from urllib.error import HTTPError
@@ -102,6 +104,13 @@ DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+# Items per page that get_json_pages asks GitHub list endpoints for: the most GitHub allows.
+# Without it, GitHub returns 30.
+GITHUB_PAGE_SIZE = 100
+# How many more times, and how many seconds apart, mergeable_warning reads an open PR while
+# GitHub is still computing whether it is mergeable.
+MERGEABLE_RETRIES = 5
+MERGEABLE_RETRY_SECONDS = 2
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
@@ -111,12 +120,46 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
+# Optional pre-push check offered by maybe_compile_check: a clean SBT compile of the main and
+# test sources in the backport's working tree. A smoke test, not CI: only the default modules
+# plus Hive, since the full CI profile list pulls in flaky ones. `clean` deletes every module's
+# build output, so the offer says so -- declining is a reasonable answer.
+# -Phive is not optional: with no -P at all SparkBuild falls back to the `sbt` profile, which
+# puts guava and pmml-model on every compile classpath and turns CI failures into local passes.
+COMPILE_CHECK_CMD = ["build/sbt", "-Phive", ";clean;compile;Test/compile"]
+# Set by --compile-prompt (see build_arg_parser). Off by default: maybe_compile_check then
+# returns without asking, so a backport goes straight to the push prompt.
+COMPILE_PROMPT = False
+# Precise patterns for the 4.2+ ConfigBindingPolicy API. A backport to a pre-4.2 branch
+# that adds either will not compile there (the API arrived in SPARK-55928): the
+# .withBindingPolicy(...) call and the ConfigBindingPolicy import have to be dropped. Nothing
+# else -- in particular .version(...) names the release the config shipped in, so it is only
+# wrong on the backport if the config itself is new. maybe_binding_policy_warning scans the diff
+# about to be pushed (Scala/Java only) for these as a pre-push check. The call is anchored on "."
+# so a comment that merely says "withBindingPolicy" is not flagged; ConfigBindingPolicy in a
+# comment still can be, which is fine -- the prompt is advisory and the remedy (drop the import)
+# is the same either way.
+BINDING_POLICY_PATTERNS = (
+    ("withBindingPolicy", re.compile(r"\.withBindingPolicy\s*\(")),
+    ("ConfigBindingPolicy", re.compile(r"\bConfigBindingPolicy\b")),
+)
+# git pathspecs -- not suffixes -- the binding-policy diff is restricted to; the Scala API these
+# patterns match only appears in Scala/Java. The proto enum behind it (BindingPolicy in
+# common/config/src/main/protobuf/.../config_schema.proto) is spelled differently and is not
+# covered; the optional compile check is what catches a backport that touches it. The :(top)
+# magic anchors the match at the repo root: a bare pathspec is relative to the cwd, and the
+# script's own usage line has it running from dev/, where no Scala/Java file exists -- the
+# check would scan nothing while looking like it ran.
+BINDING_POLICY_PATHSPECS = (":(top)*.scala", ":(top)*.java")
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
-# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning, unless
+# the PR has the do-not-skip-ci label.
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# A PR carrying this GitHub label is exempt from the interval and never gets the skip trailer.
+POST_MERGE_CI_FORCE_LABEL = "do-not-skip-ci"
 # Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
 POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
@@ -538,12 +581,20 @@ def red(text):
     return "\033[91m%s\033[0m" % text
 
 
+def yellow(text):
+    return "\033[33m%s\033[0m" % text
+
+
 def bold(text):
     return "\033[1m%s\033[0m" % text
 
 
 def print_error(msg):
     print(red(msg))
+
+
+def print_warning(msg):
+    print(yellow(msg))
 
 
 def bold_input(prompt) -> str:
@@ -605,12 +656,13 @@ def get_input(prompt, options, bold=True, ignore_case=True):
                     return option
 
 
-def get_json(url):
+def open_github_url(url):
+    """Open the GitHub API `url`, with GITHUB_OAUTH_KEY if set, and exit on an HTTP error."""
     try:
         request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-        return json.load(urlopen(request))
+        return urlopen(request)
     except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == "0":
             print_error(
@@ -627,6 +679,142 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def get_json(url):
+    return json.load(open_github_url(url))
+
+
+def get_json_pages(url):
+    """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
+
+    `get_json` reads only the first page, and GitHub fills it with 30 items unless asked for
+    more. On a PR with a long history, that misses the `closed` event that records the merge
+    commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
+    after the 30th, so their authors get no Co-authored-by, and the release branches after
+    the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
+    reading follows the `rel="next"` URL of each page's `Link` header until a page has none,
+    as `gh api --paginate` does, so a page with fewer items does not end the read early.
+
+    >>> import io
+    >>> from unittest.mock import patch
+    >>> base = "https://api.github.com/repos/apache/spark"
+    >>> def read(path, *pages):
+    ...     # Serve `pages` in order, with Link headers like the ones GitHub sends.
+    ...     requested = []
+    ...     def links(*rels):
+    ...         return ", ".join('<%s/p?page=%d>; rel="%s"' % (base, n, rel) for rel, n in rels)
+    ...     def open_page(page_url):
+    ...         requested.append(page_url[len(base) :])
+    ...         n = len(requested)
+    ...         page = io.BytesIO(json.dumps(pages[n - 1]).encode())
+    ...         page.headers = {}
+    ...         if n < len(pages):
+    ...             page.headers["Link"] = links(("next", n + 1), ("last", len(pages)))
+    ...         elif n > 1:
+    ...             page.headers["Link"] = links(("prev", n - 1), ("first", 1))
+    ...         return page
+    ...     with patch.dict(get_json_pages.__globals__, open_github_url=open_page):
+    ...         return get_json_pages(base + path), requested
+
+    Every page is read in order, including the page after one with fewer items, and the last
+    page's links back to earlier pages are not followed:
+
+    >>> read("/issues/1/events", ["a", "b"], ["c"], ["d", "e"])
+    (['a', 'b', 'c', 'd', 'e'], ['/issues/1/events?per_page=100', '/p?page=2', '/p?page=3'])
+
+    A list that fits on one page comes without a Link header and costs one request, and a URL
+    that already has a query string gets the page size appended to it:
+
+    >>> read("/branches?protected=false", ["master", "branch-4.x"])
+    (['master', 'branch-4.x'], ['/branches?protected=false&per_page=100'])
+    """
+    separator = "&" if "?" in url else "?"
+    url = "%s%sper_page=%d" % (url, separator, GITHUB_PAGE_SIZE)
+    items = []
+    while url is not None:
+        response = open_github_url(url)
+        items.extend(json.load(response))
+        next_link = re.search(r'<([^>]*)>;\s*rel="next"', response.headers.get("Link") or "")
+        url = next_link.group(1) if next_link else None
+    return items
+
+
+def mergeable_warning(pr_num, pr):
+    """Return the warning to confirm before merging `pr` (the PR as read from GitHub), or None.
+
+    GitHub computes whether an open PR is mergeable in a background job, and reports
+    `mergeable` as null until the job is done, e.g. right after a push to the PR or to its base
+    branch. Taking that null for a conflict, this script warned that #59961 was not mergeable
+    right after a push to master, though GitHub reported it as mergeable a little later. So an
+    open PR that reads as null is read again, up to MERGEABLE_RETRIES times,
+    MERGEABLE_RETRY_SECONDS apart. GitHub does not compute it for a closed PR, which always
+    reads as null, so a closed PR is not read again, and a PR that a re-read finds closed is
+    taken as not mergeable.
+
+    >>> from unittest.mock import patch
+    >>> def warning(state, *mergeables, reread_state="open"):
+    ...     # Read the PR with the first of `mergeables`, and serve the rest to the re-reads,
+    ...     # which find the PR in `reread_state`.
+    ...     rereads = iter(mergeables[1:])
+    ...     def get_json(url):
+    ...         assert url == GITHUB_API_BASE + "/pulls/1", url
+    ...         return {"state": reread_state, "mergeable": next(rereads)}
+    ...     pr = {"state": state, "mergeable": mergeables[0]}
+    ...     with (
+    ...         patch.dict(mergeable_warning.__globals__, get_json=get_json),
+    ...         patch("time.sleep") as sleep,
+    ...     ):
+    ...         return mergeable_warning("1", pr), sleep.call_count
+
+    A PR that GitHub has checked is not read again:
+
+    >>> warning("open", True)
+    (None, 0)
+    >>> warning("open", False)
+    ('Pull request 1 is not mergeable in its current form.', 0)
+
+    An open PR that reads as null is read again until GitHub has checked it, up to five times:
+
+    >>> warning("open", None, None, True)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    (None, 2)
+    >>> warning("open", None, False)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    >>> warning("open", *[None] * 6)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('GitHub is still checking whether pull request 1 is mergeable.', 5)
+
+    A closed PR is not read again:
+
+    >>> warning("closed", None)
+    ('Pull request 1 is not mergeable in its current form.', 0)
+
+    A PR closed while it is read again, e.g. merged by another committer, is not mergeable:
+
+    >>> warning("open", None, None, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    >>> warning("open", None, True, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    """
+    mergeable = pr["mergeable"]
+    if mergeable is None and pr["state"] == "open":
+        print("Waiting for GitHub to check whether pull request %s is mergeable..." % pr_num)
+        for _ in range(MERGEABLE_RETRIES):
+            time.sleep(MERGEABLE_RETRY_SECONDS)
+            pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+            # A PR closed during the wait, e.g. merged by another committer, is not mergeable.
+            mergeable = pr["mergeable"] if pr["state"] == "open" else False
+            if mergeable is not None:
+                break
+        if mergeable is None:
+            return "GitHub is still checking whether pull request %s is mergeable." % pr_num
+    if not mergeable:
+        return "Pull request %s is not mergeable in its current form." % pr_num
+    return None
 
 
 def merge_commit_candidates(pr_events):
@@ -724,9 +912,9 @@ def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional
 class GitHub:
     """GitHub REST writes used by the merge script -- the single seam for PR mutations.
 
-    Reads go through the module-level get_json(); only the two mutations (closing the PR and
-    posting a comment) live here, so DryRunGitHub can override them without touching any read
-    path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    Reads go through the module-level get_json() and get_json_pages(); only the two mutations
+    (closing the PR and posting a comment) live here, so DryRunGitHub can override them without
+    touching any read path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
     """
 
     def close_pr(self, pr_num):
@@ -844,8 +1032,13 @@ class DryRunGit(Git):
 git = Git()
 
 
+# Set by [a]bort at the checkout-retry prompt: from then on clean_up() leaves git alone, so
+# the pick and the committer's edits survive whatever main()'s finally blocks do on the way out.
+preserve_local_state = False
+
+
 class SkipCherryPick(Exception):
-    """Signals that the committer declined to resolve a conflicting cherry-pick.
+    """Signals that the committer skipped this branch: declined a conflict or a pre-push check.
 
     A backport conflict is routine, and by the time one is hit the merge into the target
     branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
@@ -854,20 +1047,143 @@ class SkipCherryPick(Exception):
     """
 
 
-def continue_maybe(prompt, cherry=False):
+def continue_maybe(prompt: str, cherry: bool = False) -> None:
+    """Prompt to continue; on "no" either skip this cherry-pick (`cherry`) or exit the script.
+
+    `cherry` is the decline semantics, not a statement that a cherry-pick is mid-flight: the
+    pre-push checks run after the pick is committed, and declining there must still skip only
+    that branch. So the abort is skipped only when git says no pick is in progress.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+
+    Declining with `cherry` while a pick is mid-flight aborts the pick before skipping --
+    the first git call is the probe, the second the abort:
+
+    >>> with (
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=["", ""]) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Resolved?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> run.call_args_list[0]
+    call(['git', 'rev-parse', '--verify', '--quiet', 'CHERRY_PICK_HEAD'])
+    >>> run.call_args_list[1]
+    call('git cherry-pick --abort')
+    >>> run.call_count
+    2
+
+    After the pick is committed there is nothing to abort. A checkout git refuses over
+    uncommitted edits waits for the committer to stash them, then the branch is skipped:
+
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", ""]) as inp,
+    ...     patch.object(git, "run", side_effect=[refused, refused, "", ""]) as run,
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     patch.object(sys.modules[__name__], "clean_up") as clean,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> [c.args[0] for c in run.call_args_list[1:3]]
+    [['git', 'checkout', '--quiet', 'master'], ['git', 'checkout', '--quiet', 'master']]
+    >>> inp.call_count, clean.call_count
+    (2, 1)
+
+    A checkout git keeps refusing, e.g. over a stale index.lock, can be given up on:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", "a"]),
+    ...     patch.object(git, "run", side_effect=[refused, refused]),
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         exited = False
+    ...     except SystemExit:
+    ...         exited = True
+    >>> exited
+    True
+    """
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
-            try:
-                git.run("git cherry-pick --abort")
-            except Exception:
-                print_error("Unable to abort and get back to the state before cherry-pick")
+            if _cherry_pick_in_progress():
+                try:
+                    git.run("git cherry-pick --abort")
+                except Exception:
+                    print_error("Unable to abort and get back to the state before cherry-pick")
+            else:
+                _restore_original_head()
             print("Skipping this cherry-pick; the merge continues.")
             clean_up()
             raise SkipCherryPick()
         fail("Okay, exiting")
 
 
+def _cherry_pick_in_progress() -> bool:
+    """True if the repo is mid-cherry-pick. With --quiet, exit 1 is git's "no such ref" answer,
+    i.e. no pick in progress. Any other trouble answers "yes", so the caller still attempts
+    the abort, as if a pick were in progress.
+
+    >>> from unittest.mock import patch
+    >>> answers = []
+    >>> for failure in (None, subprocess.CalledProcessError(1, "g"),
+    ...                 subprocess.CalledProcessError(128, "g"), OSError("no git")):
+    ...     with patch.object(git, "run", side_effect=failure):
+    ...         answers.append(_cherry_pick_in_progress())
+    >>> answers
+    [True, False, True, True]
+    """
+    try:
+        git.run(["git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"])
+        return True
+    except subprocess.CalledProcessError as e:
+        return e.returncode != 1
+    except Exception:
+        return True
+
+
+def _restore_original_head():
+    """Check out original_head, waiting for the committer while git refuses over local edits.
+
+    The committed pick is discarded by clean_up() afterwards; the edits are theirs to keep, and
+    any git carries over to original_head are listed."""
+    if "original_head" not in globals():
+        return
+    while True:
+        try:
+            git.run(["git", "checkout", "--quiet", original_head])
+            carried = git.run(["git", "status", "--porcelain", "--untracked-files=no"]).strip()
+            if carried:
+                print("Uncommitted changes carried over to %s:\n%s" % (original_head, carried))
+            return
+        except subprocess.CalledProcessError:
+            # git already printed why it refused.
+            prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
+            if get_input(prompt, ["", "a"]) == "a":
+                global preserve_local_state
+                preserve_local_state = True
+                print_error("Okay, exiting; local edits and temporary branches are preserved.")
+                sys.exit(-1)
+
+
 def clean_up():
+    if preserve_local_state:
+        return
     if "original_head" in globals():
         print("Restoring head pointer to %s" % original_head)
         git.run("git checkout %s" % original_head)
@@ -879,10 +1195,391 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def should_skip_post_merge_ci(target_ref):
+def maybe_compile_check(ref_name: str) -> None:
+    """Offer to run a clean SBT compile of main and test sources before pushing `ref_name`.
+
+    `ref_name` is the checked-out cherry-pick, so a clean compile here catches a mis-resolved
+    conflict, or a PR that bit-rotted against the target branch, before it lands. It is a smoke
+    test (see COMPILE_CHECK_CMD), not CI: modules behind other profiles are not compiled.
+    Declining skips the check. A red build asks rather than aborts, because a non-zero sbt is
+    as easily a JDK the branch rejects or a failed download as it is the backport; declining
+    there skips this branch (see continue_maybe). Output streams so a long compile does not
+    look like a hang.
+
+    What is compiled is the working tree, not the commit: a file re-edited after the merge
+    commit, or an untracked source file left over from a manual conflict resolution, compiles
+    here and is absent from the push. (A resolved-but-never-`git add`ed conflict is NOT the
+    case -- the commit itself fails while files are unmerged, so the check is never reached.)
+    So warn when the tree is dirty rather than report a green that is about something else,
+    and name the remedy (`git add` + `git commit --amend`) since the fix is the commit, not
+    the build.
+
+    Only offered with --compile-prompt (COMPILE_PROMPT); without it this returns at once,
+    asking nothing and running neither git nor the build:
+
+    >>> import sys
+    >>> from unittest.mock import patch
+    >>> m = sys.modules[__name__]
+    >>> with (
+    ...     patch("builtins.input", side_effect=AssertionError("should not prompt")),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    The examples below all run with it enabled.
+
+    Declining runs no build and no git -- the git.run mock raises if a regression moves a
+    git call above the prompt, which otherwise would run real git in the committer's repo on
+    every startup (doctest.testmod() runs on invocation):
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    Accepting runs the SBT compile once, from the repo root, with an explicit -P so SparkBuild
+    does not fall back to `-Psbt`; a green build returns quietly. The two git calls are pinned
+    too -- transposing them or dropping --porcelain would otherwise stay green:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]) as grun,
+    ...     patch("subprocess.call", return_value=0) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> grun.call_args_list[0]
+    call(['git', 'rev-parse', '--show-toplevel'])
+    >>> grun.call_args_list[1]
+    call(['git', 'status', '--porcelain', '--untracked-files=normal'])
+    >>> run.call_count
+    1
+    >>> run.call_args[0][0][0], run.call_args[0][0][-1]
+    ('build/sbt', ';clean;compile;Test/compile')
+    >>> [a for a in run.call_args[0][0] if a.startswith("-P")]
+    ['-Phive']
+    >>> run.call_args[1]["cwd"]
+    '/repo'
+
+    A dirty tree still builds, but warns first -- and the warning names the remedy
+    (`git add` + `git commit --amend`) alongside the porcelain output:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
+    ...     patch("subprocess.call", return_value=0),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> "git commit --amend" in out.getvalue()
+    True
+    >>> "M foo.scala" in out.getvalue()  # porcelain output is strip()ed before printing
+    True
+    >>> "Compile check passed." in out.getvalue()
+    True
+
+    The experts-only override continues past a red build:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y", "y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+
+    Ctrl-C during the build, and a build/sbt that cannot be run at all, are "did not pass" and
+    get the same override prompt -- never a traceback, which would reach the top-level handler
+    and let clean_up() delete the unpushed pick:
+
+    >>> for boom in (KeyboardInterrupt(), OSError("no build/sbt")):
+    ...     with (
+    ...         patch.object(m, "COMPILE_PROMPT", True),
+    ...         patch("builtins.input", side_effect=["y", "y"]) as inp,
+    ...         patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...         patch("subprocess.call", side_effect=boom),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...     print(inp.call_count)
+    2
+    2
+
+    Declining the override skips just this branch instead of exiting:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y", ""]),
+    ...     patch.object(
+    ...         git, "run", side_effect=["/repo\\n", "", subprocess.CalledProcessError(1, "g")]
+    ...     ),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    """
+    if not COMPILE_PROMPT:
+        return
+    # The command is too long to read inside a prompt, so print it on its own line first.
+    # shlex.join quotes the ";clean;..." argument, so the printed line can be copy-pasted
+    # into a shell without the semicolons splitting it into four commands.
+    print("Optional pre-push check: %s" % shlex.join(COMPILE_CHECK_CMD))
+    print("Note: 'clean' deletes every module's build output, including under --dry-run.")
+    prompt = "Run an optional clean compile on %s before pushing? (y/N): " % ref_name
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
+    # build/sbt is repo-relative and SPARK_HOME defaults to the cwd, which is dev/ when the
+    # script is run as ./merge_spark_pr.py per its own usage line. Ask git for the root instead.
+    root = git.run(["git", "rev-parse", "--show-toplevel"]).strip()
+    dirty = git.run(["git", "status", "--porcelain", "--untracked-files=normal"]).strip()
+    if dirty:
+        print_error(
+            "Working tree is not clean, so what compiles below is not exactly the commit that "
+            "would be pushed -- the uncommitted or untracked changes below compile here but "
+            "are not in the push. If any of them belong in the pick, 'git add' them and "
+            "'git commit --amend' before pushing; if they are unrelated scratch, ignore this "
+            "and carry on:\n%s" % dirty
+        )
+    try:
+        status = subprocess.call(COMPILE_CHECK_CMD, cwd=root)
+    except KeyboardInterrupt:
+        # Interrupting the build must not unwind into the top-level handler: clean_up() there
+        # force-deletes the PR_TOOL_* branch holding the unpushed commit and any hand-resolved
+        # conflicts. Treat it as "the check did not finish" and let the committer decide.
+        print_error("Compile check interrupted.")
+    except OSError as e:
+        print_error("Could not run %s in %s: %s" % (COMPILE_CHECK_CMD[0], root, e))
+    else:
+        if status == 0:
+            print("Compile check passed.")
+            return
+        print_error(
+            "Compile check exited %d. That is the backport, or your toolchain -- a JDK this "
+            "branch rejects and a failed dependency download look the same here." % status
+        )
+    continue_maybe(
+        "Compile check did not pass on %s. Push anyway? (experts only!)" % ref_name, True
+    )
+
+
+def _is_pre_binding_policy_branch(ref: str) -> bool:
+    """True if `ref` is a Spark branch that predates the ConfigBindingPolicy API (4.2+).
+
+    master and branch-M.x (M >= 4) carry the API; branch-4.0/branch-4.1 and any branch-3.x
+    do not. Ranking is semver_branch_rank's job -- branch-M.x sorts above every branch-M.N,
+    and a ref it cannot classify as a maintenance branch gets its (-1, -1) sentinel. Those
+    refs are treated as carrying the API: fail-open, so master, a tag, or a custom ref never
+    raises a false warning -- none of them is a pre-4.2 branch anyway.
+
+    >>> _is_pre_binding_policy_branch("master")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.x")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.2")
+    False
+    >>> [_is_pre_binding_policy_branch(b) for b in ("branch-4.1", "branch-4.0", "branch-3.x")]
+    [True, True, True]
+    >>> _is_pre_binding_policy_branch("branch-3.5")
+    True
+    >>> _is_pre_binding_policy_branch("HEAD")
+    False
+    >>> _is_pre_binding_policy_branch("my-custom-ref")
+    False
+    """
+    rank = semver_branch_rank(ref)
+    return rank != (-1, -1) and rank < (4, 2)
+
+
+def _added_binding_policy_tokens(diff: str) -> list[str]:
+    """Return the sorted subset of BINDING_POLICY_PATTERNS matched on added (``+``) lines.
+
+    Only scans lines the diff added (a leading ``+`` that is not the ``+++ `` file header --
+    the trailing space keeps an added line whose own text starts with ``++`` counted, apart
+    from the ``++ <space>`` case no real Scala/Java line starts with), so a cherry-pick that
+    *removes* a stray .withBindingPolicy is not flagged. Matching uses the
+    precise patterns from BINDING_POLICY_PATTERNS, so a comment that merely mentions
+    ``withBindingPolicy`` (no leading dot, no call) is not flagged; ``ConfigBindingPolicy`` in
+    a comment still can match, which is fine -- the prompt is advisory.
+
+    >>> _added_binding_policy_tokens(
+    ...     "+++ b/foo\\n"
+    ...     "+.withBindingPolicy(X)\\n"
+    ...     "-.withBindingPolicy(Y)\\n"
+    ...     "+import ...ConfigBindingPolicy\\n"
+    ...     "+// see withBindingPolicy usage\\n"
+    ...     " context\\n"
+    ... )
+    ['ConfigBindingPolicy', 'withBindingPolicy']
+    >>> _added_binding_policy_tokens("-.withBindingPolicy(X)\\n")
+    []
+    >>> _added_binding_policy_tokens("+// mentions ConfigBindingPolicy in a comment\\n")
+    ['ConfigBindingPolicy']
+    >>> _added_binding_policy_tokens("")
+    []
+    """
+    found = set()
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++ "):
+            for token, pattern in BINDING_POLICY_PATTERNS:
+                if pattern.search(line):
+                    found.add(token)
+    return sorted(found)
+
+
+def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
+    """Warn before pushing to a pre-4.2 `ref` a cherry-pick that adds ConfigBindingPolicy.
+
+    A cherry-pick onto branch-4.1/4.0/3.x that introduces ``.withBindingPolicy(...)`` or
+    ``ConfigBindingPolicy`` will not compile there (the API arrived in SPARK-55928, 4.2+).
+    This is a git-diff + grep pre-push check: it diffs `base_head` (the branch tip before the
+    pick) against HEAD restricted to Scala/Java sources, scans only the added lines for the
+    precise patterns in BINDING_POLICY_PATTERNS, and on a hit prints the remedy and asks the
+    committer to confirm the push; declining skips this branch (see continue_maybe). No-op on
+    branches that carry the API. Only backports are checked: a PR opened straight against a
+    maintenance branch already ran that branch's CI.
+
+    The diff is forced plain: without --no-color a committer with ``color.ui = always`` gets
+    added lines behind an ANSI escape, no line starts with "+", and the check reports nothing
+    while looking like it ran. ``-c diff.relative=false`` does the same for a committer's
+    ``diff.relative = true``, which would cut the diff down to dev/. Like
+    branches_with_merge_footer, a git failure only warns: this runs after the merge has
+    already been pushed.
+
+    `never` below is how these tests assert "does not prompt": a bare input mock would return a
+    MagicMock that get_input's loop never accepts, so a regressed guard would hang the script at
+    startup -- doctest.testmod() runs on every invocation -- instead of failing.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> never = AssertionError("should not prompt")
+
+    No-op on a branch that carries the API (no diff fetched, no prompt):
+
+    >>> with (
+    ...     patch.object(git, "run") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.2", "deadbeef")
+    >>> run.call_count
+    0
+
+    No-op when the change added none of the tokens. The git command is pinned here because
+    nothing else in these tests would notice it being wrong -- transposing the two endpoints
+    inverts the whole check, and dropping the pathspec or --no-color silently defeats it:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+ unrelated change\\n") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> run.call_args[0][0][:8]
+    ['git', '-c', 'diff.relative=false', 'diff', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
+    >>> run.call_args[0][0][8:]
+    ['--', ':(top)*.scala', ':(top)*.java']
+
+    Warns and prompts when the change adds a token on a pre-4.2 branch; accepting continues
+    (no abort), so input is called once by the continue_maybe prompt:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+.withBindingPolicy(X)\\n"),
+    ...     patch("builtins.input", return_value="y") as inp,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> inp.call_count
+    1
+
+    Declining skips just that branch, so an already-pushed branch-M.x pick
+    and the JIRA resolution survive (the second git.run is the CHERRY_PICK_HEAD probe):
+
+    >>> with (
+    ...     patch.object(
+    ...         git,
+    ...         "run",
+    ...         side_effect=[
+    ...             "+.withBindingPolicy(X)\\n",
+    ...             subprocess.CalledProcessError(1, "git"),
+    ...         ],
+    ...     ),
+    ...     patch("builtins.input", return_value=""),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+
+    A git failure warns and scans nothing rather than aborting a half-pushed merge:
+
+    >>> with (
+    ...     patch.object(git, "run", side_effect=OSError("git is sad")),
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> "git is sad" in out.getvalue()
+    True
+    """
+    if not _is_pre_binding_policy_branch(ref):
+        return
+    try:
+        diff = git.run(
+            ["git", "-c", "diff.relative=false", "diff", "--no-color", "--no-ext-diff", base_head]
+            + ["HEAD", "--"]
+            + list(BINDING_POLICY_PATHSPECS)
+        )
+    except Exception as e:
+        print_error(
+            "Could not diff %s..HEAD; skipping the ConfigBindingPolicy check: %s" % (base_head, e)
+        )
+        return
+    tokens = _added_binding_policy_tokens(diff)
+    if not tokens:
+        return
+    print_error(
+        "Warning: what would be pushed to %s adds %s, which does not exist before branch-4.2 "
+        "(SPARK-55928). Drop the .withBindingPolicy(...) call and the ConfigBindingPolicy "
+        "import. Leave .version(...) alone -- it names the release the config shipped in -- "
+        "unless the config itself is new on this branch, in which case retarget it to this "
+        "branch's next release." % (ref, " / ".join(tokens))
+    )
+    continue_maybe("Push to %s anyway? (experts only!)" % ref, True)
+
+
+def should_skip_post_merge_ci(target_ref, pr_num):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
+    A commit that would skip is exempt when PR ``pr_num`` carries ``POST_MERGE_CI_FORCE_LABEL``.
+    The labels are read only then, on every call, so a label added during the run reaches the
+    later picks.
     """
     interval = POST_MERGE_CI_INTERVALS.get(target_ref)
     if interval is None:
@@ -896,10 +1593,26 @@ def should_skip_post_merge_ci(target_ref):
         )
         return False
 
-    print_error(
+    labels = get_json_pages("%s/issues/%s/labels" % (GITHUB_API_BASE, pr_num))
+    # GitHub matches label names case-insensitively.
+    if any(label["name"].lower() == POST_MERGE_CI_FORCE_LABEL for label in labels):
+        print(
+            "Post-merge CI is exempt from sampling on %s: the PR has the %r label."
+            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
+        )
+        return False
+
+    print_warning(
         "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
-        "divisible by %s. GitHub's %r trailer will be added."
-        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
+        "divisible by %s. GitHub's %r trailer will be added. To force post-merge CI to "
+        "run, add the %r label to the PR and rerun this script."
+        % (
+            target_ref,
+            commit_count,
+            interval,
+            POST_MERGE_CI_SKIP_TRAILER,
+            POST_MERGE_CI_FORCE_LABEL,
+        )
     )
     return True
 
@@ -959,7 +1672,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
-    skip_post_merge_ci = should_skip_post_merge_ci(target_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, pr_num)
 
     had_conflicts = False
     try:
@@ -1034,19 +1747,82 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, record=None):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
-    Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
-    cherry-pick conflicts and the committer declines to resolve it, after attempting to
-    abort the cherry-pick and restore the working tree.
+    Returns the (pushed ref, pushed commit hash) pair, which `record` also gets, right after
+    the push and before the cleanup that can raise. Raises `SkipCherryPick` when the
+    committer declines to resolve a conflict, after aborting the pick, or declines a pre-push
+    check. The pick is committed by then, so nothing is aborted: it and its temporary branch
+    are discarded, and uncommitted edits must be stashed first (see continue_maybe).
+
+    Both pre-push checks run once, in order, before the push prompt; the binding-policy one
+    gets the target branch and its tip from before the pick. A declined check pushes nothing:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> last_policy_call = last_record_call = None
+    >>> def pick(**effects):
+    ...     steps = Mock()
+    ...     steps.prompt.return_value = "y"
+    ...     for name, effect in effects.items():
+    ...         getattr(steps, name).side_effect = effect
+    ...     tip = ["pre\\n"]
+    ...     def run(cmd):
+    ...         if "cherry-pick" in cmd:
+    ...             tip[0] = "post\\n"
+    ...         return tip[0]
+    ...     with (
+    ...         patch("builtins.input", steps.prompt),
+    ...         patch.object(git, "run", side_effect=run),
+    ...         patch.object(git, "push", steps.push),
+    ...         patch.multiple(sys.modules[__name__], clean_up=steps.clean_up,
+    ...                        should_skip_post_merge_ci=Mock(return_value=False),
+    ...                        maybe_compile_check=steps.compile,
+    ...                        maybe_binding_policy_warning=steps.policy),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             result = _do_cherry_pick(1, "feed", "branch-4.2", steps.record)
+    ...         except SkipCherryPick:
+    ...             result = "skipped"
+    ...         except (SystemExit, subprocess.CalledProcessError) as e:
+    ...             result = type(e).__name__
+    ...     global last_policy_call, last_record_call
+    ...     last_policy_call, last_record_call = steps.policy.call_args, steps.record.call_args
+    ...     return result, [name for name, _, _ in steps.mock_calls]
+    >>> pick()
+    (('branch-4.2', 'post'), ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
+    >>> last_record_call
+    call(('branch-4.2', 'post'))
+    >>> pick(compile=SkipCherryPick())
+    ('skipped', ['policy', 'compile'])
+    >>> last_policy_call
+    call('branch-4.2', 'pre')
+
+    A push that lands is recorded before the cleanup after it, so a cleanup that raises loses
+    nothing; a push that fails is not recorded:
+
+    >>> pick(clean_up=subprocess.CalledProcessError(1, "git checkout"))
+    ('CalledProcessError', ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
+    >>> pick(push=OSError("no route"))
+    ('SystemExit', ['policy', 'compile', 'prompt', 'push', 'clean_up'])
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
-    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, pr_num)
+    if skip_post_merge_ci:
+        # The merge is already pushed, so stopping here still reaches the JIRA update in main().
+        # Resolving the ticket then and again on the rerun leaves e.g. both 5.0.0 and 4.4.0,
+        # where a single run records only 4.4.0.
+        print_warning(
+            "If you stop this pick to rerun, answer N to 'Would you like to update an "
+            "associated JIRA?' first. The rerun updates the JIRA."
+        )
 
     try:
         git.run(
@@ -1087,16 +1863,22 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     if updated_message != raw_message:
         amend_commit_message(updated_message)
 
+    maybe_binding_policy_warning(pick_ref, pick_head)
+    maybe_compile_check(pick_branch_name)
+
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
     )
 
+    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     try:
         git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
+    # Before clean_up(), which can raise: the push has landed either way.
+    if record:
+        record((pick_ref, pick_hash))
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
@@ -1172,7 +1954,9 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
     return None
 
 
-def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+def cherry_pick(
+    pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=(), record=None
+):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
@@ -1180,11 +1964,56 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     types a branch-M.N target while branch-M.x is also a known release branch AND
     has not already received this commit, prompt to confirm whether to pick into
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
-    maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
-    picked into, so the main loop can advance its remaining-branches list correctly
-    and record each backport commit for the merge comment. The list is empty (or, for the
-    Upstream-First two-branch path, holds only what landed) when the committer declines to
-    resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
+    maintenance-only bugfix).
+
+    `record` gets each (ref, commit_hash) pair right after its push, and main() learns of
+    picks only through it, so one survives a later pick that ends the run. Declining to
+    resolve a conflict, or to push past a pre-push check, skips that branch and records
+    nothing; the caller then offers the next branch and still resolves JIRA. The returned list
+    repeats the recorded pairs; nothing reads it.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def picks(branch, choice="", ends=(), skips=()):
+    ...     recorded = []
+    ...     def do(pr_num, merge_hash, ref, record):
+    ...         if ref in ends:
+    ...             sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
+    ...         if ref in skips:
+    ...             raise SkipCherryPick()
+    ...         record((ref, "abc"))
+    ...         return ref, "abc"
+    ...     with (
+    ...         patch.multiple(sys.modules[__name__], _do_cherry_pick=do,
+    ...                        get_input=lambda *a: choice),
+    ...         patch("builtins.input", return_value=branch), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             cherry_pick(1, "abc", branch, ["branch-4.x", "branch-4.2"], "master",
+    ...                         already_picked=("master",), record=recorded.append)
+    ...         except SystemExit:
+    ...             pass
+    ...     return recorded
+
+    A plain pick, an [o]nly pick, and a [b]oth pair each record what lands, in order:
+
+    >>> picks("branch-4.x")
+    [('branch-4.x', 'abc')]
+    >>> picks("branch-4.2", "o")
+    [('branch-4.2', 'abc')]
+    >>> picks("branch-4.2", "b")
+    [('branch-4.x', 'abc'), ('branch-4.2', 'abc')]
+
+    A skipped pick records nothing, and the branch-M.x pick survives a branch-M.N pick that
+    is skipped or ends the run:
+
+    >>> picks("branch-4.x", skips=("branch-4.x",)), picks("branch-4.2", "o", skips=("branch-4.2",))
+    ([], [])
+    >>> picks("branch-4.2", "b", skips=("branch-4.2",))
+    [('branch-4.x', 'abc')]
+    >>> picks("branch-4.2", "b", ends=("branch-4.2",))
+    [('branch-4.x', 'abc')]
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -1197,6 +2026,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             f"'{pick_ref}' is not a known release branch. "
             f"Valid branches: {valid_branches}. Please try again."
         )
+
+    def pick(ref):
+        return _do_cherry_pick(pr_num, merge_hash, ref, record)
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
@@ -1216,19 +2048,18 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
-            # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
-            # reflect it.
+            # A branch-M.x pick that landed stays recorded when the branch-M.N pick is skipped
+            # or ends the run.
             picked = []
             try:
-                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
-                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+                picked.append(pick(sibling_x))
+                picked.append(pick(pick_ref))
             except SkipCherryPick:
                 pass
             return picked
         elif choice == "o":
             try:
-                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+                return [pick(pick_ref)]
             except SkipCherryPick:
                 return []
         elif choice == "a":
@@ -1237,7 +2068,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             fail("Unrecognized choice %r; aborting." % choice)
 
     try:
-        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        return [pick(pick_ref)]
     except SkipCherryPick:
         return []
 
@@ -2428,6 +3259,7 @@ COMPONENTS = (
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
     Component("EXAMPLES", ("EXAMPLE",), primary=True, jira_name="Examples"),
+    Component("GRAPH", ("GRAPHFRAME", "GRAPHFRAMES"), primary=True, jira_name="Graph"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
     Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),
@@ -3143,7 +3975,7 @@ def check_script_up_to_date():
 
 
 def build_arg_parser():
-    """CLI parser: an optional PR number plus the --dry-run/-n flag.
+    """CLI parser: an optional PR number plus the --dry-run/-n and --compile-prompt flags.
 
     --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
     DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
@@ -3164,12 +3996,19 @@ def build_arg_parser():
         "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
         "Also enabled by setting the DRY_RUN environment variable.",
     )
+    parser.add_argument(
+        "--compile-prompt",
+        action="store_true",
+        help="Before pushing each backport pick, offer an optional clean SBT compile of it "
+        "(see COMPILE_CHECK_CMD). Off by default: no compile is offered.",
+    )
     return parser
 
 
 def main():
-    global git, github, jira_ops, original_head
+    global git, github, jira_ops, original_head, COMPILE_PROMPT
     args = build_arg_parser().parse_args()
+    COMPILE_PROMPT = args.compile_prompt
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
         git = DryRunGit()
@@ -3189,7 +4028,7 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
-    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branches = get_json_pages("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
@@ -3199,7 +4038,6 @@ def main():
         pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
     title = pr["title"]
@@ -3216,6 +4054,7 @@ def main():
     # merge as it could have been reverted earlier.
     merge_hash, message = (None, None)
     if pr["state"] == "closed":
+        pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
         merge_hash, message = find_merge_commit(pr_num, pr_events)
     if merge_hash is not None:
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
@@ -3252,11 +4091,57 @@ def main():
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
+    if merge_hash is not None:
+        # The change is already on target_ref and on any branch a previous run backported it
+        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
+        picked_refs = [target_ref] + [
+            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
+        ]
+        if len(picked_refs) > 1:
+            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # Loop so one invocation can reach several maintenance branches, as the merge path does.
+        picked_commits = []
+
+        def record(pair):
+            picked_refs.append(pair[0])
+            picked_commits.append(pair)
+
+        try:
+            while True:
+                default = default_pick_branch(branch_names, tuple(picked_refs))
+                if default is None:
+                    print(
+                        "Every known release branch already contains #%s; nothing to pick." % pr_num
+                    )
+                    break
+                cherry_pick(
+                    pr_num,
+                    merge_hash,
+                    default,
+                    branch_names,
+                    target_ref,
+                    already_picked=tuple(picked_refs),
+                    record=record,
+                )
+                prompt = "Would you like to pick %s into another branch?" % merge_hash
+                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                    break
+        finally:
+            # Report whatever was pushed even if a later pick is aborted, since the earlier
+            # pushes have already landed.
+            if picked_commits:
+                post_merge_comment(pr_num, picked_commits)
+            # Reconcile JIRA with every branch that contains the merge or revert.
+            if subject is not None:
+                title = jira_title_for_backport(subject, pr["title"])
+            update_jira_for_pr(pr_num, title, picked_refs)
+        sys.exit(0)
+
     # Fetch PR author's GitHub profile and PR commits for commit attribution
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
@@ -3283,54 +4168,9 @@ def main():
             seen.add(raw)
             co_authors.append(raw)
 
-    if merge_hash is not None:
-        # The change is already on target_ref and on any branch a previous run backported it
-        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
-        picked_refs = [target_ref] + [
-            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
-        ]
-        if len(picked_refs) > 1:
-            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
-        # Loop so one invocation can reach several maintenance branches, as the merge path does.
-        picked_commits = []
-        try:
-            while True:
-                default = default_pick_branch(branch_names, tuple(picked_refs))
-                if default is None:
-                    print(
-                        "Every known release branch already contains #%s; nothing to pick." % pr_num
-                    )
-                    break
-                picked = cherry_pick(
-                    pr_num,
-                    merge_hash,
-                    default,
-                    branch_names,
-                    target_ref,
-                    already_picked=tuple(picked_refs),
-                )
-                picked_refs = picked_refs + [ref for ref, _ in picked]
-                picked_commits = picked_commits + picked
-                prompt = "Would you like to pick %s into another branch?" % merge_hash
-                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
-                    break
-        finally:
-            # Report whatever was pushed even if a later pick is aborted, since the earlier
-            # pushes have already landed.
-            if picked_commits:
-                post_merge_comment(pr_num, picked_commits)
-            # Reconcile JIRA with every branch that contains the merge or revert.
-            if subject is not None:
-                title = jira_title_for_backport(subject, pr["title"])
-            update_jira_for_pr(pr_num, title, picked_refs)
-        sys.exit(0)
-
-    if not bool(pr["mergeable"]):
-        msg = (
-            "Pull request %s is not mergeable in its current form.\n" % pr_num
-            + "Continue? (experts only!)"
-        )
-        continue_maybe(msg)
+    warning = mergeable_warning(pr_num, pr)
+    if warning is not None:
+        continue_maybe(warning + "\nContinue? (experts only!)")
 
     check_linked_jira_issues(pr_num, title)
 
@@ -3350,6 +4190,10 @@ def main():
     # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
     # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
     # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
+    def record(pair):
+        merged_refs.append(pair[0])
+        merged_commits.append(pair)
+
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
@@ -3360,16 +4204,15 @@ def main():
             if default is None:
                 print("Every known release branch already contains #%s; nothing to pick." % pr_num)
                 break
-            picked = cherry_pick(
+            cherry_pick(
                 pr_num,
                 merge_hash,
                 default,
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
+                record=record,
             )
-            merged_refs = merged_refs + [ref for ref, _ in picked]
-            merged_commits = merged_commits + picked
     finally:
         if merged_commits:
             # The "Closes #N" keyword in the commit message only auto-closes the PR when the
@@ -3388,6 +4231,58 @@ def main():
 
 
 __test__ = {
+    "abort_entrypoint": """
+    After [a]bort at the checkout-retry prompt no git runs again, by any route out: the CLI
+    handler, or a fail() in main()'s finally blocks such as declining the JIRA prompt. An
+    ordinary exit still cleans up.
+
+    >>> import ast, doctest
+    >>> from pathlib import Path
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> entrypoint = ast.parse(Path(__file__).read_bytes()).body[-1]
+    >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> def abort_then_fail():
+    ...     try:
+    ...         _restore_original_head()
+    ...     finally:
+    ...         fail("Okay, exiting")
+    >>> def ordinary_exit():
+    ...     raise SystemExit(-1)
+    >>> for entry in (_restore_original_head, abort_then_fail, ordinary_exit):
+    ...     with (
+    ...         patch.object(doctest, "testmod", return_value=(0, 0)),
+    ...         patch.dict(clean_up.__globals__, original_head="master",
+    ...                    preserve_local_state=False),
+    ...         patch.object(git, "run", side_effect=refused) as run,
+    ...         patch("builtins.input", side_effect=["a"]), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             exec(code, dict(globals(), __name__="__main__", main=entry))
+    ...         except BaseException as e:
+    ...             ended = getattr(e, "code", type(e).__name__)
+    ...     cmds = [c.args[0] if isinstance(c.args[0], str) else " ".join(c.args[0])
+    ...             for c in run.call_args_list]
+    ...     print(entry.__name__, [cmd.split()[1] for cmd in cmds], ended)
+    _restore_original_head ['checkout'] -1
+    abort_then_fail ['checkout'] -1
+    ordinary_exit ['checkout'] CalledProcessError
+
+    The flag clean_up() reads is off again, and one left on stops the run before main():
+
+    >>> clean_up.__globals__["preserve_local_state"]
+    False
+    >>> ran = []
+    >>> with patch.object(doctest, "testmod", return_value=(0, 0)):
+    ...     try:
+    ...         exec(code, dict(globals(), __name__="__main__", main=lambda: ran.append(1),
+    ...                         preserve_local_state=True))
+    ...     except SystemExit as e:
+    ...         print(e.code, ran)
+    -1 []
+    """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
     and unrelated versions. JIRA receives individual removals so concurrent additions survive.
@@ -3933,6 +4828,84 @@ __test__ = {
     pass
     pass
     """,
+    "main_records": """
+    main() reports the picks cherry_pick hands to `record`, on a merge and on a backport of a
+    merged PR: the merge comment gets them in order and the JIRA update their branches, also
+    for picks recorded before a later pick ends the run. Each run takes the pairs the
+    cherry_pick stand-in records, one list per call (None ends the run), and returns the
+    pairs the merge comment receives, the branches the JIRA update receives, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(calls, message=None):
+    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     def get_json(url):
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": b} for b in ("master", "branch-4.x", "branch-4.2")]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     remaining = list(calls)
+    ...     def ask(prompt, *args, **kwargs):
+    ...         return "y" if remaining and "into another branch" in prompt else "n"
+    ...     def pick(*args, record, **kwargs):
+    ...         for pair in remaining.pop(0):
+    ...             if pair is None:
+    ...                 sys.exit(-1)  # a later pick ends the run
+    ...             record(pair)
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     comment, update = Mock(), Mock()
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=Mock(),
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=Mock(return_value="abc"),
+    ...                    post_merge_comment=comment,
+    ...                    prompt_for_components=Mock(return_value=["CORE"]),
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock()),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     return (comment.call_args.args[1] if comment.called else None,
+    ...             update.call_args.args[2], code)
+
+    On a merge, the merged branch comes first and every recorded pick follows:
+
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]])  # doctest: +NORMALIZE_WHITESPACE
+    ([('master', 'abc'), ('branch-4.x', 'd'), ('branch-4.2', 'e')],
+     ['master', 'branch-4.x', 'branch-4.2'], None)
+
+    A pick recorded before a later pick ends the run is still reported, and so is a merge
+    with no picks:
+
+    >>> run([[("branch-4.x", "d")], [None]])
+    ([('master', 'abc'), ('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    >>> run([])
+    ([('master', 'abc')], ['master'], None)
+
+    On a backport of a merged PR the comment holds only the picks, and the JIRA update also
+    the branch the PR merged into:
+
+    >>> message = "[SPARK-1][SQL] Fix" + footer
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]], message)
+    ([('branch-4.x', 'd'), ('branch-4.2', 'e')], ['master', 'branch-4.x', 'branch-4.2'], 0)
+    >>> run([[("branch-4.x", "d")], [None]], message)
+    ([('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    """,
     "main_titles": """
     main() hands the title that title_for_run() returns to the commit, the JIRA checks, and
     the JIRA update: on a merge the prepared title, with a component entered at the prompt;
@@ -3951,7 +4924,9 @@ __test__ = {
     ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
     ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
     ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     requested = []
     ...     def get_json(url):
+    ...         requested.append(url)
     ...         if url.endswith("/branches"):
     ...             return [{"name": "master"}, {"name": "branch-4.x"}]
     ...         if url.endswith("/pulls/1"):
@@ -3971,17 +4946,19 @@ __test__ = {
     ...     merge, check = Mock(return_value="abc"), Mock()
     ...     pick = Mock(side_effect=lambda *a, **k: print("picked") or [("branch-4.x", "d")])
     ...     found = (None, None) if message is None else ("abc", message)
+    ...     pick_default = Mock(return_value="branch-4.x")
     ...     with (
     ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
     ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
     ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
     ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
-    ...                    get_json=get_json, find_merge_commit=Mock(return_value=found),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
     ...                    git=Mock(), github=Mock(), check_linked_jira_issues=check,
     ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
     ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
     ...                    branches_with_merge_footer=Mock(return_value=[]),
-    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    default_pick_branch=pick_default,
     ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
     ...                    print_error=lambda msg: print(msg.splitlines()[0])),
     ...     ):
@@ -3992,6 +4969,10 @@ __test__ = {
     ...             code = e.code
     ...     committed = merge.call_args.args[2] if merge.called else None
     ...     assert committed == (check.call_args.args[1] if check.called else None)
+    ...     assert all(c.args[0] == ["branch-4.x"] for c in pick_default.call_args_list)
+    ...     # A merge reads no events, and a backport reads neither commits nor the author.
+    ...     unused = ("/issues/1/events",) if message is None else ("/pulls/1/commits", "/users/x")
+    ...     assert not [url for url in requested if url.endswith(unused)], requested
     ...     return update.call_args.args[1], committed, prompt.called, code
 
     A merge commits, checks, and updates JIRA from the prepared title:
@@ -4292,7 +5273,8 @@ if __name__ == "__main__":
     import doctest
 
     failure_count, test_count = doctest.testmod()
-    if failure_count:
+    # A doctest that left the abort flag on would make every clean_up() of this run a no-op.
+    if failure_count or preserve_local_state:
         sys.exit(-1)
     try:
         main()
