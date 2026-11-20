@@ -134,13 +134,14 @@ private[sql] class SharedState(
    * SparkContext stops: while no query has a limit, its event handlers return at once. It has a
    * queue of its own on the listener bus, so that it does not slow down the listeners of the UI
    * and they do not delay or drop its events. The events that its own queue drops when it is full
-   * still weaken the limit.
+   * still weaken the limit: `spark.scheduler.listenerbus.eventqueue.scanLimit.capacity` sets how
+   * many events the queue holds.
    */
   private[sql] lazy val scanLimitListener: ScanLimitListener = {
     // The listener is never removed, so its function must not capture this SharedState.
     val sc = sparkContext
     val listener = new ScanLimitListener(sc.cancelJobsWithTag(_, _))
-    sc.listenerBus.addToQueue(listener, "scanLimit")
+    sc.listenerBus.addToQueue(listener, ScanLimitListener.QUEUE_NAME)
     listener
   }
 

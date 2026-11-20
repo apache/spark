@@ -259,8 +259,10 @@ object SQLExecution extends Logging {
       // count towards the same limit. Streaming queries are not limited: neither their batches
       // nor the queries that their sources run on the thread of the stream while they plan a
       // batch, with whichever session they hold. The thread of a stream has its query ID for as
-      // long as it runs. Creating the listener fails once the listener bus is stopped, so it is
-      // done in this `try`, whose `finally` restores the state of the thread.
+      // long as it runs. A thread inherits both local properties from the thread that starts it,
+      // so the queries on a thread started during a query or a stream are not limited either.
+      // Creating the listener fails once the listener bus is stopped, so it is done in this
+      // `try`, whose `finally` restores the state of the thread.
       if (existingRootId == null && maxScanBytes >= 0 &&
           sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null) {
         val listener = sparkSession.sharedState.scanLimitListener

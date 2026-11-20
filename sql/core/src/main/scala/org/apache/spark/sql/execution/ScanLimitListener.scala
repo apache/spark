@@ -203,15 +203,21 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
 
 private[sql] object ScanLimitListener {
 
+  /** The name of the queue of the listener on the listener bus. */
+  val QUEUE_NAME = "scanLimit"
+
   /**
    * The reason for which the listener cancels the jobs of an execution that went over its limit.
    * The error of a cancelled job carries it, which tells the cancellation by the listener from
    * other ones.
    */
   def cancelReason(bytesRead: Long, maxScanBytes: Long): String = {
-    s"because the query read at least ${Utils.bytesToString(bytesRead)}, more than the limit " +
-      s"of ${Utils.bytesToString(maxScanBytes)} set by ${SQLConf.MAX_SCAN_BYTES.key}"
+    s"because the query read at least ${bytes(bytesRead)}, more than the limit of " +
+      s"${bytes(maxScanBytes)} set by ${SQLConf.MAX_SCAN_BYTES.key}"
   }
+
+  // The rounded sizes alone can be equal, and can differ from the value that the user set.
+  private def bytes(n: Long): String = s"$n bytes (${Utils.bytesToString(n)})"
 }
 
 /** What a root execution with a scan limit has read. */

@@ -54,8 +54,8 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkException](query),
         condition = "SCAN_BYTES_LIMIT_EXCEEDED",
         parameters = Map(
-          "scannedBytes" -> ".+ B",
-          "limit" -> "1\\.0 B",
+          "scannedBytes" -> "\\d+ bytes \\(.+ B\\)",
+          "limit" -> "1 bytes \\(1\\.0 B\\)",
           "config" -> "\"spark.sql.execution.maxScanBytes\""))
     }
   }
