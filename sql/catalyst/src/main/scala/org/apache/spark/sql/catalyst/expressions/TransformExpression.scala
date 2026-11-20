@@ -103,8 +103,10 @@ object TransformFunctionId {
  *                            function may report any name. Not part of the transform's identity
  *                            (`functionId`), nor of its plan string, but part of case-class
  *                            equality, since a marked and an unmarked transform are offered
- *                            different reducers. Every production transform is resolved by
- *                            `V2ExpressionUtils`, which sets it, and rebuilt with `copy`, which
+ *                            different reducers. It also gives [[numBucketsOpt]], which the
+ *                            per-partition runtime bloom filter reads to refuse a bucket side
+ *                            with too few partition keys. Every production transform is resolved
+ *                            by `V2ExpressionUtils`, which sets it, and rebuilt with `copy`, which
  *                            keeps it.
  * @param storedKey whether this transform was rebuilt over a cogroup's key of another type than
  *                  the layout's column, stored as it is (`TransformExpression.keysStoredAlike`), by
@@ -126,8 +128,8 @@ case class TransformExpression(
   /**
    * The function and the children, then `reducedWith` and `storedKey` only when they are set, so
    * the ordinary form is unchanged, while two transforms that resolve their call or compare
-   * differently print differently. `fromBucketTransform` is not printed: it only decides which
-   * reducer overload Spark asks.
+   * differently print differently. `fromBucketTransform` is not printed: it decides which reducer
+   * overload Spark asks and gives [[numBucketsOpt]], neither of which the plan string shows.
    */
   override protected def stringArgs: Iterator[Any] =
     Iterator(function, children) ++ Iterator(reducedWith).filter(_.isDefined) ++
@@ -173,11 +175,16 @@ case class TransformExpression(
   def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
     withNewChildren(children.map {
       case l: Literal => l
-      case c => rewriteColumn(c)
+      case c => rewriteColumn(c) match {
+        // A literal would read as a parameter from then on, so the transform would lose its column.
+        case l: Literal => throw SparkException.internalError(
+          s"Cannot rebuild $this over the literal $l: its column arguments must stay columns")
+        case rewritten => rewritten
+      }
     }).asInstanceOf[TransformExpression]
 
   /** The non-literal arguments. */
-  def columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
+  lazy val columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
 
   /**
    * This transform's identity, or None if some argument references more than one column or is not
@@ -241,8 +248,9 @@ case class TransformExpression(
    *
    * This is true if both are the same function, or if [[pairReducers]] finds a reducer in either
    * direction: both are instances of [[ReducibleFunction]], their arguments line up, both sides
-   * have an identity, neither direction threw, and a reducer in one direction comes with an answer
-   * from the other. So it is false for a pair the connector could reduce but Spark does not trust.
+   * have an identity, and a reducer in one direction comes with an answer from the other. So it is
+   * false for a pair the connector could reduce but Spark does not trust. An exception from the
+   * connector other than `UnsupportedOperationException` fails the query.
    *
    * @param other the transform expression to compare to
    * @return true if compatible, false if not
@@ -369,12 +377,6 @@ case class TransformExpression(
     val thisParams = extractParameters
     val otherParams = other.extractParameters
 
-    // A single IntegerType parameter on each side is the shape the deprecated
-    // reducer(int, ..., int) overload accepts. Null parameters were refused above.
-    def isSingleInt(p: Array[V2Literal[_]]): Boolean = {
-      p.length == 1 && p(0).dataType == IntegerType
-    }
-
     // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below. An
     // `UnsupportedOperationException` means the overload is not implemented; any other exception
     // fails the query.
@@ -400,14 +402,10 @@ case class TransformExpression(
         // a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`. If that finds
         // nothing either, the outcome stays why the generalized one was not asked.
         case skipped @ (Unimplemented | LiteralTypesDiffer)
-            if fromBucketTransform && other.fromBucketTransform &&
-              isSingleInt(thisParams) && isSingleInt(otherParams) =>
-          probe(thisFunction.reducer(
-            thisParams(0).value().asInstanceOf[Int], otherFunction,
-            otherParams(0).value().asInstanceOf[Int])) match {
-            case Unimplemented => skipped
-            case found => found
-          }
+            if numBucketsOpt.isDefined && other.numBucketsOpt.isDefined =>
+          val deprecated = probe(
+            thisFunction.reducer(numBucketsOpt.get, otherFunction, other.numBucketsOpt.get))
+          if (deprecated == Unimplemented) skipped else deprecated
         case outcome => outcome
       }
 

@@ -127,6 +127,14 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
   }
 
+  test("SPARK-50593: a transform is not rebuilt over a literal") {
+    // A literal child reads as a parameter, so a column argument rebuilt as one would leave the
+    // transform with no column; that fails with a clear error rather than later.
+    val e = intercept[SparkException](bucket(new NamedFunction("test.bucket"), a)
+      .rewriteColumnSlots(_ => Literal(1)))
+    assert(e.getCondition == "INTERNAL_ERROR" && e.getMessage.contains("over the literal 1"), e)
+  }
+
   test("SPARK-50593: rewriting a reduced transform's column keeps its partner's shape in step") {
     // A broadcast join's key expansion, or an alias projection, rewrites a reduced member's column
     // through withNewChildren. Both sides of one reduce are rewritten the same way, so they must
