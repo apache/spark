@@ -303,7 +303,14 @@ object ToCharacterBuilder extends ExpressionBuilder {
   }
 }
 
-case class ToCharacter(left: Expression, right: Expression)
+// `legacyFormatZeroAsBlank` changes results, so it is a constructor parameter: expressions
+// resolved under different values of the config must not be semantically equal, for example
+// when matching cached plans.
+case class ToCharacter(
+    left: Expression,
+    right: Expression,
+    legacyFormatZeroAsBlank: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK))
   extends BinaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   // ToNumberParser mutates its working state during parsing/formatting. Stateful fresh
@@ -316,7 +323,7 @@ case class ToCharacter(left: Expression, right: Expression)
       new ToNumberParser(
         value.toString.toUpperCase(Locale.ROOT),
         errorOnFail = true,
-        legacyFormatZeroAsBlank = SQLConf.get.getConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK))
+        legacyFormatZeroAsBlank = legacyFormatZeroAsBlank)
     } else {
       null
     }
@@ -347,6 +354,7 @@ case class ToCharacter(left: Expression, right: Expression)
   }
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def prettyName: String = "to_char"
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def nullSafeEval(decimal: Any, format: Any): Any = {
     val input = decimal.asInstanceOf[Decimal]
     numberFormatter.format(input)
