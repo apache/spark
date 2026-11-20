@@ -3258,13 +3258,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * Before a deterministic condition ends the split, the conditions written after it, up to the
    * first non-deterministic one, are filtered on in a layer below it, in their written order, when
    * nothing there can fail: none of these conditions can fail with the aliases of the projection
-   * inlined (`cannotFail`, which also accepts LIKE and RLIKE whose pattern
+   * inlined (`cannotFailInSplit`, which also accepts LIKE and RLIKE whose pattern
    * `StringRegexExpression.cannotFailPattern` accepts), nor reads, with them inlined, a column
-   * below the projection that can fail (`failableOutputWith`, with `cannotFail`), and no alias the
-   * layer computes can fail by itself (`cannotFail`). Under whole-stage codegen, a projection
-   * computes a deterministic column, apart from the common subexpressions it computes up front,
-   * only where an operator above first reads it, so a column that can fail, also one a lower layer
-   * computes because it shares expensive work with another, would be computed in the layer's
+   * below the projection that can fail (`failableOutputWith`, with `cannotFailInSplit`), and no
+   * alias the layer computes can fail by itself (`cannotFailInSplit`). Under whole-stage codegen, a
+   * projection computes a deterministic column, apart from the common subexpressions it computes up
+   * front, only where an operator above first reads it, so a column that can fail, also one a lower
+   * layer computes because it shares expensive work with another, would be computed in the layer's
    * filter. This also holds in the later passes, where the aliases computed in a lower layer are
    * columns below the projection. The layer is also only added while it still leaves an expensive
    * alias for a later one and none of the aliases it leaves shares expensive work with one it
@@ -3279,10 +3279,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * passes split each layer the same way, so in a layer's filter a condition that cannot fail can
    * likewise be filtered on below the first one, when that one needs every expensive alias the
    * layer computes: with `j` expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`,
-   * then on `j`. Among the conditions that
-   * cannot fail, the split does not otherwise order by cost: in this example, and in
-   * `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
-   * (SPARK-61680).
+   * then on `j`. Among the conditions that cannot fail, the split does not otherwise order by cost:
+   * in this example, and in `(f || g) AND j`, it computes `f` and `g` on more rows than filtering
+   * on `j` first would (SPARK-61680).
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form and written order).
@@ -3371,10 +3370,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val following = conds.indices.tail.takeWhile(idx => conds(idx)._2.deterministic)
         // With every alias of the projection inlined, and over no column below it that can fail
         // (see the docstring).
-        lazy val failableBelow = failableOutputWith(project.child, cannotFail)
+        lazy val failableBelow = failableOutputWith(project.child, cannotFailInSplit)
         val followingCannotFail = following.forall { idx =>
           val inlined = replaceAlias(conds(idx)._2, aliasMap)
-          cannotFail(inlined) && !inlined.references.exists(failableBelow.contains)
+          cannotFailInSplit(inlined) && !inlined.references.exists(failableBelow.contains)
         }
         val (deferred, deferredNeeded) = (if (followingCannotFail) following else Nil)
           .foldLeft((Set.empty[Int], AttributeSet.empty)) { case ((taken, unit), idx) =>
@@ -3385,7 +3384,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             // leaves shares expensive work with one it computes, and no alias it computes, also
             // one that only shares expensive work with an alias a condition reads, can fail.
             if (left.nonEmpty && (partsOf(left) intersect partsOf(newAliases)).isEmpty &&
-                newAliases.forall(attr => cannotFail(aliasMap(attr).child))) {
+                newAliases.forall(attr => cannotFailInSplit(aliasMap(attr).child))) {
               (taken + idx, grown)
             } else {
               (taken, unit)
@@ -3452,10 +3451,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * `canEvaluateUnconditionally` (see `splitMovable`), so it does not move a condition with LIKE
    * or RLIKE ahead of a non-deterministic or throwable one.
    */
-  private def cannotFail(e: Expression): Boolean = ExprUtils.canEvaluateUnconditionallyWith(e, {
-    case r: StringRegexExpression => r.cannotFailPattern
-    case _ => false
-  })
+  private def cannotFailInSplit(e: Expression): Boolean =
+    ExprUtils.canEvaluateUnconditionallyWith(e, {
+      case r: StringRegexExpression => r.cannotFailPattern
+      case _ => false
+    })
 
   /**
    * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
