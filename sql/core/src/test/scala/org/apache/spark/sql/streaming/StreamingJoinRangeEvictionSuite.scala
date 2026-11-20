@@ -28,6 +28,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.JoinStateValueWatermarkPredicate
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -210,6 +211,34 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
           CheckNewAnswer(
             (if (version == 2) Seq(Row(1, 500L, null)) else Nil) ++
               (if (joinType == "left_outer") Seq(Row(2, null, 100L)) else Nil): _*))
+      }
+    }
+  }
+
+  // A left semi join processes its right input first. The right row and the left row of the
+  // second batch match, and lie between the late-events watermark (0) and the eviction watermark
+  // (10 h). The cutoff over the whole right input is 7 h, from rx, so the right row is stored.
+  for (version <- Seq(2, 4)) {
+    test(s"left semi join keeps a right row that the whole-input cutoff keeps, V$version") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long, Long)]
+        val left = leftInput.toDF().toDF("k", "t")
+          .select($"k", timestamp_seconds($"t").as("lt"))
+          .withWatermark("lt", "0 seconds")
+        val right = rightInput.toDF().toDF("rk", "e", "x")
+          .select($"rk", timestamp_seconds($"e").as("re"), timestamp_seconds($"x").as("rx"))
+          .withWatermark("re", "0 seconds")
+        val joined = left.join(right, expr("k = rk AND lt BETWEEN re - INTERVAL 1 HOUR AND re " +
+          "AND rx >= lt - INTERVAL 3 HOURS"), "left_semi")
+          .select($"k", $"lt".cast("long"))
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (9, 36000L)), AddData(rightInput, (9, 36000L, 36000L)))),
+          CheckNewAnswer(Row(9, 36000L)),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 27000L)), AddData(rightInput, (1, 28800L, 28800L)))),
+          CheckNewAnswer(Row(1, 27000L)))
       }
     }
   }
@@ -455,6 +484,15 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
         StreamProgressLockedActions(Seq(
           AddData(leftInput, (2, 1200L, 5000L)), AddData(rightInput, (9, 1300L)))),
         CheckNewAnswer(),
+        // The late-events watermark is 940 s. This batch scans the left input from the cutoff on
+        // leftTime at it, not from the lower cutoff from expiry.
+        Execute { q =>
+          val join = q.lastExecution.executedPlan.collectFirst {
+            case j: StreamingSymmetricHashJoinExec => j
+          }.get
+          assert(join.stateWatermarkPredicates.left.get
+            .asInstanceOf[JoinStateValueWatermarkPredicate].prevStateWatermark === Some(929999L))
+        },
         // The watermark is 1140 s, so the cutoff on leftTime is 1130 s.
         AddData(rightInput, (2, 1300L)),
         CheckNewAnswer(Row(8, null, 1000L)),

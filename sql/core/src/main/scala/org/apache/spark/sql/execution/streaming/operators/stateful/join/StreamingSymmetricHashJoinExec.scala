@@ -758,12 +758,12 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-    // When the join condition bounds the column that the value predicate tests, a row with a NULL
-    // in it can never match, and `column <= cutoff` never holds for it. The legacy mode, and the
-    // default mode for an input bounded only through a column cast to TIMESTAMP, test the event
-    // time, which the condition need not bound. A NULL in an equality key that the opposite
-    // watermark selects can never match either; the key that findJoinKeyOrdinalForWatermark
-    // selects keeps the previous behavior.
+    // When the default mode picked the column that the value predicate tests because the join
+    // condition bounds it, a row with a NULL in it can never match, and `column <= cutoff` never
+    // holds for it. The legacy mode, and the default mode for an input bounded only through a
+    // column cast to TIMESTAMP, test the event time, which the condition need not bound. A NULL in
+    // an equality key that the opposite watermark selects can never match either; the key that
+    // findJoinKeyOrdinalForWatermark selects keeps the previous behavior.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _, true)) =>
         Predicate.create(IsNull(column), inputAttributes).eval _
@@ -775,11 +775,26 @@ case class StreamingSymmetricHashJoinExec(
 
     // Such a row is not stored, but an earlier version or the legacy mode can have stored one.
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
+      case Some(JoinStateValueWatermarkPredicate(expr @ LessThanOrEqual(column, _), _, _, true)) =>
+        Predicate.create(Or(expr, IsNull(column)), inputAttributes).eval _
       case Some(JoinStateValueWatermarkPredicate(expr, _, _, _)) =>
-        val predicate = Predicate.create(expr, inputAttributes)
-        (row: UnsafeRow) => predicate.eval(row) || isEvictionColumnNull(row)
+        Predicate.create(expr, inputAttributes).eval _
       case _ =>
         Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
+    }
+
+    // A left semi join processes its right input first, so this batch's left rows can still match
+    // a right row that the completion check skips (SPARK-61380). Earlier versions tested it against
+    // the cutoff on the event time solved over the whole input, which a picked column can exceed.
+    private[this] val skipsEvictingRightRow: UnsafeRow => Boolean = stateWatermarkPredicate match {
+      case Some(p: JoinStateValueWatermarkPredicate) if p.conditionBoundsColumn &&
+          joinType == LeftSemi && joinSide == RightSide =>
+        val cutoff = StreamingJoinHelper.getStateValueWatermark(AttributeSet(inputAttributes),
+          AttributeSet(left.output), condition.full, eventTimeWatermarkForEviction)
+        WatermarkSupport.watermarkExpression(WatermarkSupport.findEventTimeColumn(inputAttributes,
+          allowMultipleEventTimeColumns = false), cutoff)
+          .map(Predicate.create(_, inputAttributes).eval _).getOrElse((_: UnsafeRow) => false)
+      case _ => stateValueWatermarkPredicateFunc
     }
 
     // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
@@ -903,8 +918,9 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
-        // If this row fails the pre join filter, or its eviction column is NULL, that means it can
-        // never satisfy the full join condition no matter what other side row it's matched with.
+        // If this row fails the pre join filter, or its eviction column is NULL where the default
+        // mode picked that column because the condition bounds it, that means it can never
+        // satisfy the full join condition no matter what other side row it's matched with.
         // This allows us to avoid adding it to the state, and generate an outer join row
         // immediately (or do nothing in the case of inner join).
         if (preJoinFilter(thisRow) && !isEvictionColumnNull(thisRow)) {
@@ -967,7 +983,7 @@ case class StreamingSymmetricHashJoinExec(
 
           // if the input is not evicted in this batch (hence need to be persisted)
           val isNotEvictingInThisBatch =
-            !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+            !stateKeyWatermarkPredicateFunc(key) && !skipsEvictingRightRow(thisRow)
 
           isNotEvictingInThisBatch ||
             // if the input is producing "unmatched row" in this batch

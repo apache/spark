@@ -4472,6 +4472,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK =
+    buildConf("spark.sql.streaming.statefulOperator.checkJoinOutputWatermark")
+      .internal()
+      .doc("When true, the correctness check of chained stateful operators also covers, in " +
+        "append mode, an operator that drops late rows after a stream-stream join whose state " +
+        "of an input has no cutoff. " +
+        "When false, such a query only logs a warning. A streaming query restarted from a " +
+        "checkpoint written without this config uses false.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_ALLOW_MULTIPLE =
     buildConf("spark.sql.streaming.statefulOperator.allowMultiple")
       .internal()

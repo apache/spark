@@ -74,8 +74,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   /**
    * Predicate for watermark on state values. See [[JoinStateKeyWatermarkPredicate]] for
    * the semantics of `stateWatermark` and `prevStateWatermark`. `conditionBoundsColumn` is true
-   * when the join condition bounds the column that `expr` tests, so that a row with a NULL in it
-   * can never match.
+   * only when the default mode picked the column that `expr` tests because the join condition
+   * bounds it, so that a row with a NULL in it can never match. The legacy mode and the fallback
+   * for an input bounded only through a column cast to TIMESTAMP leave it false.
    */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
@@ -290,14 +291,16 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         }
         solve(eventTimeWatermarkForEviction).flatMap { case (column, stateValueWatermark, bounds) =>
           // A row can pass late-input filtering but already be eligible for eviction in this
-          // batch. When the previous join-derived state cutoff is ahead of the late-input
-          // watermark, a new row can fall at or below that cutoff. V4 must scan from the
-          // beginning to find such rows. Late-input filtering bounds only the event time, so a
-          // cutoff on another column always scans from the beginning. In a later batch of a run,
-          // the previous batch evicted the event time up to its own cutoff at the late-input
-          // watermark, and new rows lie above that watermark. In the first batch, the state can
-          // come from an earlier version or the legacy mode, which evicted only up to the cutoff
-          // solved over the whole input.
+          // batch: when the previous join-derived cutoff is ahead of the late-input watermark, a
+          // new row can fall at or below that cutoff. So the V4 scan must start at or below the
+          // late-input watermark. Late-input filtering bounds only the event time, so a cutoff on
+          // another column always scans from the beginning. In a later batch of a run, when the
+          // default mode picked the event time, the previous batch evicted it up to its own
+          // cutoff at the late-input watermark, so the scan starts there, capped at that
+          // watermark. In the first batch of a run, and in every batch of an input on the
+          // whole-input fallback, the state can come from an earlier version or the legacy mode,
+          // which evicted only up to the cutoff solved over the whole input, so the scan starts
+          // there, or from the beginning when that cutoff is ahead of the late-input watermark.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
             eventTime.exists(_.semanticEquals(column))
           }.flatMap { lateWatermark =>
