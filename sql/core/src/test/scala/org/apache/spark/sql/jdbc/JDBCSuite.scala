@@ -1397,6 +1397,21 @@ class JDBCSuite extends SharedSparkSession {
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
+  test("SPARK-62136: MsSqlServer does not push down CAST from FLOAT, DOUBLE or BOOLEAN to STRING") {
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    def castToString(from: DataType): Option[String] =
+      msSqlServer.compileExpression(new V2Cast(FieldReference("c"), from, StringType))
+    Seq(FloatType, DoubleType, BooleanType).foreach { from =>
+      assert(castToString(from).isEmpty, from)
+    }
+    Seq(IntegerType, LongType, DecimalType(10, 2)).foreach { from =>
+      assert(castToString(from) === Some("CAST(\"c\" AS NVARCHAR(MAX))"), from)
+    }
+    // Other dialects keep pushing these casts.
+    assert(JdbcDialects.get("jdbc:").compileExpression(
+      new V2Cast(FieldReference("c"), DoubleType, StringType)).isDefined)
+  }
+
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
     val dialect = JdbcDialects.get("jdbc:")
     val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")

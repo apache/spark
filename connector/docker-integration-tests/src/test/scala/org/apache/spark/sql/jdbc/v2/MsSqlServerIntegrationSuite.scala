@@ -21,11 +21,12 @@ import java.sql.Connection
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -293,6 +294,47 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     val rows = df.collect()
     assert(rows.length == 1)
     assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-62136: CAST of FLOAT, DOUBLE or BOOLEAN to STRING is not pushed down") {
+    val table = s"$catalogName.cast_to_string"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, d DOUBLE, r FLOAT, b BOOLEAN, s STRING)")
+      sql(s"INSERT INTO $table VALUES (1, 1.5, 1.5, true, '1.5'), " +
+        "(2, 100.0, 100.0, false, '100.0'), (3, 123.456789, 123.4567, true, '123.456789'), " +
+        "(4, 1234567.0, 1234567.0, false, '100')")
+      // If pushed, MsSqlServer would render d as '1.5', '100', '123.457' and '1.23457e+006',
+      // r as '123.457' and b as '1' or '0', so each of these queries would return wrong rows.
+      val cases = Seq(
+        s"SELECT id FROM $table WHERE CAST(d AS STRING) = '100.0'" -> Seq(Row(2)),
+        s"SELECT id FROM $table WHERE CAST(d AS STRING) = '123.456789'" -> Seq(Row(3)),
+        s"SELECT id FROM $table WHERE startswith(CAST(d AS STRING), '1234567')" -> Seq(Row(4)),
+        s"SELECT id FROM $table WHERE CAST(d AS STRING) = s" -> Seq(Row(1), Row(2), Row(3)),
+        s"SELECT id FROM $table WHERE concat('v', CAST(d AS STRING)) = 'v100.0'" -> Seq(Row(2)),
+        s"SELECT id FROM $table WHERE d LIKE '1.%'" -> Seq(Row(1)),
+        s"SELECT MAX(CAST(d AS STRING)), MIN(CAST(d AS STRING)) FROM $table" ->
+          Seq(Row("1234567.0", "1.5")),
+        s"SELECT x.id, y.id FROM $table x JOIN $table y ON CAST(x.d AS STRING) = y.s" ->
+          Seq(Row(1, 1), Row(2, 2), Row(3, 3)),
+        s"SELECT id FROM $table WHERE CAST(r AS STRING) = '123.4567'" -> Seq(Row(3)),
+        s"SELECT id FROM $table WHERE CAST(b AS STRING) = 'true'" -> Seq(Row(1), Row(3)),
+        s"SELECT id FROM $table WHERE CAST(b AS STRING) = 'false'" -> Seq(Row(2), Row(4)),
+        s"SELECT id FROM $table WHERE CAST(b AS STRING) IN ('true', 'false')" ->
+          Seq(Row(1), Row(2), Row(3), Row(4)))
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        cases.foreach { case (query, expected) =>
+          val df = sql(query)
+          // The plan before AQE, so every scan is found under an aggregate or a join too.
+          val remoteQueries = df.queryExecution.sparkPlan.collect {
+            case scan: RowDataSourceScanExec =>
+              scan.rdd.asInstanceOf[JDBCRDD].getExternalEngineQuery
+          }
+          assert(remoteQueries.nonEmpty, query)
+          assert(!remoteQueries.exists(_.contains("NVARCHAR")), s"$query: $remoteQueries")
+          checkAnswer(df, expected)
+        }
+      }
+    }
   }
 
   test("SPARK-60479: CHAR read-side padding with NULL") {

@@ -91,6 +91,18 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case _ => super.dialectFunctionName(funcName)
     }
 
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      (exprDataType, dataType) match {
+        // MsSqlServer converts FLOAT and REAL to strings with at most 6 significant digits
+        // (123.456789 -> '123.457', 1234567.0 -> '1.23457e+006', 100.0 -> '100') and BIT to
+        // '1' or '0', so the pushed cast would not match Spark's CAST(x AS STRING).
+        case (FloatType | DoubleType | BooleanType, _: StringType) =>
+          throw new UnsupportedOperationException(
+            s"Cannot push down CAST from ${exprDataType.sql} to STRING")
+        case _ => super.visitCast(expr, exprDataType, dataType)
+      }
+    }
+
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
       funcName match {
         case "RPAD" =>
