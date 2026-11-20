@@ -132,3 +132,52 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "COUNT(1)"
   } ]
 }
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+ORDER BY id
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+3	3
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY t.rn = 1
+ORDER BY id
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+3	3
+
+
+-- !query
+SELECT a, SUM(b) AS b, ROW_NUMBER() OVER (ORDER BY a) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY b > 2
+ORDER BY a
+-- !query schema
+struct<a:int,b:bigint,rn:int>
+-- !query output
+1	3	1
+2	3	2
+3	3	3
+
+
+-- !query
+SELECT id, rn, RANK() OVER (ORDER BY id) AS rank
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+  FROM VALUES (1, 30), (2, 20), (3, 10) AS t(id, score)
+) s
+QUALIFY rn = 1
+-- !query schema
+struct<id:int,rn:int,rank:int>
+-- !query output
+1	1	1

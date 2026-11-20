@@ -54,3 +54,28 @@ QUALIFY a = 1;
 SELECT a, RANK() OVER (ORDER BY b) AS rank
 FROM testData2
 QUALIFY COUNT(1) > 1;
+
+-- An input column takes precedence over a SELECT alias with the same name
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+ORDER BY id;
+
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY t.rn = 1
+ORDER BY id;
+
+SELECT a, SUM(b) AS b, ROW_NUMBER() OVER (ORDER BY a) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY b > 2
+ORDER BY a;
+
+-- A window function of a subquery defines an input column of the outer query
+SELECT id, rn, RANK() OVER (ORDER BY id) AS rank
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+  FROM VALUES (1, 30), (2, 20), (3, 10) AS t(id, score)
+) s
+QUALIFY rn = 1;
