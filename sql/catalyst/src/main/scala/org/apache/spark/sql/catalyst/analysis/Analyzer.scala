@@ -420,6 +420,30 @@ object Analyzer {
     }
     functionConf
   }
+
+  /**
+   * Replaces references to the aliases in `sqlFunctionInputs` with the aliased input expressions.
+   */
+  def inlineSQLFunctionInputs(
+      expression: Expression,
+      sqlFunctionInputs: Seq[NamedExpression]): Expression =
+    replaceSQLFunctionInputAttributes(expression, buildSQLFunctionInputAliasMap(sqlFunctionInputs))
+
+  /** Maps the attribute of each alias in `sqlFunctionInputs` to the aliased input expression. */
+  def buildSQLFunctionInputAliasMap(
+      sqlFunctionInputs: Seq[NamedExpression]): Map[Attribute, Expression] =
+    sqlFunctionInputs.collect { case a: Alias => a.toAttribute -> a.child }.toMap
+
+  /**
+   * Replaces the attributes in `aliasMap` with the input expressions they map to. The input
+   * expressions cannot reference the alias attributes, so replacements are not traversed again.
+   */
+  def replaceSQLFunctionInputAttributes(
+      expression: Expression,
+      aliasMap: Map[Attribute, Expression]): Expression =
+    expression.transformUp {
+      case a: Attribute => aliasMap.getOrElse(a, a)
+    }
 }
 
 /**
@@ -3070,10 +3094,11 @@ class Analyzer(
         if (joinCond != j.condition) {
           // Join condition cannot have non-deterministic expressions. We can safely
           // replace the aliases with the original SQL function input expressions.
-          val aliasMap = projectList.collect { case a: Alias => a.toAttribute -> a.child }.toMap
-          val newJoinCond = joinCond.map(_.transform {
-            case a: Attribute => aliasMap.getOrElse(a, a)
-          })
+          val newJoinCond = joinCond match {
+            case Some(condition) =>
+              Some(Analyzer.inlineSQLFunctionInputs(condition, projectList.toSeq))
+            case None => None
+          }
           j.copy(left = newLeft, right = newRight, condition = newJoinCond)
         } else {
           assert(projectList.isEmpty)
