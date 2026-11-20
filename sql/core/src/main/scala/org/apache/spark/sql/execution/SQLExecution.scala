@@ -261,14 +261,8 @@ object SQLExecution extends Logging {
       // batch, with whichever session they hold. The thread of a stream has its query ID for as
       // long as it runs. A thread inherits both local properties from the thread that starts it,
       // so the queries on a thread started during a query or a stream are not limited either.
-      // Creating the listener fails once the listener bus is stopped, so it is done in this
-      // `try`, whose `finally` restores the state of the thread.
-      if (existingRootId == null && maxScanBytes >= 0 &&
-          sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null) {
-        val listener = sparkSession.sharedState.scanLimitListener
-        listener.register(executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
-        scanLimitListener = Some(listener)
-      }
+      val hasScanLimit = existingRootId == null && maxScanBytes >= 0 &&
+        sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
@@ -318,6 +312,15 @@ object SQLExecution extends Logging {
                   sc.listenerBus.post(startEvent)
                   throw e
                 case Right(f) =>
+                  // Creating the listener fails once the listener bus is stopped, so it is done
+                  // in this `try`: its `finally` still posts the end event and completes the
+                  // observations, and a query that fails before it runs keeps its own error.
+                  if (hasScanLimit) {
+                    val listener = sparkSession.sharedState.scanLimitListener
+                    listener.register(
+                      executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
+                    scanLimitListener = Some(listener)
+                  }
                   val planDesc = planDescription(
                     queryExecution, sparkSession.sessionState.conf.uiExplainMode)
                   val planInfo = try {
