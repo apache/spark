@@ -27,6 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.scalatest.Assertions
+import org.scalatest.exceptions.{TestCanceledException, TestFailedException}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkEnv, TestUtils}
@@ -40,12 +41,14 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFProtoCommunicationPattern,
   UDFWorkerDataFormat, UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket,
   WorkerCapabilities, WorkerConnectionSpec, WorkerEnvironment}
+import org.apache.spark.util.Utils
 
 // Spark-submit is required so the driver loads assembly jars plus test-classes.
 @ExtendedSQLTest
 class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
 
-  import UdfWorkerRuntimeSparkSubmitSuite.{assemblyJarsDir, RuntimeJarPrefix}
+  import UdfWorkerRuntimeSparkSubmitSuite.{assemblyJarsDir, ensureRuntimeJarPresent,
+    RuntimeJarPrefix}
   import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
 
   test("packaged UDF worker runtime executes Range(0, 6) with the echo worker") {
@@ -53,9 +56,7 @@ class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
       "Netty UDS native transport (epoll on Linux or kqueue on macOS) is required")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val jarsDir = assemblyJarsDir(sparkHome)
-    assume(Option(jarsDir.listFiles()).exists(_.exists(_.getName.startsWith(RuntimeJarPrefix))),
-      s"A Spark assembly containing $RuntimeJarPrefix is required in $jarsDir. " +
-        "Build it with build/sbt package or build/mvn install -pl assembly.")
+    ensureRuntimeJarPresent(jarsDir)
     val javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString
     val classPath = System.getProperty("java.class.path")
     val workerMain = classOf[EchoGrpcWorkerMain.type].getName.stripSuffix("$")
@@ -82,6 +83,32 @@ class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
       environmentOverrides = packagedDriverEnvironment())
   }
 
+  test("fails when the packaged runtime jar is required but missing") {
+    val jarsDir = Utils.createTempDir()
+    try {
+      val e = intercept[TestFailedException] {
+        ensureRuntimeJarPresent(jarsDir, required = true)
+      }
+      assert(e.getMessage.contains(RuntimeJarPrefix))
+      assert(e.getMessage.contains(jarsDir.getPath))
+    } finally {
+      Utils.deleteRecursively(jarsDir)
+    }
+  }
+
+  test("skips when the packaged runtime jar is optional and missing") {
+    val jarsDir = Utils.createTempDir()
+    try {
+      val e = intercept[TestCanceledException] {
+        ensureRuntimeJarPresent(jarsDir, required = false)
+      }
+      assert(e.getMessage.contains(RuntimeJarPrefix))
+      assert(e.getMessage.contains(jarsDir.getPath))
+    } finally {
+      Utils.deleteRecursively(jarsDir)
+    }
+  }
+
   // SPARK_PREPEND_CLASSES puts unshaded module classes ahead of the assembly. With
   // SPARK_TESTING the launcher already adds the assembly jars and every test-classes
   // directory, so the dist classpath carries only the ScalaTest jars that main needs.
@@ -100,11 +127,40 @@ class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
 
 object UdfWorkerRuntimeSparkSubmitSuite extends Assertions {
 
-  private val RuntimeJarPrefix = "spark-udf-worker-runtime"
+  private[externalUDF] val RuntimeJarPrefix = "spark-udf-worker-runtime"
+  // Packaging CI that builds the assembly sets this so a missing runtime jar fails
+  // the suite instead of skipping. Local developers keep the skip when unset.
+  private[externalUDF] val RuntimeJarRequiredEnv = "SPARK_UDF_WORKER_RUNTIME_JAR_REQUIRED"
+  private[externalUDF] val RuntimeJarRequiredProp =
+    "spark.test.udfWorkerRuntimeJar.required"
 
   private def assemblyJarsDir(sparkHome: String): File = {
     val scalaBinary = scala.util.Properties.versionNumberString.split('.').take(2).mkString(".")
     new File(sparkHome, s"assembly/target/scala-$scalaBinary/jars").getCanonicalFile
+  }
+
+  private[externalUDF] def isRuntimeJarRequired: Boolean = {
+    def enabled(value: Option[String]): Boolean =
+      value.exists(_.equalsIgnoreCase("true"))
+    enabled(sys.env.get(RuntimeJarRequiredEnv)) ||
+      enabled(sys.props.get(RuntimeJarRequiredProp))
+  }
+
+  private[externalUDF] def ensureRuntimeJarPresent(
+      jarsDir: File,
+      required: Boolean = isRuntimeJarRequired): Unit = {
+    val present = Option(jarsDir.listFiles())
+      .exists(_.exists(_.getName.startsWith(RuntimeJarPrefix)))
+    val message =
+      s"A Spark assembly containing $RuntimeJarPrefix is required in $jarsDir. " +
+        "Build it with build/sbt package or build/mvn install -pl assembly."
+    if (required) {
+      if (!present) {
+        fail(message)
+      }
+    } else {
+      assume(present, message)
+    }
   }
 
   private val InitResource = "org/apache/spark/udf/worker/Init.class"

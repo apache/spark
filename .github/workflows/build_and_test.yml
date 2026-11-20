@@ -422,6 +422,12 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        # The SQL extended job reuses the precompile assembly. Require the shaded
+        # UDF worker runtime jar there so packaging regressions fail instead of skip.
+        if [[ "$MODULES_TO_TEST" == "sql" ]] && \
+           [[ "$INCLUDED_TAGS" == *"ExtendedSQLTest"* ]]; then
+          export SPARK_UDF_WORKER_RUNTIME_JAR_REQUIRED=true
+        fi
         export SKIP_SCALA_BUILD=true
         echo "Reusing precompiled artifact, skipping local SBT build."
         export SERIAL_SBT_TESTS=1

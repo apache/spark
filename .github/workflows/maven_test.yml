@@ -282,6 +282,9 @@ jobs:
             # Only this entry builds the assembly, which the packaged UDF worker
             # runtime suite needs. Older branches do not have the suite.
             if [ -f sql/core/src/test/scala/org/apache/spark/sql/execution/externalUDF/UdfWorkerRuntimeSparkSubmitSuite.scala ]; then
+              # Fail rather than skip if the shaded runtime jar is missing after
+              # the assembly install above.
+              export SPARK_UDF_WORKER_RUNTIME_JAR_REQUIRED=true
               ./build/mvn $MAVEN_CLI_OPTS -pl sql/core -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} -Dtest=none -DwildcardSuites=org.apache.spark.sql.execution.externalUDF.UdfWorkerRuntimeSparkSubmitSuite test
             fi
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
