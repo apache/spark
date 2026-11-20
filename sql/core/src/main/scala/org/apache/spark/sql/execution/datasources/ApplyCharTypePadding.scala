@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Union, WriteDelta}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Except, Intersect, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Union, View, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, UNION, WRITE_DELTA}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, EXCEPT, INTERSECT, REPLACE_DATA, UNION, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
@@ -89,44 +89,84 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
       padRowLevelConditions(padDeleteConditions(
         ApplyCharTypePaddingHelper.paddingForStringComparison(
-          padUnionChildren(newPlan), padCharCol = false)))
+          padSetOperations(newPlan), padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        padUnionChildren(plan),
+        padSetOperations(plan),
         padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }
   }
 
   /**
-   * When the children of a Union have CHAR columns or fields of different lengths at the same
-   * position, the output of the Union has the widest length, see [[Union.mergeChildOutputs]], as
-   * the SQL standard does for the union of CHAR(n) and CHAR(m). This pads the values of the
-   * shorter children to that length, so that comparisons padded to it match them.
+   * When the children of a Union, Intersect or Except have CHAR columns or fields of different
+   * lengths at the same position, its output has the widest length, see
+   * [[Union.mergeChildOutputs]], as the SQL standard does for set operations of CHAR(n) and
+   * CHAR(m). This pads the values of the shorter children to that length, so that they match the
+   * values of the other children and comparisons padded to it. Like read-side padding, it does not
+   * truncate longer values. Then it narrows the columns of views that store a shorter length.
    */
-  private def padUnionChildren(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithNewOutput({
-      // An unresolved Union, or one with children of different arity, fails in CheckAnalysis.
-      case u: Union if u.resolved =>
-        val rawTypes = u.children.map(_.output).transpose.map(CharVarcharUtils.widerCharRawType)
+  private def padSetOperations(plan: LogicalPlan): LogicalPlan = {
+    val newPlan = plan.transformUpWithNewOutput({
+      // An unresolved set operation, or one with children of different arity, fails in
+      // CheckAnalysis.
+      case op @ (_: Union | _: Intersect | _: Except) if op.resolved =>
+        val rawTypes = op.children.map(_.output).transpose.map(CharVarcharUtils.widerCharRawType)
         if (rawTypes.forall(_.isEmpty)) {
-          u -> Nil
+          op -> Nil
         } else {
-          val newChildren = u.children.map { child =>
+          val newChildren = op.children.map { child =>
             val projectList = child.output.zip(rawTypes).map {
               case (attr, Some(rawType)) =>
                 CharVarcharUtils.padCharToWiderLength(attr, rawType).map {
                   case (padded, paddedRawType) =>
-                    Alias(padded, attr.name)(explicitMetadata =
-                      Some(CharVarcharUtils.withRawType(attr.metadata, paddedRawType)))
+                    Alias(padded, attr.name)(
+                      qualifier = attr.qualifier,
+                      explicitMetadata =
+                        Some(CharVarcharUtils.withRawType(attr.metadata, paddedRawType)))
                 }.getOrElse(attr)
               case (attr, _) => attr
             }
             if (projectList == child.output) child else Project(projectList, child)
           }
-          val newUnion = u.withNewChildren(newChildren)
-          newUnion -> u.output.zip(newUnion.output).filterNot { case (a, b) => a == b }
+          val newOp = op.withNewChildren(newChildren)
+          newOp -> op.output.zip(newOp.output).filterNot { case (a, b) => a == b }
         }
-    }, skipCond = p => p.analyzed || !p.containsPattern(UNION), canGetOutput = _.resolved)
+    }, skipCond = p => p.analyzed || !p.containsAnyPattern(UNION, INTERSECT, EXCEPT),
+      canGetOutput = _.resolved)
+    narrowViewColumns(newPlan)
+  }
+
+  /**
+   * A view stores the CHAR types of its columns, and keeps them for the values of its query. A view
+   * of a set operation created before the output had the widest length of its children stores the
+   * length of the first child. This narrows the values back to that length, as the stored type
+   * says, so that comparisons padded to it still match them. The columns keep their expression IDs
+   * and metadata.
+   */
+  private def narrowViewColumns(plan: LogicalPlan): LogicalPlan = {
+    def queryAttr(e: Expression): Option[Attribute] = e match {
+      case a: Attribute => Some(a)
+      case c: Cast => queryAttr(c.child)
+      case _ => None
+    }
+    plan.resolveOperatorsUp {
+      case v @ View(_, _, p @ Project(projectList, _), _) =>
+        val newProjectList = projectList.map {
+          case a @ Alias(child, _) =>
+            (for {
+              viewType <- CharVarcharUtils.getRawType(a.metadata)
+              attr <- queryAttr(child)
+              queryType <- CharVarcharUtils.getRawType(attr.metadata)
+              narrowed <- CharVarcharUtils.narrowCharToLength(child, queryType, viewType)
+            } yield a.withNewChildren(Seq(narrowed)).asInstanceOf[Alias]).getOrElse(a)
+          case other => other
+        }
+        if (newProjectList == projectList) {
+          v
+        } else {
+          v.copy(child = p.copy(projectList = newProjectList))
+        }
+    }
   }
 
   /**

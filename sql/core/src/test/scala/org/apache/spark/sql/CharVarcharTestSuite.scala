@@ -24,6 +24,7 @@ import scala.util.Try
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
@@ -719,6 +720,46 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         sql(s"SELECT id FROM ($union) u WHERE EXISTS (SELECT 1 FROM t3 WHERE u.c = 'a')"),
         Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-61972: set operations and IN subqueries of char columns of different lengths") {
+    withTable("t3", "t5", "tc") {
+      sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql("INSERT INTO t3 VALUES (1, 'a')")
+      sql("INSERT INTO t5 VALUES (2, 'a')")
+      val union = "SELECT c FROM t3 UNION ALL SELECT c FROM t5"
+      val padded = "a" + " ".repeat(4)
+
+      checkAnswer(sql(s"SELECT id FROM t3 WHERE c IN ($union)"), Row(1))
+      checkAnswer(sql("SELECT id FROM t3 WHERE c IN (SELECT c FROM t5)"), Row(1))
+      checkAnswer(sql("SELECT id FROM t5 WHERE c IN (SELECT c FROM t3)"), Row(2))
+      checkAnswer(sql("SELECT id FROM t3 WHERE c NOT IN (SELECT c FROM t5)"), Nil)
+      checkAnswer(sql("SELECT id FROM t3 WHERE (id, c) IN (SELECT 1, c FROM t5)"), Row(1))
+
+      Seq("SELECT c FROM t3 INTERSECT SELECT c FROM t5", s"SELECT c FROM t3 INTERSECT ($union)",
+          "SELECT c FROM t5 INTERSECT SELECT c FROM t3").foreach { query =>
+        checkAnswer(sql(query), Row(padded))
+        checkColType(sql(query).schema(0), CharType(5))
+      }
+      Seq("SELECT c FROM t3 EXCEPT SELECT c FROM t5", s"SELECT c FROM t3 EXCEPT ($union)",
+          "SELECT c FROM t5 EXCEPT SELECT c FROM t3").foreach { query =>
+        checkAnswer(sql(query), Nil)
+        checkColType(sql(query).schema(0), CharType(5))
+      }
+
+      // the default collation, implicit or explicit, is the same collation
+      sql(s"CREATE TABLE tc(id INT, c CHAR(5) COLLATE UTF8_BINARY) USING $format")
+      sql("INSERT INTO tc VALUES (3, 'a')")
+      checkAnswer(
+        sql("SELECT id FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM tc) WHERE c = 'a'"),
+        Seq(Row(1), Row(3)))
+
+      // the output keeps the qualifier of the first child
+      checkAnswer(
+        spark.table("t3").union(spark.table("t5")).select("t3.c"),
+        Seq(Row(padded), Row(padded)))
     }
   }
 
@@ -4209,6 +4250,36 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
         }
+      }
+    }
+  }
+
+  test("SPARK-61972: a view of a union that stores a shorter char length") {
+    withTable("t3", "t5") {
+      withView("v") {
+        sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+        sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+        sql("INSERT INTO t3 VALUES (1, 'a')")
+        sql("INSERT INTO t5 VALUES (2, 'a'), (3, 'abcde')")
+        sql("CREATE VIEW v AS SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5")
+        // a view created before the union had the widest length stores the first child's length
+        val catalog = spark.sessionState.catalog
+        val view = catalog.getTableMetadata(TableIdentifier("v"))
+        val storedSchema = StructType(view.schema.map { field =>
+          if (field.name == "c") {
+            field.copy(metadata = CharVarcharUtils.withRawType(field.metadata, CharType(3)))
+          } else {
+            field
+          }
+        })
+        catalog.alterTable(view.copy(schema = storedSchema))
+
+        checkColType(spark.table("v").schema(1), CharType(3))
+        checkAnswer(
+          spark.table("v"),
+          Seq(Row(1, "a" + " ".repeat(2)), Row(2, "a" + " ".repeat(2)), Row(3, "abcde")))
+        checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Seq(Row(1), Row(2)))
+        checkAnswer(sql("SELECT id FROM v WHERE c = 'abcde'"), Row(3))
       }
     }
   }

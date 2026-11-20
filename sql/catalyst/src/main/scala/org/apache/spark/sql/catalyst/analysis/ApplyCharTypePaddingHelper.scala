@@ -23,12 +23,13 @@ import org.apache.spark.sql.catalyst.expressions.{
   BinaryComparison,
   Expression,
   In,
+  InSubquery,
   Literal,
   NamedExpression,
   OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, IN_SUBQUERY}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
 import org.apache.spark.sql.types.{CharType, Metadata, StringType}
@@ -68,9 +69,11 @@ object ApplyCharTypePaddingHelper {
   private[sql] def paddingForStringComparison(
       plan: LogicalPlan,
       padCharCol: Boolean): LogicalPlan = {
-    plan.resolveOperatorsUpWithSubqueriesAndPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
+    plan.resolveOperatorsUpWithSubqueriesAndPruning(
+        _.containsAnyPattern(BINARY_COMPARISON, IN, IN_SUBQUERY)) {
       case operator =>
-        operator.transformExpressionsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
+        operator.transformExpressionsUpWithPruning(
+            _.containsAnyPattern(BINARY_COMPARISON, IN, IN_SUBQUERY)) {
           case e if !e.childrenResolved => e
           case withChildrenResolved =>
             singleNodePaddingForStringComparison(withChildrenResolved, padCharCol)
@@ -158,8 +161,48 @@ object ApplyCharTypePaddingHelper {
           i.copy(value = newChildren.head, list = newChildren.tail)
         }
 
+      case i: InSubquery if i.resolved => padInSubquery(i)
+
       case other => other
     }
+
+  /**
+   * For CHAR values compared with CHAR columns of a different length of an IN subquery, pads the
+   * shorter of each to the longer length. Like read-side padding, it does not truncate longer
+   * values. The columns are padded in a Project over the subquery.
+   */
+  private def padInSubquery(i: InSubquery): InSubquery = {
+    val rawTypes = i.values.zip(i.query.childOutputs).map {
+      case (AttrOrOuterRef(attr), col) => CharVarcharUtils.widerCharRawType(Seq(attr, col))
+      case _ => None
+    }
+    if (rawTypes.forall(_.isEmpty)) {
+      i
+    } else {
+      val newValues = i.values.zip(rawTypes).map {
+        case (e @ AttrOrOuterRef(attr), Some(rawType)) =>
+          CharVarcharUtils.padCharToWiderLength(attr, rawType).map {
+            case (padded, _) if e.isInstanceOf[OuterReference] =>
+              padded.transform { case a: Attribute if a.semanticEquals(attr) => OuterReference(a) }
+            case (padded, _) => padded
+          }.getOrElse(e)
+        case (e, _) => e
+      }
+      val plan = i.query.plan
+      // The plan can have more columns than values after de-correlation.
+      val projectList = plan.output.zipWithIndex.map { case (col, idx) =>
+        rawTypes.lift(idx).flatten.flatMap(CharVarcharUtils.padCharToWiderLength(col, _)).map {
+          case (padded, paddedRawType) =>
+            Alias(padded, col.name)(
+              qualifier = col.qualifier,
+              explicitMetadata = Some(CharVarcharUtils.withRawType(col.metadata, paddedRawType)))
+        }.getOrElse(col)
+      }
+      val newQuery =
+        if (projectList == plan.output) i.query else i.query.withNewPlan(Project(projectList, plan))
+      i.copy(values = newValues, query = newQuery)
+    }
+  }
 
   private def padAttrLitCmp(
       expr: Expression,

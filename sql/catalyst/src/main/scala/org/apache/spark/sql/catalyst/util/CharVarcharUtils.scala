@@ -42,6 +42,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private[sql] val VARCHAR_TYPE_READ_SIDE_CHECK = "varcharTypeReadSideCheck"
 
+  /** JVM method name used by [[narrowCharToLength]]. */
+  private[sql] val CHAR_TYPE_NARROWING = "charTypeNarrowing"
+
   /**
    * V2 function name for CHAR read-side padding. Distinct from SQL `RPAD` so connectors that
    * already allowlist `RPAD` for explicit `rpad()` do not inherit CHAR-scan rewrite. Emitted
@@ -460,6 +463,50 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }
   }
 
+  /** The metadata of the first attribute, with the raw type of [[widerCharRawType]] if any. */
+  def widerCharMetadata(attrs: Seq[Attribute]): Metadata = {
+    widerCharRawType(attrs).map(withRawType(attrs.head.metadata, _)).getOrElse(attrs.head.metadata)
+  }
+
+  /**
+   * Narrows the CHAR columns and fields of the given expression, whose raw type is `fromType`, that
+   * are longer than those at the same places of `toType`, by removing the trailing spaces past the
+   * length of `toType`. Values with other characters past that length are kept, as read-side
+   * padding keeps them. A view stores the CHAR type of its columns, which can be shorter than the
+   * CHAR type of the same column of its query, such as for a view of a UNION created before the
+   * union had the widest length of its children. Returns None if no column or field is longer.
+   */
+  def narrowCharToLength(
+      expr: Expression,
+      fromType: DataType,
+      toType: DataType): Option[Expression] = {
+    narrowerCharType(fromType, toType).map { narrower =>
+      processStringForCharVarchar(
+        expr, narrower, charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None)
+    }.filterNot(_.fastEquals(expr))
+  }
+
+  // The CHAR types of toType where fromType is longer, and STRING elsewhere, with the field names
+  // of toType. None if they are not both CHAR types, or structs and arrays of them, of one shape.
+  private def narrowerCharType(fromType: DataType, toType: DataType): Option[DataType] = {
+    (fromType, toType) match {
+      case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>
+        Some(if (c1.length > c2.length) c2 else c2.toStringType)
+      case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+        val narrowerFields = fields1.zip(fields2).map { case (from, to) =>
+          narrowerCharType(from.dataType, to.dataType).map(dt => to.copy(dataType = dt))
+        }
+        if (narrowerFields.forall(_.isDefined)) {
+          Some(StructType(narrowerFields.map(_.get)))
+        } else {
+          None
+        }
+      case (ArrayType(et1, _), ArrayType(et2, containsNull)) =>
+        narrowerCharType(et1, et2).map(ArrayType(_, containsNull))
+      case _ => None
+    }
+  }
+
   /** The metadata with the given raw type, for a value padded to the CHAR lengths of that type. */
   def withRawType(metadata: Metadata, rawType: DataType): Metadata = {
     new MetadataBuilder()
@@ -472,7 +519,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   // not both CHAR types, or structs and arrays of them, with the same shape.
   private def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
     (type1, type2) match {
-      case (c1: CharType, c2: CharType) if c1.collation == c2.collation =>
+      // collation is None for the default collation, and collationId compares the effective one
+      case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>
         Some(CharType(math.max(c1.length, c2.length), c1.collation))
       case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
         val widerFields = fields1.zip(fields2).map { case (left, right) =>

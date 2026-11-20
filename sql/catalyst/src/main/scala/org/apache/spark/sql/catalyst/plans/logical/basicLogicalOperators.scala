@@ -455,10 +455,15 @@ case class Intersect(
 
 /** Factory methods for `Intersect` nodes. */
 object Intersect {
-  /** We don't use right.output because those rows get excluded from the set. */
+  /**
+   * We don't use right.output because those rows get excluded from the set. The CHAR lengths of
+   * the raw types are the widest of both children, see Union.mergeChildOutputs.
+   */
   def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
     childOutputs.head.zip(childOutputs.tail.head).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+      val attr = leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+      val metadata = CharVarcharUtils.widerCharMetadata(Seq(leftAttr, rightAttr))
+      if (metadata == leftAttr.metadata) attr else attr.withMetadata(metadata)
     }
 }
 
@@ -494,8 +499,21 @@ case class Except(
 
 /** Factory methods for `Except` nodes. */
 object Except {
-  /** We don't use right.output because those rows get excluded from the set. */
-  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = childOutputs.head
+  /**
+   * We don't use right.output because those rows get excluded from the set. The CHAR lengths of
+   * the raw types are the widest of both children, see Union.mergeChildOutputs.
+   */
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
+    val Seq(left, right) = childOutputs
+    if (left.length != right.length) {
+      left
+    } else {
+      left.zip(right).map { case (leftAttr, rightAttr) =>
+        val metadata = CharVarcharUtils.widerCharMetadata(Seq(leftAttr, rightAttr))
+        if (metadata == leftAttr.metadata) leftAttr else leftAttr.withMetadata(metadata)
+      }
+    }
+  }
 }
 
 /** Factory methods for `Union` nodes. */
@@ -517,9 +535,8 @@ object Union {
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      val widerRawType = if (widenCharLengths) CharVarcharUtils.widerCharRawType(attrs) else None
-      val metadata = widerRawType.map(CharVarcharUtils.withRawType(firstAttr.metadata, _))
-        .getOrElse(firstAttr.metadata)
+      val metadata =
+        if (widenCharLengths) CharVarcharUtils.widerCharMetadata(attrs) else firstAttr.metadata
       if (firstAttr.dataType == newDt && metadata == firstAttr.metadata) {
         firstAttr.withNullability(nullable)
       } else {
