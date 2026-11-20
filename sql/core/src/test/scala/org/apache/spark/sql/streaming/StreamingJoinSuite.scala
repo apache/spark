@@ -2098,7 +2098,14 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
       }
       val right = rightInput.toDF().toDF("rk", "s").select($"rk", rightKey.as("rw"))
       val (leftEnd, rightEnd) = if (windowKey) ($"lw.end", $"rw.end") else ($"lw", $"rw")
-      val joined = left.join(right, expr("lk = rk AND lw = rw"), joinType)
+      // In half of the cases, a conjunct on a preserved input, which all rows pass, stays in the
+      // join as a pre join filter.
+      val sideConjunct = joinType match {
+        case "left_outer" if !nullsInFirstBatch => " AND lk > 0"
+        case "full_outer" if !nullsInFirstBatch => " AND lk > 0 AND rk > 0"
+        case _ => ""
+      }
+      val joined = left.join(right, expr(s"lk = rk AND lw = rw$sideConjunct"), joinType)
         .select($"lk", leftEnd.cast("long"), $"rk", rightEnd.cast("long"))
 
       // Left time 5 is in window [0, 10).
