@@ -1919,9 +1919,9 @@ object FoldablePropagation extends Rule[LogicalPlan] with AliasHelper {
    *
    * `ConstantPropagation` also uses this to find the foldable columns of the child of a filter,
    * with `withoutAliases`. Then a column is foldable also if its expression is foldable once the
-   * aliases below its top one are removed, as `CleanupAliases` does, e.g. one that renames a foldable
-   * column or is computed from one, which this rule finds only in its next application, and its
-   * alias has those aliases removed.
+   * aliases below its top one are removed, as `CleanupAliases` does, e.g. one that renames a
+   * foldable column or is computed from one, which this rule finds only in its next application,
+   * and its alias has those aliases removed.
    */
   private[optimizer] def propagateFoldablesFromChildren(
       plan: LogicalPlan,
