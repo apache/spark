@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("try_add") {
@@ -85,6 +87,67 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-62149: try_abs and try_negative over integral values") {
+    // (minimum, maximum) of each integral type, with their literals.
+    Seq[(Any, Any, Any => Literal)](
+      (Byte.MinValue, Byte.MaxValue, v => Literal(v.asInstanceOf[Byte])),
+      (Short.MinValue, Short.MaxValue, v => Literal(v.asInstanceOf[Short])),
+      (Int.MinValue, Int.MaxValue, v => Literal(v.asInstanceOf[Int])),
+      (Long.MinValue, Long.MaxValue, v => Literal(v.asInstanceOf[Long]))
+    ).foreach { case (min, max, lit) =>
+      val dataType = lit(min).dataType
+      def value(v: Long): Any = Cast(Literal(v), dataType).eval()
+      val minPlusOne = value(min.asInstanceOf[Number].longValue + 1)
+      Seq(
+        (min, null, null),
+        (minPlusOne, max, max),
+        (max, max, value(-max.asInstanceOf[Number].longValue)),
+        (value(-1), value(1), value(1)),
+        (value(0), value(0), value(0)),
+        (value(1), value(1), value(-1))
+      ).foreach { case (input, abs, negated) =>
+        checkEvaluation(IntegralAbsOrNull(lit(input)), abs)
+        checkEvaluation(IntegralNegateOrNull(lit(input)), negated)
+      }
+      checkEvaluation(IntegralAbsOrNull(Literal.create(null, dataType)), null)
+      checkEvaluation(IntegralNegateOrNull(Literal.create(null, dataType)), null)
+      assert(IntegralAbsOrNull(lit(max)).nullable)
+      assert(IntegralNegateOrNull(lit(max)).nullable)
+
+      // Under ANSI mode the functions return NULL on overflow, and otherwise they behave as
+      // `abs` and `negative` do, which wrap around.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkEvaluation(new TryAbs(lit(min)).replacement, null)
+        checkEvaluation(new TryNegative(lit(min)).replacement, null)
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkEvaluation(new TryAbs(lit(min)).replacement, min)
+        checkEvaluation(new TryNegative(lit(min)).replacement, min)
+      }
+    }
+  }
+
+  test("SPARK-62149: try_abs and try_negative over non-integral values") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(
+        (Literal(-1.5d), 1.5d, 1.5d),
+        (Literal(-1.5f), 1.5f, 1.5f),
+        (Literal(Decimal("-12.34")), Decimal("12.34"), Decimal("12.34")),
+        (Literal.create(null, DoubleType), null, null)
+      ).foreach { case (input, abs, negated) =>
+        checkEvaluation(new TryAbs(input).replacement, abs)
+        checkEvaluation(new TryNegative(input).replacement, negated)
+      }
+      // An ANSI interval overflows in every mode, and the functions raise as `abs` and
+      // `negative` do.
+      val ymMin = Literal.create(Int.MinValue, YearMonthIntervalType())
+      checkExceptionInExpression[ArithmeticException](
+        new TryAbs(ymMin).replacement, "ARITHMETIC_OVERFLOW")
+      checkExceptionInExpression[ArithmeticException](
+        new TryNegative(ymMin).replacement, "ARITHMETIC_OVERFLOW")
+    }
+  }
+
   test("Throw exceptions from children") {
     val failingChild = Divide(Literal(1.0), Literal(0.0), EvalMode.ANSI)
     Seq(
@@ -98,6 +161,11 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       Divide(Literal(1.0), failingChild, EvalMode.TRY)
     ).foreach { expr =>
       checkExceptionInExpression[ArithmeticException](expr, "DIVIDE_BY_ZERO")
+    }
+    // An error of the argument of try_abs and try_negative is not caught.
+    val failingIntegral = Add(Literal(Int.MaxValue), Literal(1), EvalMode.ANSI)
+    Seq(IntegralAbsOrNull(failingIntegral), IntegralNegateOrNull(failingIntegral)).foreach {
+      expr => checkExceptionInExpression[ArithmeticException](expr, "ARITHMETIC_OVERFLOW")
     }
   }
 }

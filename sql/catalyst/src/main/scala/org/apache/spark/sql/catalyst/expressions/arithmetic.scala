@@ -223,6 +223,75 @@ private[expressions] object UnaryArithmetic {
   }
 }
 
+/**
+ * [[Abs]] or [[UnaryMinus]] over an integral value that returns NULL where the ANSI form raises
+ * ARITHMETIC_OVERFLOW. Both overflow only on the minimum value of the type. Under ANSI mode,
+ * `try_abs` and `try_negative` are replaced with a subclass, see [[TryUnaryArithmetic]].
+ */
+abstract class IntegralUnaryArithmeticOrNull extends UnaryExpression {
+  override def nullIntolerant: Boolean = true
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  /** The result for `value`, which is not the minimum value of its type. */
+  protected def op(value: Long): Long
+
+  /** The Java code of the result for `value`, which is not the minimum value of its type. */
+  protected def opCode(value: String): String
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val value = input.asInstanceOf[Number].longValue
+    dataType match {
+      case ByteType => if (value == Byte.MinValue) null else op(value).toByte
+      case ShortType => if (value == Short.MinValue) null else op(value).toShort
+      case IntegerType => if (value == Int.MinValue) null else op(value).toInt
+      case LongType => if (value == Long.MinValue) null else op(value)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
+    val boxedType = CodeGenerator.boxedType(dataType)
+    nullSafeCodeGen(ctx, ev, c => {
+      val value = ctx.freshName("value")
+      s"""
+         |$javaType $value = $c;
+         |if ($value == $boxedType.MIN_VALUE) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = ($javaType) (${opCode(value)});
+         |}
+         |""".stripMargin
+    })
+  }
+}
+
+case class IntegralAbsOrNull(child: Expression) extends IntegralUnaryArithmeticOrNull {
+  override def prettyName: String = "try_abs"
+
+  override protected def op(value: Long): Long = math.abs(value)
+
+  override protected def opCode(value: String): String = s"java.lang.Math.abs($value)"
+
+  override protected def withNewChildInternal(newChild: Expression): IntegralAbsOrNull =
+    copy(child = newChild)
+}
+
+case class IntegralNegateOrNull(child: Expression) extends IntegralUnaryArithmeticOrNull {
+  override def prettyName: String = "try_negative"
+
+  override protected def op(value: Long): Long = -value
+
+  override protected def opCode(value: String): String = s"-($value)"
+
+  override protected def withNewChildInternal(newChild: Expression): IntegralNegateOrNull =
+    copy(child = newChild)
+}
+
 abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 

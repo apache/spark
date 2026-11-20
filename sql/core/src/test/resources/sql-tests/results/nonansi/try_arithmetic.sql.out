@@ -703,3 +703,156 @@ SELECT try_multiply(interval 106751991 day, 2)
 struct<try_multiply(INTERVAL '106751991' DAY, 2):interval day to second>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_abs(-1), try_negative(1)
+-- !query schema
+struct<try_abs(-1):int,try_negative(1):int>
+-- !query output
+1	-1
+
+
+-- !query
+SELECT try_abs(-128Y), try_negative(-128Y)
+-- !query schema
+struct<try_abs(-128):tinyint,try_negative(-128):tinyint>
+-- !query output
+-128	-128
+
+
+-- !query
+SELECT try_abs(-32768S), try_negative(-32768S)
+-- !query schema
+struct<try_abs(-32768):smallint,try_negative(-32768):smallint>
+-- !query output
+-32768	-32768
+
+
+-- !query
+SELECT try_abs(-2147483648), try_negative(-2147483648)
+-- !query schema
+struct<try_abs(-2147483648):int,try_negative(-2147483648):int>
+-- !query output
+-2147483648	-2147483648
+
+
+-- !query
+SELECT try_abs(-9223372036854775808L), try_negative(-9223372036854775808L)
+-- !query schema
+struct<try_abs(-9223372036854775808):bigint,try_negative(-9223372036854775808):bigint>
+-- !query output
+-9223372036854775808	-9223372036854775808
+
+
+-- !query
+SELECT try_abs(-2147483647), try_negative(2147483647)
+-- !query schema
+struct<try_abs(-2147483647):int,try_negative(2147483647):int>
+-- !query output
+2147483647	-2147483647
+
+
+-- !query
+SELECT try_abs(-1.5D), try_negative(1.5D)
+-- !query schema
+struct<try_abs(-1.5):double,try_negative(1.5):double>
+-- !query output
+1.5	-1.5
+
+
+-- !query
+SELECT try_abs(-12.34BD), try_negative(-12.34BD)
+-- !query schema
+struct<try_abs(-12.34):decimal(4,2),try_negative(-12.34):decimal(4,2)>
+-- !query output
+12.34	12.34
+
+
+-- !query
+SELECT try_abs(NULL), try_negative(NULL)
+-- !query schema
+struct<try_abs(NULL):double,try_negative(NULL):double>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs("-1"), try_negative("1")
+-- !query schema
+struct<try_abs(-1):double,try_negative(1):double>
+-- !query output
+1.0	-1.0
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c)
+-- !query schema
+struct<try_abs(c):int,try_negative(c):int>
+-- !query output
+-2147483648	-2147483648
+1	1
+2147483647	-2147483647
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-9223372036854775808L), (1L) AS t(c)
+-- !query schema
+struct<try_abs(c):bigint,try_negative(c):bigint>
+-- !query output
+-9223372036854775808	-9223372036854775808
+1	-1
+
+
+-- !query
+SELECT try_abs(2147483647 + 1)
+-- !query schema
+struct<try_abs((2147483647 + 1)):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT try_negative(2147483647 + 1)
+-- !query schema
+struct<try_negative((2147483647 + 1)):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT try_abs(interval -2 year), try_negative(interval 2 second)
+-- !query schema
+struct<try_abs(INTERVAL '-2' YEAR):interval year,try_negative(INTERVAL '02' SECOND):interval second>
+-- !query output
+2-0	-0 00:00:02.000000000
+
+
+-- !query
+SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : "",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "overflow"
+  }
+}
+
+
+-- !query
+SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}
