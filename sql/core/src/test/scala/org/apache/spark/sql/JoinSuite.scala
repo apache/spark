@@ -2102,6 +2102,16 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
               |JOIN tb3 t3 ON t1.v = t3.v WHERE 10 / (t1.k - t3.w) > 0
               |""".stripMargin),
           Row(2))
+        // The join with t3 removes the row whose k is 1, so the WHERE clause, which stays above
+        // the join for its subquery, is not evaluated on it.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k
+              |JOIN tb3 t3 ON t1.v = t3.v AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |WHERE 10 / (t1.k - t3.w) > (SELECT max(x.k) FROM tb2 x WHERE x.k = t1.k) - 5
+              |""".stripMargin),
+          Row(2))
       }
     }
   }

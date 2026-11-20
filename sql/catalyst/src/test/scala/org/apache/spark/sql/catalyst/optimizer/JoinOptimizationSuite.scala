@@ -178,26 +178,36 @@ class JoinOptimizationSuite extends PlanTest {
     assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
   }
 
-  test("SPARK-62069: do not reorder inner joins when a lower join or filter has a condition " +
-    "that may not move") {
-    // The lower join removes a row on which its condition is NULL, so the filter above the joins
-    // does not evaluate the division on the row. A filter that keeps the throwable condition above
-    // the joins would, once combined with it. Only ReorderJoin runs.
-    def divide(l: Expression, r: Expression): Expression =
-      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+  test("SPARK-62069: reorder inner joins with a lower join or filter that has a condition that " +
+    "may not move as one of the joined plans") {
+    // A lower join or filter removes a row on which its condition is NULL, so no condition above
+    // it is evaluated on the row. It is joined as one plan, with its condition. Only ReorderJoin
+    // runs.
+    val z = LocalRelation($"e".int, $"f".int)
+    val w = LocalRelation($"g".int, $"h".int)
+    val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
+    Seq(
+      testRelation.join(testRelation1, condition = Some($"a" === $"d" && throwing)),
+      testRelation.join(testRelation1, condition = Some($"a" === $"d")).where(Rand(0) > 0.5)
+    ).foreach { lower =>
+      val query = lower.join(w).join(z).where($"e" === $"c" && $"g" === $"e")
+      val answer = lower.join(z, condition = Some($"e" === $"c"))
+        .join(w, condition = Some($"g" === $"e"))
+        .select($"a", $"b", $"c", $"d", $"g", $"h", $"e", $"f")
+      comparePlans(ReorderJoin(query.analyze), answer.analyze)
+    }
+  }
+
+  test("SPARK-62069: do not reorder inner joins when the top join has a condition that may not " +
+    "move") {
+    // A filter that keeps the throwable condition above the joins would take a filter above the
+    // top join, e.g. by CombineFilters, and evaluate its conditions after a NULL with AND. Only
+    // ReorderJoin runs.
     val z = LocalRelation($"e".int, $"f".int)
     val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
-    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d" && throwing))
-      .join(z, condition = Some($"c" === $"e"))
-      .where(divide($"a", $"f") > 1)
+    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+      .join(z, condition = Some($"c" === $"e" && throwing))
       .analyze
     comparePlans(ReorderJoin(query), query)
-
-    // The top join has no condition, so the non-deterministic filter is below it.
-    val sampled = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
-      .where(Rand(0) > 0.5)
-      .join(z)
-      .analyze
-    comparePlans(ReorderJoin(sampled), sampled)
   }
 }

@@ -260,14 +260,34 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenJoin(left, joinType)
+      val (plans, conditions) = flattenBelow(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenJoin(j)
+      val (plans, conditions) = flattenBelow(j, Inner)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
+  }
+
+  /**
+   * [[flattenJoin]] below the top join or filter, where a join or filter with a condition that
+   * may not move (see `PredicateHelper.splitMovable`) is one of the plans, with its condition. It
+   * removes a row on which its condition is NULL, so no condition above it is evaluated on the row.
+   */
+  private def flattenBelow(plan: LogicalPlan, parentJoinType: InnerLike)
+      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = {
+    val condition = plan match {
+      case j: Join => j.condition
+      case f: Filter => Some(f.condition)
+      case _ => None
+    }
+    if (condition.exists(c =>
+        splitMovable(splitConjunctivePredicates(c), plan.children)._2.nonEmpty)) {
+      (Seq((plan, parentJoinType)), Seq.empty)
+    } else {
+      flattenJoin(plan, parentJoinType)
+    }
   }
 
   def unapply(plan: LogicalPlan)

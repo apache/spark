@@ -95,29 +95,17 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  /**
-   * Returns the conditions written in the joins and filters below `plan`, the top join or filter:
-   * all of `conditions` but the ones of `plan` itself, which are the last ones.
-   */
-  private def conditionsBelow(plan: LogicalPlan, conditions: Seq[Expression]): Seq[Expression] = {
-    val topCondition = plan match {
-      case Filter(condition, _) => Some(condition)
-      case j: Join => j.condition
-    }
-    conditions.dropRight(topCondition.map(splitConjunctivePredicates(_).size).getOrElse(0))
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
-    // A join or filter removes a row on which its condition is NULL, so a condition above it is
-    // not evaluated on the row. In a filter, however, `NULL AND x` evaluates `x`, and such a filter
-    // can take a condition from above, e.g. by `CombineFilters`. So the joins are reordered only
-    // when the conditions written below the top join or filter may all move, so that the filter
-    // that keeps the conditions that may not move above all the joins takes the place of the top
-    // join or filter, whose conditions they are.
+    // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
+    // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
+    // They stay in a filter above all the joins, which takes the place of a top filter. It can not
+    // take the place of a top join, since `CombineFilters` can merge a filter above it into it,
+    // e.g. one with a subquery that would stay above the join, and `NULL AND x` evaluates `x`. So
+    // the joins are not reordered when the top join has such a condition.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty &&
-          splitMovable(conditionsBelow(p, conditions), input.map(_._1))._2.isEmpty =>
+          (p.isInstanceOf[Filter] || splitMovable(conditions, input.map(_._1))._2.isEmpty) =>
       // The first join that covers the references of a condition can be below the filter or the
       // join that the condition is written in, where it would be evaluated on rows that a join
       // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
