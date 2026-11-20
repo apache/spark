@@ -1096,6 +1096,65 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  // Built in ANSI mode, where it can fail, whatever the session's mode is.
+  private def ansiDivide(l: Expression, r: Expression): Expression =
+    Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+
+  test("SPARK-62144: a condition that can fail is not pushed through an aggregate ahead of a " +
+    "non-deterministic or throwable condition before it") {
+    def aggregate(child: LogicalPlan): LogicalPlan =
+      child.groupBy($"a", $"b")($"a", ansiDivide($"a", $"b") as "q", count($"c") as "n")
+    // `q > 1` divides once the alias is substituted. `a > 1` can not fail, so it is still pushed.
+    Seq(Rand(10) > 0.5, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
+      val originalQuery = aggregate(testRelation)
+        .where(blocker && $"q" > 1 && $"a" > 1)
+        .analyze
+      val correctAnswer = aggregate(testRelation.where($"a" > 1))
+        .where(blocker && $"q" > 1)
+        .analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    // `k > 1` can not fail itself, but the projection below computes `k` with a division.
+    val overFailableKey = testRelation.select(ansiDivide($"a", $"b") as "k")
+      .groupBy($"k")($"k")
+      .where(Rand(10) > 0.5 && $"k" > 1)
+      .analyze
+    comparePlans(Optimize.execute(overFailableKey), overFailableKey)
+
+    // A deterministic condition before it that stays up does not keep it from being pushed.
+    val afterDeterministic = aggregate(testRelation).where($"n" > 1 && $"q" > 1).analyze
+    val afterDeterministicAnswer = aggregate(testRelation.where(ansiDivide($"a", $"b") > 1))
+      .where($"n" > 1)
+      .analyze
+    comparePlans(Optimize.execute(afterDeterministic), afterDeterministicAnswer)
+  }
+
+  test("SPARK-62144: a condition that can fail is not pushed through a union ahead of a " +
+    "non-deterministic condition before it") {
+    val testRelation2 = LocalRelation($"d".int, $"e".int, $"f".int)
+    val originalQuery = Union(Seq(testRelation, testRelation2))
+      .where(Rand(10) > 0.5 && ansiDivide($"a", $"b") > 1 && $"a" > 1)
+      .analyze
+    val correctAnswer = Union(Seq(testRelation.where($"a" > 1), testRelation2.where($"d" > 1)))
+      .where(Rand(10) > 0.5 && ansiDivide($"a", $"b") > 1)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("SPARK-62144: a cheap condition that can fail is neither pushed nor split off ahead of a " +
+    "non-deterministic condition before it") {
+    val originalQuery = testStringRelation
+      .select($"a", $"b", expensiveRLike("magic") as "f")
+      .where((Rand(10) > 0.5 || $"f") && ansiDivide($"a", $"b") > 1 && $"a" > 1)
+      .analyze
+    val correctAnswer = testStringRelation.where($"a" > 1)
+      .select($"a", $"b", expensiveRLike("magic") as "f")
+      .where((Rand(10) > 0.5 || $"f") && ansiDivide($"a", $"b") > 1)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation
