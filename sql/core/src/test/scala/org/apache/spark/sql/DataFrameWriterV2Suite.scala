@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
@@ -527,6 +528,26 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     }
     assert(exc.getMessage.contains(
       s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+  }
+
+  test("SPARK-62100: Append and overwrite check a NOT NULL column against a value " +
+    "made nullable by an outer join") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data bigint NOT NULL) USING foo")
+    val left = Seq(1L, 2L).toDF("id")
+    val right = Seq(2L).toDF("data")
+    // right("data") is non-nullable in `right`, but NULL for id 1 after the left outer join
+    val df = left.join(right, left("id") === right("data"), "left_outer")
+      .select(left("id"), right("data"))
+    Seq[DataFrameWriterV2[Row] => Unit](
+      _.append(),
+      _.overwrite(lit(true)),
+      _.overwritePartitions()).foreach { write =>
+      val e = intercept[SparkRuntimeException] {
+        write(df.writeTo("testcat.table_name"))
+      }
+      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+    checkAnswer(spark.table("testcat.table_name"), Seq.empty)
   }
 
   test("Create: basic behavior") {

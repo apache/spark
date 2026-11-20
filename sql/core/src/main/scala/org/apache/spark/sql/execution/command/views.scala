@@ -1020,9 +1020,8 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
       }
 
     case av: AlterViewAs if av.isAnalyzed =>
-      // No capability check here: `Analyzer.lookupTableOrView(identifier, viewOnly=true)`
-      // already rejects non-ViewCatalog catalogs upstream for `UnresolvedView`, so by the time
-      // an AlterViewAs reaches this rule the catalog is guaranteed to be a ViewCatalog.
+      // `RelationResolution.lookupTableOrView(identifier, viewOnly = true)` rejects catalogs
+      // without view support for `UnresolvedView`, so no capability check is needed here.
       val fullIdent = fullIdentFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, fullIdent, av.query, av.referredTempFunctions,
