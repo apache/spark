@@ -1252,7 +1252,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * Aggregate without grouping expressions, whose row decorrelation loses. The correlated input is
    * taken as empty, and the chain is evaluated over it. An outer reference in the chain does not
    * change which rows it returns; a value that depends on one is not a literal, and is not taken
-   * (see below).
+   * (see below). A NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None
+   * here means that the result cannot be computed.
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
       plan: LogicalPlan): Option[Literal] = {
