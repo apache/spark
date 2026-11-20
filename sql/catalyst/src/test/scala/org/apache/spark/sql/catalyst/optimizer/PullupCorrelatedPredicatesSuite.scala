@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, ListAgg, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, MapType, StringType}
@@ -310,6 +310,37 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // Another subquery of the operator, which a filter above can inline through its alias.
     val limitedScalar = ScalarSubquery(testRelation2.select($"c").limit(1)).as("x")
     assert(countBugHandling(correlated(max($"d")), others = Seq(limitedScalar)) == inLegacy)
+    // So can a subquery of a Project above, which a filter above that Project brings along
+    // through the alias; one that gives the same rows again does not matter.
+    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+      above = _.select($"a", $"sq", limitedScalar).where($"x" > 0)) == inLegacy)
+    val repeatableScalar = ScalarSubquery(testRelation2.groupBy()(max($"c").as("m"))).as("x")
+    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+      above = _.select($"a", $"sq", repeatableScalar).where($"x" > 0)) == inDecorrelation)
+    // MIN, MAX, grouping and DISTINCT keep one of the values that compare equal, which one
+    // depending on the order: -0.0 or 0.0 for MIN and MAX of floating-point values (grouping and
+    // DISTINCT normalize them), 'a' or 'A' in UTF8_LCASE for all of them.
+    val collated = LocalRelation($"a".int, $"b".double,
+      AttributeReference("s", StringType("UTF8_LCASE"))())
+    Seq(collated.groupBy($"a")($"a", max($"b").as("m")),
+        collated.groupBy($"a")($"a", min($"b").as("m")),
+        collated.groupBy($"a")($"a", max(CreateStruct(Seq($"b"))).as("m")),
+        collated.groupBy($"a")($"a", max($"s").as("m")),
+        collated.groupBy($"a")($"a", min($"s").as("m")),
+        collated.groupBy($"a", $"s")($"a", $"s"),
+        Distinct(collated.select($"a", $"s")),
+        Intersect(collated.select($"a", $"s"), collated.select($"a", $"s"), isAll = false),
+        Except(collated.select($"a", $"s"), collated.select($"a", $"s"), isAll = false)
+    ).foreach { outer =>
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, outer)
+    }
+    Seq(collated.groupBy($"a")($"a", max($"a").as("m")),
+        collated.groupBy($"a", $"b")($"a", $"b"),
+        Distinct(collated.select($"a", $"b")),
+        Intersect(collated.select($"a", $"b"), collated.select($"a", $"b"), isAll = false)
+    ).foreach { outer =>
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == inDecorrelation, outer)
+    }
     val joinOuter = testRelation.join(testRelation2, LeftOuter, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = joinOuter, above = _.limit(10)) ==
       (Some(false), true))
