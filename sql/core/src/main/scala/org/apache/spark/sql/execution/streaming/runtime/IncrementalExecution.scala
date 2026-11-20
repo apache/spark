@@ -159,8 +159,8 @@ class IncrementalExecution(
     // query started, which the plan must still apply to all the rows that it reads, see
     // StreamingV2ScanPushDown.
     StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized, pushedFilterRewrites)
-    // Unlike the other checks, which run when the query starts, this one runs once the confs of
-    // the checkpoint are restored, on the plan that eviction derives from.
+    // Unlike the other unsupported operation checks, which run when the query starts, this one
+    // runs once the confs of the checkpoint are restored, on the plan that eviction derives from.
     if (isFirstBatch && sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
       UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
         InlineCTE(alwaysInline = true).apply(optimized), outputMode)
