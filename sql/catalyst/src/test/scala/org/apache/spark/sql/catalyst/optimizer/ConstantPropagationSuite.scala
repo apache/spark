@@ -521,6 +521,20 @@ class ConstantPropagationSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61437: A filter whose condition does not change is returned as it is") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The check folds `7 < 3 OR 10 / x > 1` each time the rule runs on the filter, so the rule
+      // returns the filter itself, which the batch then does not run it on again.
+      val plan = projected.where(
+        $"id" === 7L && ($"id" < 3L || tenDividedBy($"x") > 1.0) && $"i" === 1).analyze
+      assert(ConstantPropagation(plan) eq plan)
+      // Also where it changes the condition, from the next time on.
+      val moved = ConstantPropagation(projected.where(
+        ($"id" < 3L || tenDividedBy($"x") > 1.0) && $"i" === 1 && $"id" === 7L).analyze)
+      assert(ConstantPropagation(moved) eq moved)
+    }
+  }
+
   test("SPARK-61437: An equality over a column that can fail is handled as before when the " +
       "condition with all of the constants fails to fold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
