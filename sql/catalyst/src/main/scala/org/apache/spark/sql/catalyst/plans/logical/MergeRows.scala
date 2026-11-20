@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Insert, Instruction, Keep, ROW_ID}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types.{DataType, NullType}
@@ -31,7 +32,14 @@ case class MergeRows(
     notMatchedBySourceInstructions: Seq[Instruction],
     checkCardinality: Boolean,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with SupportsNonDeterministicExpression {
+
+  // A single insert may retain nondeterministic values when constant folding requires MergeRows.
+  override def allowNonDeterministicExpression: Boolean = this match {
+    case MergeRows(TrueLiteral, FalseLiteral, Nil, Seq(Keep(Insert, _, _)), Nil, false, _, _) =>
+      true
+    case _ => false
+  }
 
   override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))

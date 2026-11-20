@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ConstantFolding, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
@@ -32,7 +35,7 @@ import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDel
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, NullType}
 
 /**
  * A rule that rewrites MERGE operations using plans that operate on individual or groups of rows.
@@ -49,42 +52,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // aligned is false when schema evolution is pending (see ResolveRowLevelCommandAssignments)
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        matchedActions.isEmpty && notMatchedActions.size == 1 &&
-        notMatchedBySourceActions.isEmpty =>
-
-      EliminateSubqueryAliases(aliasedTable) match {
-        case r: DataSourceV2Relation =>
-          checkNoGeneratedColumns(r, MERGE)
-          validateMergeIntoConditions(m)
-
-          // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
-          val insertAction = removeMetadataAssignments(notMatchedActions).head
-            .asInstanceOf[InsertAction]
-          val filteredSource = insertAction.condition match {
-            case Some(insertCond) => Filter(insertCond, source)
-            case None => source
-          }
-
-          // there is only one NOT MATCHED action, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match the condition are appended to the table
-          val joinPlan = Join(filteredSource, r, LeftAnti, Some(cond), JoinHint.NONE)
-
-          val output = insertAction.assignments.map(_.value)
-          val outputColNames = r.output.map(_.name)
-          val projectList = output.zip(outputColNames).map { case (expr, name) =>
-            Alias(expr, name)()
-          }
-          val project = Project(projectList, joinPlan)
-
-          InsertOnlyMerge(r, project)
-
-        case _ =>
-          m
-      }
-
-    case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -97,7 +64,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           // only unmatched source rows that match action conditions are appended to the table
           val joinPlan = Join(source, r, LeftAnti, Some(cond), JoinHint.NONE)
 
-          val notMatchedInstructions = removeMetadataAssignments(notMatchedActions).map {
+          val dataNotMatchedActions = removeMetadataAssignments(notMatchedActions)
+          val notMatchedInstructions = dataNotMatchedActions.map {
             case InsertAction(cond, assignments) =>
               Keep(Insert, cond.getOrElse(TrueLiteral), assignments.map(_.value))
             case other =>
@@ -108,7 +76,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
           val outputs = notMatchedInstructions.flatMap(_.outputs)
 
-          // merge rows as there are multiple NOT MATCHED actions
+          // evaluate NOT MATCHED actions conditionally for each unmatched source row
           val mergeRows = MergeRows(
             isSourceRowPresent = TrueLiteral,
             isTargetRowPresent = FalseLiteral,
@@ -119,7 +87,13 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(dataAttrs(r), outputs),
             joinPlan)
 
-          InsertOnlyMerge(r, mergeRows)
+          val query = dataNotMatchedActions match {
+            case Seq(insertAction: InsertAction) =>
+              tryBuildInsertOnlyMergeProject(r, source, cond, insertAction).getOrElse(mergeRows)
+            case _ => mergeRows
+          }
+
+          InsertOnlyMerge(r, query)
 
         case _ =>
           m
@@ -169,6 +143,56 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private def isNullAssignment(assignment: Assignment): Boolean = assignment.value match {
     case Literal(null, _) | Alias(Literal(null, _), _) => true
     case _ => false
+  }
+
+  /**
+   * Tries to build a Project/Filter plan for a single INSERT action.
+   *
+   * Note: Pushing the action condition below the anti join can evaluate it for source rows that
+   * match the target. Failures deferred inside IF/CASE in that condition must stay in MergeRows
+   * so matching rows skip the condition.
+   *
+   * Note: Later optimizer rules may introduce failing constants that this check cannot see.
+   */
+  private def tryBuildInsertOnlyMergeProject(
+      relation: DataSourceV2Relation,
+      source: LogicalPlan,
+      cond: Expression,
+      insertAction: InsertAction): Option[Project] = {
+    // Run ReplaceExpressions, ComputeCurrentTime and SpecialDatetimeValues before ConstantFolding
+    // to detect failures that Project/Filter would expose. A failed fold can throw directly or
+    // be tagged for runtime evaluation. MergeRows evaluates instructions conditionally, like
+    // IF/CASE branches, so failures occur only if the failing expression is reached.
+    val folded = try {
+      val replaced = ReplaceExpressions.replace(insertAction.clone())
+      val withCurrentTime = ComputeCurrentTime.applyForExpression(replaced)
+      val rewritten = SpecialDatetimeValues.applyForExpression(withCurrentTime)
+      ConstantFolding.constantFolding(rewritten).asInstanceOf[InsertAction]
+    } catch {
+      case NonFatal(e) =>
+        logInfo(log"Keeping MergeRows for insert-only MERGE because expression preparation " +
+          log"or constant folding failed.", e)
+        return None
+    }
+
+    if (folded.condition.exists(
+        _.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)))) {
+      logInfo(log"Keeping MergeRows for insert-only MERGE because its action condition " +
+        log"contains a deferred constant-folding failure.")
+      None
+    } else {
+      // NOT MATCHED conditions only refer to source columns and can be pushed down.
+      val filteredSource = insertAction.condition match {
+        case Some(insertCond) => Filter(insertCond, source)
+        case None => source
+      }
+      val filteredJoin = Join(filteredSource, relation, LeftAnti, Some(cond), JoinHint.NONE)
+      val output = insertAction.assignments.map(_.value)
+      val projectList = output.zip(relation.output).map { case (expr, attr) =>
+        Alias(expr, attr.name)()
+      }
+      Some(Project(projectList, filteredJoin))
+    }
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -590,6 +614,10 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     if (cond.exists(_.isInstanceOf[AggregateExpression])) {
       throw QueryCompilationErrors.aggregationNotAllowedInMergeCondition(condName, cond)
+    }
+
+    if (condName != "SEARCH" && cond.dataType != BooleanType && cond.dataType != NullType) {
+      throw QueryCompilationErrors.nonBooleanMergeCondition(cond)
     }
   }
 }
