@@ -25,6 +25,8 @@ import scala.language.implicitConversions
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
@@ -549,9 +551,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       withQuery("ym / -1")(DivideYMInterval(ymMin, Literal(-1))),
       withQuery("ym / -1.0D")(DivideYMInterval(ymMin, Literal(-1.0d))),
+      withQuery("ym / -1BD")(DivideYMInterval(ymMin, Literal(Decimal(-1)))),
       withQuery("ym / 0")(DivideYMInterval(ymMin, Literal(0))),
       withQuery("dt / -1L")(DivideDTInterval(dtMin, Literal(-1L))),
       withQuery("dt / -1BD")(DivideDTInterval(dtMin, Literal(Decimal(-1)))),
+      withQuery("dt / -1.0D")(DivideDTInterval(dtMin, Literal(-1.0d))),
       withQuery("dt / 0")(DivideDTInterval(dtMin, Literal(0))),
       withQuery("make_ym_interval(2147483647, 0)")(
         MakeYMInterval(Literal(Int.MaxValue), Literal(0))),
@@ -563,12 +567,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // rule returns, so that a failure tells which form lost the context.
       // A rule that replaces a node calls `copyTagsFrom` on the replacement, as `SimplifyCasts`
       // does when it replaces a cast to the same type with its child: the expression takes the
-      // context of an ANSI cast, and keeps its own under a LEGACY cast, which has none.
-      val replacingCasts = Seq(EvalMode.ANSI -> castContext, EvalMode.LEGACY -> context).map {
-        case (evalMode, expected) =>
-          sameTypeCast(newExpr(), evalMode).transformDown {
-            case Cast(child, dataType, _, _) if child.dataType == dataType => child
-          } -> expected
+      // context of an ANSI or a TRY cast, and keeps its own under a LEGACY cast, which has none.
+      val replacingCasts = Seq(
+        EvalMode.ANSI -> castContext,
+        EvalMode.TRY -> castContext,
+        EvalMode.LEGACY -> context).map { case (evalMode, expected) =>
+        val plan = Project(
+          Seq(Alias(sameTypeCast(newExpr(), evalMode), "c")()), OneRowRelation())
+        SimplifyCasts(plan).expressions.head.children.head -> expected
       }
       // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
       // node with an empty `origin`, and the rebuilt node takes the context of the copy.

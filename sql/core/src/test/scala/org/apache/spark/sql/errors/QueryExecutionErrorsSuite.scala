@@ -849,9 +849,12 @@ class QueryExecutionErrorsSuite
     // codegen the projection is built on the executor from a deserialized copy of the expression.
     // The expressions read a column, so that they are not constant-folded on the driver.
     // `SimplifyCasts` replaces a cast to the type of the expression with the expression, which
-    // keeps its own context although the non-ANSI cast has none.
-    def withSameTypeCast(expr: String, dataType: String): Seq[(String, String)] =
-      Seq(expr -> expr, s"CAST($expr AS $dataType)" -> expr)
+    // keeps its own context although the non-ANSI cast has none, and takes the context of a
+    // `try_cast`, which has one in every mode, as the ANSI expressions do.
+    def withSameTypeCast(expr: String, dataType: String): Seq[(String, String)] = {
+      val tryCast = s"try_cast($expr AS $dataType)"
+      Seq(expr -> expr, s"CAST($expr AS $dataType)" -> expr, tryCast -> tryCast)
+    }
 
     val makeYM = "make_ym_interval(CAST(id AS INT) + 178956971, 0)"
     val makeDT = "make_dt_interval(CAST(id AS INT) + 106751992)"

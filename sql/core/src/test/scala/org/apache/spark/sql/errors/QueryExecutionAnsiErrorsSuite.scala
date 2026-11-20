@@ -118,29 +118,30 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
 
   test("SPARK-61352: an interval division error keeps its query context") {
     // Without whole-stage codegen the projection is built on the executor from a deserialized
-    // copy of the expression. `SimplifyCasts` replaces a cast to the type of the division with
-    // the division, which takes the context of the cast, as the other ANSI expressions do.
+    // copy of the expression. `SimplifyCasts` replaces a cast or a `try_cast` to the type of the
+    // division with the division, which takes the context of the cast, as the other ANSI
+    // expressions do.
+    def withSameTypeCasts(expr: String, dataType: String): Seq[String] =
+      Seq(expr, s"CAST($expr AS $dataType)", s"try_cast($expr AS $dataType)")
     Seq("true", "false").foreach { wholeStage =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
-        Seq(ymDivide, s"CAST($ymDivide AS INTERVAL YEAR TO MONTH)").foreach { query =>
-          checkError(
-            exception = intercept[SparkArithmeticException] {
-              sql(s"SELECT $query FROM range(1)").collect()
-            },
-            condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
-            sqlState = "22015",
-            parameters = Map("functionName" -> "`try_divide`"),
-            context = expectedContext(query, query))
-        }
-        Seq(dtDivide, s"CAST($dtDivide AS INTERVAL DAY TO SECOND)").foreach { query =>
-          checkError(
-            exception = intercept[SparkArithmeticException] {
-              sql(s"SELECT $query FROM range(1)").collect()
-            },
-            condition = "INTERVAL_DIVIDED_BY_ZERO",
-            sqlState = "22012",
-            parameters = Map.empty[String, String],
-            context = expectedContext(query, query))
+        Seq(
+          (withSameTypeCasts(ymDivide, "INTERVAL YEAR TO MONTH"),
+            "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION", "22015",
+            Map("functionName" -> "`try_divide`")),
+          (withSameTypeCasts(dtDivide, "INTERVAL DAY TO SECOND"),
+            "INTERVAL_DIVIDED_BY_ZERO", "22012", Map.empty[String, String])
+        ).foreach { case (queries, condition, sqlState, parameters) =>
+          queries.foreach { query =>
+            checkError(
+              exception = intercept[SparkArithmeticException] {
+                sql(s"SELECT $query FROM range(1)").collect()
+              },
+              condition = condition,
+              sqlState = sqlState,
+              parameters = parameters,
+              context = expectedContext(query, query))
+          }
         }
         // The Column API gives the division a `DataFrameQueryContext`.
         checkError(
