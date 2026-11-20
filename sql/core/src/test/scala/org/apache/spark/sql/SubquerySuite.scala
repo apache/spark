@@ -3869,6 +3869,14 @@ class SubquerySuite extends SharedSparkSession
             checkAnswer(sql(all), Seq(Row(0, 10.0 / 3), Row(1, null)))
             checkAnswer(sql(filtered), Row(0))
           }
+          // So does a grouping key over the value over no rows, which keeps the result from being
+          // computed before decorrelation.
+          val groupedByFailing = "SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
+            "WHERE t1.a1 = t2.b1) GROUP BY 10 / COALESCE(m, 0)) FROM t1"
+          checkFailsAtRuntime[SparkArithmeticException](groupedByFailing, "DIVIDE_BY_ZERO")
+          withSQLConf(legacyKey -> "true") {
+            checkAnswer(sql(groupedByFailing), Seq(Row(0, 1), Row(1, null)))
+          }
         }
       }
     }

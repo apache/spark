@@ -597,11 +597,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * conservative: it accepts only a short list of functions of `agg` directly over outputs of
    * lower aggregate functions, with only Projects between, and leaves other shapes that have
    * this property, such as STDDEV_SAMP(s), to DecorrelateInnerQuery. It is checked only where
-   * countBugResult cannot be computed, e.g. for SUM(s) + (SELECT MAX(c) FROM t), whose result
-   * is not a literal. It never accepts a lower
-   * Aggregate with a function with a `defaultResult`, such as COUNT, which DecorrelateInnerQuery
-   * handled before SPARK-60501. Like the rest of the count bug handling, this relies on
-   * `defaultResult` matching the result on empty input.
+   * countBugResult cannot be computed, e.g. for SUM(s) + (SELECT MAX(c) FROM t), whose result is
+   * not a literal. It never accepts a lower Aggregate with a function with a `defaultResult`, such
+   * as COUNT, which DecorrelateInnerQuery handled before SPARK-60501. Like the rest of the count
+   * bug handling, this relies on `defaultResult` matching the result on empty input.
    */
   private def sameResultOverEmptyLowerAggregate(agg: Aggregate): Boolean = {
     // The attributes of `plan` that the count bug handling takes as NULL when the lower Aggregate
@@ -649,8 +648,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * rows when the domain joins of [[DecorrelateInnerQuery]] compute it again. The check is
    * conservative: it accepts only operators known to keep the same rows, deterministic
    * expressions, aggregate functions whose result does not depend on the order of the rows,
-   * grouping keys in the output, DISTINCT, INTERSECT and EXCEPT only over types without a
-   * non-binary collation (floating-point keys are normalized), and leaf nodes other than a CTE
+   * grouping keys in the output and DISTINCT, INTERSECT and EXCEPT only of types whose values that
+   * compare equal are the same as keys (see keyStable), and leaf nodes other than a CTE
    * that is not inlined (which may be a non-deterministic one; a CTERelationRef does not tell) and
    * a streaming source (for which the domain joins fail). It also checks the plans of the
    * subqueries in `input`. A relation is taken to give the same rows again, as elsewhere in Spark,
@@ -735,7 +734,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   // Whether grouping keys, or rows of DISTINCT, INTERSECT or EXCEPT, of `dt` are the same
   // whichever of the values that compare equal comes first, unlike 'a' and 'A' in UTF8_LCASE.
   // NormalizeFloatingNumbers normalizes floating-point keys in planning, but not in a
-  // user-defined type, which compares as its SQL type.
+  // user-defined type, whose keys can then depend on the order too.
   private def keyStable(dt: DataType): Boolean = !dt.existsRecursively {
     case u: UserDefinedType[_] => !sameWhenEqual(u.sqlType)
     case st: StringType => !st.supportsBinaryEquality
@@ -827,8 +826,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           !guaranteedToReturnOneRow(s.plan) => s.exprId
     })
     // ExtractFiltersAndInnerJoins flattens a whole chain of inner joins and filters from its top,
-    // and a chain below has a part of its inputs and conditions, so only the top of each chain is
-    // checked, and the search goes on in its inputs.
+    // and a chain below has a part of its inputs and conditions, so checking only the top of each
+    // chain, and going on in its inputs, gives the same conditions as checking every chain. For
+    // another join, it returns the join itself as the only input, which is not followed.
     def reorderedConditions(p: LogicalPlan): Seq[Expression] = p match {
       case ExtractFiltersAndInnerJoins(input, conditions) if input.size > 1 =>
         val own = if (conditions.exists(SubqueryExpression.hasCorrelatedSubquery) &&
@@ -910,7 +910,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
           case _ => Nil
         }
-        // The lower Aggregates that selected decorrelation before SPARK-60501.
+        // The lower Aggregates that selected decorrelation before SPARK-60501, correlated or not.
         def defaultResultCountBugAgg(a: Aggregate): Boolean =
           a.groupingExpressions.isEmpty && hasDefaultResult(a)
         def mayHaveCountBugAgg(a: Aggregate): Boolean = defaultResultCountBugAgg(a) ||
@@ -950,7 +950,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           // cannot bring back that row, unless countBugResult (see above) gives it the result
           // for such an outer row. Whether it is needed does not follow from whether the
           // aggregate functions have a default result, e.g. COUNT(COUNT + COUNT), SUM(COUNT),
-          // COUNT(*) over MAX and SUM(COALESCE(SUM, 0)) all need it. Some shapes do not, because
+          // and COUNT(*) over MAX with a filter between all need it. Some shapes do not, because
           // the top level Agg returns the same result over that row as over no rows, e.g. SUM(s)
           // and COLLECT_LIST(s) over s = MAX; they are handled in constructLeftJoins, with fewer
           // joins (see sameResultOverEmptyLowerAggregate).
@@ -1220,9 +1220,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * [[DeclarativeAggregate]], the expression applies its update expressions once to its initial
    * values, and then its evaluate expression; a FILTER keeps the initial values when its condition
    * does not hold. COLLECT_LIST and COLLECT_SET over literal values are computed directly. DISTINCT
-   * does not change the result over a single row. Returns None for other functions, for
-   * non-deterministic arguments or FILTER, and if the result does not keep the data type and
-   * nullability of `ae`.
+   * does not change the result over a single row. Returns None for other functions, and if the
+   * result does not keep the data type and nullability of `ae`. A result that depends on a
+   * non-deterministic argument or FILTER is not a literal, and is not taken by the caller.
    */
   private def evalAggregateOnOneRow(
       ae: AggregateExpression,
@@ -1232,7 +1232,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     }
     val f = bind(ae.aggregateFunction).asInstanceOf[AggregateFunction]
     val filter = ae.filter.map(c => tryEvalExpr(bind(c)))
-    if (!f.children.forall(_.deterministic) || !filter.forall(_.deterministic)) return None
     val result = f match {
       case f: DeclarativeAggregate =>
         def bindBuffer(e: Expression, values: Seq[Expression]): Expression = {
@@ -1269,15 +1268,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * `plan` must be an Aggregate over a chain of Projects, SubqueryAliases and Aggregates down to
    * the first other node, the correlated input. After decorrelation, which groups each correlated
    * Aggregate of the chain by the outer (domain) columns, each node of the chain returns a row for
-   * an outer row only if its child does, so the decorrelated subquery returns no row for an outer
-   * row only if the correlated input is empty for it, as long as the correlated input has no
-   * correlated Aggregate without grouping expressions, whose row decorrelation loses. So for such
-   * an outer row the correlated input is taken as empty, and the chain is evaluated over it as
-   * before decorrelation: an Aggregate without grouping expressions returns one row on empty
-   * input. An outer reference in the chain does not
-   * change which rows it returns; a value that depends on one is not a literal, and is not taken
-   * (see below). A NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None
-   * here means that the result cannot be computed.
+   * an outer row if its child does, so the decorrelated subquery returns no row for an outer row
+   * only if the correlated input is empty for it. That holds if the correlated input has no
+   * correlated Aggregate without grouping expressions, whose row decorrelation loses, and if the
+   * domain joins that decorrelation adds there anyway, e.g. for a non-equality correlation, have
+   * every outer row (they compute the outer input again, as on master). So for such an outer row
+   * the correlated input is taken as empty, and the chain is evaluated over it as before
+   * decorrelation: an Aggregate without grouping expressions returns one row on empty input. An
+   * outer reference in the chain does not change which rows it returns; a value or grouping key
+   * that depends on one is not a literal, and is not taken (see below). A NULL result is a NULL
+   * Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that the result cannot be
+   * computed.
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
       plan: LogicalPlan): Option[Literal] = {
@@ -1291,8 +1292,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         rowsOf(a.child).flatMap {
           case None if a.groupingExpressions.isEmpty => Some(Some(evalAggregateOnZeroTups(a)))
           case None => Some(None)
-          // A grouping key is computed over the row too, and may fail there, e.g. in ANSI mode, as
-          // it would at runtime, or need a Python UDF; such a key is not taken.
+          // A grouping key is computed over the row too. One that is not a literal there, e.g.
+          // because it fails, as it would at runtime, or needs a Python UDF or an outer reference,
+          // is not taken.
           case Some(row) if !a.groupingExpressions.forall(g =>
               bindingExpr(g, row).isInstanceOf[Literal]) => None
           case Some(row) =>
@@ -1307,7 +1309,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                   case ae: AggregateExpression => values(ae)
                   case a: AttributeReference if row.contains(a.exprId) => row(a.exprId)
                 }
-                if (bound.references.isEmpty) Some((ne.exprId, tryEvalExpr(bound))) else None
+                Some((ne.exprId, tryEvalExpr(bound)))
               }
             }
             if (results.forall(_.isDefined)) Some(Some(results.map(_.get).toMap)) else None

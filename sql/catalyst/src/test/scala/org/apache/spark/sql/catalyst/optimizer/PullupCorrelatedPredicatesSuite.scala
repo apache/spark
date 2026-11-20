@@ -547,7 +547,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // For a non-equality correlation, decorrelation adds the domain join that it adds on master,
     // also in a single aggregate, which computes the outer input again.
     assert(countBugResult(nonEquality, outer = nonDeterministicOuter) == Some("1"))
-    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
+    assert(subqueryWithOutputR(nonDeterministicOuter.select(
+      ScalarSubquery(countOver(nonEquality)).as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
     assert(countBugResult(correlated(max($"d")), above = _.where($"sq" > 0)) == Some("1"))
     val overMapUnfiltered = testRelation2.where($"c" === Size($"m")).groupBy()(max($"d").as("s"))
     assert(countBugResult(overMapUnfiltered, outer = mapOuter) == Some("1"))
@@ -612,6 +613,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // An outer reference between the aggregates, here in a Project, does not change the rows,
     // only values, which are not computed (see below), so it does not matter for a COUNT(*).
     assert(countBugResult(lowerMax.select(($"s" + $"b").as("s"))) == Some("1"))
+    // But a grouping key over it is not a literal, and is not taken.
+    assert(countBugResult(lowerMax.select(($"s" + $"b").as("s")), grouping = Seq($"s")).isEmpty)
+    assert(countBugHandling(lowerMax.select(($"s" + $"b").as("s")), grouping = Seq($"s")) ==
+      inDecorrelation)
+    // The string of the subquery shows the result.
+    assert(subqueryWithOutputR(testRelation.select(
+      ScalarSubquery(lowerMax.groupBy()(count(Literal(1)).as("r"))).as("sq")))
+      .toString.endsWith(" countBugResult=1L"))
     // An expression that fails on the row of the lower aggregate does not matter when the top
     // aggregate does not use it.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
