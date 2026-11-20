@@ -2410,12 +2410,17 @@
       },
       "DUPLICATE_SELECTED_PREDICATE" : {
         "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+          "`selectLookupPredicates()` returned the index <index>, of the predicate <predicate>, more than once."
         ]
       },
       "INVALID_INPUT_ORDINAL" : {
         "message" : [
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "INVALID_SELECTED_PREDICATE_INDEX" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the index <index>, which is not a position in the <numCandidates> candidates offered by Spark."
         ]
       },
       "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
@@ -2446,11 +2451,6 @@
       "UNKNOWN_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field>, which matches no table column by name and data type."
-        ]
-      },
-      "UNOFFERED_SELECTED_PREDICATE" : {
-        "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
         ]
       }
     },

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Collections, IdentityHashMap}
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -372,16 +370,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   }
 
   /**
-   * Maps the connector's selection back to the offered candidates, in the connector's order, which
-   * defines the fields of each request parameter row. Selections are matched by object identity
-   * rather than by equality, so two candidates of the same shape, for example the same lookup field
-   * compared with two different join-side values, remain distinguishable.
+   * Maps the connector's selection, positions in the offered array, back to the offered
+   * candidates, in the connector's order, which defines the fields of each request parameter row.
+   * Positions keep two candidates of the same shape, for example the same lookup field compared
+   * with two different join-side values, distinguishable.
    */
   private def selectedCandidates(
       tableName: String,
       offered: Array[V2Predicate],
       candidates: Seq[OfferedLookupPredicate],
-      selected: Array[V2Predicate]): Seq[OfferedLookupPredicate] = {
+      selected: Array[Int]): Seq[OfferedLookupPredicate] = {
     if (selected == null) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
@@ -390,24 +388,21 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
-    val candidateByPredicate = new IdentityHashMap[V2Predicate, OfferedLookupPredicate]()
-    offered.zip(candidates).foreach { case (predicate, candidate) =>
-      candidateByPredicate.put(predicate, candidate)
-    }
-    val seen = Collections.newSetFromMap(new IdentityHashMap[V2Predicate, java.lang.Boolean]())
-    selected.toSeq.map { predicate =>
-      // A null element is not an offered instance either.
-      val candidate = Option(predicate).map(candidateByPredicate.get).orNull
-      if (candidate == null) {
+    val byIndex = candidates.toIndexedSeq
+    val seen = new java.util.BitSet(offered.length)
+    selected.toSeq.map { index =>
+      if (index < 0 || index >= offered.length) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "UNOFFERED_SELECTED_PREDICATE",
-          Map("predicate" -> Option(predicate).map(_.describe()).getOrElse("null")))
+          tableName, "INVALID_SELECTED_PREDICATE_INDEX",
+          Map("index" -> index.toString, "numCandidates" -> offered.length.toString))
       }
-      if (!seen.add(predicate)) {
+      if (seen.get(index)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> predicate.describe()))
+          tableName, "DUPLICATE_SELECTED_PREDICATE",
+          Map("index" -> index.toString, "predicate" -> offered(index).describe()))
       }
-      candidate
+      seen.set(index)
+      byIndex(index)
     }
   }
 

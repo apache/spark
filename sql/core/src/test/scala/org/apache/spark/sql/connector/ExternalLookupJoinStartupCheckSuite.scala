@@ -273,7 +273,8 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
       exception = queryFailure[AnalysisException](
         stream.join(duplicate, stream("id") === duplicate("id"))),
       condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
-      parameters = Map("table" -> "`SimpleExternalLookupTable`", "predicate" -> "id = ?"))
+      parameters =
+        Map("table" -> "`SimpleExternalLookupTable`", "index" -> "0", "predicate" -> "id = ?"))
     val noLookup =
       source(classOf[MisconfiguredExternalLookupDataSource], "kind", "noExternalLookup")
     val e = queryFailure[SparkUnsupportedOperationException](

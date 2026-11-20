@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupFilter,
   ExternalLookupJoin, ExternalLookupProject, ExternalLookupTransform, Filter, Join, JoinHint,
   LocalRelation, LogicalPlan, LookupKeyComparison, PreparedExternalLookupJoin, Project}
+import org.apache.spark.sql.connector.ExternalLookupSelection.positionsWhere
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -90,7 +91,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
       candidates =>
         offeredCandidates = candidates.map(_.toString).toSeq
-        candidates.take(1)
+        Array(0)
     }))
     val Seq(lookupId, lookupCode) = lookup.output
     val streamId = stream.output.head
@@ -151,7 +152,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value STRING, alt STRING",
       select = { candidates =>
         offered = candidates.map(_.toString).toSeq
-        candidates.take(1)
+        Array(0)
       }))
     val Seq(id, value, alt) = lookup.output
     val streamCode = AttributeReference("streamCode", value.dataType)()
@@ -232,7 +233,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 
   test("selected predicates bind in the connector's order, and the residual in written order") {
     val Seq(streamId, streamLabel) = stream.output
-    def prepared(select: Array[Predicate] => Array[Predicate])
+    def prepared(select: Array[Predicate] => Array[Int])
         : (PreparedExternalLookupJoin, Seq[Attribute], Seq[Expression]) = {
       val lookup = lookupRelation(
         PlanningExternalLookupTable("id INT, label STRING, value STRING", select = select))
@@ -245,7 +246,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
 
     val (reversed, joinOutput, conjuncts) =
-      prepared(candidates => Array(candidates(1), candidates(0)))
+      prepared(_ => Array(1, 0))
     assert(reversed.lookupParameters === Seq(streamLabel, streamId))
     assert(reversed.lookupKeyComparisons ===
       Seq(LookupKeyComparison.Equal, LookupKeyComparison.Equal))
@@ -255,7 +256,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     assert(PrepareExternalLookupJoin(reversed) === reversed)
 
     // An unselected equality stays ahead of the conjuncts written after it.
-    val (idOnly, _, idOnlyConjuncts) = prepared(candidates => Array(candidates(0)))
+    val (idOnly, _, idOnlyConjuncts) = prepared(_ => Array(0))
     assert(idOnly.lookupParameters === Seq(streamId))
     assert(idOnly.residualCondition === Some(idOnlyConjuncts.drop(1).reduce(_ && _)))
   }
@@ -265,7 +266,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value STRING", select = {
       candidates =>
         offered = candidates.map(_.toString).toSeq
-        candidates
+        candidates.indices.toArray
     }))
     val Seq(id, value) = lookup.output
     val streamId = stream.output.head
@@ -292,7 +293,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
         candidates =>
           offered = candidates.map(_.toString).toSeq
-          candidates.take(1)
+          Array(0)
       }))
       val Seq(lookupId, lookupCode) = lookup.output
       val streamId = stream.output.head
@@ -344,7 +345,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
         "price DECIMAL(12, 2), rate DECIMAL(38, 10)",
       select = { candidates =>
         offered = candidates.map(_.toString).toSeq
-        candidates.take(1)
+        Array(0)
       }))
     val Seq(lookupId, lookupValue, lookupTotal, lookupDay, lookupLocalTime, lookupTime, lookupPrice,
       lookupRate) = lookup.output
@@ -450,7 +451,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     var offered = Seq.empty[String]
     val lookup = lookupRelation(PlanningExternalLookupTable(select = { candidates =>
       offered = candidates.map(_.toString).toSeq
-      candidates.filter(_.children()(0) == FieldReference.column("id"))
+      positionsWhere(candidates)(_.children()(0) == FieldReference.column("id"))
     }))
     // Under case-insensitive analysis, a condition that writes `ID` resolves to the column `id`,
     // with the same exprId and the query's spelling.
@@ -500,13 +501,17 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
       parameters = Map("table" -> QUOTED_TABLE_NAME))
 
-    Seq[(Array[Predicate] => Array[Predicate], String, Map[String, String])](
+    Seq[(Array[Predicate] => Array[Int], String, Map[String, String])](
       (_ => Array.empty, "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE", Map.empty),
       (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
-      // A null element is not one of the offered instances.
-      (_ :+ null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.UNOFFERED_SELECTED_PREDICATE",
-        Map("predicate" -> "null"))).foreach {
+      (_ => Array(-1), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
+        Map("index" -> "-1", "numCandidates" -> "1")),
+      (_.indices.toArray :+ 1,
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
+        Map("index" -> "1", "numCandidates" -> "1")),
+      (_ => Array(0, 0), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
+        Map("index" -> "0", "predicate" -> "id = ?"))).foreach {
       case (select, condition, parameters) =>
         checkError(
           exception = prepareError(lookupJoinOnId(
@@ -728,7 +733,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 case class PlanningExternalLookupTable(
     schemaDDL: String = "id INT, value STRING NOT NULL",
     readSchemaDDL: Option[String] = None,
-    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectIdEqualities,
+    select: Array[Predicate] => Array[Int] = PlanningExternalLookupTable.selectIdEqualities,
     nullFrom: String = "",
     // For nullability that DDL cannot write, such as of array elements.
     tableSchema: Option[StructType] = None,
@@ -741,7 +746,7 @@ case class PlanningExternalLookupTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
         select(candidates)
       override def build(): Scan = if (nullFrom == "build") null else new Scan {
         override def readSchema(): StructType = if (nullFrom == "readSchema") null else {
@@ -764,6 +769,6 @@ case class PlanningExternalLookupTable(
 }
 
 object PlanningExternalLookupTable {
-  private val selectIdEqualities: Array[Predicate] => Array[Predicate] =
-    _.filter(p => p.name() == "=" && p.children()(0) == FieldReference.column("id"))
+  private val selectIdEqualities: Array[Predicate] => Array[Int] =
+    positionsWhere(_)(p => p.name() == "=" && p.children()(0) == FieldReference.column("id"))
 }
