@@ -677,6 +677,32 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61970: a reordered struct field keeps its own raw type") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3), v: STRING>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('c', 'x', 'v', 'a'))")
+      // Dataset.to reorders the fields of the struct and keeps the column's metadata.
+      val df = spark.table("t").to(StructType.fromDDL("s STRUCT<v: STRING, c: STRING>"))
+      checkAnswer(df.selectExpr("s.v = 'a'", "s.c = 'x'"), Row(true, true))
+    }
+  }
+
+  test("SPARK-61970: comparisons with a struct field keep constants that fail") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3)>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('c', 'a'))")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // The comparison is in a branch that is never evaluated.
+        checkAnswer(sql("SELECT IF(false, s.c = CAST(1 / 0 AS STRING), true) FROM t"), Row(true))
+        checkAnswer(
+          sql("SELECT IF(false, s.c IN ('a', CAST(1 / 0 AS STRING)), true) FROM t"), Row(true))
+      }
+      // An invalid comparison reports its type mismatch rather than failing to evaluate.
+      val e = intercept[AnalysisException](sql("SELECT s.c = array(1) FROM t").collect())
+      assert(e.getCondition == "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
+    }
+  }
+
   test("SPARK-59278: char type comparison: struct nullability is preserved") {
     // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
     // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
