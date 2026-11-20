@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.TaskInputThreads
 
 abstract class BaseScriptTransformationSuite extends QueryTest {
   import testImplicits._
@@ -469,6 +470,24 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         !earlierThreads.contains(event.getThreadId)
     }
     assert(errors.isEmpty, errors.map(_.getMessage.getFormattedMessage).mkString("\n"))
+  }
+
+  test("SPARK-62031: tell that the writer thread reads the input of its task") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val plan = createScriptTransformationExec(
+      script = "cat",
+      output = Seq(AttributeReference("id", StringType)()),
+      child = spark.range(0, 10, 1, 1).queryExecution.sparkPlan,
+      ioschema = defaultIOSchema)
+    // Whether a thread that the task does not wait for was registered for the task.
+    val registered = plan.execute().mapPartitions { rows =>
+      val registered = TaskInputThreads.unawaitedFlag(TaskContext.get()).get()
+      rows.foreach(_ => ())
+      Iterator(registered)
+    }.collect()
+    assert(registered === Array(true))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
