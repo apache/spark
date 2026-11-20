@@ -20,7 +20,7 @@ use std::ffi::{c_char, c_int, c_void};
 
 use crate::abi::{
     self, ArrowArray, ArrowArrayStream, ArrowSchema, SparkDsCommitOffsetInfo, SparkDsCreateInfo,
-    SparkDsDataWriterInfo, SparkDsFinishDataWriterInfo, SparkDsFinishWriteInfo,
+    SparkDsDataWriterInfo, SparkDsDomain, SparkDsFinishDataWriterInfo, SparkDsFinishWriteInfo,
     SparkDsInitialOffsetInfo, SparkDsLatestOffsetInfo, SparkDsLibrary, SparkDsPartitionsInfo,
     SparkDsReadInfo, SparkDsReadLimit, SparkDsReaderInfo, SparkDsSink, SparkDsStreamPartitionsInfo,
     SparkDsStreamReaderInfo, SparkDsTaskContext, SparkDsWriteInfo,
@@ -149,10 +149,7 @@ pub const fn library<S: Exported>() -> SparkDsLibrary {
         abort_data_writer: when!(write, abort_data_writer),
         close_data_writer: when!(write, close_data_writer),
         default_read_limit: when!(micro_batch_read, default_read_limit::<S>),
-        // SPARK-61200 added push_domains to version 1. The SDK does not expose it yet
-        // (SPARK-61306): without it, Spark pushes no filters down, and evaluates them after
-        // reading.
-        push_domains: None,
+        push_domains: when!(read, push_domains::<S>),
     }
 }
 
@@ -225,6 +222,21 @@ unsafe extern "C" fn create_reader<S: Exported>(
 
 unsafe extern "C" fn close<S: Exported>(source: *mut c_void) {
     let _ = abi::call(|| S::bridge().close_source(id(source)));
+}
+
+unsafe extern "C" fn push_domains<S: Exported>(
+    reader: *mut c_void,
+    domains: *const *const SparkDsDomain,
+    count: i64,
+    used: *mut bool,
+) -> c_int {
+    abi::call(|| {
+        abi::require_output(used)?;
+        let domains = unsafe { abi::domains(domains, count)? };
+        let uses = S::bridge().push_domains(id(reader), domains)?;
+        unsafe { std::ptr::copy_nonoverlapping(uses.as_ptr(), used, uses.len()) };
+        Ok(())
+    })
 }
 
 unsafe extern "C" fn push_limit<S: Exported>(

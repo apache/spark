@@ -37,6 +37,22 @@ class DetermineModulesForFilesTests(unittest.TestCase):
                     determine_modules_for_files([".github/workflows/build_main.yml"]), expected
                 )
 
+    def test_lint_js_module_selection(self):
+        cases = {
+            "docs/js/main.js": {modules.docs, modules.lint_js},
+            "dev/lint-js": {modules.lint_js},
+            "dev/spark-test-image/lint/Dockerfile": {modules.lint_js},
+            "ui-test/tests/__snapshots__/utils.test.js.snap": {modules.lint_js},
+            "ui-test/package.json": set(),
+        }
+        for filename, expected in cases.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(determine_modules_for_files([filename]), expected)
+        self.assertNotIn(
+            modules.lint_js,
+            determine_modules_for_files(["python/docs/source/_static/copybutton.js"]),
+        )
+
 
 class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
     def changed_modules(self, patch_sha, target_ref):
@@ -62,6 +78,7 @@ class DetermineModulesToTestTests(unittest.TestCase):
             "connect",
             "docker-integration-tests",
             "examples",
+            "graph",
             "hive",
             "hive-thriftserver",
             "mllib",
@@ -102,6 +119,7 @@ class DetermineModulesToTestTests(unittest.TestCase):
             "credential-aws",
             "docker-integration-tests",
             "examples",
+            "graph",
             "graphx",
             "hive",
             "hive-thriftserver",
