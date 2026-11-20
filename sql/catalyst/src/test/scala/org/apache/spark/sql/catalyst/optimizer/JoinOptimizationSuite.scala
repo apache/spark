@@ -198,16 +198,17 @@ class JoinOptimizationSuite extends PlanTest {
     }
   }
 
-  test("SPARK-62069: do not reorder inner joins when the top join has a condition that may not " +
-    "move") {
-    // A filter that keeps the throwable condition above the joins would take a filter above the
-    // top join, e.g. by CombineFilters, and evaluate its conditions after a NULL with AND. Only
-    // ReorderJoin runs.
+  test("SPARK-62069: reorder inner joins with a condition of the top join that may not move in " +
+    "a filter above them") {
+    // The filter takes the place of the top join. Only ReorderJoin runs.
     val z = LocalRelation($"e".int, $"f".int)
     val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
-    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
-      .join(z, condition = Some($"c" === $"e" && throwing))
-      .analyze
-    comparePlans(ReorderJoin(query), query)
+    val query = testRelation.join(testRelation1)
+      .join(z, condition = Some($"e" === $"a" && $"f" === $"d" && throwing))
+    val answer = testRelation.join(z, condition = Some($"e" === $"a"))
+      .join(testRelation1, condition = Some($"f" === $"d"))
+      .where(throwing)
+      .select($"a", $"b", $"c", $"d", $"e", $"f")
+    comparePlans(ReorderJoin(query.analyze), answer.analyze)
   }
 }

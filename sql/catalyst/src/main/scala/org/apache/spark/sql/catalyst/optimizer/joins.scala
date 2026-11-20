@@ -99,13 +99,10 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
     // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
     // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
-    // They stay in a filter above all the joins, which takes the place of a top filter. It can not
-    // take the place of a top join, since `CombineFilters` can merge a filter above it into it,
-    // e.g. one with a subquery that would stay above the join, and `NULL AND x` evaluates `x`. So
-    // the joins are not reordered when the top join has such a condition.
+    // They stay in a filter above all the joins, which takes the place of the top join or filter.
+    // `CombineFilters` does not combine a condition that can fail from a filter above into it.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
-        if input.size > 2 && conditions.nonEmpty &&
-          (p.isInstanceOf[Filter] || splitMovable(conditions, input.map(_._1))._2.isEmpty) =>
+        if input.size > 2 && conditions.nonEmpty =>
       // The first join that covers the references of a condition can be below the filter or the
       // join that the condition is written in, where it would be evaluated on rows that a join
       // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
