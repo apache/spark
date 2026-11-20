@@ -101,21 +101,16 @@ ignored_file_patterns = (
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
-    "/dev/eslint.js",
     "/dev/java-file-header",
     "/dev/lint-java",
-    "/dev/lint-js",
     "/dev/lint-python",
     "/dev/lint-r*",
     "/dev/lint-scala",
     "/dev/mima",
-    "/dev/package-lock.json",
-    "/dev/package.json",
     "/dev/reformat-python",
     "/dev/sbt-checkstyle",
     "/dev/scalafmt",
     "/dev/scalastyle",
-    "/dev/spark-test-image/lint/",
     "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
     # Maintainer tools.
@@ -148,9 +143,10 @@ ignored_file_patterns = (
     "/conf/",
     # Binder infra. CI does not test this.
     "/binder/",
-    # UI tests. These are typically triggered by the `precondition` job
-    # regardless of modifications to these files.
-    "/ui-test/",
+    # UI test harness files. UI tests are typically triggered by the
+    # `precondition` job regardless of modifications to these files. Nested
+    # files under `ui-test/` are not ignored because `lint-js` claims them.
+    "/ui-test/*",
 )
 
 
@@ -1949,6 +1945,27 @@ build = Module(
         "dev/test-dependencies.sh",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
+)
+
+lint_js = Module(
+    name="lint-js",
+    dependencies=[],
+    source_file_regexes=[
+        # Keep in sync with LINT_TARGET_FILES in dev/lint-js. In the future we should expand
+        # dev/lint-js to lint all JavaScript in the repo, at which point these can become one rule
+        # for all `.js`.
+        r"core/src/main/resources/org/apache/spark/ui/static/.*\.js$",
+        r"sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/.*\.js$",
+        r"docs/js/.*\.js$",
+        r"dev/lint-js$",
+        r"dev/eslint\.js$",
+        r"dev/package(-lock)?\.json$",
+        # Broader than the lint targets so nested files do not fall through to
+        # the root module. Direct children of ui-test/ stay ignored above.
+        r"ui-test/",
+        r"dev/spark-test-image/lint/",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
 )
 
 yarn = Module(
