@@ -628,6 +628,39 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugResult(lower, Seq(top)).isEmpty, (lower, top))
       assert(countBugHandling(lower, Seq(top)) == inDecorrelation, (lower, top))
     }
+    // Where the result is not computed, a top aggregate that returns over the row of NULLs what
+    // it returns over no rows stays in constructLeftJoins, with the result over no rows, e.g. next
+    // to an uncorrelated subquery, which keeps the result from being a literal. Spark has no
+    // property for such functions, so a short list of functions directly over the outputs of
+    // lower aggregate functions, also through Projects, is accepted (see
+    // sameResultOverEmptyLowerAggregate).
+    val uncorrelatedScalar = ScalarSubquery(subqueryRelation.groupBy()(max($"e").as("x")))
+    Seq(sum($"s"), max($"s"), min($"s"), avg($"s"), count($"s"), first($"s"), last($"s"),
+        collectList($"s"), collectSet($"s"), countDistinct($"s"), sum($"s") + 1).foreach { top =>
+      assert(countBugResult(lowerMax, Seq(top, uncorrelatedScalar)).isEmpty, top)
+      assert(countBugHandling(lowerMax, Seq(top, uncorrelatedScalar)) == inConstructLeftJoins, top)
+    }
+    assert(countBugHandling(lowerMax.select($"s".as("t")), Seq(sum($"t"), uncorrelatedScalar)) ==
+      inConstructLeftJoins)
+    assert(countBugHandling(lowerMax.select($"s", ($"s" + 1).as("t")),
+      Seq(sum($"s"), uncorrelatedScalar)) == inConstructLeftJoins)
+    assert(countBugHandling(lowerMaxAndMin, Seq(sum($"s"), count($"n"), uncorrelatedScalar)) ==
+      inConstructLeftJoins)
+    // Other shapes go to DecorrelateInnerQuery: a function that counts the NULL row, one not in
+    // the list, one that collects NULLs, a FILTER, an argument other than the output of a lower
+    // aggregate function, another function next to it, a computed column, a node other than a
+    // Project between the aggregates, and another aggregate below.
+    Seq(lowerMax -> count(Literal(1)), lowerMax -> StddevSamp($"s").toAggregateExpression(),
+        lowerMax -> CollectList($"s", ignoreNulls = false).toAggregateExpression(),
+        lowerMax -> CollectSet($"s", ignoreNulls = false).toAggregateExpression(),
+        lowerMax -> sum($"s", Some($"s" > 1)), lowerMax -> sum($"s" + 1),
+        lowerMax.select(($"s" + 1).as("s")) -> sum($"s"), lowerMax.where($"s" > 1) -> sum($"s"),
+        lowerMax.groupBy()(max($"s").as("s")) -> sum($"s")).foreach { case (lower, top) =>
+      assert(countBugHandling(lower, Seq(top, uncorrelatedScalar)) == inDecorrelation,
+        (lower, top))
+    }
+    assert(countBugHandling(lowerMax, Seq(sum($"s"), count(Literal(1)), uncorrelatedScalar)) ==
+      inDecorrelation)
     // It is not tried for a lower aggregate with a function with a default result, which is
     // handled in decorrelation as before, even when the top aggregate does not use it or its
     // default result is NULL, for an uncorrelated lower aggregate, and with the legacy behavior.

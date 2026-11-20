@@ -585,6 +585,62 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     })
 
   /**
+   * Returns true if the Aggregate without grouping expressions `agg` returns the same result
+   * over the one row that the Aggregate without grouping expressions below it returns on empty
+   * input as over no rows, so that constructLeftJoins handles its count bug correctly even
+   * though decorrelation loses that row, with fewer joins than DecorrelateInnerQuery. E.g.
+   * SUM(s) and COLLECT_LIST(s) over s = MAX(b.v) return NULL and [] over both. The check is
+   * conservative: it accepts only a short list of functions of `agg` directly over outputs of
+   * lower aggregate functions, with only Projects between, and leaves other shapes that have
+   * this property, such as STDDEV_SAMP(s), to DecorrelateInnerQuery. It is checked only where
+   * countBugResult cannot be computed, e.g. for SUM(s) + (SELECT MAX(c) FROM t), whose result
+   * is not a literal. It never accepts a lower
+   * Aggregate with a function with a `defaultResult`, such as COUNT, which DecorrelateInnerQuery
+   * handled before SPARK-60501. Like the rest of the count bug handling, this relies on
+   * `defaultResult` matching the result on empty input.
+   */
+  private def sameResultOverEmptyLowerAggregate(agg: Aggregate): Boolean = {
+    // The attributes of `plan` that the count bug handling takes as NULL when the lower Aggregate
+    // gets empty input.
+    def nullOnEmptyInput(plan: LogicalPlan): Option[AttributeSet] = plan match {
+      case Project(projectList, child) =>
+        nullOnEmptyInput(child).map { attrs =>
+          AttributeSet(projectList.collect {
+            case a: Attribute if attrs.contains(a) => a
+            case a @ Alias(c: Attribute, _) if attrs.contains(c) => a.toAttribute
+          })
+        }
+      case lower: Aggregate if lower.groupingExpressions.isEmpty &&
+          !lower.child.exists(_.isInstanceOf[Aggregate]) && !hasDefaultResult(lower) =>
+        Some(AttributeSet(lower.aggregateExpressions.collect {
+          case a @ Alias(_: AggregateExpression, _) => a.toAttribute
+        }))
+      case _ => None
+    }
+    val aggregates = agg.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae
+    })
+    agg.groupingExpressions.isEmpty &&
+      nullOnEmptyInput(agg.child).exists { attrs =>
+        aggregates.forall { ae =>
+          val sameResultOverNulls = ae.aggregateFunction match {
+            case _: Max | _: Min | _: Sum | _: Average | _: Count | _: First | _: Last => true
+            // With RESPECT NULLS, they collect the NULLs.
+            case c: CollectList => c.ignoreNulls
+            case c: CollectSet => c.ignoreNulls
+            case _ => false
+          }
+          // A FILTER condition can fail on the row of NULLs, which constructLeftJoins does not
+          // evaluate it on, so it is left to DecorrelateInnerQuery.
+          ae.filter.isEmpty && sameResultOverNulls && ae.aggregateFunction.children.forall {
+            case a: Attribute => attrs.contains(a)
+            case _ => false
+          }
+        }
+      }
+  }
+
+  /**
    * Whether `input`, the outer input of an operator with a correlated subquery, gives the same
    * rows when the domain joins of [[DecorrelateInnerQuery]] compute it again. The check is
    * conservative: it accepts only operators known to keep the same rows, deterministic
@@ -873,8 +929,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           // cannot bring back that row, unless countBugResult (see above) gives it the result
           // for such an outer row. Whether it is needed does not follow from whether the
           // aggregate functions have a default result, e.g. COUNT(COUNT + COUNT), SUM(COUNT),
-          // COUNT(*) over MAX and SUM(COALESCE(SUM, 0)) all need it.
-          case _: Aggregate => !lowerAggs.exists(mayHaveCountBugAgg)
+          // COUNT(*) over MAX and SUM(COALESCE(SUM, 0)) all need it. Some shapes do not, because
+          // the top level Agg returns the same result over that row as over no rows, e.g. SUM(s)
+          // and COLLECT_LIST(s) over s = MAX; they are handled in constructLeftJoins, with fewer
+          // joins (see sameResultOverEmptyLowerAggregate).
+          case agg: Aggregate =>
+            !lowerAggs.exists(mayHaveCountBugAgg) || sameResultOverEmptyLowerAggregate(agg)
           case _ => false
         })
         val (decorrelatedPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
