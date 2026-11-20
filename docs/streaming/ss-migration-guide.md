@@ -52,10 +52,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   and could lose matches. In append mode, a new query fails when an operator that drops late rows
   follows such a join, because the state of an input evicted by a key other than its event time
   keeps rows of any event time. A row whose new eviction key is NULL, such as a left row with a NULL
-  `lb`, can never match: an outer join now emits it when it arrives, and with state format versions
-  1 to 3 such rows that a checkpoint of an earlier version holds are evicted, and emitted, after the
-  upgrade. A NULL in `ra` keeps the earlier handling. With state format version 4, such a join
-  cannot restart from a checkpoint of an earlier version, or after a change of
+  `lb`, can never match: an outer join now emits it when it arrives. A NULL in `ra` keeps the
+  earlier handling. A query restarted from a checkpoint of an earlier version keeps evicting both
+  inputs by the same key, with the earlier handling of NULL keys; start it with a new checkpoint to
+  use the new rule. With state format version 4, such a join cannot restart after a change of
   `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint. With
   `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
   behavior.

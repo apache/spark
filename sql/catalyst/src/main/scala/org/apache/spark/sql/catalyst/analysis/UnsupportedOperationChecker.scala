@@ -194,9 +194,9 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("Detected pattern of possible 'correctness' issue: the state of the " +
                   s"$side input of a stream-stream join has no cutoff on its event time, so the " +
                   "join can emit its old rows below its output watermark, and a later stateful " +
-                  "operator drops them as late. Add a watermark in the join keys or a range " +
-                  "condition that bounds the event time of that input by the other input's " +
-                  "watermark, or set " +
+                  "operator drops them as late. Add a range condition that bounds the event time " +
+                  "of that input by the other input's watermark, or a watermark on the same join " +
+                  "key of both inputs, or set " +
                   "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
               }
             case _ =>
@@ -214,8 +214,8 @@ object UnsupportedOperationChecker extends Logging {
   // watermark of the other input. With allowMultiple, an input that eviction picks another column
   // for counts too, since its state keeps rows of any event time, unless the checkpoint was written
   // without this check, whose eviction keeps the event time. A left semi join only emits left rows.
-  // TODO: An input evicted by a join key other than its event time is not checked yet, such as
-  //   the right input of `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs.
+  // TODO: An input that earlier versions also evicted by a join key other than its event time is
+  //   not checked yet, such as the right input of `leftKey = rightKey AND leftTime = rightTs`.
   private def joinInputWithoutStateCutoff(
       join: Join, counts: LogicalPlan => Boolean): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
@@ -243,9 +243,11 @@ object UnsupportedOperationChecker extends Logging {
         case _ => false
       }).filter(_ >= 0)
       val shared = watermarked(leftKeys).orElse(watermarked(rightKeys))
-      Seq(("left", leftKeys, rightKeys), ("right", rightKeys, leftKeys))
-        .take(if (joinType == LeftSemi) 1 else 2).collectFirst {
-          case (side, keys, otherKeys) if watermarked(otherKeys).exists { i =>
+      Seq(("left", leftKeys, rightKeys, left), ("right", rightKeys, leftKeys, right))
+        .take(if (joinType == LeftSemi) 1 else 2)
+        .filter { case (_, _, _, input) => counts(input) }
+        .collectFirst {
+          case (side, keys, otherKeys, _) if watermarked(otherKeys).exists { i =>
             !shared.contains(i) && watermarked(Seq(keys(i))).isEmpty } => side
         }
     case _ => None

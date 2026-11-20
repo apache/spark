@@ -229,6 +229,9 @@ case class StreamingSymmetricHashJoinExec(
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, conf))
   private val allowMultipleStatefulOperators =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+  // As in getStateWatermarkPredicates, which picks the key that evicts each input.
+  private val usesSharedKeyOrdinal = !allowMultipleStatefulOperators ||
+    !conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
 
   private val useVirtualColumnFamilies = stateFormatVersion >= 3
 
@@ -387,7 +390,7 @@ case class StreamingSymmetricHashJoinExec(
             }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
           }
           val key = findStateKeyOrdinalForWatermark(
-            side, leftKeys, rightKeys, !allowMultipleStatefulOperators && indexVersion == 0)
+            side, leftKeys, rightKeys, usesSharedKeyOrdinal && indexVersion == 0)
             .filterNot(sharedKeyOrdinal.contains).map(i => toSQLExpr(keys(i)))
           column.filterNot(eventTime.contains).map(i => toSQLId(attributes(i).name)).orElse(key)
             .foreach { c =>
@@ -439,7 +442,7 @@ case class StreamingSymmetricHashJoinExec(
     // Both sides should use the same store generator if we are re-using the same store instance.
     val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
     def joinKeyOrdinalForWatermark(side: JoinSide): Option[Int] =
-      findStateKeyOrdinalForWatermark(side, leftKeys, rightKeys, !allowMultipleStatefulOperators)
+      findStateKeyOrdinalForWatermark(side, leftKeys, rightKeys, usesSharedKeyOrdinal)
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
