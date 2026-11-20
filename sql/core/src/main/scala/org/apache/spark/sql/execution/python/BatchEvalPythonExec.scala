@@ -192,7 +192,7 @@ object BatchEvalPythonExec {
   private[python] def projectedInputPayloadSizeEstimator(
       inputTypes: Seq[DataType]): Option[InternalRow => Long] = {
     val projectedPayloads = inputTypes.zipWithIndex.flatMap { case (dataType, ordinal) =>
-      projectedInputPayloadSizer(dataType, ordinal).map(size => (ordinal, size))
+      projectedInputPayloadSizer(dataType, ordinal).map(sizer => (ordinal, sizer))
     }.toArray
     if (projectedPayloads.isEmpty) {
       None
