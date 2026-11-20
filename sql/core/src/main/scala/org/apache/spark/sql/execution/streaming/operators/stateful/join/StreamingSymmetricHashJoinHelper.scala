@@ -75,10 +75,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * Predicate for watermark on state values. See [[JoinStateKeyWatermarkPredicate]] for
    * the semantics of `stateWatermark` and `prevStateWatermark`. `conditionBoundsColumn` is true
    * only when the default mode picked the column that `expr` tests because the join condition
-   * bounds it, so that a row with a NULL in it can never match. The legacy mode, the fallback for
-   * an input bounded only through a column cast to TIMESTAMP, and a checkpoint written without the
-   * join output watermark check for an input that the default mode would evict by another column
-   * leave it false and test the event time.
+   * bounds it, so that a row with a NULL in it can never match. The legacy mode, the fallback to
+   * the event time with the cutoff of the whole input, and a checkpoint written without the join
+   * output watermark check for an input that the default mode would evict by another column leave
+   * it false and test the event time.
    */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
@@ -298,10 +298,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // The column or cast that evicts this input, its cutoff, and whether the condition bounds
         // it. The legacy mode with a single global watermark keeps applying a cutoff on any column
         // of this input to the event time. So does the default mode when the condition bounds no
-        // TIMESTAMP column or cast to TIMESTAMP, such as a bare LONG column. So does a checkpoint
-        // written without the join output watermark check for an input that the default mode
-        // would evict by another column or cast, since for such a checkpoint that check only warns
-        // about a later operator that drops the rows this eviction emits late.
+        // TIMESTAMP column or cast to TIMESTAMP that it picks, such as a bare LONG column or a cast
+        // that can fail. So does a checkpoint written without the join output watermark check for
+        // an input that the default mode would evict by another column or cast, since for such a
+        // checkpoint that check only warns about a later operator that drops the rows this
+        // eviction emits late.
+        // TODO: A cast of arithmetic over a column, such as CAST(expirySec + 3600 AS TIMESTAMP),
+        //  is not picked, so it keeps this fallback.
         def solve(watermark: Option[Long]): Option[(Expression, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
             pickStateValueWatermarkColumn(oneSideInputAttributes, otherSideInputAttributes,

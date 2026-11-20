@@ -188,6 +188,93 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
+  // A cast that can fail in ANSI mode is not picked, so eviction never evaluates it, and the
+  // input keeps the eviction by its event time.
+  for {
+    version <- Seq(2, 4)
+    source <- Seq("string", "double")
+  } {
+    test(s"a $source column cast to TIMESTAMP in ANSI mode is not evaluated by eviction, " +
+        s"V$version") {
+      withJoinConf(version) {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+          val leftInput = MemoryStream[(Int, Long, String)]
+          val rightInput = MemoryStream[(Int, Long)]
+          val left = leftInput.toDF().toDF("leftKey", "start", "end")
+            .select($"leftKey", timestamp_seconds($"start").as("leftTime"),
+              (if (source == "string") $"end" else $"end".cast("double")).as("leftExpiry"))
+            .withWatermark("leftTime", "60 seconds")
+          val right = rightInput.toDF().toDF("rightKey", "time")
+            .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+            .withWatermark("rightTime", "60 seconds")
+          val result = left.join(right, expr("leftKey = rightKey AND " +
+              "rightTime BETWEEN leftTime AND CAST(leftExpiry AS TIMESTAMP)"), "left_outer")
+            .select($"leftKey", $"rightTime".cast("long"), $"leftTime".cast("long"))
+          val (invalid, valid) =
+            if (source == "string") ("n/a", "1970-01-01 00:26:40") else ("NaN", "1600")
+          testStream(result)(
+            // No right row has the key of the row whose value does not cast.
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (2, 100L, invalid)), AddData(rightInput, (9, 100L)))),
+            CheckNewAnswer(),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 1000L, valid)), AddData(rightInput, (9, 1000L)))),
+            CheckNewAnswer(),
+            AddData(rightInput, (9, 1000L)),
+            CheckNewAnswer(Row(2, null, 100L)))
+        }
+      }
+    }
+  }
+
+  test("V4 restart in the legacy mode fails for an input that is evicted by a cast") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) = joinWithCastDate("left_outer")
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 86400L, 5)), AddData(rightInput, (9, 86400L)))),
+          CheckNewAnswer(),
+          StopStream)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(result)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(rightInput, (9, 90000L)),
+            ExpectFailure[AnalysisException] { e =>
+              checkError(
+                e.asInstanceOf[AnalysisException],
+                condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                parameters = Map("side" -> "left", "column" -> "`leftDate`"))
+            })
+        }
+      }
+    }
+  }
+
+  test("V4 restart of an index version 1 checkpoint of a join evicted by another column") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) =
+          joinWithExpiry("rightTime BETWEEN leftTime AND expiry", "left_outer")
+        withSQLConf(indexVersionKey -> "1") {
+          testStream(result)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, 100L, 700L)), AddData(rightInput, (9, 100L)))),
+            CheckNewAnswer(),
+            StopStream)
+        }
+        assert(indexVersion(checkpoint) === Some("1"))
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (1, 460L)),
+          CheckNewAnswer(Row(1, 460L, 100L)))
+      }
+    }
+  }
+
   test("V4 fails with an index version that orders a cast-bounded input by the event time") {
     Seq("0", "1").foreach { version =>
       withJoinConf(4) {

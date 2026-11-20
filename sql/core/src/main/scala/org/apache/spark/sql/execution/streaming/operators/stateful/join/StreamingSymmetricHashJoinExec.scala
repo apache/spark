@@ -384,8 +384,9 @@ case class StreamingSymmetricHashJoinExec(
               pickStateValueWatermarkColumn(attributes, otherAttributes, condition.full, Some(0L),
                 conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
             }.flatten.collect {
-              // With version 1, the default mode orders only by a cast, and the legacy mode by
-              // anything else. With version 2, only the legacy mode gets here.
+              // With version 1, the checkpoint's order differs from the default mode's only for
+              // a cast, and from the legacy mode's for any other column. With version 2, only the
+              // legacy mode gets here.
               case (c, _) if indexVersion == 2 ||
                   c.isInstanceOf[Cast] == allowMultipleStatefulOperators =>
                 attributes.indexWhere(c.references.contains)
@@ -759,10 +760,10 @@ case class StreamingSymmetricHashJoinExec(
 
     // When the default mode picked the column that the value predicate tests because the join
     // condition bounds it, a row with a NULL in it can never match, and `column <= cutoff` never
-    // holds for it. The legacy mode, the default mode for an input bounded only through a column
-    // cast to TIMESTAMP, and a checkpoint written without the join output watermark check for an
-    // input that the default mode would evict by another column test the event time, which the
-    // condition need not bound.
+    // holds for it. The legacy mode, the fallback to the event time with the cutoff of the whole
+    // input, and a checkpoint written without the join output watermark check for an input that
+    // the default mode would evict by another column test the event time, which the condition
+    // need not bound.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _, true)) =>
         Predicate.create(IsNull(column), inputAttributes).eval _
