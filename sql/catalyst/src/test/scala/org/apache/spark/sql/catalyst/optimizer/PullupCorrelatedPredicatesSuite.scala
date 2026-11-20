@@ -22,12 +22,28 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, ListAgg, Percentile, StddevSamp, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, DeclarativeAggregate, ListAgg, Percentile, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, LongType, MapType, StringType, TestUDT}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DoubleType, IntegerType, LongType, MapType, StringType, TestUDT}
+
+// A DeclarativeAggregate whose evaluate expression does not have its data type.
+private case class MistypedAggregate(child: Expression)
+  extends DeclarativeAggregate with UnaryLike[Expression] {
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  private lazy val buffer = AttributeReference("buffer", IntegerType)()
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = buffer :: Nil
+  override lazy val initialValues: Seq[Expression] = Seq(Literal(0))
+  override lazy val updateExpressions: Seq[Expression] = Seq(buffer)
+  override lazy val mergeExpressions: Seq[Expression] = Seq(buffer.left)
+  override lazy val evaluateExpression: Expression = buffer
+  override protected def withNewChildInternal(newChild: Expression): MistypedAggregate =
+    copy(child = newChild)
+}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -568,6 +584,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(lowerWithLiteral, Seq(sum($"s"))) == Some("10"))
     assert(countBugResult(lowerMax.groupBy()(max($"s").as("s"))) == Some("1"))
     assert(countBugResult(lowerMax.groupBy($"s")($"s")) == Some("1"))
+    // A grouped aggregate below returns no row on empty input, so the MAX over it is NULL, not
+    // the MAX over a row with its COUNT of 0.
+    val groupedBelow = testRelation2.where($"a" === $"c").groupBy($"d")(count(Literal(1)).as("n"))
+      .groupBy()(max($"n").as("s"))
+    assert(countBugResult(groupedBelow, Seq(count($"s"))) == Some("0"))
     assert(countBugHandling(lowerMax, grouping = Seq($"s")) == inConstructLeftJoins)
     assert(countBugResult(lowerMax, grouping = Seq($"s")) == Some("1"))
     // COLLECT_LIST with RESPECT NULLS over the row of NULLs, with a FILTER that does not hold.
@@ -589,7 +610,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     // Neither is it for a filter between the aggregates, a value over an outer reference, a
     // function that is not computed over one row, such as PERCENTILE, a FILTER with a subquery,
-    // and a Python UDF in the result.
+    // a Python UDF in the result, and a function whose evaluate expression does not have its
+    // data type.
     val subqueryRelation = LocalRelation($"e".double)
     val uncorrelatedFilter = ScalarSubquery(subqueryRelation.groupBy()(max($"e").as("x"))) > 0
     val correlatedFilter = ScalarSubquery(
@@ -601,7 +623,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         lowerMax -> new Percentile($"s", Literal(0.5)).toAggregateExpression(),
         lowerMax -> sum($"s", Some(uncorrelatedFilter)),
         lowerMax -> sum($"s", Some(correlatedFilter)),
-        lowerMax -> sum(pyUdf)).foreach { case (lower, top) =>
+        lowerMax -> sum(pyUdf),
+        lowerMax -> MistypedAggregate($"s").toAggregateExpression()).foreach { case (lower, top) =>
       assert(countBugResult(lower, Seq(top)).isEmpty, (lower, top))
       assert(countBugHandling(lower, Seq(top)) == inDecorrelation, (lower, top))
     }
