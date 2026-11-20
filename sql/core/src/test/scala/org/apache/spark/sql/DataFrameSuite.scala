@@ -3056,6 +3056,23 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62143: a filter condition that can fail is not pushed through a generate that " +
+    "can drop rows") {
+    // The generate outputs no row for id 3, so the division by zero on it never runs, although
+    // the division is the only condition of the filter. Each query is built inside the config
+    // loop, so it is planned under that config.
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val df = spark.range(0, 10, 1, 1).toDF()
+          .select($"id", explode(filter(array($"id"), x => x =!= 3)) as "x")
+          .where(lit(10L) / ($"id" - 3) > 0)
+        checkAnswer(df, (4L until 10L).map(i => Row(i, i)))
+      }
+    }
+  }
+
   test("SPARK-60980: a filter condition that can fail is not evaluated ahead of a " +
     "non-deterministic one") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
