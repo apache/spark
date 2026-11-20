@@ -73,8 +73,8 @@ object FileTypeApiOps {
   private val jsonFactory = new JsonFactory()
 
   /** Formats a FileRef as the canonical JSON of FILE, see the other overload. */
-  def formatJson(f: FileRef): String = formatJson(
-    f.uri, f.offset, f.size, f.contentType, f.checksum, FileRefInternals.inline(f))
+  def formatJson(f: FileRef): String =
+    formatJson(f.uri, f.offset, f.size, f.contentType, f.checksum, FileRefInternals.inline(f))
 
   /**
    * Formats the fields of a FILE value as its canonical JSON: an object with the fields of
