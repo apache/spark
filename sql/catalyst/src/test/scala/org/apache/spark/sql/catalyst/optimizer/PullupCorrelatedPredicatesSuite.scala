@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, MapType, StringType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, MapType, StringType}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -307,14 +307,51 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       above = _.where(limitInSubquery)) == inLegacy)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.where($"a" > 1)) == inDecorrelation)
-    // Another subquery of the operator, which a filter above can inline through its alias.
+    // Another subquery of the operator, which a filter above on its alias can inline, but not
+    // without such a filter; and likewise of a Project above, also through another alias and the
+    // children of a Union, which PushDownPredicates pushes into by position. A subquery that
+    // gives the same rows again does not matter.
     val limitedScalar = ScalarSubquery(testRelation2.select($"c").limit(1)).as("x")
-    assert(countBugHandling(correlated(max($"d")), others = Seq(limitedScalar)) == inLegacy)
-    // So can a subquery of a Project above, which a filter above that Project brings along
-    // through the alias; one that gives the same rows again does not matter.
-    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
-      above = _.select($"a", $"sq", limitedScalar).where($"x" > 0)) == inLegacy)
+    val doubleMaxScalar = ScalarSubquery(testRelation2.groupBy()(max($"d").as("m"))).as("x")
     val repeatableScalar = ScalarSubquery(testRelation2.groupBy()(max($"c").as("m"))).as("x")
+    Seq(limitedScalar -> IntegerType, doubleMaxScalar -> DoubleType).foreach { case (other, dt) =>
+      assert(countBugHandling(correlated(max($"d")), others = Seq(other)) == inDecorrelation)
+      assert(countBugHandling(correlated(max($"d")), others = Seq(other),
+        above = _.where($"x" > 0)) == inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = _.select($"a", $"sq", other)) == inDecorrelation)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = _.select($"a", $"sq", other).where($"x" > 0)) == inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = _.select($"a", $"sq", other).select(($"x" + 1).as("y")).where($"y" > 0)) ==
+        inLegacy)
+      val first =
+        testRelation.select($"a", Literal(1L).as("sq"), Cast($"a", dt).as("x"))
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => Union(first, p.select($"a", $"sq", other))) == inDecorrelation)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => Union(first, p.select($"a", $"sq", other)).where($"x" > 0)) == inLegacy)
+      // ReplaceExceptWithFilter can turn a filter of the right child into one of the left child.
+      val right = first.where($"x" > 0)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => Except(p.select($"a", $"sq", other), right, isAll = false)) == inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => Except(p.select($"a", $"sq", other), first, isAll = false)) ==
+        inDecorrelation)
+      // A join condition, which PushPredicateThroughJoin can push, but not a lateral subquery,
+      // which stays in the right side of its join.
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = _.select($"a", $"sq", other).join(testRelation2, Inner,
+          Some($"x" > 0 && $"a" === $"c"))) == inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => LateralJoin(p, LateralSubquery(testRelation2.select(other)), Inner, None)) ==
+        inDecorrelation)
+    }
+    assert(countBugHandling(correlated(max($"d")), others = Seq(repeatableScalar),
+      above = _.where($"x" > 0)) == inDecorrelation)
+    // The subquery itself does not count, though a filter on it reaches it and its MAX of DOUBLEs
+    // may give another value.
+    assert(countBugHandling(correlated(max($"d")), above = _.where($"sq" > 0)) == inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.select($"a", $"sq", repeatableScalar).where($"x" > 0)) == inDecorrelation)
     // MIN, MAX, grouping and DISTINCT keep one of the values that compare equal, which one

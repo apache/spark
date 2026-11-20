@@ -725,10 +725,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * operators of `root` may put something into the outer input of that operator that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
    * builds the domain joins: PushDownPredicates can push a filter or join condition there, and
-   * with it, through the aliases of each Project that it passes, a subquery of that Project or of
-   * the operator itself. The check is conservative: it takes any non-deterministic filter or join
-   * condition and any subquery other than `exprId` that may give other rows when computed again
-   * (see repeatableInput) in any operator of `root`, and computes both once for `root`. Of the
+   * with it a subquery of an alias that it replaces on the way, e.g. of a Project above or of the
+   * operator itself. The check is conservative: it takes any non-deterministic filter or join
+   * condition, and any subquery other than `exprId` that may give other rows when computed again
+   * (see repeatableInput) in a filter or join condition, in an alias that such a condition may
+   * reach (see below), or in any other expression of an operator of `root` that is not an alias,
+   * such as a grouping expression. It computes both once for `root`. Of the
    * cases of LimitPushDown for a Project, the ones into a join and, for a LIMIT 1, through a
    * group-only Aggregate keep the LIMIT above a Project with a scalar subquery with a domain join
    * with keepLimitAbove; the ones over UDF evaluation nodes or a UnionLoop occur only after the
@@ -740,9 +742,42 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case p @ (_: Filter | _: Join) => !p.expressions.forall(_.deterministic)
       case _ => false
     }
-    lazy val unrepeatableSubqueries = root.flatMap(_.expressions).flatMap(_.collect {
-      case s: SubqueryExpression if !repeatableInput(s.plan, inSubquery = true) => s.exprId
-    }).toSet
+    lazy val unrepeatableSubqueries = {
+      // The attributes that a filter or join condition may reach: those it references, and those
+      // that the aliases it may replace them with reference, also through a set operation, whose
+      // children and output match by the position of the attribute: PushDownPredicates pushes a
+      // filter above a Union into each child, and ReplaceExceptWithFilter turns a filter of the
+      // right child of an EXCEPT into one of the left child.
+      var reached = AttributeSet(root.flatMap {
+        case f: Filter => Seq(f.condition)
+        case j: Join => j.condition.toSeq
+        case j: LateralJoin => j.condition.toSeq
+        case _ => Nil
+      }.flatMap(_.references))
+      var more = reached
+      while (more.nonEmpty) {
+        more = AttributeSet(root.flatMap {
+          case u @ (_: Union | _: SetOperation) =>
+            val outputs = u.output +: u.children.map(_.output)
+            u.output.indices.filter(i => outputs.exists(o => reached.contains(o(i))))
+              .flatMap(i => outputs.map(_(i)))
+          case p => p.expressions.flatMap {
+            case a: Alias if reached.contains(a.toAttribute) => a.references
+            case _ => Nil
+          }
+        }) -- reached
+        reached ++= more
+      }
+      root.flatMap {
+        case j: LateralJoin => j.condition.toSeq
+        case p => p.expressions.filter {
+          case a: Alias => reached.contains(a.toAttribute)
+          case _ => true
+        }
+      }.flatMap(_.collect {
+        case s: SubqueryExpression if !repeatableInput(s.plan, inSubquery = true) => s.exprId
+      }).toSet
+    }
     exprId => nonDeterministicCondition || unrepeatableSubqueries.exists(_ != exprId)
   }
 
