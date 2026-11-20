@@ -430,7 +430,6 @@ spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput
 spark.sql.analyzer.expandTagPassthroughDuplicates
 spark.sql.analyzer.failAmbiguousSelfJoin
 spark.sql.analyzer.maxIterations
-spark.sql.analyzer.preferColumnOverLcaInArrayIndex
 spark.sql.analyzer.scalarSubqueryAllowGroupByColumnEqualToConstant
 spark.sql.analyzer.singlePassResolver.dualRunSampleRate
 spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
