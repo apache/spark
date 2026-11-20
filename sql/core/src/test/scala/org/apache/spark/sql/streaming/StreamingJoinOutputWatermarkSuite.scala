@@ -354,22 +354,19 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     }
   }
 
-  // The left input is bounded only through a DATE column cast to TIMESTAMP, so the join keeps
-  // evicting it by its event time.
+  // The left input is bounded only through a DATE column cast to TIMESTAMP, so the join evicts it
+  // by that cast, and its state keeps rows of any leftTime.
   for (version <- Seq(2, 4)) {
-    test(s"accept a join bounded through a cast column before a window aggregation, V$version") {
+    test(s"reject a join bounded through a cast column before a window aggregation, V$version") {
       withJoinConf(version) {
         val (leftInput, left) = input("left")
-        val (rightInput, right) = input("right")
+        val (_, right) = input("right")
         val result = left.withColumn("leftDate", expr("date_add(to_date(leftTime), 1)"))
           .join(right, expr("leftKey = rightKey AND " +
             "rightTime BETWEEN leftTime AND CAST(leftDate AS TIMESTAMP)"))
           .groupBy(window($"leftTime", "10 seconds")).count()
           .select($"window.start".cast("long"), $"count")
-        testStream(result)(
-          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
-          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
-          AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)))
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
       }
     }
   }
