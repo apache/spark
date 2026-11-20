@@ -167,7 +167,8 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     // The temporary functions that resolution built in this analysis, including in the SQL
     // functions it expands but not in views. Unlike `referredTempFunctionNames`, a lookup that only
-    // checks whether a function exists does not add to it. A persistent SQL function rejects them.
+    // checks whether a function exists does not add to it. A persistent SQL function rejects them
+    // unless `spark.sql.legacy.allowTempFunctionInPersistedSQLFunction` is set.
     boundTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by

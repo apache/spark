@@ -870,6 +870,32 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60805: a called function's default counts when it fills an omitted argument") {
+    withUserDefinedFunction("temp_fn" -> true, "perm_dflt" -> false, "perm_dflt_tbl" -> false,
+        "perm_outer" -> false) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 2")
+      // Functions whose defaults call the temp function, as earlier versions created them.
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        sql("CREATE FUNCTION perm_dflt(x INT DEFAULT IDENTIFIER('temp_fn')()) " +
+          "RETURNS INT RETURN x")
+        sql("CREATE FUNCTION perm_dflt_tbl(x INT DEFAULT IDENTIFIER('temp_fn')()) " +
+          "RETURNS TABLE (a INT) RETURN SELECT x")
+      }
+      Seq(
+        "RETURNS INT RETURN perm_dflt" -> "perm_outer()",
+        "RETURNS TABLE (a INT) RETURN SELECT * FROM perm_dflt_tbl" -> "* FROM perm_outer()"
+      ).foreach { case (body, call) =>
+        val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_outer() $body()"))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
+        assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
+        // With the argument given, the default and so the temp function are not used.
+        sql(s"CREATE FUNCTION perm_outer() $body(5)")
+        checkAnswer(sql(s"SELECT $call"), Row(5))
+        sql("DROP FUNCTION perm_outer")
+      }
+    }
+  }
+
   test("SPARK-60805: an IDENTIFIER-built call is a temp reference only if PATH resolves it so") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_shadow_db") {
