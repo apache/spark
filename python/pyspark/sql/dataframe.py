@@ -2259,7 +2259,12 @@ class DataFrame:
         elif isinstance(withReplacement, float):
             # For the case below:
             #   sample(0.5 [, seed])
-            _seed = int(fraction) if fraction is not None else random.randint(0, sys.maxsize)
+            if fraction is not None:
+                _seed = int(fraction)
+            elif seed is not None:
+                _seed = int(seed)
+            else:
+                _seed = random.randint(0, sys.maxsize)
             _fraction = float(withReplacement)
             return False, _fraction, _seed
 
