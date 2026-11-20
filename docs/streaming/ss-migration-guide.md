@@ -84,14 +84,16 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   watermark when the other input's watermark and a range condition bound one of its TIMESTAMP
   columns, for example `leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime +
   INTERVAL 5 SECONDS` with a watermark only on `rightTime`. Earlier versions kept such state
-  forever and never emitted the unmatched rows of an outer join. With state format version 4, an
-  outer join that emits the unmatched rows of such an input cannot restart from a checkpoint of an
-  earlier version, or of a query started with
+  forever and never emitted the unmatched rows of an outer join. A bound through a cast that can
+  round or drop digits, such as `CAST(leftTime AS LONG)`, gives such an input no cutoff. A query
+  restarted from a checkpoint of an earlier version keeps the earlier behavior; start it with a
+  new checkpoint to use the new rule. With state format version 4, an outer join that emits the
+  unmatched rows of such an input cannot restart from a checkpoint of a query started with
   `spark.sql.streaming.statefulOperator.allowMultiple` set to false; start it with a new
-  checkpoint. Other joins restart with state format version 4 and keep the rows stored before the
-  restart. With state format versions 1 to 3, every such join restarts and evicts the rows stored
-  before the restart once the cutoff passes them, and an outer join emits the unmatched ones then.
-  With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
+  checkpoint. Other joins restart from such a checkpoint: with state format version 4 they keep
+  the rows stored before the restart, and with state format versions 1 to 3 they evict those rows
+  once the cutoff passes them, and an outer join emits the unmatched ones then. With
+  `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
   behavior.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4

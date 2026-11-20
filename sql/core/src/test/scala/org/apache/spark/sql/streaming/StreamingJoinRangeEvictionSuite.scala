@@ -624,7 +624,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
   }
 
   // Only state format 4 orders the state by the column, and the check covers both inputs.
-  for ((version, joinType) <- Seq((2, "left_outer"), (4, "right_outer"))) {
+  for ((version, joinType) <- Seq((2, "left_outer"), (4, "right_outer"), (4, "inner"))) {
     test(s"restart from a checkpoint without the index version, V$version $joinType") {
       withJoinConf(version) {
         withTempDir { checkpoint =>
@@ -645,12 +645,40 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
                 checkError(
                   e.asInstanceOf[AnalysisException],
                   condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-                  parameters = Map("side" -> "right", "column" -> "`expiry`"))
+                  parameters = Map("side" -> (if (joinType == "right_outer") "right" else "left"),
+                    "column" -> "`expiry`"))
               }
             } else {
               CheckNewAnswer(Row(1, 460L, 100L))
             })
         }
+      }
+    }
+  }
+
+  // A checkpoint written without the join output watermark check keeps the earlier eviction, which
+  // never evicted an input without its own watermark.
+  test("restart from a checkpoint without the output watermark check for an input without its " +
+      "own watermark") {
+    withJoinConf(2) {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          .withWatermark("rightTime", "10 seconds")
+        val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
+          "left_outer").select($"leftKey", $"rightKey")
+        val start = StartStream(checkpointLocation = checkpoint.getCanonicalPath)
+        testStream(joined)(start, AddData(leftInput, (1, 5L)), CheckNewAnswer(), StopStream)
+        removeConfs(checkpoint, SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key)
+        testStream(joined)(start,
+          AddData(rightInput, (2, 30L)), CheckNewAnswer(),
+          // The default mode would evict and emit (1, null) here.
+          AddData(rightInput, (2, 40L)), CheckNewAnswer())
       }
     }
   }

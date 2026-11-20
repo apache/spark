@@ -149,6 +149,42 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
 
   // An earlier version, like the legacy mode, kept every row of such an input, including one
   // whose bounded column is NULL.
+  // A cast to a whole number of seconds rounds 14.2 s and 19.6 s down, so the cutoff solved through
+  // it is too high. Earlier versions never evicted the left input, which has no watermark.
+  for {
+    version <- Seq(2, 4)
+    joinType <- Seq("inner", "left_outer")
+    leftCast <- Seq("LONG", "DOUBLE")
+  } {
+    test(s"an input without its own watermark is not evicted through an inexact cast, " +
+        s"V$version $joinType $leftCast") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Double)]
+        val rightInput = MemoryStream[(Int, Double)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("lt"))
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rt"))
+          .withWatermark("rt", "1 second")
+        val joined = left.join(right,
+            expr(s"leftKey = rightKey AND CAST(lt AS $leftCast) >= CAST(rt AS LONG) - 5"), joinType)
+          .select($"leftKey", $"lt".cast("double"), $"rt".cast("double"))
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 14.2)), AddData(rightInput, (9, 14.2)))),
+          CheckNewAnswer(),
+          // The watermark becomes 19.5 s.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 20.5)), AddData(rightInput, (9, 20.5)))),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 20.6)),
+          CheckNewAnswer(),
+          AddData(rightInput, (1, 19.6)),
+          CheckNewAnswer(Row(1, 14.2, 19.6)))
+      }
+    }
+  }
+
   test("a stored row of an input without its own watermark whose column is NULL is evicted") {
     withJoinConf(2) {
       val leftInput = MemoryStream[(Int, Int)]
