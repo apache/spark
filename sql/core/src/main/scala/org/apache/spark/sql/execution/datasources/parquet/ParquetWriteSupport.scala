@@ -306,7 +306,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
                     (value.getBaseOffset - Platform.BYTE_ARRAY_OFFSET).toInt, value.numBytes())
                 case _ => Binary.fromConstantByteArray(value.getBytes)
               }
-            // Other implementations store BinaryType as Array[Byte], not BinaryView.
+            // Generic rows and arrays hold Array[Byte], so getBinaryView would fail on them.
             case _ => Binary.fromReusedByteArray(row.getBinary(ordinal))
           })
 
