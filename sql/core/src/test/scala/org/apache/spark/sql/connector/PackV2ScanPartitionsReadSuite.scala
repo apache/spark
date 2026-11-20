@@ -48,7 +48,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
   import testImplicits._
 
@@ -644,6 +646,7 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
 }
 
 /** Packing with the opt-in local pipelined shuffle, which needs a session of its own. */
+@DataSourceV2Test
 class PackV2ScanPartitionsPipelinedSuite extends SparkFunSuite
   with AdaptiveSparkPlanHelper with PipelinedShuffleTestSession {
 

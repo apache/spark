@@ -23,7 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.read.{HasPartitionStatistics, InputPartition}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class V2ScanPartitionPackingSuite extends SparkFunSuite {
   private case class Sized(bytes: Option[Long]) extends HasPartitionStatistics {
     override def sizeInBytes(): OptionalLong = bytes.map(OptionalLong.of)
