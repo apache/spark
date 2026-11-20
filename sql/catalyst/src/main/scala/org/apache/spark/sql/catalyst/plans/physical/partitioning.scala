@@ -1296,12 +1296,14 @@ object KeyedPartitioning {
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
-    // Exactly one column argument, and it must be a plain column reference.
+    // Exactly one column argument, a plain column reference, and an identity
+    // (`TransformExpression.functionId`): a partitioning by a transform that cannot be told apart
+    // from another could be merged with one's, e.g. by a union.
     def isSupportedTransform(transform: TransformExpression): Boolean =
-      transform.columnSlots match {
+      transform.functionId.isDefined && (transform.columnSlots match {
         case Seq(col) => isReference(col)
         case _ => false
-      }
+      })
 
     @tailrec
     def isReference(e: Expression): Boolean = e match {

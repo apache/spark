@@ -23,12 +23,13 @@ import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -125,6 +126,25 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
     assert(!b12.hasSameReducedKeys(left))
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
+  }
+
+  test("SPARK-50593: a floating point parameter leaves a transform with no identity") {
+    // `Literal` equals 0.0 and -0.0, and every NaN, while a function can tell them apart. So a
+    // transform with such a parameter is not the same as any other, itself included.
+    val fn = new NamedFunction("test.scale")
+    def t(p: Any, dataType: DataType): TransformExpression =
+      TransformExpression(fn, Seq(a, Literal(p, dataType)))
+    assert(t(0.0, DoubleType).functionId.isEmpty && t(0.0f, FloatType).functionId.isEmpty)
+    assert(t(1.5, DoubleType).functionId.isEmpty, "the type decides, not the value")
+    val nested = Literal.create(Seq(0.0), ArrayType(DoubleType))
+    assert(TransformExpression(fn, Seq(a, nested)).functionId.isEmpty)
+    // Also behind a UDT, whose values are stored as its underlying type.
+    val point = new ExamplePointUDT
+    val udtParam = Literal.create(point.serialize(new ExamplePoint(0.0, 1.0)), point)
+    assert(TransformExpression(fn, Seq(a, udtParam)).functionId.isEmpty)
+    assert(!t(0.0, DoubleType).isSameFunction(t(-0.0, DoubleType)))
+    assert(!t(1.5, DoubleType).isSameFunction(t(1.5, DoubleType)))
+    assert(t(2, IntegerType).isSameFunction(t(2, IntegerType)), "other types keep their identity")
   }
 
   test("SPARK-50593: a transform is not rebuilt over a literal") {

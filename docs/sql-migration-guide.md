@@ -29,7 +29,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.4 to 4.5
 
-- Since Spark 4.5, a V2 scan partitioned by a transform with literal parameters and a single column argument, such as `truncate(col, n)`, reports that partitioning as it does for `bucket(n, col)`. Joins, aggregates and windows over such a scan can skip their shuffle, and then run with one partition per partition key instead of `spark.sql.shuffle.partitions`. Previously, such a scan reported no partitioning, so these operators shuffled it. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.enabled` to `false`. That drops every V2 scan's reported partitioning, not only these, so it also turns off storage-partitioned joins over `identity`, `bucket` and other transforms, and the aggregates and windows that skip their shuffle over any partitioned V2 scan.
+- Since Spark 4.5, a V2 scan partitioned by a transform with literal parameters and a single column argument, such as `truncate(col, n)`, reports that partitioning as it does for `bucket(n, col)`, unless a parameter is or contains a `FLOAT` or `DOUBLE`. Joins, aggregates and windows over such a scan can skip their shuffle, and then run with one partition per partition key instead of `spark.sql.shuffle.partitions`. Previously, such a scan reported no partitioning, so these operators shuffled it. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.enabled` to `false`. That drops every V2 scan's reported partitioning, not only these, so it also turns off storage-partitioned joins over `identity`, `bucket` and other transforms, and the aggregates and windows that skip their shuffle over any partitioned V2 scan.
 
 ## Upgrading from Spark SQL 4.3 to 4.4
 

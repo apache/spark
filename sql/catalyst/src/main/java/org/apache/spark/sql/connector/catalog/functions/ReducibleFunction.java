@@ -72,10 +72,13 @@ public interface ReducibleFunction<I, O> {
    * use {@link Literal#dataType()} to interpret it rather than assuming a JVM type. Spark does not
    * call this method for a pair where either side has a null literal or a literal of array, map,
    * struct or UDT type; such a pair is not reducible, so the join shuffles unless the two
-   * transforms are the same. Nor does it call it when a literal's type differs from the one the
-   * function declares at its position in {@code inputTypes()}; it then treats this method as not
-   * implemented, see the dispatch order below. A literal past the declared arity has no declared
-   * type, so it is passed as it is.
+   * transforms are the same. Nor for a transform with a {@code FLOAT} or {@code DOUBLE} literal,
+   * alone or nested: Spark's literal equality does not tell {@code 0.0} from {@code -0.0}, so it
+   * cannot tell such transforms apart, and a scan partitioned by one reports no partitioning. Nor
+   * does it call it when a literal's type differs from the one the function declares at its
+   * position in {@code inputTypes()}; it then treats this method as not implemented, see the
+   * dispatch order below. A literal past the declared arity has no declared type, so it is passed
+   * as it is.
    * <p>
    * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.

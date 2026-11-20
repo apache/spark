@@ -2038,6 +2038,24 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-50593: transforms whose parameters differ only in the sign of zero are not paired") {
+    // `Literal` equals 0.0 and -0.0, but a function can tell them apart, here by negating the key
+    // for a negative sign. Both scans report keys -1 and 1, each holding the other side's id, so
+    // pairing them as one transform would lose every match. The join must shuffle.
+    val keys = Seq(InternalRow(-1), InternalRow(1))
+    def side(zero: Double, column: Expression): DummySparkPlanWithBatchScanChild =
+      new DummySparkPlanWithBatchScanChild(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(SignFlipFunction, Seq(column, Literal(zero)))), keys))
+    Seq(true, false).foreach { compatible =>
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> compatible.toString) {
+        val smj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None,
+          side(0.0, exprA), side(-0.0, exprB))
+        val shuffles = EnsureRequirements.apply(smj).collect { case s: ShuffleExchangeExec => s }
+        assert(shuffles.size == 2, s"allowCompatibleTransforms=$compatible")
+      }
+    }
+  }
+
   test("SPARK-50593: the key type error names the cogroup key, not a literal parameter") {
     // The key is stored like the column, so the storage check passes, but the transform rebuilt
     // over it cannot be evaluated: a nested decimal of more precision than the declared one. The

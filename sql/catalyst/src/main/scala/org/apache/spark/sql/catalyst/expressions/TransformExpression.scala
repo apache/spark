@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysi
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, IntegerType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
 
 /**
  * The identity of a partition transform: what [[TransformExpression.isSameFunction]] compares, and
@@ -60,7 +60,11 @@ object TransformFunctionId {
   sealed trait ArgumentShape
 
   object ArgumentShape {
-    /** A literal parameter, e.g. the bucket count of `bucket` or the width of `truncate`. */
+    /**
+     * A literal parameter, e.g. the bucket count of `bucket` or the width of `truncate`, compared
+     * with `Literal` equality. So only a literal of a type that equality compares exactly is one,
+     * see [[TransformExpression.functionId]].
+     */
     case class Param(value: Literal) extends ArgumentShape
 
     /** A nested transform, compared by its own identity, recursively. */
@@ -189,12 +193,17 @@ case class TransformExpression(
 
   /**
    * This transform's identity, or None if some argument references more than one column or is not
-   * deterministic (e.g. `b + c`); such a transform is not the same as any other.
+   * deterministic (e.g. `b + c`), or is a literal whose type `Literal` equality does not compare
+   * exactly: a `FLOAT` or `DOUBLE`, alone or nested, since it equates `0.0` with `-0.0` and every
+   * NaN with every other, which a function can tell apart. Such a transform is not the same as any
+   * other, and a scan partitioned by it reports no partitioning
+   * (`KeyedPartitioning.supportsExpressions`).
    */
   lazy val functionId: Option[TransformFunctionId] = {
     import TransformFunctionId.ArgumentShape
     val shapes = children.map {
-      case l: Literal => Some(ArgumentShape.Param(l))
+      case l: Literal =>
+        Option.when(TransformExpression.comparesExactly(l.dataType))(ArgumentShape.Param(l))
       case t: TransformExpression => t.functionId.map(ArgumentShape.Nested(_))
       case e => TransformExpression.columnShape(e)
     }
@@ -765,6 +774,18 @@ object TransformExpression extends Logging {
         case other => other
       })
     }
+  }
+
+  /**
+   * Whether `Literal` equality tells apart every two values of `dataType`, so that a parameter of
+   * the type can be part of a transform's identity. Not for a `FLOAT` or `DOUBLE`, alone or nested,
+   * a UDT's underlying type included: `Literal` equates `0.0` with `-0.0`, and every NaN with every
+   * other.
+   */
+  private def comparesExactly(dataType: DataType): Boolean = !dataType.existsRecursively {
+    case FloatType | DoubleType => true
+    case udt: UserDefinedType[_] => !comparesExactly(udt.sqlType)
+    case _ => false
   }
 
   /** Whether `a` and `b` are the same expression of one column each, see [[expressionShape]]. */

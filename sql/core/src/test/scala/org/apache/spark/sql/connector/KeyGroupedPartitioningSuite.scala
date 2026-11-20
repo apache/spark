@@ -1788,6 +1788,72 @@ class KeyGroupedPartitioningSuite
       mixedKeyGroupPartitions(a2, dt2, o2).canonicalized)
   }
 
+  test("SPARK-50593: scans by transforms whose parameters differ only in the sign of zero") {
+    // `sign_flip(id, 0.0)` and `sign_flip(id, -0.0)` would report the keys [-1, 1] for ids
+    // {-1, 1}, each key holding the other one's id. `Literal` equates the two parameters, so Spark
+    // cannot tell the transforms apart: a transform with a floating point parameter has no
+    // identity, and a scan partitioned by it reports no partitioning. So a union of the two scans
+    // and a join between them shuffle, rather than take one for the other.
+    withFunction(SignFlipFunction) {
+      val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+      def signFlip(zero: Double): Transform =
+        Expressions.apply("sign_flip", Expressions.column("id"), Expressions.literal(zero))
+      createTable("sp", cols, Array(signFlip(0.0)))
+      createTable("sn", cols, Array(signFlip(-0.0)))
+      Seq("sp", "sn").foreach(t => sql(s"INSERT INTO testcat.ns.$t VALUES (-1, 'a'), (1, 'b')"))
+      Seq(true, false).foreach { compatible =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> compatible.toString) {
+          checkAnswer(
+            sql("SELECT id, count(*) FROM (SELECT id FROM testcat.ns.sp UNION ALL " +
+              "SELECT id FROM testcat.ns.sn) GROUP BY id"),
+            Seq(Row(-1, 2L), Row(1, 2L)))
+          val join = sql(s"${selectWithMergeJoinHint("sp", "sn")} sp.id FROM testcat.ns.sp " +
+            "JOIN testcat.ns.sn ON sp.id = sn.id")
+          checkAnswer(join, Seq(Row(-1), Row(1)))
+          val scans = collectScans(join.queryExecution.executedPlan)
+          assert(scans.size == 2 &&
+            scans.forall(!_.outputPartitioning.isInstanceOf[KeyedPartitioning]), scans)
+        }
+      }
+    }
+  }
+
+  test("SPARK-50593: transforms with a literal parameter whose reported keys coincide") {
+    // The parameterized counterpart of the test below. With ids 0 and 1 in every table, scans
+    // partitioned by `identity(id)`, `xor(id, 0)` and `xor(id, 1)` all report the keys [0, 1],
+    // but `xor(id, 1)`'s key 0 holds id 1. Paired as they stand, a join would lose both matches.
+    // Against `identity(id)` the identity side is reduced onto `xor(id, 1)`; against `xor(id, 0)`
+    // they are different transforms with no reducer, so both sides shuffle.
+    withFunction(XorFunction) {
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      def xor(mask: Long): Transform =
+        Expressions.apply("xor", Expressions.column("id"), Expressions.literal(mask))
+      createTable("t_id", cols, Array(identity("id")))
+      createTable("t_x0", cols, Array(xor(0L)))
+      createTable("t_x1", cols, Array(xor(1L)))
+      Seq("t_id", "t_x0", "t_x1").foreach { t =>
+        sql(s"INSERT INTO testcat.ns.$t VALUES (0, 'a'), (1, 'b')")
+      }
+      withReducingJoinConfs {
+        Seq("t_id", "t_x0").foreach { left =>
+          Seq("JOIN", "LEFT OUTER JOIN").foreach { joinType =>
+            val df = sql(s"SELECT l.id, r.id FROM testcat.ns.$left l $joinType " +
+              "testcat.ns.t_x1 r ON l.id = r.id")
+            checkAnswer(df, Seq(Row(0L, 0L), Row(1L, 1L)))
+            val plan = stripAQEPlan(df.queryExecution.executedPlan)
+            if (left == "t_id") {
+              assert(collectShuffles(plan).isEmpty, s"$left $joinType: the identity side reduces")
+            } else {
+              assert(collectShuffles(plan).size == 2, s"$left $joinType: different transforms")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-59688: an identity side and a compatible transform whose reported keys coincide") {
     withFunction(FlipLowBitFunction) {
       // `flip_low_bit` maps 0 to 1 and 1 to 0, so with ids 0 and 1 in both tables the two scans
@@ -8194,14 +8260,19 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  // A table partitioned by `truncate(id, width)` over the int `id`, with ids 0 to 23 and a null.
+  // A table partitioned by `truncate(id, width)` over the int `id`, with ids 0 to 23,
+  // `Int.MinValue`, whose truncated key wraps around for a width that is not a power of 2, and a
+  // null.
   private def createIntTruncateTable(name: String, width: Int): Unit = {
     createTable(name, columns,
       Array(Expressions.apply("truncate", Expressions.column("id"), Expressions.literal(width))))
-    val rows = (0 until 24).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))") :+
+    val rows = (intTruncateIds :+ Int.MinValue).map(i =>
+      s"($i, 'v$i', CAST('2022-01-01' AS timestamp))") :+
       "(null, 'null', CAST('2022-01-01' AS timestamp))"
     sql(s"INSERT INTO testcat.ns.$name VALUES ${rows.mkString(", ")}")
   }
+
+  private val intTruncateIds = 0 until 24
 
   private def joinOnId(left: String, right: String): DataFrame = sql(
     s"""
@@ -8217,7 +8288,7 @@ class KeyGroupedPartitioningSuite
     withReducingJoinConfs {
       val df = joinOnId("it4", "it6")
       assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
-      checkAnswer(df, (0 until 24).map(Row(_)))
+      checkAnswer(df, (intTruncateIds :+ Int.MinValue).map(Row(_)))
     }
   }
 
@@ -8234,7 +8305,7 @@ class KeyGroupedPartitioningSuite
            |JOIN testcat.ns.it6 ON it4.id = it6.id
            |JOIN testcat.ns.it8 ON it4.id = it8.id
            |""".stripMargin)
-      checkAnswer(df, (0 until 24).map(Row(_)))
+      checkAnswer(df, (intTruncateIds :+ Int.MinValue).map(Row(_)))
     }
   }
 
@@ -8296,8 +8367,8 @@ class KeyGroupedPartitioningSuite
     assert(wide.pairReducers(wider) == ((None, None)))
     val narrow = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(4)))
     val narrower = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(6)))
-    assert(narrow.pairReducers(narrower) == ((Some(IntTruncateReducer(12)),
-      Some(IntTruncateReducer(12)))))
+    assert(narrow.pairReducers(narrower) == ((Some(IntTruncateReducer(12, 4)),
+      Some(IntTruncateReducer(12, 6)))))
   }
 
   test("SPARK-50593: the truncate test functions take a null key") {
@@ -8314,7 +8385,7 @@ class KeyGroupedPartitioningSuite
         Literal(4)))
     assert(intTruncate.eval(InternalRow(7)) == 4)
     assert(intTruncate.eval(InternalRow(null)) == null)
-    assert(IntTruncateReducer(4).reduce(null) == null)
+    assert(IntTruncateReducer(4, 2).reduce(null) == null)
   }
 
   test("SPARK-50593: identical truncate widths trigger SPJ under the default config") {

@@ -755,7 +755,7 @@ object IntegerTruncateFunction
     if (input.isNullAt(0)) null else truncate(input.getInt(0), input.getInt(1))
 
   /** `value` snapped down to a multiple of `width`, as the Iceberg spec truncates an integer. */
-  def truncate(value: Int, width: Int): Int = value - (((value % width) + width) % width)
+  def truncate(value: Int, width: Int): Int = value - Math.floorMod(value, width)
 
   override def reducer(
       thisParams: Array[Literal[_]],
@@ -766,7 +766,7 @@ object IntegerTruncateFunction
       val otherWidth = otherParams(0).value().asInstanceOf[Int]
       // Only the finer side reduces; if the common grid is `thisWidth`, this side already is it.
       lcm(thisWidth, otherWidth) match {
-        case Some(common) if common != thisWidth => return IntTruncateReducer(common)
+        case Some(common) if common != thisWidth => return IntTruncateReducer(common, thisWidth)
         case _ =>
       }
     }
@@ -780,9 +780,20 @@ object IntegerTruncateFunction
   }
 }
 
-case class IntTruncateReducer(width: Int) extends Reducer[Integer, Integer] {
-  override def reduce(value: Integer): Integer =
-    if (value == null) null else IntegerTruncateFunction.truncate(value, width)
+/**
+ * Reduces a `truncate(col, sourceWidth)` key onto `width`, a multiple of it, giving the key a
+ * `truncate(col, width)` would give the same values. Truncating wraps around below `Int.MinValue`
+ * as an int does, so a key at `sourceWidth` may already have wrapped, e.g. `-2147483648` at
+ * width 6 is stored as `2147483644`. A true key is a multiple of `sourceWidth` and a wrapped one is
+ * not, unless `sourceWidth` is a power of 2, for which truncating never wraps. So such a key is
+ * unwrapped first, and the result wraps as truncating at `width` would.
+ */
+case class IntTruncateReducer(width: Int, sourceWidth: Int) extends Reducer[Integer, Integer] {
+  override def reduce(value: Integer): Integer = if (value == null) null else {
+    val key = value.toLong
+    val unwrapped = if (key % sourceWidth != 0) key - (1L << 32) else key
+    (Math.floorDiv(unwrapped, width.toLong) * width).toInt
+  }
   override def resultType(): DataType = IntegerType
   override def displayName(): String = s"truncate($width)"
 }
