@@ -656,8 +656,15 @@ private[spark] object PythonWorkerFactory {
         case (cachedPaths, dir) if cachedPaths == paths && dir.isDirectory => dir
       }.getOrElse {
         val dir = Utils.createTempDir(Utils.getLocalDir(conf), "pyfiles")
-        modules.foreach { module =>
-          Files.copy(module.toPath, dir.toPath.resolve(module.getName))
+        try {
+          modules.foreach { module =>
+            Files.copy(module.toPath, dir.toPath.resolve(module.getName))
+          }
+        } catch {
+          case e: Throwable =>
+            // Not cached yet, so nothing else would delete it.
+            try Utils.deleteRecursively(dir) catch { case d: Throwable => e.addSuppressed(d) }
+            throw e
         }
         globalPythonModules = Some((paths, dir))
         dir

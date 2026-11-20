@@ -19,7 +19,7 @@ package org.apache.spark.api.python
 
 import java.io.File
 import java.net.SocketTimeoutException
-import java.nio.file.Files
+import java.nio.file.{Files, NoSuchFileException}
 
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
@@ -63,6 +63,29 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
       // Clearing, as SparkEnv.stop does, deletes the directory.
       PythonWorkerFactory.clearGlobalPythonModulesDirectory()
       assert(!again.exists())
+    } finally {
+      PythonWorkerFactory.clearGlobalPythonModulesDirectory()
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+  test("SPARK-62000: A failed copy of the application's Python modules leaves no directory") {
+    val conf = sc.getConf
+    val dir = Utils.createTempDir()
+    val module = new File(dir, "copy_ok.py")
+    Files.writeString(module.toPath, "value = 'ok'")
+    val missing = new File(dir, "copy_missing.py")
+    try {
+      val cached = PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(module))
+      def copyDirs: Set[String] =
+        cached.getParentFile.listFiles().map(_.getName).filter(_.startsWith("pyfiles")).toSet
+      val before = copyDirs
+      intercept[NoSuchFileException] {
+        PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(module, missing))
+      }
+      assert(copyDirs === before)
+      // The cached copies of another module list stay.
+      assert(PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(module)) === cached)
     } finally {
       PythonWorkerFactory.clearGlobalPythonModulesDirectory()
       Utils.deleteRecursively(dir)
