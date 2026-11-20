@@ -1934,7 +1934,7 @@ object SQLConf {
         "column, or after all conjuncts, except after a conjunct that can be NULL (see " +
         s"${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct before that " +
         "position can raise an error on a row that the check rejects.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)

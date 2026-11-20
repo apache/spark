@@ -4018,9 +4018,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
           spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x")
             .sample(1.0).where("x IS NOT NULL AND c > 0").select("a"),
           Row(0))
-        // The shared `c * 2` would take the CSE branch, which evaluates `c` before the checks, so
-        // the filter falls back to the other branch, and the check on `x` drops the first row
-        // with and without the CSE branch enabled.
+        // The shared `c * 2` is eliminated as a common subexpression when that is enabled for
+        // the filter. `c` is still loaded only by the conjunct that first reads it, after the
+        // check on `x`, so the check drops the first row with and without the elimination.
         Seq("true", "false").foreach { cse =>
           withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse) {
             checkAnswer(
