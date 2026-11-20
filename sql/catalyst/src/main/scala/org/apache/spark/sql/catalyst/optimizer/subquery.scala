@@ -735,13 +735,20 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * PushDownPredicates can push a filter or join condition there, and with it a subquery of an
    * alias that it replaces on the way, e.g. of a Project above or of the operator itself, which
    * can be a copy of the subquery `exprId` itself. ReorderJoin can move a filter with the subquery
-   * above the other inputs of the inner joins around it. The check is conservative: it takes any
-   * non-deterministic filter or join condition; any subquery other than `exprId` that may give
-   * other rows when computed again (see repeatableInput) in a filter or join condition, in an
-   * alias that such a condition may reach (see below), or in any other expression that is not an
-   * alias, such as a grouping expression; the subquery `exprId` in such an alias if it may give
-   * other rows; and the subquery `exprId` in the conditions of inner joins that ReorderJoin
-   * reorders if one of their inputs may give other rows. It computes these once for `root`. Of the
+   * above the other inputs of the inner joins around it. CollapseProject and
+   * PullUpProjectAliasThroughWindow can bring a correlated subquery of a Project above into the
+   * operator, and RewriteCorrelatedScalarSubquery joins the other correlated subqueries of the
+   * operator to its input before this one, so the domain joins compute those joins again. The
+   * check is conservative: it takes any non-deterministic filter or join condition; any subquery
+   * other than `exprId` whose plan may give other rows when computed again (see repeatableInput)
+   * in a filter or join condition, in an alias that such a condition may reach (see `reached`), or
+   * in any other expression that is not an alias, such as a sort order, but not the lateral
+   * subquery of a LateralJoin, which stays in its right side; any other correlated scalar
+   * subquery that may return more than one row and whose plan may give other rows, since its
+   * single join can then fail where computed again; the subquery `exprId` in such an alias if its
+   * plan may give other rows, even where its result cannot change, such as a COUNT over a MAX; and
+   * the subquery `exprId` in the conditions of inner joins that ReorderJoin reorders if one of
+   * their inputs may give other rows. It computes these once for `root`. Of the
    * cases of LimitPushDown for a Project, the ones into a join and, for a LIMIT 1, through a
    * group-only Aggregate keep the LIMIT above a Project with a scalar subquery with a domain join
    * with keepLimitAbove; the ones over UDF evaluation nodes or a UnionLoop occur only after the
@@ -796,6 +803,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         case a: Alias if reached.contains(a.toAttribute) => a
       }))
     }
+    lazy val rowsMayChange = root.flatMap(_.expressions).flatMap(_.collect {
+      case s: ScalarSubquery if s.outerAttrs.nonEmpty && unrepeatable(s.exprId) &&
+          !guaranteedToReturnOneRow(s.plan) => s.exprId
+    })
     lazy val reordered = subqueryIds(root.flatMap {
       case ExtractFiltersAndInnerJoins(input, conditions)
           if conditions.exists(SubqueryExpression.hasCorrelatedSubquery) &&
@@ -803,7 +814,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case _ => Nil
     })
     exprId => nonDeterministicCondition || moving.exists(_ != exprId) || copied(exprId) ||
-      reordered(exprId)
+      rowsMayChange.exists(_ != exprId) || reordered(exprId)
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, mayMove: ExprId => Boolean): LogicalPlan = {
@@ -832,13 +843,6 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 
     // Whether the outer input of `plan` gives the same rows when computed again (see below).
     lazy val inputRepeatable = plan.children.forall(repeatableInput(_))
-    // The correlated scalar subqueries of `plan` that RewriteCorrelatedScalarSubquery may join to
-    // the outer input before another one, whose domain joins then compute that join again, and
-    // that may return another number of rows there, which can fail a single join.
-    lazy val rowsMayChange = plan.expressions.flatMap(_.collect {
-      case s: ScalarSubquery if s.outerAttrs.nonEmpty && !guaranteedToReturnOneRow(s.plan) &&
-          !repeatableInput(s.plan, inSubquery = true) => s.exprId
-    })
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, outerAttrs, exprId, conditions, hint,
@@ -855,21 +859,20 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // qualifies, correlated or not, as before SPARK-60501. Only such an Aggregate does with
         // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, and where the domain joins
         // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
-        // than before: where the outer input, or a join of another subquery of `plan` to it, may
-        // give other rows when computed again (see repeatableInput, mayMoveIntoOuterInput and
-        // rowsMayChange), and for outer references that are not orderable, for which the domain
-        // joins fail. So does a subquery with a scalar Python or external UDF anywhere in its plan
-        // when the conditional evaluation of SPARK-61482 is off, since one in a value over no rows
+        // than before: where the outer input, or a join of another subquery to it, may give other
+        // rows when computed again (see repeatableInput and mayMoveIntoOuterInput), and for outer
+        // references that are not orderable, for which the domain joins fail. So does a subquery
+        // with a scalar Python or external UDF in an expression of an operator of its plan when
+        // the conditional evaluation of SPARK-61482 is off, since one in a value over no rows
         // would then run for every outer row.
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
-          !rowsMayChange.exists(_ != exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
             !domainJoinsWork ||
             (!conf.getConf(DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
               sub.exists(_.expressions.exists(EvalOnlyWhen.hasLiftedUDF)))
-        val lowerAggs = sub match {
+        lazy val lowerAggs = sub match {
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
           case _ => Nil
         }

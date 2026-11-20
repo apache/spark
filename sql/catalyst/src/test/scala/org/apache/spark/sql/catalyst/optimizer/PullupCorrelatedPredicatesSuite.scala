@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, MapType, StringType, TestUDT}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType, LongType, MapType, StringType, TestUDT}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -349,11 +350,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), others = Seq(repeatableScalar),
       above = _.where($"x" > 0)) == inDecorrelation)
     // A filter above on the alias of the subquery itself pushes a copy of the subquery into the
-    // outer input, which counts when it may give other rows, as with a MAX of DOUBLEs.
+    // outer input, which counts when its plan may give other rows, as with a MAX of DOUBLEs, even
+    // where its result, such as this COUNT, cannot change.
     assert(countBugHandling(correlated(max($"d")), above = _.where($"sq" > 0)) == inLegacy)
     assert(countBugHandling(correlated(max($"c")), above = _.where($"sq" > 0)) == inDecorrelation)
     // In the condition of its own operator, the subquery itself does not count, though its MAX of
-    // DOUBLEs may give another value: the domain joins compute only the input of the operator.
+    // DOUBLEs may give another value: the domain joins do not compute the operator itself again.
     val ownFilter = ScalarSubquery(correlated(max($"d")).groupBy()(count(Literal(1)).as("r")))
     assert(countBugHandlingIn(testRelation.where(ownFilter === 1L)) == inDecorrelation)
     // ReorderJoin can move a filter with the subquery above the other inputs of the inner joins
@@ -365,8 +367,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandlingIn(crossed.join(f, Inner, Some($"a" === $"f"))) == inDecorrelation)
     assert(countBugHandlingIn(testRelation.where(sqFilter).join(f.limit(2), Inner,
       Some($"a" === $"f"))) == inDecorrelation)
-    // Another correlated subquery of the operator, whose join to the outer input the domain joins
-    // compute again, counts when it may return another number of rows there, e.g. with a
+    // Another correlated subquery of the operator, or of a Project above, which CollapseProject
+    // can bring into the operator, whose join to the outer input the domain joins compute again,
+    // counts when it may return more than one row and give other rows there, e.g. with a
     // non-deterministic filter, but not when it returns one row.
     // With rows, since an empty LocalRelation has at most no rows.
     val twoRows = testRelation2.copy(data = Seq(InternalRow(1, 1.0), InternalRow(2, 2.0)))
@@ -381,10 +384,25 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), others = Seq(deterministicRows.as("s1"))) ==
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+      above = _.select($"a", nonDeterministicRows, $"sq")) == inLegacy)
+    // A scalar Python UDF in the subquery keeps the previous handling when its conditional
+    // evaluation (SPARK-61482) is off, since it would then run on the value over no rows for every
+    // outer row.
+    val pyUdf = PythonUDF("udf", null, LongType, Seq($"s"), PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key ->
+            enabled.toString) {
+        assert(countBugHandling(correlated(max($"d")), top = Seq(sum(pyUdf))) ==
+          (if (enabled) inDecorrelation else inLegacy), enabled)
+      }
+    }
+    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.select($"a", $"sq", repeatableScalar).where($"x" > 0)) == inDecorrelation)
-    // MIN, MAX, grouping and DISTINCT keep one of the values that compare equal, which one
-    // depending on the order: -0.0 or 0.0 for MIN and MAX of floating-point values (grouping and
-    // DISTINCT normalize them), 'a' or 'A' in UTF8_LCASE for all of them.
+    // MIN, MAX, grouping, DISTINCT, INTERSECT and EXCEPT keep one of the values that compare
+    // equal, which one depending on the order: -0.0 or 0.0 for MIN and MAX of floating-point
+    // values (the others normalize them), 'a' or 'A' in UTF8_LCASE for all of them.
     val collated = LocalRelation($"a".int, $"b".double,
       AttributeReference("s", StringType("UTF8_LCASE"))())
     Seq(collated.groupBy($"a")($"a", max($"b").as("m")),
