@@ -661,11 +661,16 @@ trait UnresolvedStarBase extends Star with Unevaluable {
  *                     be the same as the length of the EXCEPT list. This supports replacing
  *                     expressions instead of excluding them from the original SELECT list.
  *                     With replacements, each EXCEPT name must resolve to a top-level column.
+ *
+ * @param appendMissingReplacements if true, an EXCEPT name that matches no expanded column is not
+ *                                  an error: its replacement is appended after the expanded
+ *                                  columns instead. Requires `replacements`.
  */
 case class UnresolvedStarExceptOrReplace(
     target: Option[Seq[String]],
     excepts: Seq[Seq[String]],
-    replacements: Option[Seq[NamedExpression]])
+    replacements: Option[Seq[NamedExpression]],
+    appendMissingReplacements: Boolean = false)
   extends LeafExpression with UnresolvedStarBase {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
@@ -684,8 +689,26 @@ case class UnresolvedStarExceptOrReplace(
     // a seq of NamedExpressions corresponding to struct fields.
     val expandedCols = super.expandStar(parameters)
 
+    // With appendMissingReplacements, only the excepts that match a column replace it. The
+    // replacements of the other excepts are appended after the expanded columns.
+    val (presentExcepts, presentReplacements, appendedReplacements) =
+      if (appendMissingReplacements) {
+        val replacementList = replacements match {
+          case Some(list) if list.size == excepts.size => list
+          case _ => throw SparkException.internalError(
+            "Appending missing replacements requires one replacement per except")
+        }
+        val expandedAttributes = AttributeSeq(expandedCols.map(_.toAttribute))
+        val (present, missing) = excepts.zip(replacementList).partition { case (exceptParts, _) =>
+          expandedAttributes.resolve(exceptParts, parameters.resolver).isDefined
+        }
+        (present.map(_._1), Some(present.map(_._2)), missing.map(_._2))
+      } else {
+        (excepts, replacements, Nil)
+      }
+
     // resolve except list with respect to the expandedCols
-    val resolvedExcepts = excepts.map { exceptParts =>
+    val resolvedExcepts = presentExcepts.map { exceptParts =>
       AttributeSeq(expandedCols.map(_.toAttribute))
         .resolve(exceptParts, parameters.resolver)
         .getOrElse {
@@ -727,7 +750,7 @@ case class UnresolvedStarExceptOrReplace(
     // Each replacement takes the place of the top-level column that its except names. Two copies
     // of the same column, as in `SELECT x, x`, resolve to one attribute, so a replacement for that
     // name is ambiguous, as it would be for two different columns with the name.
-    val replacementsByColumn: AttributeMap[NamedExpression] = replacements match {
+    val replacementsByColumn: AttributeMap[NamedExpression] = presentReplacements match {
       case Some(replacementList) =>
         assert(exceptPairs.size == replacementList.size,
           "The number of replacements must be the same as the number of excepts")
@@ -735,7 +758,7 @@ case class UnresolvedStarExceptOrReplace(
           throw SparkException.internalError(
             "An EXCEPT name with a replacement must resolve to a top-level column")
         }
-        excepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
+        presentExcepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
           val copies = expandedCols.map(_.toAttribute).filter(_.semanticEquals(column.toAttribute))
           if (copies.size > 1) {
             throw QueryCompilationErrors.ambiguousReferenceError(
@@ -805,14 +828,14 @@ case class UnresolvedStarExceptOrReplace(
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
-              "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+              "columns" -> presentExcepts.map(_.mkString(".")).mkString(", ")))
         // found a match with a replacement - replace the column
         case (col, Some(_)) if replacementsByColumn.contains(col.toAttribute) =>
           replacementsByColumn(col.toAttribute)
       }
     }
 
-    filterColumns(expandedCols, exceptPairs)
+    filterColumns(expandedCols, exceptPairs) ++ appendedReplacements
   }
 }
 

@@ -383,6 +383,151 @@ table t
 select col from st
 |> set col.i1 = 42;
 
+-- EVAL operators: positive tests.
+----------------------------------
+
+-- EVAL replaces an existing column in place, as SET does.
+table t
+|> eval x = 1;
+
+-- EVAL appends a column that does not exist in the input relation after the existing columns, as
+-- EXTEND does.
+table t
+|> eval z = 1;
+
+-- Existing columns are replaced in place and new columns are appended, and each assignment sees
+-- the result of the preceding ones.
+table t
+|> eval z = x + length(y), x = x * 10, zz = z + x;
+
+-- New columns are appended in the order of their assignments.
+table t
+|> eval c = 3, a = 1, b = 2;
+
+-- The example from the EVAL section of the pipe syntax documentation.
+values (0), (1) tab(col)
+|> eval col = col * 2, half = col / 2;
+
+-- Normalizing rows with assignments that replace some columns and add others.
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> eval duration_s = response_ms / 1000,
+        slow = if(duration_s > 2, 1, 0),
+        uri = lower(uri),
+        is_api = if(uri like '/api/%', 1, 0);
+
+-- Assigning the same new column twice appends it and then replaces it.
+table t
+|> eval z = 1, z = z + 1;
+
+-- Names match case-insensitively: Z is appended, and z then replaces it in place.
+table t
+|> eval Z = x, z = Z + 1;
+
+-- With case-sensitive matching, z does not match Z, so both columns are appended.
+set spark.sql.caseSensitive=true;
+
+table t
+|> eval Z = x, z = Z + 1;
+
+set spark.sql.caseSensitive=false;
+
+-- A column added by EVAL can be referenced by the following pipe operators.
+table t
+|> eval z = x + 1
+|> where z > 1
+|> select z;
+
+-- Adding a column with a backquoted name that contains a dot and a space.
+table t
+|> eval `x.y z` = x;
+
+-- Adding columns from a struct field, a scalar subquery, and a window function.
+select col from st
+|> eval i1 = col.i1;
+
+table t
+|> eval m = (select max(a) from other);
+
+table t
+|> eval w = sum(x) over (order by x);
+
+-- The table alias of the input relation remains visible after EVAL.
+table t
+|> as v
+|> eval z = v.x + 1
+|> select v.x, z;
+
+-- EVAL matches only the columns that * expands to, so a hidden metadata column such as _metadata
+-- is not replaced: a new column with that name is appended, and later references resolve to it.
+table t
+|> eval _metadata = x + 1
+|> select x, _metadata;
+
+-- EVAL is a non-reserved keyword, so it also works as a column name.
+select 1 as eval
+|> eval eval = eval + 1;
+
+-- Replacing a struct column in place with a value of another type.
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2);
+
+-- EVAL on an empty input.
+table t
+|> where false
+|> eval z = x + 1, x = 0;
+
+-- IDENTIFIER names the assigned column.
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1;
+
+-- A view whose definition adds a column with EVAL.
+create or replace temporary view pipe_eval_view as
+table t
+|> eval z = x + 1;
+
+select * from pipe_eval_view;
+
+drop view pipe_eval_view;
+
+-- EVAL inside a subquery assigns to the subquery's input: z does not exist in t, so EVAL appends it
+-- there rather than replacing the z column of the outer query.
+select (table t |> eval z = 1 |> select z |> limit 1) as z from values (0) as o(z);
+
+-- EVAL inside a correlated subquery can reference the outer query.
+select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t;
+
+-- EVAL operators: negative tests.
+----------------------------------
+
+-- EVAL with a column name that matches more than one column.
+select 1 as a, 2 as a
+|> eval a = 3;
+
+-- EVAL with a column name that matches two copies of the same column.
+select x, x from t
+|> eval x = 1;
+
+select x, * from t
+|> eval x = 1;
+
+-- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
+select (table t |> eval z = 1 |> limit 1) from values (0) as o(z);
+
+-- Aggregate functions are not allowed in EVAL, whether the assignment adds or replaces a column.
+table t
+|> eval z = sum(x);
+
+table t
+|> eval x = sum(x);
+
+-- EVAL with an alias.
+table t
+|> eval x = 1 as z;
+
+-- Setting nested fields in structs is not supported.
+select col from st
+|> eval col.i1 = 42;
+
 -- DROP operators: positive tests.
 ------------------------------------
 
@@ -1825,6 +1970,10 @@ table t
 | extend 1 as z
 | set z = x + length(y);
 
+-- EVAL with single pipe.
+table t
+| eval z = x + length(y), x = z;
+
 -- WINDOW with single pipe.
 table windowTestData
 | select cate, sum(val) over w
@@ -1871,6 +2020,14 @@ set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
 select 1 | extend y;
 set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
 drop temporary variable extend;
+
+-- EVAL starts a pipe operator only before an assignment, so these are bitwise OR operations with a
+-- column named eval.
+select x | eval from values (1, 2) as v(x, eval);
+
+select x | eval as y from values (1, 2) as v(x, eval);
+
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3;
 
 -- Single PIPE token with configuration disabled: negative tests.
 ------------------------------------------------------------------

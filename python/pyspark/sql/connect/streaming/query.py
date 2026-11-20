@@ -41,6 +41,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.sql.streaming.query import (
     StreamingQueryManager as PySparkStreamingQueryManager,
 )
+from pyspark.sql.streaming.query import _validate_timeout_type
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client.core import _ExecutePlanResponseItem
@@ -83,7 +84,8 @@ class StreamingQuery:
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         cmd = pb2.StreamingQueryCommand()
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout <= 0:
+            _validate_timeout_type(timeout)
+            if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
@@ -218,7 +220,8 @@ class StreamingQueryManager:
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         cmd = pb2.StreamingQueryManagerCommand()
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout <= 0:
+            _validate_timeout_type(timeout)
+            if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},

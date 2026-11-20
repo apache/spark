@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.internal.SQLConf
@@ -206,6 +206,108 @@ class NameStreamingSourcesSuite extends AnalysisTest {
         case other =>
           fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
       }
+    }
+  }
+
+  test("propagates names through the changelog output boundary") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      Seq(UserProvided("cdc"), FlowAssigned("cdc")).foreach { name =>
+        val source = createStreamingRelationV2()
+        val alias = SubqueryAlias("source_alias", source)
+        assert(NameStreamingSources(NamedStreamingRelation(alias, name)) ==
+          alias.copy(child = source.withSourceIdentifyingName(name)))
+        val project = Project(source.output, source)
+        project.setTagValue(Project.hiddenOutputTag, Seq.empty[Attribute])
+        val boundary = SubqueryAlias("table", SubqueryAlias("changelog", project))
+        val result = NameStreamingSources(NamedStreamingRelation(boundary, name))
+
+        assert(result.resolved)
+        assert(result.collect {
+          case source: StreamingRelationV2 => source.sourceIdentifyingName
+        } == Seq(name))
+        val resultProject = result.collectFirst { case p: Project => p }.get
+        assert(resultProject.getTagValue(Project.hiddenOutputTag).contains(Seq.empty))
+        assert(result.metadataOutput.isEmpty)
+      }
+    }
+  }
+
+  test("does not propagate one name to multiple sources below the output boundary") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val sources = Union(Seq(createStreamingRelationV2(), createStreamingRelationV2()))
+      val boundary = SubqueryAlias("changelog", Project(sources.output, sources))
+      val result = NameStreamingSources(
+        NamedStreamingRelation(boundary, UserProvided("cdc")))
+
+      assert(!result.resolved)
+      assert(result.collect {
+        case source: StreamingRelationV2 => source.sourceIdentifyingName
+      } == Seq(Unassigned, Unassigned))
+      assert(result.collect { case n: NamedStreamingRelation => n }.size == 1)
+    }
+  }
+
+  test("source naming keeps nested wrappers stable at unsupported branches") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val innerName = UserProvided("inner")
+      val outerName = UserProvided("outer")
+      val sources = Union(Seq(createStreamingRelationV2(), createStreamingRelationV2()))
+      val plan = NamedStreamingRelation(NamedStreamingRelation(sources, innerName), outerName)
+      val result = NameStreamingSources(plan)
+
+      assert(result.fastEquals(plan))
+      assert(NameStreamingSources(result).fastEquals(result))
+
+      val source = createStreamingRelationV2()
+      val namedSource = NamedStreamingRelation(NamedStreamingRelation(source, innerName), outerName)
+      // The analyzer revisits the outer wrapper after the inner wrapper resolves.
+      val namedResult = NameStreamingSources(NameStreamingSources(namedSource))
+      assert(namedResult.resolved)
+      assert(namedResult.collect {
+        case source: StreamingRelationV2 => source.sourceIdentifyingName
+      } == Seq(outerName))
+    }
+  }
+
+  test("source naming retains explicit names when the leaf does not support naming") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      Seq(UserProvided("cdc"), FlowAssigned("cdc")).foreach { name =>
+        val source = createStreamingRelation()
+        val boundary = SubqueryAlias("changelog", Project(source.output, source))
+        val result = NameStreamingSources(NamedStreamingRelation(boundary, name))
+
+        assert(!result.resolved)
+        assert(result.collect {
+          case n: NamedStreamingRelation => n.sourceIdentifyingName
+        } == Seq(name))
+        assert(NameStreamingSources(result).fastEquals(result))
+      }
+    }
+  }
+
+  test("source naming preserves enforcement through the output boundary") {
+    val source = createStreamingRelationV2()
+    val boundary = SubqueryAlias("changelog", Project(source.output, source))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false") {
+      Seq(UserProvided("cdc"), FlowAssigned("cdc")).foreach { name =>
+        checkError(
+          intercept[AnalysisException] {
+            NameStreamingSources(NamedStreamingRelation(boundary, name))
+          },
+          condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+          parameters = Map("name" -> "cdc"))
+      }
+      assert(NameStreamingSources(NamedStreamingRelation(boundary, Unassigned))
+        .fastEquals(boundary))
+    }
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        intercept[AnalysisException] {
+          NameStreamingSources(NamedStreamingRelation(boundary, Unassigned))
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "(?s).*"),
+        matchPVals = true)
     }
   }
 

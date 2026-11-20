@@ -117,6 +117,7 @@ jobs:
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_periodic=`./dev/is-changed.py -m pyspark-periodic`
           pyspark_connect_old_client="$pyspark"
+          lint_python=true
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -158,6 +159,17 @@ jobs:
                   mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
                 esac
               done
+              # Run the Python linter only when the files it checks, its configurations, its
+              # tools, or its steps in this workflow change.
+              lint_python=false
+              for f in $changed_files; do
+                case "$f" in
+                  *.py|*.pyi|*/tests/typing/*) lint_python=true; break ;;
+                  pyproject.toml|python/mypy.ini) lint_python=true; break ;;
+                  dev/lint-python|dev/spark-test-image/lint/*) lint_python=true; break ;;
+                  .github/workflows/build_and_test.yml) lint_python=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -188,7 +200,7 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,graph,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,config,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -202,6 +214,7 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
+              \"lint-python\" : \"$lint_python\",
               \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
@@ -314,7 +327,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
+            mllib-local, mllib, graphx, graph, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
@@ -949,18 +962,24 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
+    # The callers that pass `jobs` without `lint-python`, e.g. scheduled builds, run these steps.
     - name: List Python packages
+      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
       shell: 'script -q -e -c "bash {0}"'
       run: |
         lsb_release -a
         python3.12 --version
         python3.12 -m pip list
     - name: Python linter
+      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
       shell: 'script -q -e -c "bash {0}"'
       run: |
         PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
     - name: JS linter
-      run: ./dev/lint-js
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-js
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
     - name: R linter

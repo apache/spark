@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedOrdinal, UnresolvedPipeAggregateOrdinal, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedOrdinal, UnresolvedPipeAggregateOrdinal, UnresolvedRelation, UnresolvedStar, UnresolvedStarExceptOrReplace, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -619,6 +619,63 @@ class PlanParserSuite extends AnalysisTest {
             parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
         }
       }
+    }
+  }
+
+  private def pipeAssignmentStars(plan: LogicalPlan): Seq[UnresolvedStarExceptOrReplace] =
+    plan.collect { case Project(Seq(star: UnresolvedStarExceptOrReplace), _) => star }.reverse
+
+  test("pipe EVAL appends assigned columns that do not exist, and SET does not") {
+    val evalStars = pipeAssignmentStars(parsePlan("TABLE t |> EVAL z = 1, x = z + 1"))
+    assert(evalStars.map(_.excepts) == Seq(Seq(Seq("z")), Seq(Seq("x"))))
+    assert(evalStars.forall(_.appendMissingReplacements))
+    assert(evalStars.flatMap(_.replacements.get).map(_.name) == Seq("z", "x"))
+
+    val setStars = pipeAssignmentStars(parsePlan("TABLE t |> SET z = 1, x = z + 1"))
+    assert(setStars.map(_.excepts) == evalStars.map(_.excepts))
+    assert(!setStars.exists(_.appendMissingReplacements))
+
+    // EVAL is non-reserved, so it also works as a column name.
+    val selfStars = pipeAssignmentStars(parsePlan("SELECT 1 AS eval |> EVAL eval = eval + 1"))
+    assert(selfStars.map(_.excepts) == Seq(Seq(Seq("eval"))))
+  }
+
+  test("pipe EVAL after the single-character pipe") {
+    withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "true") {
+      val stars = pipeAssignmentStars(parsePlan("TABLE t | EVAL z = 1 | WHERE z > 0"))
+      assert(stars.map(_.excepts) == Seq(Seq(Seq("z"))))
+      assert(stars.forall(_.appendMissingReplacements))
+      val identifierStars = pipeAssignmentStars(parsePlan("TABLE t | EVAL IDENTIFIER('z') = 1"))
+      assert(identifierStars.map(_.excepts) == Seq(Seq(Seq("z"))))
+      checkError(
+        exception = parseException("SELECT col FROM st | EVAL col.i1 = 42"),
+        condition = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> ("SQL pipe syntax |> EVAL operator with multi-part " +
+          "assignment key (only single-part keys are allowed)")),
+        context = ExpectedContext(fragment = "col.i1 = 42", start = 26, stop = 36))
+      // Without an assignment after it, `| eval` is a bitwise OR with a column named eval.
+      assertEqual("SELECT 1 | eval FROM t", table("t").select(Literal(1) | $"eval"))
+      assertEqual("SELECT a | eval AS b FROM t", table("t").select(($"a" | $"eval").as("b")))
+      assertEqual("SELECT a | eval b FROM t", table("t").select(($"a" | $"eval").as("b")))
+      assertEqual(
+        "SELECT a | eval IDENTIFIER('b') FROM t", table("t").select(($"a" | $"eval").as("b")))
+      assertEqual("SELECT a | eval.f FROM t", table("t").select($"a" | $"eval.f"))
+      // Also when `=` follows a token that ends the expression.
+      Seq(
+        "(a | eval) = 1",
+        "(a | eval) == 1",
+        "(a | eval).f = 1",
+        "abs(a | eval) = 1",
+        "arr[a | eval] = 1",
+        "CASE WHEN c THEN a | eval END = 1").foreach { condition =>
+        val filters = parsePlan(s"SELECT * FROM t WHERE $condition").collect {
+          case f: Filter => f.condition
+        }
+        assert(filters.exists(_.exists(_ == ($"a" | $"eval"))), condition)
+      }
+    }
+    withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "false") {
+      assert(parseException("TABLE t | EVAL z = 1").getCondition == "PARSE_SYNTAX_ERROR")
     }
   }
 
@@ -3561,6 +3618,47 @@ class PlanParserSuite extends AnalysisTest {
         |  BIN WIDTH INTERVAL '5' MINUTE
         |  DISTRIBUTE UNIFORM (value)
         |)""".stripMargin)).size == 1)
+  }
+
+  test("BIN BY: a join keyword after the clause starts the join, not a table alias") {
+    val binBy = "metrics BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' HOUR " +
+      "DISTRIBUTE UNIFORM (value))"
+    Seq("false", "true").foreach { enforceReserved =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+        Seq(
+          "LEFT JOIN t ON metrics.k = t.k" -> LeftOuter,
+          "RIGHT JOIN t ON metrics.k = t.k" -> RightOuter,
+          "FULL JOIN t ON metrics.k = t.k" -> FullOuter,
+          "INNER JOIN t ON metrics.k = t.k" -> Inner,
+          "LEFT SEMI JOIN t ON metrics.k = t.k" -> LeftSemi,
+          "LEFT ANTI JOIN t ON metrics.k = t.k" -> LeftAnti,
+          "CROSS JOIN t" -> Cross,
+          "NATURAL JOIN t" -> NaturalJoin(Inner),
+          "NATURAL LEFT JOIN t" -> NaturalJoin(LeftOuter)).foreach { case (join, joinType) =>
+          val clue = s"$join, enforceReservedKeywords=$enforceReserved"
+          val joins = parsePlan(s"SELECT * FROM $binBy $join").collect { case j: Join => j }
+          assert(joins.map(_.joinType) == Seq(joinType), clue)
+          assert(joins.head.left.isInstanceOf[UnresolvedBinBy], clue)
+        }
+
+        // A table alias before the join keyword still names the BIN BY output.
+        val aliasedJoins = parsePlan(s"SELECT * FROM $binBy b LEFT JOIN t ON b.k = t.k")
+          .collect { case j: Join => j }
+        assert(aliasedJoins.map(_.joinType) == Seq(LeftOuter))
+        aliasedJoins.head.left match {
+          case SubqueryAlias(alias, _: UnresolvedBinBy) => assert(alias.name == "b")
+          case other => fail(s"expected an aliased BIN BY, got:\n$other")
+        }
+
+        // A quoted join keyword is still a valid table alias.
+        val quoted = parsePlan(s"SELECT * FROM $binBy AS `left`")
+        val aliases = quoted.collect { case s: SubqueryAlias if s.alias == "left" => s }
+        assert(aliases.size == 1)
+        assert(aliases.head.child.isInstanceOf[UnresolvedBinBy])
+      }
+    }
   }
 
   test("GAP FILL: clause parses into the expected UnresolvedGapFill") {

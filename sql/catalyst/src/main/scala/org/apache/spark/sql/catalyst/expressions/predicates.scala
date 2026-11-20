@@ -292,17 +292,27 @@ trait PredicateHelper extends AliasHelper with Logging {
 
   /**
    * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
-   * others, by pushing them below a join or moving them into the condition of a join, and the
-   * ones that may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct
-   * written after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or
-   * that reads a column of `plans`, the inputs of the joins, that can fail (see
+   * others, by pushing them below a join, moving them into the condition of a join or combining
+   * them into the filter below, and the ones that may not. A non-deterministic or throwable
+   * conjunct may not, and nor may a conjunct written after it that can fail: one that
+   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
+   * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. The conjuncts that may not move are returned in their written order.
+   *
+   * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
+   * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
+   * condition of the join below them, so only the ones that can not fail may move.
    */
   protected def splitMovable(
       conditions: Seq[Expression],
-      plans: Seq[LogicalPlan]): (Seq[Expression], Seq[Expression]) = {
-    val (leading, following) = conditions.span(cond => cond.deterministic && !cond.throwable)
+      plans: Seq[LogicalPlan],
+      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) = {
+    val (leading, following) = if (afterBarrier) {
+      (Nil, conditions)
+    } else {
+      conditions.span(cond => cond.deterministic && !cond.throwable)
+    }
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
     val (cannotFail, stayUp) = following.partition { cond =>
       ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)

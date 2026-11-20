@@ -83,7 +83,13 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
       case e if isConstant(e) => Literal(EvalInlineTables.evalExpression(table, e), e.dataType)
       case e => e
     })
-    Expand(projections, table.output, OneRowRelation())
+    // The output takes the nullability of the values before they are cast to the common type, so
+    // make it nullable when a cast is nullable, e.g., from DATE to TIMESTAMP_NTZ. Otherwise,
+    // UpdateAttributeNullability makes it nullable only after the NOT NULL checks of writes.
+    val output = table.output.zip(projections.transpose).map { case (attr, column) =>
+      attr.withNullability(attr.nullable || column.exists(_.nullable))
+    }
+    Expand(projections, output, OneRowRelation())
   }
 
   private def runtimeEvaluationEnabled: Boolean =

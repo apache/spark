@@ -142,6 +142,7 @@ ENFORCED	false
 ERROR	false
 ESCAPE	false
 ESCAPED	false
+EVAL	false
 EVOLUTION	false
 EXACT	false
 EXCEPT	false
