@@ -658,7 +658,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         case _: Project | _: Filter | _: Join | _: Union | _: Sort | _: SubqueryAlias |
              _: RepartitionOperation | _: LateralJoin => true
         // They keep one of the rows that compare equal, which one depending on the order, e.g.
-        // 'a' or 'A' in UTF8_LCASE. Floating-point keys are normalized (NormalizeFloatingNumbers).
+        // 'a' or 'A' in UTF8_LCASE. Floating-point keys are normalized in planning (see
+        // NormalizeFloatingNumbers).
         case _: Distinct | _: Intersect | _: Except =>
           p.output.forall(a => UnsafeRowUtils.isBinaryStable(a.dataType))
         // The domain join of a subquery of an operator in `input` takes its domain from the input
@@ -735,10 +736,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * PushDownPredicates can push a filter or join condition there, and with it a subquery of an
    * alias that it replaces on the way, e.g. of a Project above or of the operator itself, which
    * can be a copy of the subquery `exprId` itself. ReorderJoin can move a filter with the subquery
-   * above the other inputs of the inner joins around it. CollapseProject and
-   * PullUpProjectAliasThroughWindow can bring a correlated subquery of a Project above into the
-   * operator, and RewriteCorrelatedScalarSubquery joins the other correlated subqueries of the
-   * operator to its input before this one, so the domain joins compute those joins again. The
+   * above the other inputs of the inner joins around it. CollapseProject can bring a correlated
+   * subquery of a Project above into the operator, and PullUpProjectAliasThroughWindow can move
+   * the subquery into a Project above windows, next to the subqueries there (the windows keep the
+   * rows of the input). RewriteCorrelatedScalarSubquery joins the other correlated subqueries of
+   * the operator to its input before this one, so the domain joins compute those joins again. The
    * check is conservative: it takes any non-deterministic filter or join condition; any subquery
    * other than `exprId` whose plan may give other rows when computed again (see repeatableInput)
    * in a filter or join condition, in an alias that such a condition may reach (see `reached`), or
@@ -765,26 +767,29 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }).toSet
     // The attributes that a filter or join condition may reach: those it references, and those
     // that the aliases it may replace them with reference, also through a Union, which
-    // PushDownPredicates pushes a filter into each child of by the position of the attribute.
+    // PushDownPredicates pushes a filter into each child of by the position of the attribute, and
+    // an EXCEPT ALL or INTERSECT ALL, which RewriteExceptAll and RewriteIntersectAll turn into a
+    // Union of the children first.
     lazy val reached = {
-      var reached = AttributeSet(root.flatMap {
+      var acc = AttributeSet(root.flatMap {
         case f: Filter => Seq(f.condition)
         case j: Join => j.condition.toSeq
         case _ => Nil
       }.flatMap(_.references))
-      var more = reached
+      var more = acc
       while (more.nonEmpty) {
         more = AttributeSet(root.flatMap {
-          case u: Union => u.output.indices.filter(i => reached.contains(u.output(i)))
-            .flatMap(i => u.children.map(_.output(i)))
+          case u @ (_: Union | Except(_, _, true) | Intersect(_, _, true)) =>
+            u.output.indices.filter(i => acc.contains(u.output(i)))
+              .flatMap(i => u.children.map(_.output(i)))
           case p => p.expressions.flatMap {
-            case a: Alias if reached.contains(a.toAttribute) => a.references
+            case a: Alias if acc.contains(a.toAttribute) => a.references
             case _ => Nil
           }
-        }) -- reached
-        reached ++= more
+        }) -- acc
+        acc ++= more
       }
-      reached
+      acc
     }
     def subqueryIds(exprs: Seq[Expression]): Set[ExprId] =
       exprs.flatMap(_.collect { case s: SubqueryExpression => s.exprId }).toSet

@@ -338,6 +338,16 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         above = p => Union(first, p.select($"a", $"sq", other))) == inDecorrelation)
       assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
         above = p => Union(first, p.select($"a", $"sq", other)).where($"x" > 0)) == inLegacy)
+      // Likewise an EXCEPT ALL or INTERSECT ALL, which become a Union first, but not an EXCEPT,
+      // whose filter above stays on its left child.
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+        above = p => Except(first, p.select($"a", $"sq", other), isAll = true).where($"x" > 0)) ==
+        inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"), above = p =>
+        Intersect(first, p.select($"a", $"sq", other), isAll = true).where($"x" > 0)) == inLegacy)
+      assert(countBugHandling(correlated(max($"d")), others = Seq($"a"), above = p =>
+        Except(first, p.select($"a", $"sq", other), isAll = false).where($"x" > 0)) ==
+        inDecorrelation)
       // A join condition, which PushPredicateThroughJoin can push, but not a lateral subquery,
       // which stays in the right side of its join.
       assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
@@ -385,16 +395,20 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.select($"a", nonDeterministicRows, $"sq")) == inLegacy)
-    // A scalar Python UDF in the subquery keeps the previous handling when its conditional
-    // evaluation (SPARK-61482) is off, since it would then run on the value over no rows for every
-    // outer row.
-    val pyUdf = PythonUDF("udf", null, LongType, Seq($"s"), PythonEvalType.SQL_BATCHED_UDF,
+    // Not an uncorrelated one, which is not joined to the input.
+    val uncorrelatedRows = ScalarSubquery(twoRows.where(Rand(0) > 0.5).select($"d")).as("s1")
+    assert(countBugHandling(correlated(max($"d")), others = Seq(uncorrelatedRows)) ==
+      inDecorrelation)
+    // A scalar Python UDF over the result of the lower aggregate keeps the previous handling when
+    // its conditional evaluation (SPARK-61482) is off, since it would then run on the value over
+    // no rows for every outer row.
+    val pyUdf = PythonUDF("udf", null, LongType, Seq(max($"d")), PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true)
     Seq(true, false).foreach { enabled =>
       withSQLConf(
           SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key ->
             enabled.toString) {
-        assert(countBugHandling(correlated(max($"d")), top = Seq(sum(pyUdf))) ==
+        assert(countBugHandling(correlated(pyUdf)) ==
           (if (enabled) inDecorrelation else inLegacy), enabled)
       }
     }
