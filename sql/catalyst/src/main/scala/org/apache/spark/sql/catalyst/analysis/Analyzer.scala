@@ -4405,12 +4405,12 @@ class Analyzer(
 
     /**
      * The attributes defined by the Window nodes of this query block below `plan`, which
-     * ExtractWindowExpressions creates for the window functions of the SELECT list.
+     * `ExtractWindowExpressions` creates for the window functions of the SELECT list. They are
+     * above the Aggregate of the block, if any, and below the Projects of the SELECT list.
      */
     private def windowOutputs(plan: LogicalPlan): AttributeSet = plan match {
       case w: Window => w.windowOutputSet ++ windowOutputs(w.child)
       case p: Project => windowOutputs(p.child)
-      case f: Filter => windowOutputs(f.child)
       case _ => AttributeSet.empty
     }
 
