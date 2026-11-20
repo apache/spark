@@ -7034,7 +7034,9 @@ object SQLConf {
         "rows. When false, revert to evaluating the UDF for every row, which can fail a query " +
         "that references the UDF's result only for rows without matching inner rows. Only " +
         "effective for the subqueries whose COUNT bug DecorrelateInnerQuery handles, which needs " +
-        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true.")
+        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true. When false, a correlated " +
+        "scalar subquery over a nested aggregate without GROUP BY that needs such a rewrite and " +
+        "has such a UDF keeps the handling before SPARK-60501.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

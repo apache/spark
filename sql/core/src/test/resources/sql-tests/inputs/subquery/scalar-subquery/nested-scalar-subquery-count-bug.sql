@@ -80,6 +80,9 @@ from t1 order by a1;
 -- with an outer row whose correlated column is null
 select a1, ( select count(*) from (select max(b2) m from t2 where t.a1 = t2.b1) ) a
 from values (0), (1), (null) as t(a1) order by a1;
+-- with a correlated predicate only over outer columns
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a2 > 1) ) a
+from t1 order by a1;
 
 -- with a join, a union, an intersect, a limit or a window function over the lower aggregates
 select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) l,
@@ -271,6 +274,17 @@ select a1 from t1 where a1 = 0 and ( select sum(d) from (select 10 / coalesce(ma
 select a1, ( select sum(d) from (select cast(coalesce(max(cast(b2 as string)), 'x') as int) d
   from t2 where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1;
+
+-- a COUNT(*) does not use the expression, so it is not evaluated for any outer row
+select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+-- with a grouping key that fails on the value over no rows, which fails at runtime for the outer
+-- row without matching rows, as in the LATERAL form
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1)
+  group by 10 / coalesce(m, 0) ) a
+from t1 order by a1;
 
 -- with a top aggregate over an expression of a lower COUNT, and with a nested correlated
 -- subquery over a lower COUNT

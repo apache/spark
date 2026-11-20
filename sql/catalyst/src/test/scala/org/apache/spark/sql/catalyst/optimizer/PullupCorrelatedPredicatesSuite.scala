@@ -148,20 +148,26 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     countBugHandlingIn(above(outer.select(others :+ ScalarSubquery(subPlan).as("sq"): _*)))
   }
 
-  // countBugHandling of the correlated scalar subquery with the output `r` in `query`.
-  private def countBugHandlingIn(query: LogicalPlan): (Option[Boolean], Boolean) = {
-    val plan = query.analyze
-    val optimized = Optimize.execute(plan)
+  // The correlated scalar subquery with the output `r` in `query` after the rule, which also
+  // checks that running the rule again does not change the plan.
+  private def subqueryWithOutputR(query: LogicalPlan): ScalarSubquery = {
+    val optimized = Optimize.execute(query.analyze)
     comparePlans(Optimize.execute(optimized), optimized, false)
     val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
       case s: ScalarSubquery if s.children.nonEmpty && s.plan.output.head.name == "r" => s
     })
     assert(subqueries.size == 1)
-    val countBugDomainJoin = subqueries.head.plan.exists {
+    subqueries.head
+  }
+
+  // countBugHandling of the correlated scalar subquery with the output `r` in `query`.
+  private def countBugHandlingIn(query: LogicalPlan): (Option[Boolean], Boolean) = {
+    val subquery = subqueryWithOutputR(query)
+    val countBugDomainJoin = subquery.plan.exists {
       case d: DomainJoin => d.joinType == LeftOuter
       case _ => false
     }
-    (subqueries.head.mayHaveCountBug, countBugDomainJoin)
+    (subquery.mayHaveCountBug, countBugDomainJoin)
   }
 
   // ScalarSubquery.countBugResult of the subquery of countBugHandling, as a string.
@@ -173,12 +179,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       above: LogicalPlan => LogicalPlan = identity): Option[String] = {
     val result = if (top.size == 1) top.head else CreateStruct(top)
     val subPlan = lower.groupBy(grouping: _*)(result.as("r"))
-    val optimized = Optimize.execute(above(outer.select(ScalarSubquery(subPlan).as("sq"))).analyze)
-    val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
-      case s: ScalarSubquery if s.children.nonEmpty && s.plan.output.head.name == "r" => s
-    })
-    assert(subqueries.size == 1)
-    subqueries.head.countBugResult.map(_.toString)
+    subqueryWithOutputR(above(outer.select(ScalarSubquery(subPlan).as("sq"))))
+      .countBugResult.map(_.toString)
   }
 
   // DomainJoin.keepLimitAbove of each domain join of the scalar subquery `subPlan`.
@@ -258,7 +260,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // The rest of this test is about subqueries that need the domain joins of
     // DecorrelateInnerQuery, such as `filtered`. Those joins compute the outer input again, so
     // they are not used where it may give other rows then, nor where they fail. The result
-    // computed before decorrelation needs no domain join (see the end of this test).
+    // computed before decorrelation needs no such domain join (see the end of this test).
     // A streaming outer query keeps the legacy behavior.
     val streamingOuter = testRelation.copy(isStreaming = true)
     assert(countBugHandling(filtered(max($"d")), outer = streamingOuter) == (Some(true), false))
@@ -438,6 +440,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandlingIn(crossed.join(f, Inner, Some($"a" === $"f"))) == inDecorrelation)
     assert(countBugHandlingIn(testRelation.where(sqFilter).join(f.limit(2), Inner,
       Some($"a" === $"f"))) == inDecorrelation)
+    // Also for such joins in an input of other inner joins, e.g. below a Project.
+    val z = LocalRelation($"z".int)
+    assert(countBugHandlingIn(z.join(crossed.join(f.limit(2), Inner, Some($"a" === $"f"))
+      .select($"a"), Inner, Some($"z" === $"a"))) == inLegacy)
     // Another correlated subquery of the operator, or of a Project above, which CollapseProject
     // can bring into the operator, whose join to the outer input the domain joins compute again,
     // counts when it may return more than one row and give other rows there, e.g. with a
@@ -496,6 +502,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val udt = LocalRelation($"a".int, AttributeReference("v", new TestUDT.MyDenseVectorUDT())())
     assert(countBugHandling(filtered(max($"d")),
       outer = udt.groupBy($"a")($"a", max($"v").as("m"))) == inLegacy)
+    // Floating-point values in a user-defined type are not normalized as grouping keys.
+    Seq(udt.groupBy($"a", $"v")($"a", $"v"), Distinct(udt.select($"a", $"v"))).foreach { outer =>
+      assert(countBugHandling(filtered(max($"d")), outer = outer) == inLegacy, outer)
+    }
     Seq(collated.groupBy($"a")($"a", max($"a").as("m")),
         // A grouping key that is not in the output.
         collated.groupBy($"a", $"s")($"a"),
@@ -524,9 +534,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         assert(countBugResult(correlated(max($"d"))).isEmpty, kv)
       }
     }
-    // The result computed before decorrelation needs no domain join, so it applies whatever the
-    // outer input is and whatever is above the subquery, also where the domain joins are not
-    // used or fail.
+    // The result computed before decorrelation needs no domain join for an equality correlation,
+    // so it applies whatever the outer input is and whatever is above the subquery, also where
+    // the domain joins are not used or fail.
     Seq(streamingOuter, nonDeterministicOuter, cteOuter, testRelation.limit(10),
         Sample(0.0, 0.5, withReplacement = false, 1L, testRelation), domainOuter,
         collated.groupBy($"a")($"a", max($"b").as("m"))).foreach { outer =>
@@ -534,6 +544,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugResult(correlated(max($"d")), outer = outer) == Some("1"), outer)
     }
     assert(countBugResult(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) == Some("1"))
+    // For a non-equality correlation, decorrelation adds the domain join that it adds on master,
+    // also in a single aggregate, which computes the outer input again.
+    assert(countBugResult(nonEquality, outer = nonDeterministicOuter) == Some("1"))
+    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
     assert(countBugResult(correlated(max($"d")), above = _.where($"sq" > 0)) == Some("1"))
     val overMapUnfiltered = testRelation2.where($"c" === Size($"m")).groupBy()(max($"d").as("s"))
     assert(countBugResult(overMapUnfiltered, outer = mapOuter) == Some("1"))
@@ -604,9 +618,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       val failing = lowerMax.select((Literal(10.0) / coalesce($"s", Literal(0.0))).as("t"))
       assert(countBugResult(failing) == Some("1"))
       // Otherwise the result is not computed, and the count bug is handled in
-      // DecorrelateInnerQuery, which evaluates the expression in the aggregate.
+      // DecorrelateInnerQuery, which evaluates the expression in the aggregate, also for a
+      // grouping key.
       assert(countBugResult(failing, Seq(sum($"t"))).isEmpty)
       assert(countBugHandling(failing, Seq(sum($"t"))) == inDecorrelation)
+      assert(countBugResult(failing, grouping = Seq($"t")).isEmpty)
+      assert(countBugHandling(failing, grouping = Seq($"t")) == inDecorrelation)
     }
     // Neither is it for a filter between the aggregates, a value over an outer reference, a
     // function that is not computed over one row, such as PERCENTILE, a FILTER with a subquery,
@@ -618,6 +635,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       subqueryRelation.where($"e" === $"s").groupBy()(max($"e").as("x"))).isNotNull
     val pyUdf = PythonUDF("udf", null, LongType, Seq($"s"), PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true)
+    assert(countBugResult(lowerMax.select(pyUdf.as("g")), grouping = Seq($"g")).isEmpty)
     Seq(lowerMax.where($"s".isNull) -> count(Literal(1)),
         lowerMax.select(($"s" + $"b").as("s")) -> sum($"s"),
         lowerMax -> new Percentile($"s", Literal(0.5)).toAggregateExpression(),

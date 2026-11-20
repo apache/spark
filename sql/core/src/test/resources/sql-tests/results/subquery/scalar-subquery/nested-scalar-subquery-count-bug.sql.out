@@ -221,6 +221,16 @@ NULL	1
 
 
 -- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a2 > 1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
 select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) l,
   (select min(b2) n from t2 where t1.a1 = t2.b1) r ) a
 from t1 order by a1
@@ -728,6 +738,41 @@ from t1 where a1 = 0 order by a1
 struct<a1:int,a:bigint>
 -- !query output
 0	3
+
+
+-- !query
+select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1)
+  group by 10 / coalesce(m, 0) ) a
+from t1 order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 111,
+    "fragment" : "10 / coalesce(m, 0)"
+  } ]
+}
 
 
 -- !query

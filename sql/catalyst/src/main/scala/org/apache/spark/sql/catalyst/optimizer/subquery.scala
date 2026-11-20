@@ -33,10 +33,9 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED, DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
   WRAP_EXISTS_IN_AGGREGATE_FUNCTION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -577,6 +576,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
    }
 
+  // Whether `a` is an Aggregate without grouping expressions over outer references, whose one row
+  // on empty input decorrelation can lose (see rewriteSubQueries).
+  private[optimizer] def correlatedUngroupedAggregate(a: Aggregate): Boolean =
+    a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a)
+
   // Whether some aggregate function of `a` has a default result on empty input, such as COUNT.
   private def hasDefaultResult(a: Aggregate): Boolean =
     a.aggregateExpressions.exists(_.exists {
@@ -659,11 +663,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       val known = p match {
         case _: Project | _: Filter | _: Join | _: Union | _: Sort | _: SubqueryAlias |
              _: RepartitionOperation | _: LateralJoin => true
-        // They keep one of the rows that compare equal, which one depending on the order, e.g.
-        // 'a' or 'A' in UTF8_LCASE. Floating-point keys are normalized in planning (see
-        // NormalizeFloatingNumbers).
-        case _: Distinct | _: Intersect | _: Except =>
-          p.output.forall(a => UnsafeRowUtils.isBinaryStable(a.dataType))
+        // They keep one of the rows that compare equal, which one depending on the order (see
+        // keyStable).
+        case _: Distinct | _: Intersect | _: Except => p.output.forall(a => keyStable(a.dataType))
         // The domain join of a subquery of an operator in `input` takes its domain from the input
         // of that operator, which this check accepts too. Directly in `input`, its domain comes
         // from outside the plan this rule sees.
@@ -673,7 +675,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // A grouping key keeps one of the values that compare equal too, which matters only where
         // the output has it.
         case a: Aggregate =>
-          a.groupingExpressions.forall(g => UnsafeRowUtils.isBinaryStable(g.dataType) ||
+          a.groupingExpressions.forall(g => keyStable(g.dataType) ||
             !a.aggregateExpressions.exists(_.exists(_.semanticEquals(g)))) &&
             !a.aggregateExpressions.exists(_.exists {
               case ae: AggregateExpression => !orderIrrelevant(ae.aggregateFunction)
@@ -726,6 +728,16 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   private def sameWhenEqual(dt: DataType): Boolean = !dt.existsRecursively {
     case u: UserDefinedType[_] => !sameWhenEqual(u.sqlType)
     case FloatType | DoubleType => true
+    case st: StringType => !st.supportsBinaryEquality
+    case _ => false
+  }
+
+  // Whether grouping keys, or rows of DISTINCT, INTERSECT or EXCEPT, of `dt` are the same
+  // whichever of the values that compare equal comes first, unlike 'a' and 'A' in UTF8_LCASE.
+  // NormalizeFloatingNumbers normalizes floating-point keys in planning, but not in a
+  // user-defined type, which compares as its SQL type.
+  private def keyStable(dt: DataType): Boolean = !dt.existsRecursively {
+    case u: UserDefinedType[_] => !sameWhenEqual(u.sqlType)
     case st: StringType => !st.supportsBinaryEquality
     case _ => false
   }
@@ -814,12 +826,21 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case s: ScalarSubquery if s.outerAttrs.nonEmpty && unrepeatable(s.exprId) &&
           !guaranteedToReturnOneRow(s.plan) => s.exprId
     })
-    lazy val reordered = subqueryIds(root.flatMap {
-      case ExtractFiltersAndInnerJoins(input, conditions)
-          if conditions.exists(SubqueryExpression.hasCorrelatedSubquery) &&
-            !input.forall(i => repeatableInput(i._1)) => conditions
-      case _ => Nil
-    })
+    // ExtractFiltersAndInnerJoins flattens a whole chain of inner joins and filters from its top,
+    // and a chain below has a part of its inputs and conditions, so only the top of each chain is
+    // checked, and the search goes on in its inputs.
+    def reorderedConditions(p: LogicalPlan): Seq[Expression] = p match {
+      case ExtractFiltersAndInnerJoins(input, conditions) if input.size > 1 =>
+        val own = if (conditions.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+            !input.forall(i => repeatableInput(i._1))) {
+          conditions
+        } else {
+          Nil
+        }
+        own ++ input.flatMap(i => reorderedConditions(i._1))
+      case _ => p.children.flatMap(reorderedConditions)
+    }
+    lazy val reordered = subqueryIds(reorderedConditions(root))
     exprId => nonDeterministicCondition || moving.exists(_ != exprId) || copied(exprId) ||
       rowsMayChange.exists(_ != exprId) || reordered(exprId)
   }
@@ -882,7 +903,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
             !domainJoinsWork ||
-            (!conf.getConf(DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
+            (!conf.getConf(
+              SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
               sub.exists(_.expressions.exists(EvalOnlyWhen.hasLiftedUDF)))
         lazy val lowerAggs = sub match {
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
@@ -892,8 +914,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         def defaultResultCountBugAgg(a: Aggregate): Boolean =
           a.groupingExpressions.isEmpty && hasDefaultResult(a)
         def mayHaveCountBugAgg(a: Aggregate): Boolean = defaultResultCountBugAgg(a) ||
-          (a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a) &&
-            !onlyDefaultResultSelectsDecorrelation)
+          (correlatedUngroupedAggregate(a) && !onlyDefaultResultSelectsDecorrelation)
+        // Whether this rule handles the count bug at all, in either place.
+        val handleCountBug = conf.decorrelateInnerQueryEnabled &&
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING)
 
         // The result for an outer row without matching rows of a subquery whose top Aggregate is
         // over a correlated lower Aggregate without grouping expressions, if
@@ -902,11 +926,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // subquery.
         val countBugResult = if (mayHaveCountBugOld.isDefined) {
           countBugResultOld
-        } else if (conf.decorrelateInnerQueryEnabled &&
-            !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) &&
+        } else if (handleCountBug &&
             !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) &&
             sub.isInstanceOf[Aggregate] && !lowerAggs.exists(defaultResultCountBugAgg) &&
-            lowerAggs.exists(a => a.groupingExpressions.isEmpty && hasOuterReferences(a))) {
+            lowerAggs.exists(correlatedUngroupedAggregate)) {
           RewriteCorrelatedScalarSubquery.evalSubqueryOnEmptyCorrelatedInput(sub)
         } else {
           None
@@ -918,9 +941,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // [[DecorrelateInnerQuery]] is correct where its domain joins work (see domainJoinsWork
         // above), and turning it off to handle it in constructLeftJoins is otherwise an
         // optimization, so that additional, redundant left outer joins are not introduced.
-        val handleCountBugInDecorrelate = countBugResult.isEmpty &&
-          conf.decorrelateInnerQueryEnabled &&
-          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+        val handleCountBugInDecorrelate = countBugResult.isEmpty && handleCountBug && !(sub match {
           // If the top level node is an Agg, handle count bug in DecorrelateInnerQuery only if
           // there exists a lower level Agg for which mayHaveCountBugAgg holds. Decorrelation
           // groups a correlated lower level Agg by the outer (domain) columns, so it returns no
@@ -1132,7 +1153,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
   /**
    * Statically evaluate a scalar subquery on an empty input. A result that can't be evaluated
-   * statically is an expression instead of a literal, see `tryEvalExpr`.
+   * statically is an expression instead of a literal, see `tryEvalExpr`. constructLeftJoins uses
+   * ScalarSubquery.countBugResult instead where PullupCorrelatedPredicates set it (see
+   * `evalSubqueryOnEmptyCorrelatedInput`).
    *
    * <b>WARNING:</b> This method only covers subqueries that pass the checks under
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
@@ -1204,9 +1227,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   private def evalAggregateOnOneRow(
       ae: AggregateExpression,
       row: Map[ExprId, Expression]): Option[Expression] = {
-    if (!ae.references.forall(a => row.contains(a.exprId))) return None
     def bind(e: Expression): Expression = e.transform {
-      case a: AttributeReference => row(a.exprId)
+      case a: AttributeReference if row.contains(a.exprId) => row(a.exprId)
     }
     val f = bind(ae.aggregateFunction).asInstanceOf[AggregateFunction]
     val filter = ae.filter.map(c => tryEvalExpr(bind(c)))
@@ -1245,12 +1267,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * input, and computes the Aggregates above over that row.
    *
    * `plan` must be an Aggregate over a chain of Projects, SubqueryAliases and Aggregates down to
-   * the first other node, the correlated input. Each node of that chain returns a row exactly when
-   * its child does, and decorrelation groups each of those Aggregates by the outer (domain)
-   * columns, so the decorrelated subquery returns no row for an outer row exactly when the
-   * correlated input is empty for it. That holds only if the correlated input has no correlated
-   * Aggregate without grouping expressions, whose row decorrelation loses. The correlated input is
-   * taken as empty, and the chain is evaluated over it. An outer reference in the chain does not
+   * the first other node, the correlated input. After decorrelation, which groups each correlated
+   * Aggregate of the chain by the outer (domain) columns, each node of the chain returns a row for
+   * an outer row only if its child does, so the decorrelated subquery returns no row for an outer
+   * row only if the correlated input is empty for it, as long as the correlated input has no
+   * correlated Aggregate without grouping expressions, whose row decorrelation loses. So for such
+   * an outer row the correlated input is taken as empty, and the chain is evaluated over it as
+   * before decorrelation: an Aggregate without grouping expressions returns one row on empty
+   * input. An outer reference in the chain does not
    * change which rows it returns; a value that depends on one is not a literal, and is not taken
    * (see below). A NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None
    * here means that the result cannot be computed.
@@ -1267,6 +1291,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         rowsOf(a.child).flatMap {
           case None if a.groupingExpressions.isEmpty => Some(Some(evalAggregateOnZeroTups(a)))
           case None => Some(None)
+          // A grouping key is computed over the row too, and may fail there, e.g. in ANSI mode, as
+          // it would at runtime, or need a Python UDF; such a key is not taken.
+          case Some(row) if !a.groupingExpressions.forall(g =>
+              bindingExpr(g, row).isInstanceOf[Literal]) => None
           case Some(row) =>
             val results = a.aggregateExpressions.map { ne =>
               val aggs = ne.collect { case ae: AggregateExpression => ae }
@@ -1285,7 +1313,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             if (results.forall(_.isDefined)) Some(Some(results.map(_.get).toMap)) else None
         }
       case input if input.exists {
-          case a: Aggregate => a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a)
+          case a: Aggregate => PullupCorrelatedPredicates.correlatedUngroupedAggregate(a)
           case _ => false
         } => None
       case _ => Some(None)

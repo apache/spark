@@ -3826,6 +3826,25 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: a grouped top aggregate over a lower aggregate gets the result computed " +
+      "before decorrelation") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1) AS VALUES (0), (1)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
+      // The top aggregate returns one row for the group of the row of the lower MAX, also for
+      // a1 = 1, which has no matching rows. On master, the subquery had no count bug handling,
+      // since it has a GROUP BY. It returns at most one row, so it gets a left outer join, also
+      // with single joins on, and no other join.
+      withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val df = sql("SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
+          "WHERE t2.b1 = t1.a1) GROUP BY m) FROM t1")
+        checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        assert(df.queryExecution.optimizedPlan.collect { case j: Join => j.joinType } ==
+          Seq(LeftOuter))
+      }
+    }
+  }
+
   test("SPARK-60501: an expression that fails on the value over no rows fails at runtime") {
     withTempView("t1", "t2") {
       sql("CREATE TEMP VIEW t1(a1, a2) AS VALUES (0, 1), (1, 2)")
@@ -3889,6 +3908,10 @@ class SubquerySuite extends SharedSparkSession
           Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Nil)
         checkAnswer(sql(s"SELECT o.a, $subquery FROM lo7 o"),
           Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Row(7, null) :: Nil)
+        // A COUNT(*), whose result is computed before decorrelation, still gets the fix.
+        checkAnswer(sql("SELECT o.a, (SELECT COUNT(*) FROM (SELECT inv(COALESCE(MAX(ri.d), 0)) " +
+          "AS x FROM ri WHERE ri.c = o.a)) FROM lo7 o"),
+          Row(2, 1) :: Row(3, 1) :: Row(6, 1) :: Row(7, 1) :: Nil)
       }
     }
   }
