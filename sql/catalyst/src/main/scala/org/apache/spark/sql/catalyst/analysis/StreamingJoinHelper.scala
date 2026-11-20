@@ -77,6 +77,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      By default false only for a query restarted from a
    *                                      checkpoint written before the join output watermark
    *                                      check, which keeps the rule of earlier versions.
+   * @param exactCutoffsOnly              whether conjuncts that the solver reads inexactly give no
+   *                                      cutoff
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -84,9 +86,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      risingCutoffsOnly: Boolean = risingCutoffsByDefault): Option[Long] = {
+      risingCutoffsOnly: Boolean = risingCutoffsByDefault,
+      exactCutoffsOnly: Boolean = false): Option[Long] = {
     val cutoffs = conjunctCutoffs(attributesToFindStateWatermarkFor, attributesWithEventWatermark,
-      joinCondition, eventWatermark, risingCutoffsOnly)
+      joinCondition, eventWatermark, risingCutoffsOnly, exactCutoffsOnly)
     val cutoff = cutoffs.map(_._1).reduceOption((x, y) => Math.min(x, y))
     // A cutoff through an inexact conjunct, or one solved for another column on an input whose
     // event time the rising-only rule leaves unbounded, keeps the minimum of earlier versions,
@@ -107,7 +110,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      risingCutoffsOnly: Boolean): Seq[(Long, Boolean)] = {
+      risingCutoffsOnly: Boolean,
+      exactCutoffsOnly: Boolean = false): Seq[(Long, Boolean)] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return Nil
@@ -133,7 +137,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
       // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
-      val stateWatermark = predicate match {
+      val inexact = isInexactConjunct(predicate)
+      val stateWatermark = if (exactCutoffsOnly && inexact) None else predicate match {
         case LessThan(l, r) => getStateWatermarkSafely(l, r)
         case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
         case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
@@ -147,7 +152,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
           log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
       }
-      stateWatermark.map(_ -> isInexactConjunct(predicate))
+      stateWatermark.map(_ -> inexact)
     }
   }
 
@@ -219,8 +224,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         !conjunctCutoffs(AttributeSet(a), attributesWithEventWatermark, joinCondition,
           eventWatermark, risingCutoffsOnly = true).exists(_._2)
     }.flatMap { a =>
+      // Earlier versions never evicted an input without its own watermark, so such an input takes
+      // no cutoff through a conjunct that the solver reads inexactly, which can be too high.
       getStateValueWatermark(AttributeSet(a), attributesWithEventWatermark, joinCondition,
-        eventWatermark).map(a -> _)
+        eventWatermark, exactCutoffsOnly = eventTime.isEmpty).map(a -> _)
     }.nextOption()
   }
 
