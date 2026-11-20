@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class ShowViewColumnsSuite
   extends command.ShowViewColumnsSuiteBase with ViewCommandSuiteBase

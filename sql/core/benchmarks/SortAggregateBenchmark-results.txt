@@ -2,71 +2,71 @@
 sort aggregate without grouping
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w/o group:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                       18462          18845         542         28.4          35.2       1.0X
-codegen = T                                         437            446           9       1200.0           0.8      42.3X
+codegen = F                                       15558          16340        1105         33.7          29.7       1.0X
+codegen = T                                         425            440          11       1232.8           0.8      36.6X
 
 
 ================================================================================================
 sort aggregate with linear keys
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w linear keys:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                       21475          21838         513          3.9         256.0       1.0X
-codegen = T                                       16522          16618          71          5.1         197.0       1.3X
+codegen = F                                       22259          22458         281          3.8         265.4       1.0X
+codegen = T                                       18970          19030         111          4.4         226.1       1.2X
 
 
 ================================================================================================
 sort aggregate with randomized keys
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w randomized keys:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                       30996          31282         406          2.7         369.5       1.0X
-codegen = T                                       26707          26840         169          3.1         318.4       1.2X
+codegen = F                                       35587          35710         174          2.4         424.2       1.0X
+codegen = T                                       30945          31080         146          2.7         368.9       1.2X
 
 
 ================================================================================================
 sort aggregate with string key
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w string key:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        6900           6981         114          3.0         329.0       1.0X
-codegen = T                                        6337           6365          22          3.3         302.2       1.1X
+codegen = F                                        7322           7528         291          2.9         349.2       1.0X
+codegen = T                                        6482           6610         221          3.2         309.1       1.1X
 
 
 ================================================================================================
 sort aggregate with decimal key
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w decimal key:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        3307           3359          73          6.3         157.7       1.0X
-codegen = T                                        2499           2639         200          8.4         119.2       1.3X
+codegen = F                                        3700           3968         378          5.7         176.5       1.0X
+codegen = T                                        2778           2931         167          7.5         132.5       1.3X
 
 
 ================================================================================================
 sort aggregate with multiple key types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 sort agg w multiple keys:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = F                                        6305           6328          33          3.3         300.6       1.0X
-codegen = T                                        5627           5665          39          3.7         268.3       1.1X
+codegen = F                                        7230           7475         346          2.9         344.7       1.0X
+codegen = T                                        6450           6605         156          3.3         307.6       1.1X
 
 

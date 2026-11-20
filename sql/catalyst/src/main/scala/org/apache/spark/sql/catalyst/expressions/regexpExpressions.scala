@@ -402,8 +402,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
 
-    if (right.foldable) {
-      val rVal = right.eval()
+    val foldablePattern = ExprUtils.tryEvalFoldable(right)
+    if (foldablePattern.isDefined) {
+      val rVal = foldablePattern.get
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
@@ -746,8 +747,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
 
-    if (right.foldable) {
-      val rVal = right.eval()
+    val foldablePattern = ExprUtils.tryEvalFoldable(right)
+    if (foldablePattern.isDefined) {
+      val rVal = foldablePattern.get
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())

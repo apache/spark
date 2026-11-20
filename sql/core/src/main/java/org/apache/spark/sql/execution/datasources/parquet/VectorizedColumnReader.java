@@ -297,8 +297,6 @@ public class VectorizedColumnReader {
         if (isCurrentPageDictionaryEncoded) {
           // Save starting offset in case we need to decode dictionary IDs.
           int startOffset = readState.valueOffset;
-          // Save starting row index so we can check if we need to eagerly decode dict ids later
-          long startRowId = readState.rowId;
 
           // Read and decode dictionary ids.
           if (readState.maxRepetitionLevel == 0) {
@@ -311,12 +309,11 @@ public class VectorizedColumnReader {
 
           // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
           // the values to add microseconds precision.
-          if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
+          if (column.hasDictionary() || (startOffset == 0 &&
               isLazyDecodingSupported(typeName, column.dataType()))) {
             // Column vector supports lazy decoding of dictionary values so just set the dictionary.
-            // We can't do this if startRowId is not the first row index in the page AND the column
-            // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
-            // added).
+            // We can't do this if startOffset is not 0 AND the column doesn't have a dictionary
+            // (i.e. some non-dictionary encoded values have already been added to this batch).
             PrimitiveType primitiveType = descriptor.getPrimitiveType();
 
             // We need to make sure that we initialize the right type for the dictionary otherwise

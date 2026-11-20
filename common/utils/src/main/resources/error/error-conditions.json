@@ -1999,7 +1999,7 @@
       },
       "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
         "message" : [
-          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+          "The Bloom filter binary input to <functionName> should be a constant value, an uncorrelated scalar subquery expression or an expression without subqueries, but it's <actual>."
         ]
       },
       "BLOOM_FILTER_WRONG_TYPE" : {
@@ -2928,11 +2928,6 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
-      "CHAR_VARCHAR_COLUMN" : {
-        "message" : [
-          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
-        ]
-      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
@@ -2945,7 +2940,7 @@
       },
       "LOOKUP_PLAN" : {
         "message" : [
-          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
+          "The lookup side must be a DSv2 table, optionally under projections and filters, which Spark evaluates on the lookup results. They cannot contain Python UDFs, external UDFs, subqueries or non-deterministic expressions: Spark evaluates them on each returned row, so a non-deterministic one could give one stored row different values for different stream rows. No other operator can be between the table and the join."
         ]
       },
       "LOOKUP_TABLE_ON_LEFT" : {
@@ -2953,19 +2948,29 @@
           "The lookup-only table <relation> must be on the right side of the join."
         ]
       },
+      "MATERIALIZED_CTE" : {
+        "message" : [
+          "The lookup side reads the CTE <cteName>, which Spark evaluates once instead of inlining it, as for a `MATERIALIZED` CTE. An external lookup join must read the lookup table itself. Remove the `MATERIALIZED` option of the CTE."
+        ]
+      },
+      "METADATA_COLUMN" : {
+        "message" : [
+          "An external lookup join over <relation> cannot read a metadata column of the table."
+        ]
+      },
       "MISSING_JOIN_CONDITION" : {
         "message" : [
-          "The join has no join condition. Write the lookup condition in the join itself, such as in its `ON` clause or the condition argument of `join()`, rather than in a later `WHERE` clause or filter."
+          "The join has no condition from which Spark can plan a lookup. Compare a lookup column with a stream-side value in the join, such as in its `ON` clause or the condition argument of `join()`, or in a `WHERE` clause above an inner join."
         ]
       },
       "NO_LOOKUP_CANDIDATE" : {
         "message" : [
-          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists these types. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
+          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is a comparison `=`, `<=>`, `<`, `<=`, `>` or `>=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does, and a range comparison needs a streaming-side expression that cannot fail; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists both. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
         ]
       },
       "NO_LOOKUP_PREDICATE" : {
         "message" : [
-          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition."
+          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition and the lookup-side filters."
         ]
       },
       "SCAN_BUILDER" : {
@@ -2976,6 +2981,11 @@
       "STATIC_LEFT_SIDE" : {
         "message" : [
           "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "STREAMING_LOOKUP_SIDE" : {
+        "message" : [
+          "The lookup side cannot be a streaming relation."
         ]
       },
       "SUBQUERY_IN_JOIN_CONDITION" : {
@@ -3222,19 +3232,19 @@
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
     "message" : [
-      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+      "The FILE type cannot be a map key in the return type of <routineName>. Use FILE only as a map value, array element, or struct field."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
     "message" : [
-      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+      "The FILE type in the signature of <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_MISSING_QUALIFIER" : {
     "message" : [
-      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+      "The column <colName> of type <dataType> holds a FILE without a qualifier. A FILE in a column definition requires the EXTERNAL qualifier. Use FILE EXTERNAL."
     ],
     "sqlState" : "42601"
   },
@@ -3249,6 +3259,16 @@
       "The column <colName> of type <dataType> holds a FILE, which is not comparable."
     ],
     "subClass" : {
+      "BUCKET_COLUMN" : {
+        "message" : [
+          "It cannot be a bucket column."
+        ]
+      },
+      "BUCKET_SORT_COLUMN" : {
+        "message" : [
+          "It cannot be a column that sorts the buckets."
+        ]
+      },
       "CLUSTERING_COLUMN" : {
         "message" : [
           "It cannot be a clustering column."
@@ -4487,6 +4507,49 @@
     ],
     "sqlState" : "42K09"
   },
+  "INVALID_EXTERNAL_LOOKUP_HINT" : {
+    "message" : [
+      "The `EXTERNAL_LOOKUP` hint is invalid:"
+    ],
+    "subClass" : {
+      "DUPLICATE_OPTION" : {
+        "message" : [
+          "The option <option> is specified more than once."
+        ]
+      },
+      "INVALID_OPTION_FORMAT" : {
+        "message" : [
+          "The option <option> must have the form key=value."
+        ]
+      },
+      "INVALID_OPTION_VALUE" : {
+        "message" : [
+          "The value of the option <option> must be <expected>."
+        ]
+      },
+      "NOT_ON_LOOKUP_SIDE" : {
+        "message" : [
+          "The hint must be placed on the right lookup side of the join."
+        ]
+      },
+      "RELATION_NOT_FOUND" : {
+        "message" : [
+          "Cannot find the relation(s) <relations> named by the hint. A string parameter that does not contain `=` is a relation name. Write a cache option as key=value, such as 'cache_enabled=false'."
+        ]
+      },
+      "UNSUPPORTED_OPTION" : {
+        "message" : [
+          "The option <option> is not supported. Supported options are <supportedOptions>."
+        ]
+      },
+      "UNSUPPORTED_PARAMETER" : {
+        "message" : [
+          "The hint accepts only relation names and string options, but got <parameter>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
@@ -4625,6 +4688,12 @@
       "If you do not want to use the session default timestamp version of this function, use `try_make_timestamp_ntz` or `try_make_timestamp_ltz`."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_GENERATED_COLUMN_EXPRESSION" : {
+    "message" : [
+      "Cannot analyze the generation expression <expression> for column <columnName> in table <tableName>: <reason>"
+    ],
+    "sqlState" : "42621"
   },
   "INVALID_HANDLE" : {
     "message" : [
@@ -5247,6 +5316,11 @@
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
+      "EVALUATION_ERROR" : {
+        "message" : [
+          "the expression <invalidValue> could not be evaluated."
+        ]
+      },
       "EXTENSION" : {
         "message" : [
           "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
@@ -5553,11 +5627,6 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
-      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
-        "message" : [
-          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
-        ]
-      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5576,11 +5645,6 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
-        ]
-      },
-      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
-        "message" : [
-          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },
@@ -7618,6 +7682,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "SESSION_DEPENDENT_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` has a different meaning under the SQL configs of this session, such as `spark.sql.parser.escapedStringLiterals` or `spark.sql.ansi.doubleQuotedIdentifiers`, than under the default values of those configs, which a later write uses to read the condition. Rewrite the condition, or set these configs to their default values and run the statement again."
+    ],
+    "sqlState" : "42621"
+  },
   "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
     "message" : [
       "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
@@ -9082,6 +9152,13 @@
     ],
     "sqlState" : "42704"
   },
+  "UNRESOLVABLE_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The CHECK constraint <constraintName> with condition `<checkCondition>` cannot be enforced on this write because the condition cannot be resolved:",
+      "<cause>"
+    ],
+    "sqlState" : "42621"
+  },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
       "Could not resolve <name> to a table-valued function.",
@@ -9613,6 +9690,11 @@
       "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
         "message" : [
           "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
+      "GAP_FILL" : {
+        "message" : [
+          "The GAP FILL relation operator is not yet supported."
         ]
       },
       "GEOSPATIAL_DISABLED" : {

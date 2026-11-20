@@ -29,9 +29,11 @@ AT	false
 ATOMIC	false
 AUTHORIZATION	true
 AUTO	false
+BACKWARD	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
+BFILL	false
 BIGINT	false
 BIN	false
 BINARY	false
@@ -79,6 +81,7 @@ COMPUTE	false
 CONCATENATE	false
 CONDITION	false
 CONDITIONAL	false
+CONSTANT	false
 CONSTRAINT	true
 CONTAINS	false
 CONTINUE	false
@@ -156,9 +159,11 @@ EXTERNAL	false
 EXTRACT	false
 FALSE	true
 FETCH	true
+FFILL	false
 FIELDS	false
 FILE	false
 FILEFORMAT	false
+FILL	false
 FILTER	true
 FIRST	false
 FLOAT	false
@@ -168,11 +173,13 @@ FOR	true
 FOREIGN	true
 FORMAT	false
 FORMATTED	false
+FORWARD	false
 FOUND	false
 FROM	true
 FULL	true
 FUNCTION	false
 FUNCTIONS	false
+GAP	false
 GENERATED	false
 GEOGRAPHY	false
 GEOMETRY	false
@@ -212,6 +219,7 @@ INTERVAL	false
 INTO	true
 INVOKER	false
 IS	true
+IS_GENERATED	false
 ITEMS	false
 ITERATE	false
 JOIN	true
@@ -235,6 +243,7 @@ LEFT	true
 LEVEL	false
 LIKE	false
 LIMIT	false
+LINEAR	false
 LINES	false
 LIST	false
 LOAD	false

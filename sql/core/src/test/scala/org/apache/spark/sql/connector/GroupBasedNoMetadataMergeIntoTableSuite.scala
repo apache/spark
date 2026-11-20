@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedNoMetadataMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   import testImplicits._

@@ -439,8 +439,8 @@ private class StateStoreCoordinator(
           s"Batch commit tracker already exists for runId=$runId, batchId=$batchId"))
       } else {
         batchCommitTrackers.put(key, new BatchCommitTracker(runId, batchId, expectedStores))
-        logInfo(s"Started tracking commits for batch $batchId with " +
-          s"${expectedStores.values.map(_.values.sum).sum} expected stores")
+        logInfo(log"Started tracking commits for batch ${MDC(LogKeys.BATCH_ID, batchId)} with " +
+          log"${MDC(LogKeys.COUNT, expectedStores.values.map(_.values.sum).sum)} expected stores")
         context.reply(())
       }
 
@@ -597,7 +597,8 @@ private class BatchCommitTracker(
       )
     }
 
-    logInfo(s"All ${committedStores.size} StateStores successfully committed for batch $batchId")
+    logInfo(log"All ${MDC(LogKeys.COUNT, committedStores.size)} StateStores successfully " +
+      log"committed for batch ${MDC(LogKeys.BATCH_ID, batchId)}")
   }
 }
 

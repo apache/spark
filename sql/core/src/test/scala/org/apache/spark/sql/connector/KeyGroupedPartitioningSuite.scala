@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
@@ -66,7 +66,7 @@ import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSuiteBase {
 
@@ -120,6 +120,16 @@ abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSu
 
   protected def collectScans(plan: SparkPlan): Seq[BatchScanExec] = {
     collect(plan) { case s: BatchScanExec => s }
+  }
+
+  /** The nodes of the whole-stage codegen stages of `plan`, down to their inputs. */
+  protected def codegenStageNodes(plan: SparkPlan): Seq[SparkPlan] = {
+    def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
+      case _: InputAdapter => Nil
+      case _ => plan +: plan.children.flatMap(inStage)
+    }
+    collect(plan) { case stage: WholeStageCodegenExec => stage }
+      .flatMap(stage => inStage(stage.child))
   }
 
 }
@@ -661,7 +671,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningSuite
   extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper with SQLMetricsTestUtils {
   private val functions = Seq(
@@ -2616,12 +2626,11 @@ class KeyGroupedPartitioningSuite
           }
         }
         try {
-          // A new `PlannedScan` makes the copy plan the connector's replacement partitions, and a
-          // rewritten runtime filter makes it distinct for tree replacement, while the true literal
-          // leaves those partitions unchanged.
+          // A case-class copy plans the connector's replacement partitions, and a rewritten runtime
+          // filter makes it distinct for tree replacement, while the true literal leaves those
+          // partitions unchanged.
           inMemoryScan.data = newData
-          val rebuilt = leftScan.copy(plannedScan = new PlannedScan(leftScan.scan),
-            runtimeFilters = Seq(Literal.TrueLiteral))
+          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
           assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
           assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
             replacementKeys == Seq(1, 2))
@@ -3560,6 +3569,27 @@ class KeyGroupedPartitioningSuite
         assert(allGroupPartitions.size === 1,
           "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
       }
+    }
+  }
+
+  test("SPARK-60541: a checkpointed scan with a transform partitioning stays in whole-stage " +
+      "codegen") {
+    // The test catalog's `bucket` has only `produceResult`, so a node that evaluates it runs
+    // outside whole-stage codegen. The scan of the checkpoint only reports it in its partitioning.
+    createTable(items, Array(Column.create("id", LongType), Column.create("name", StringType)),
+      Array(bucket(4, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'a'), (2, 'b'), (3, 'a'), (5, 'c')")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.table(s"testcat.ns.$items").localCheckpoint().groupBy("name").count()
+      checkAnswer(df, Seq(Row("a", 2), Row("b", 1), Row("c", 1)))
+      val plan = df.queryExecution.executedPlan
+      val scans = collect(plan) { case r: RDDScanExec => r }
+      assert(scans.size == 1 && (scans.head.outputPartitioning match {
+        case k: physical.KeyedPartitioning =>
+          k.expressions.exists(_.isInstanceOf[TransformExpression])
+        case _ => false
+      }), s"test setup:\n$plan")
+      assert(codegenStageNodes(plan).exists(_.isInstanceOf[RDDScanExec]), plan)
     }
   }
 
@@ -11817,7 +11847,7 @@ class KeyGroupedPartitioningSuite
  * Runs the runtime filtering tests against a catalog whose scans take runtime filters as connector
  * predicates, via [[org.apache.spark.sql.connector.read.SupportsRuntimeFiltering]].
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 
@@ -11832,7 +11862,7 @@ class KeyGroupedPartitioningRuntimeFilterSuite
  * single identity partition column they filter themselves in place on `=` and `IN`, so one node's
  * runtime filter prunes a scan it shares with another node (SPARK-60752).
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 
@@ -11849,7 +11879,7 @@ class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
  * expressions, via
  * [[org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering]].
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningCatalystRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 

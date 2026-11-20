@@ -28,6 +28,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
@@ -258,6 +259,29 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
         StopStream
       )
     }
+  }
+
+  test("pipelined shuffle: a union reads a shuffle that is not its first child") {
+    // The union stage runs the single-partition stream as task 0 and the repartitioned stream's
+    // reduce partitions 0 and 1 as tasks 1 and 2, so its shuffle readers must connect to the
+    // writers as their reduce partitions rather than their task partitions.
+    val inputData1 = LowLatencyMemoryStream.singlePartition[Int]
+    val inputData2 = LowLatencyMemoryStream[Int](2)
+    val unioned = inputData1.toDS().union(inputData2.toDS().repartition(2))
+
+    testStream(unioned, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      AddData(inputData1, (0 until 10): _*),
+      AddData(inputData2, (10 until 100): _*),
+      StartStream(),
+      CheckAnswerWithTimeout(60000, (0 until 100): _*),
+      Execute { q =>
+        val union = q.lastExecution.executedPlan.collectFirst { case u: UnionExec => u }.get
+        val shuffles = union.children.map(_.collect { case s: ShuffleExchangeExec => s })
+        assert(shuffles.map(_.nonEmpty) == Seq(false, true))
+        assert(shuffles(1).forall(_.pipelined), "the streaming-path shuffle must be pipelined")
+      },
+      StopStream
+    )
   }
 
   test("multiple broadcast joins with the same static table run in Real-Time Mode") {

@@ -57,6 +57,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -3275,7 +3276,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   import testImplicits.ColumnConstructorExt
 

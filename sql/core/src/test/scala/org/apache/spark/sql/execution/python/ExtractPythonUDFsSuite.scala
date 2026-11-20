@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
-import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EvalOnlyWhen, Expression, If, Literal, PythonUDF}
+import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit, LocalRelation, Project}
+import org.apache.spark.sql.execution.{FileSourceScanExec, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.{col, count}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, LongType, StringType, StructType}
 
 class ExtractPythonUDFsSuite extends SharedSparkSession {
   import testImplicits._
@@ -40,6 +44,50 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
 
   private def collectArrowExec(plan: SparkPlan): Seq[ArrowEvalPythonExec] = plan.collect {
     case b: ArrowEvalPythonExec => b
+  }
+
+  test("SPARK-61482: a UDF inside an EvalOnlyWhen marker gets the condition, " +
+      "others do not, and they are planned in separate nodes") {
+    val a = AttributeReference("a", LongType)()
+    val b = AttributeReference("b", LongType)()
+    val flag = AttributeReference("flag", BooleanType)()
+    val rel = LocalRelation(a, b, flag)
+    val marked = batchedPythonUDF.builder(Seq(b))
+    val plain = batchedPythonUDF.builder(Seq(a))
+    // flag ? EvalOnlyWhen(flag, dummy(b)) : null  (marked), and dummy(a) unmarked.
+    val proj = Project(
+      Seq(
+        Alias(plain, "p")(),
+        Alias(If(flag, EvalOnlyWhen(flag, marked), Literal.create(null, BooleanType)), "m")()),
+      rel)
+    val extracted = ExtractPythonUDFs(proj)
+    val conds = extracted.collect { case e: BatchEvalPython => e.evalCondition }
+    // Two eval nodes (different conditions), one with the marker's condition, one without.
+    assert(conds.length == 2)
+    assert(conds.count(_.isEmpty) == 1)
+    assert(conds.count(_.contains(flag)) == 1)
+  }
+
+  test("SPARK-61482: the eval condition reaches the physical node and disables columnar input") {
+    val a = AttributeReference("a", LongType)()
+    val flag = AttributeReference("flag", BooleanType)()
+    val rel = LocalRelation(a, flag)
+    val udf = batchedPythonUDF.builder(Seq(a)).asInstanceOf[PythonUDF]
+    val resultAttr = AttributeReference("pythonUDF0", udf.dataType)()
+    // A BatchEvalPython with a condition plans to a BatchEvalPythonExec that keeps it.
+    val batch = BatchEvalPython(Seq(udf), rel.output, Seq(resultAttr), rel, Some(flag))
+    val batchExec = spark.sessionState.planner.plan(batch).next()
+    val batchConds = batchExec.collect { case b: BatchEvalPythonExec => b.evalCondition }.flatten
+    assert(batchConds == Seq(flag))
+    // An ArrowEvalPython with a condition does not take columnar input. Use a columnar-capable
+    // child so that `supportsColumnar` turns on `evalCondition.isEmpty` rather than on the
+    // child (a LocalRelation plans to a row-based scan).
+    val columnarChild = ColumnarLeafExec(Seq(a))
+    def arrowExec(cond: Option[Expression]): ArrowEvalPythonExec =
+      ArrowEvalPythonExec(Seq(udf), Seq(a), Seq(resultAttr), columnarChild,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF, cond)(columnarInputEnabled = true)
+    assert(arrowExec(None).supportsColumnar)
+    assert(!arrowExec(Some(flag)).supportsColumnar)
   }
 
   test("Chained Batched Python UDFs should be combined to a single physical node") {
@@ -166,6 +214,29 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
           assert(filters.length == 2)
           assert(filters.flatMap(_.references).distinct === Array("a"))
         }
+      }
+    }
+  }
+
+  test("SPARK-61614: A filter on the result of a Python UDF over a scan does not evaluate it " +
+      "again") {
+    withClue("V2 scan") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempPath { f =>
+          spark.range(10).select($"id".as("a"), $"id".as("b")).write.parquet(f.getCanonicalPath)
+          val query = spark.read.parquet(f.getCanonicalPath)
+            .select(batchedPythonUDF($"a").as("u"), $"b").where($"u")
+          assert(collectBatchExec(query.queryExecution.executedPlan).length == 1)
+        }
+      }
+    }
+    withClue("V1 partition pruning") {
+      withTable("t") {
+        spark.range(10).select($"id".as("a"), ($"id" % 2).as("p"))
+          .write.partitionBy("p").saveAsTable("t")
+        val query = spark.table("t")
+          .select(batchedPythonUDF($"a").as("u"), $"p").where($"u" && $"p" === 1)
+        assert(collectBatchExec(query.queryExecution.executedPlan).length == 1)
       }
     }
   }
@@ -300,4 +371,11 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
     // The child is pruned to the columns passed through and the arguments.
     assert(evals.head.child.output.map(_.name).toSet == Set("a", "b"))
   }
+}
+
+/** A leaf whose output supports columnar input; it is never executed. */
+private case class ColumnarLeafExec(output: Seq[Attribute]) extends LeafExecNode {
+  override def supportsColumnar: Boolean = true
+  override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException()
 }

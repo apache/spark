@@ -25,10 +25,13 @@ import scala.jdk.CollectionConverters._
 
 import com.sun.management.UnixOperatingSystemMXBean
 
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
+import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
@@ -164,6 +167,24 @@ class SortMergeAsOfJoinSuite extends QueryTest
   }
 
   /**
+   * Checks `df` with the ASOF join codegen off and on, with InferFiltersFromConstraints excluded
+   * so the rows with a NULL ON key reach the join. Also asserts that every input row reaches it.
+   */
+  private def checkAnswerWithNullOnKeys(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      val qe = df.queryExecution
+      def inputs(plan: LogicalPlan): Seq[LogicalPlan] =
+        plan.collectFirst { case j: AsOfJoin => j.children }.get
+      def numRows(plan: LogicalPlan): Long = classic.Dataset.ofRows(spark, plan).count()
+      inputs(qe.analyzed).zip(inputs(qe.optimizedPlan)).foreach { case (input, joinInput) =>
+        assert(numRows(joinInput) == numRows(input),
+          s"Expected every input row to reach the as-of join in:\n${qe.optimizedPlan}")
+      }
+      checkAnswerCodegenOffAndOn(df, expectedAnswer)
+    }
+  }
+
+  /**
    * Rewrites each as-of comparison with the right side first, as an optimizer rule may:
    * `l.ts >= r.ts` becomes `r.ts <= l.ts`. It only flips a comparison that starts with a left
    * side column, so running it again changes nothing.
@@ -216,6 +237,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "nearest").select(right.col("value")),
         Seq(Row(expected)))
+    }
+  }
+
+  test("SPARK-61756: the interpreted join releases the sorters of its children early") {
+    // The right side has keys above every left key, so the join stops reading it before its end.
+    // It must release the right sorter once it has produced its last row, instead of holding its
+    // memory until the task completes. Read the join to its end in a task, and check that the
+    // task holds no execution memory afterwards.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = spark.range(0, 100).selectExpr("id % 5 AS k", "id AS ts")
+      val quotes = spark.range(0, 1000).selectExpr("id % 10 AS k", "id AS ts")
+      // A nearest join has no generated scan, so it runs the interpreted one.
+      val df = trades.joinAsOf(
+        quotes, trades.col("ts"), quotes.col("ts"), usingColumns = Seq("k"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "nearest")
+      val memory = df.queryExecution.toRdd.mapPartitions { iter =>
+        iter.foreach(_ => ())
+        Iterator(TaskContext.get().taskMemoryManager().getMemoryConsumptionForThisTask)
+      }.collect().toSeq
+      // Checked after the run: with AQE, the plan is final only then.
+      val plan = df.queryExecution.executedPlan
+      val join = collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.get
+      assert(!isGenerated(plan, join), plan)
+      assert(memory.forall(_ == 0L), s"$memory, $plan")
     }
   }
 
@@ -1856,6 +1902,274 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  /**
+   * Writes a left input of one parquet file, and a right input of a smaller and a bigger file
+   * with one row each. The left file size is between them, nearer the smaller one. Passes `f`
+   * the two paths.
+   */
+  private def withFileSizeInputs(f: (String, String) => Unit): Unit = {
+    withTempPath { dir =>
+      val leftPath = s"${dir.getCanonicalPath}/left"
+      val rightPath = s"${dir.getCanonicalPath}/right"
+      // SHA-256 digests do not compress, so the number of digests sets the file size.
+      def text(digests: Int): String = "concat_ws('', transform(" +
+        s"sequence(1, $digests), x -> sha2(CAST(id * 1000 + x AS STRING), 256))) AS text"
+      spark.range(0, 3).selectExpr("id AS lid", text(20))
+        .coalesce(1).write.parquet(leftPath)
+      spark.range(100, 101).selectExpr("id AS rid", text(1))
+        .coalesce(1).write.parquet(rightPath)
+      spark.range(200, 201).selectExpr("id AS rid", text(600))
+        .coalesce(1).write.mode("append").parquet(rightPath)
+
+      val leftSize = spark.read.parquet(leftPath).select("_metadata.file_size").head().getLong(0)
+      val rightSizes = spark.read.parquet(rightPath)
+        .select("rid", "_metadata.file_size").collect().map(r => r.getLong(0) -> r.getLong(1))
+        .toMap
+      assert(rightSizes(100L) < leftSize && leftSize < rightSizes(200L) &&
+        leftSize - rightSizes(100L) < rightSizes(200L) - leftSize,
+        s"Unexpected file sizes: left $leftSize, right $rightSizes")
+      f(leftPath, rightPath)
+    }
+  }
+
+  test("join keys can reference file metadata columns") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      for ((direction, rid) <- Seq("backward" -> 100L, "forward" -> 200L, "nearest" -> 100L)) {
+        withClue(s"$direction: ") {
+          val expected = Seq(Row(0L, rid), Row(1L, rid), Row(2L, rid))
+          checkAnswerCodegenOffAndOn({
+            val left = spark.read.parquet(leftPath)
+            val right = spark.read.parquet(rightPath)
+            left.joinAsOf(
+              right, left.col("_metadata.file_size"), right.col("_metadata.file_size"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select(left.col("lid"), right.col("rid"))
+          }, expected)
+
+          // The same join with the metadata fields selected into regular columns first.
+          val left = spark.read.parquet(leftPath)
+            .select(functions.col("lid"), functions.col("_metadata.file_size").as("lk"))
+          val right = spark.read.parquet(rightPath)
+            .select(functions.col("rid"), functions.col("_metadata.file_size").as("rk"))
+          checkAnswer(
+            left.joinAsOf(
+              right, left.col("lk"), right.col("rk"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select("lid", "rid"),
+            expected)
+        }
+      }
+    }
+  }
+
+  // The (left rid, right rid) matches of a self join of the right input of `withFileSizeInputs`
+  // on file size, without exact matches.
+  private val fileSizeSelfJoinMatches = Seq(
+    "backward" -> Seq(Row(200L, 100L)),
+    "forward" -> Seq(Row(100L, 200L)),
+    "nearest" -> Seq(Row(100L, 200L), Row(200L, 100L)))
+
+  test("self join keys can reference file metadata columns through aliases") {
+    withFileSizeInputs { (_, path) =>
+      val df = spark.read.parquet(path)
+      for ((direction, expected) <- fileSizeSelfJoinMatches) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(
+            df.as("l").joinAsOf(
+              df.as("r"), functions.col("l._metadata.file_size"),
+              functions.col("r._metadata.file_size"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = false, direction = direction
+            ).select("l.rid", "r.rid"),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("self join keys can reference file metadata columns without aliases") {
+    withFileSizeInputs { (_, path) =>
+      def fileSize(df: DataFrame): Column = df.col("_metadata.file_size")
+      // The same key, with the metadata column in a lambda body.
+      def fileSizeInLambda(df: DataFrame): Column = functions.aggregate(
+        functions.array(functions.lit(0L)), functions.lit(0L), (acc, x) => acc + x + fileSize(df))
+      def selfJoin(direction: String)(
+          other: classic.DataFrame => classic.DataFrame, key: DataFrame => Column): DataFrame = {
+        val df = spark.read.parquet(path)
+        df.joinAsOf(
+          other(df), key(df), key(df), usingColumns = Seq.empty, joinType = "inner",
+          tolerance = null, allowExactMatches = false, direction = direction
+        ).toDF("lrid", "ltext", "rrid", "rtext").select("lrid", "rrid")
+      }
+      for ((direction, expected) <- fileSizeSelfJoinMatches) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(selfJoin(direction)(df => df, fileSize), expected)
+          checkAnswerCodegenOffAndOn(
+            selfJoin(direction)(_.filter(functions.col("rid") > 0), fileSize), expected)
+          checkAnswerCodegenOffAndOn(selfJoin(direction)(df => df, fileSizeInLambda), expected)
+        }
+      }
+    }
+  }
+
+  test("join keys over file metadata columns must each reference one input") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      val left = spark.read.parquet(leftPath)
+      val right = spark.read.parquet(rightPath)
+      val metadataKey = "\"_metadata.file_size AS file_size\""
+      for {
+        direction <- Seq("backward", "forward", "nearest")
+        (input, other, leftKey, rightKey, refs1) <- Seq(
+          (left, right, left.col("_metadata.file_size") + right.col("rid"),
+            right.col("_metadata.file_size"), "\"(_metadata.file_size AS file_size + rid)\""),
+          (left, right, left.col("_metadata.file_size"), left.col("_metadata.file_size"),
+            metadataKey))
+      } {
+        checkError(
+          exception = intercept[AnalysisException] {
+            input.joinAsOf(
+              other, leftKey, rightKey, usingColumns = Seq.empty, joinType = "inner",
+              tolerance = null, allowExactMatches = true, direction = direction
+            ).queryExecution.analyzed
+          },
+          condition = "AS_OF_JOIN.KEY_REFERENCE",
+          parameters = Map("refs1" -> refs1, "refs2" -> metadataKey))
+      }
+    }
+  }
+
+  test("join keys can reference DSv2 metadata columns") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      withTable("testcat.asof_left", "testcat.asof_right") {
+        // One write task per table, so the `index` metadata column numbers the rows in order.
+        spark.sql("SELECT * FROM VALUES (1, 'a'), (1, 'b'), (2, 'c') AS t(k, lid)")
+          .coalesce(1).writeTo("testcat.asof_left").create()
+        spark.sql("SELECT * FROM VALUES (1, 'x'), (2, 'y') AS t(k, rid)")
+          .coalesce(1).writeTo("testcat.asof_right").create()
+        checkAnswer(spark.table("testcat.asof_left").select("lid", "index"),
+          Seq(Row("a", 0), Row("b", 1), Row("c", 2)))
+        checkAnswer(spark.table("testcat.asof_right").select("rid", "index"),
+          Seq(Row("x", 0), Row("y", 1)))
+
+        def join(usingColumns: Seq[String], joinType: String, direction: String): DataFrame = {
+          val left = spark.table("testcat.asof_left")
+          val right = spark.table("testcat.asof_right")
+          left.joinAsOf(
+            right, left.col("index"), right.col("index"), usingColumns = usingColumns,
+            joinType = joinType, tolerance = null,
+            allowExactMatches = true, direction = direction
+          ).select(left.col("lid"), right.col("rid"))
+        }
+        for ((direction, expected) <- Seq(
+            "backward" -> Seq(Row("a", "x"), Row("b", "y"), Row("c", "y")),
+            "forward" -> Seq(Row("a", "x"), Row("b", "y")),
+            "nearest" -> Seq(Row("a", "x"), Row("b", "y"), Row("c", "y")))) {
+          withClue(s"$direction: ") {
+            checkAnswerCodegenOffAndOn(join(Nil, "inner", direction), expected)
+          }
+        }
+        // No right row has an index at or after the last left row.
+        checkAnswerCodegenOffAndOn(
+          join(Nil, "leftouter", "forward"), Seq(Row("a", "x"), Row("b", "y"), Row("c", null)))
+        // The ON key limits each left row to the right rows with the same `k`.
+        checkAnswerCodegenOffAndOn(
+          join(Seq("k"), "inner", "backward"), Seq(Row("a", "x"), Row("b", "x"), Row("c", "y")))
+      }
+    }
+  }
+
+  /** Writes a DSv2 table `testcat.asof_self` with ids x, y and z at indexes 0, 1 and 2. */
+  private def withIndexedTable(f: => Unit): Unit = {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      withTable("testcat.asof_self") {
+        // One write task, so the `index` metadata column numbers the rows in order.
+        spark.sql("SELECT * FROM VALUES (1, 'x'), (2, 'y'), (3, 'z') AS t(k, id)")
+          .coalesce(1).writeTo("testcat.asof_self").create()
+        checkAnswer(spark.table("testcat.asof_self").select("id", "index"),
+          Seq(Row("x", 0), Row("y", 1), Row("z", 2)))
+        f
+      }
+    }
+  }
+
+  /** Joins `testcat.asof_self` with `other(t)`, a plan over that table, on `index`, unaliased. */
+  private def indexSelfJoin(
+      direction: String,
+      allowExactMatches: Boolean,
+      other: classic.DataFrame => classic.DataFrame = df => df): DataFrame = {
+    val t = spark.table("testcat.asof_self")
+    t.joinAsOf(
+      other(t), t.col("index"), t.col("index"), usingColumns = Seq.empty, joinType = "inner",
+      tolerance = null, allowExactMatches = allowExactMatches, direction = direction
+    ).toDF("lk", "lid", "rk", "rid").select("lid", "rid")
+  }
+
+  test("self join keys can reference DSv2 metadata columns without aliases") {
+    withIndexedTable {
+      for ((direction, expected) <- Seq(
+          "backward" -> Seq(Row("y", "x"), Row("z", "y")),
+          "forward" -> Seq(Row("x", "y"), Row("y", "z")),
+          // On equal gaps, nearest keeps the earlier row, so y gets x.
+          "nearest" -> Seq(Row("x", "y"), Row("y", "x"), Row("z", "y")))) {
+        withClue(s"$direction: ") {
+          val t = spark.table("testcat.asof_self")
+          checkAnswerCodegenOffAndOn(
+            t.as("l").joinAsOf(
+              t.as("r"), functions.col("l.index"), functions.col("r.index"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = false, direction = direction
+            ).select("l.id", "r.id"),
+            expected)
+          checkAnswerCodegenOffAndOn(indexSelfJoin(direction, allowExactMatches = false), expected)
+          checkAnswerCodegenOffAndOn(
+            indexSelfJoin(direction, allowExactMatches = false, _.filter(functions.col("k") > 0)),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("unaliased DSv2 metadata self join returns the same rows with sort-merge on and off") {
+    withIndexedTable {
+      for ((direction, allowExactMatches, expected) <- Seq(
+          ("backward", false, Seq(Row("y", "x"), Row("z", "y"))),
+          ("forward", false, Seq(Row("x", "y"), Row("y", "z"))),
+          // Exact matches: y is as near to x as to z, and the two plans pick different rows then.
+          ("nearest", true, Seq(Row("x", "x"), Row("y", "y"), Row("z", "z"))))) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(indexSelfJoin(direction, allowExactMatches), expected)
+          withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+            val joined = indexSelfJoin(direction, allowExactMatches)
+            checkAnswer(joined, expected)
+            assert(collectWithSubqueries(joined.queryExecution.executedPlan) {
+              case j: SortMergeAsOfJoinExec => j
+            }.isEmpty, "Expected the correlated subquery rewrite")
+          }
+        }
+      }
+    }
+  }
+
+  test("SQL MATCH_CONDITION does not accept file metadata operands yet") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      // A known limit: SQL operands skip metadata columns, so both analyzers accept the same ones.
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(s"SELECT l.lid, r.rid FROM parquet.`$leftPath` l " +
+              s"ASOF JOIN parquet.`$rightPath` r " +
+              "MATCH_CONDITION (l._metadata.file_size >= r._metadata.file_size)")
+          },
+          condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+          parameters = Map(
+            "refs1" -> "\"_metadata.file_size AS file_size\"",
+            "refs2" -> "\"_metadata.file_size AS file_size\""))
+      }
+    }
+  }
+
   test("nearest join with swapped as-of columns") {
     val left = spark.sql("SELECT 10 AS lk")
     val right = spark.sql("SELECT 7 AS rk, 'far' AS tag UNION ALL SELECT 12 AS rk, 'near' AS tag")
@@ -2079,7 +2393,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df2 = spark.createDataFrame(
       List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
     // Inner join: null equi-keys should produce no match
-    checkAnswerCodegenOffAndOn(
+    checkAnswerWithNullOnKeys(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
         joinType = "inner", tolerance = null,
@@ -2091,7 +2405,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     )
     // Left outer: null equi-keys should emit null right
-    checkAnswerCodegenOffAndOn(
+    checkAnswerWithNullOnKeys(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
         joinType = "leftouter", tolerance = null,
@@ -2121,7 +2435,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // One partition: with several, the NULL right row could land apart from the left rows and
     // never be compared.
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      checkAnswerCodegenOffAndOn(
+      checkAnswerWithNullOnKeys(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
           joinType = "leftouter", tolerance = null,
@@ -2494,5 +2808,103 @@ class SortMergeAsOfJoinSuite extends QueryTest
         assert(openedFiles < 8, s"the scan left $openedFiles more files open")
       }
     }
+  }
+
+  // (grp, ts, v, tag) rows for the differential test below. Both sides have ties on `ts` with
+  // different tags, NULL as-of keys, a NULL equi-key and a group that the other side lacks. The
+  // left keys fall before, on, between and after the right keys of their group.
+  private def directionTestSides(): (classic.DataFrame, classic.DataFrame) = {
+    val schema = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) ::
+        StructField("v", IntegerType) ::
+        StructField("tag", StringType) :: Nil)
+    val leftRows = List(
+      Row("A", 1, 5, "l1"), Row("A", 5, 5, "l2"), Row("A", 5, 1, "l3"), Row("A", null, 5, "l4"),
+      Row("A", 9, 5, "l5"), Row("A", 20, 5, "l6"), Row("B", 4, 5, "l7"), Row("C", 4, 5, "l8"),
+      Row(null, 5, 5, "l9"))
+    val rightRows = List(
+      Row("A", 2, 1, "r1"), Row("A", 5, 9, "r2"), Row("A", 5, 3, "r3"), Row("A", null, 1, "r4"),
+      Row("A", 7, 3, "r5"), Row("A", 7, 7, "r6"), Row("A", 12, 1, "r7"), Row("B", 1, 1, "r8"),
+      Row("B", 4, 6, "r9"), Row("D", 4, 1, "r10"), Row(null, 5, 1, "r11"))
+    // One partition per side fixes the order within a tie.
+    (spark.createDataFrame(leftRows.asJava, schema).coalesce(1),
+      spark.createDataFrame(rightRows.asJava, schema).coalesce(1))
+  }
+
+  // A nearest join has no generated scan to compare with.
+  for {
+    direction <- Seq("backward", "forward")
+    joinType <- Seq("inner", "left")
+  } {
+    test(s"$direction $joinType join returns the same rows with the ASOF join codegen off and on") {
+      val leftRowCount = directionTestSides()._1.count()
+      var matchedRows = 0L
+      for {
+        equiKey <- Seq(false, true)
+        residual <- Seq(false, true)
+        tolerance <- Seq(None, Some(2))
+        allowExactMatches <- Seq(false, true)
+        // A residual condition or a tolerance keeps the buffered scan, so the cursor scan
+        // config changes nothing there.
+        cursorScan <- if (residual || tolerance.nonEmpty) Seq(false) else Seq(false, true)
+      } {
+        withClue(s"equi-key $equiKey, residual $residual, tolerance $tolerance, " +
+            s"exact matches $allowExactMatches, cursor scan $cursorScan: ") {
+          withSQLConf(
+              SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+              SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+            def joined: DataFrame = {
+              val (left, right) = directionTestSides()
+              val conditions =
+                (if (equiKey) Seq(left.col("grp") === right.col("grp")) else Nil) ++
+                  (if (residual) Seq(left.col("v") >= right.col("v")) else Nil)
+              left.joinAsOf(
+                right, left.col("ts"), right.col("ts"),
+                joinExprs = conditions.reduceOption(_ && _).orNull,
+                joinType = joinType, tolerance = tolerance.map(functions.lit).orNull,
+                allowExactMatches = allowExactMatches, direction = direction)
+            }
+            // The interpreted scan gives the expected rows of the generated one.
+            var interpreted: Seq[Row] = null
+            withAsOfJoinCodegenOffAndOn { codegen =>
+              val query = joined
+              if (codegen) {
+                checkAnswer(query, interpreted)
+              } else {
+                interpreted = query.collect().toSeq
+              }
+              val op = assertAsOfJoinCodegen(query, codegen)
+              assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan,
+                "Unexpected scan: the cursor scan runs exactly when it is on")
+            }
+            if (joinType == "left") assert(interpreted.length == leftRowCount)
+            matchedRows += interpreted.count(!_.isNullAt(7))
+          }
+        }
+      }
+      assert(matchedRows > 0, "no case matched any row")
+    }
+  }
+
+  test("a nearest join built with the codegen on has no generated scan") {
+    val (left, right) = directionTestSides()
+    val joined = left.joinAsOf(
+      right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
+      joinType = "inner", tolerance = null, allowExactMatches = true, direction = "nearest")
+    val planned = joined.queryExecution.sparkPlan.collectFirst {
+      case j: SortMergeAsOfJoinExec => j
+    }.get
+    // The planner already passes the config on. Set it here so the test does not depend on it.
+    val join = planned.copy(codegenEnabled = true)
+    assert(join.direction == Nearest)
+    assert(!join.supportCodegen)
+    // A stage built by hand around the join must fail, not run the scan of another direction.
+    checkError(
+      exception = intercept[SparkException] {
+        WholeStageCodegenExec(join)(codegenStageId = 0).doCodeGen()
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
   }
 }

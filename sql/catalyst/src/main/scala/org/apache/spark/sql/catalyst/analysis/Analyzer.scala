@@ -714,7 +714,12 @@ class Analyzer(
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
       Seq(ResolveHints.ResolveJoinStrategyHints,
-        ResolveHints.ResolveCoalesceHints) ++
+        ResolveHints.ResolveCoalesceHints,
+        // Must run after Disable Hints, which removes it when hints are disabled, and before
+        // Remove Unresolved Hints, which would drop it as unrecognized. Its order relative to the
+        // other hint rules does not matter: a strategy hint and this hint on the same relation
+        // resolve to separate nodes either way.
+        ResolveExternalLookupHint) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
@@ -750,6 +755,7 @@ class Analyzer(
       ResolvePivot ::
       ResolveUnpivot ::
       ResolveBinBy ::
+      ResolveGapFill ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
@@ -815,11 +821,12 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("ScalaUDF Null Handling", fixedPoint,
-      // `HandleNullInputsForUDF` may wrap the `ScalaUDF` with `If` expression to return null for
-      // null inputs, so the result can be null even if `ScalaUDF#nullable` is false. We need to
-      // run `UpdateAttributeNullability` to update nullability of the UDF output attribute in
-      // downstream operators. After updating attribute nullability, `ScalaUDF`s in downstream
-      // operators may need null handling as well, so we should run these two rules repeatedly.
+      // `HandleNullInputsForUDF` wraps the `ScalaUDF` with `If` expression to return null for null
+      // inputs of primitive parameters. An attribute can become nullable after resolution, e.g. a
+      // resolved column of the null-supplying side of an outer join, so we need to run
+      // `UpdateAttributeNullability` to update nullability of the attributes. After updating
+      // attribute nullability, `ScalaUDF`s reading them may need null handling as well, so we
+      // should run these two rules repeatedly.
       HandleNullInputsForUDF,
       UpdateAttributeNullability),
     Batch("UDF", Once,
@@ -2644,18 +2651,25 @@ class Analyzer(
   }
 
   /**
-   * A rule that binds procedures to the input types and rearranges arguments as needed.
+   * A rule that binds procedures to the input types and rearranges arguments as needed, and
+   * records the bound procedure in a [[ResolvedBoundProcedure]].
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute)
+      case c @ Call(ResolvedProcedure(catalog, ident, procedure), args, _)
           if args.forall(_.resolved) =>
-        val inputType = extractInputType(args)
-        val bound = unbound.bind(inputType)
-        validateParameterModes(bound)
+        val boundProcedure = procedure match {
+          case unbound: UnboundProcedure => unbound.bind(extractInputType(args))
+          case bound: BoundProcedure => bound
+          case other =>
+            throw SparkException.internalError(s"Unsupported procedure: ${other.getClass.getName}")
+        }
+        validateParameterModes(boundProcedure)
         val rearrangedArgs =
-          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
-        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
+          NamedParametersSupport.defaultRearrange(boundProcedure, args, SQLConf.get.resolver)
+        c.copy(
+          procedure = ResolvedBoundProcedure(catalog, ident, boundProcedure),
+          args = rearrangedArgs)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {

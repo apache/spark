@@ -109,14 +109,14 @@ object functions {
       sf.struct(
         sf.lit(0.toByte).alias("type"),
         sf.lit(sparse.size).alias("size"),
-        sf.lit(sparse.indices).alias("indices"),
-        sf.lit(sparse.values).alias("values"))
+        sf.typedLit(sparse.indices).alias("indices"),
+        sf.typedLit(sparse.values).alias("values"))
     case dense: DenseVector =>
       sf.struct(
         sf.lit(1.toByte).alias("type"),
         sf.lit(null).cast(IntegerType).alias("size"),
-        sf.lit(null).cast(ArrayType(IntegerType)).alias("indices"),
-        sf.lit(dense.values).alias("values"))
+        sf.typedLit[Array[Int]](null).alias("indices"),
+        sf.typedLit(dense.values).alias("values"))
   }
 
   private[ml] def array_binary_search(a: Column, v: Column): Column =

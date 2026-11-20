@@ -156,6 +156,7 @@ class _GaussianMixtureParams(
     HasTol,
     HasAggregationDepth,
     HasWeightCol,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
@@ -418,11 +419,13 @@ class GaussianMixture(
         seed: Optional[int] = None,
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                 aggregationDepth=2, weightCol=None)
+                 aggregationDepth=2, weightCol=None, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -448,11 +451,13 @@ class GaussianMixture(
         seed: Optional[int] = None,
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "GaussianMixture":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                  aggregationDepth=2, weightCol=None)
+                  aggregationDepth=2, weightCol=None, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for GaussianMixture.
         """
@@ -521,6 +526,13 @@ class GaussianMixture(
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "GaussianMixture":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
@@ -1268,7 +1280,9 @@ class BisectingKMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
+class _LDAParams(
+    HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval, HasIntermediateStorageLevel
+):
     """
     Params for :py:class:`LDA` and :py:class:`LDAModel`.
 
@@ -1718,13 +1732,15 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         topicConcentration: Optional[float] = None,
         topicDistributionCol: str = "topicDistribution",
         keepLastCheckpoint: bool = True,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
-                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
-                  subsamplingRate=0.05, optimizeDocConcentration=True,\
-                  docConcentration=None, topicConcentration=None,\
-                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True)
+                 k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
+                 subsamplingRate=0.05, optimizeDocConcentration=True,\
+                 docConcentration=None, topicConcentration=None,\
+                 topicDistributionCol="topicDistribution", keepLastCheckpoint=True,\
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
@@ -1756,13 +1772,15 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         topicConcentration: Optional[float] = None,
         topicDistributionCol: str = "topicDistribution",
         keepLastCheckpoint: bool = True,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "LDA":
         """
         setParams(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
                   subsamplingRate=0.05, optimizeDocConcentration=True,\
                   docConcentration=None, topicConcentration=None,\
-                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True)
+                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True,\
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for LDA.
         """
@@ -1911,6 +1929,14 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
         False
         """
         return self._set(keepLastCheckpoint=value)
+
+    @since("4.5.0")
+    def setIntermediateStorageLevel(self, value: str) -> "LDA":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        Only used with the online optimizer.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     @since("2.0.0")
     def setMaxIter(self, value: int) -> "LDA":

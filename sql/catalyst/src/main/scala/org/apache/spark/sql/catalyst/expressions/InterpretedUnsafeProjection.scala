@@ -20,6 +20,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{UserDefinedType, _}
@@ -305,8 +306,10 @@ object InterpretedUnsafeProjection {
    * portion of the array object. Primitives take up to 8 bytes, depending on the size of the
    * underlying data type.
    */
-  @scala.annotation.tailrec
-  private def getElementSize(dataType: DataType): Int = dataType match {
+  private def getElementSize(dataType: DataType): Int =
+    TypeOps(dataType).map(_.getElementSize).getOrElse(getElementSizeDefault(dataType))
+
+  private def getElementSizeDefault(dataType: DataType): Int = dataType match {
     case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: AnyTimestampNanoType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
