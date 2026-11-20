@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
@@ -1457,6 +1457,22 @@ class JDBCSuite extends SharedSparkSession {
     val abs = new GeneralScalarExpression("ABS", Array[V2Expression](a))
     assert(h2.compileExpression(new Predicate("IS_NULL", Array[V2Expression](abs))).get ===
       """ABS("a") IS NULL""")
+  }
+
+  test("EXTRACT is pushed down only for the fields MsSqlServer and DB2 support") {
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val db2Fields = Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE")
+    val allFields = db2Fields ++ Seq("SECOND", "DAY_OF_WEEK", "DAY_OF_YEAR", "YEAR_OF_WEEK")
+    allFields.foreach { field =>
+      val extract = new Extract(field, FieldReference("a"))
+      assert(msSqlServer.compileExpression(extract).isEmpty, field)
+      if (db2Fields.contains(field)) {
+        assert(db2.compileExpression(extract).get === s"""EXTRACT($field FROM "a")""")
+      } else {
+        assert(db2.compileExpression(extract).isEmpty, field)
+      }
+    }
   }
 
   test("SPARK-57332: escape backslash in LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {

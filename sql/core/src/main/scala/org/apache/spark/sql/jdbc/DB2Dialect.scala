@@ -26,7 +26,7 @@ import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression, Extract}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
@@ -64,6 +64,22 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitExtract(extract: Extract): String = {
+      val field = extract.field
+      field match {
+        // YEAR, QUARTER, MONTH, WEEK (ISO week), DAY, HOUR, MINUTE are identical on DB2 and
+        // Spark.
+        case "YEAR" | "QUARTER" | "MONTH" | "WEEK" | "DAY" | "HOUR" | "MINUTE" =>
+          super.visitExtract(field, build(extract.source()))
+        // DB2 EXTRACT does not support the date fields DAY_OF_WEEK, DAY_OF_YEAR or
+        // YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // DB2. Spark returns integer, but DB2 returns decimal with the fractional seconds.
+        case _ =>
+          visitUnexpectedExpr(extract)
+      }
+    }
 
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARIANCE"

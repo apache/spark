@@ -26,7 +26,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -90,6 +90,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
     }
+
+    // MsSqlServer has no EXTRACT function, so none of the datetime fields are pushed down.
+    override def visitExtract(extract: Extract): String = visitUnexpectedExpr(extract)
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
       funcName match {
