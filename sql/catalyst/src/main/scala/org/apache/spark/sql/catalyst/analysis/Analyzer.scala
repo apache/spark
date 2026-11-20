@@ -432,7 +432,7 @@ object Analyzer {
   /** Maps the attribute of each alias in `sqlFunctionInputs` to the aliased input expression. */
   def buildSQLFunctionInputAliasMap(
       sqlFunctionInputs: Seq[NamedExpression]): Map[Attribute, Expression] =
-    sqlFunctionInputs.collect { case a: Alias => a.toAttribute -> a.child }.toMap
+    sqlFunctionInputs.collect { case alias: Alias => alias.toAttribute -> alias.child }.toMap
 
   /**
    * Replaces the attributes in `aliasMap` with the input expressions they map to. The input
@@ -441,8 +441,8 @@ object Analyzer {
   def replaceSQLFunctionInputAttributes(
       expression: Expression,
       aliasMap: Map[Attribute, Expression]): Expression =
-    expression.transformUp {
-      case a: Attribute => aliasMap.getOrElse(a, a)
+    expression.transformUpWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+      case attribute: Attribute => aliasMap.getOrElse(attribute, attribute)
     }
 }
 
