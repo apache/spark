@@ -316,13 +316,13 @@ case class BinByExec(
   private def buildOutputExpressions(
       childLen: Int,
       ratioNullable: Boolean = false): Seq[Expression] = {
-    val distSet = distributeColumns.map(bindOrdinal).toSet
     // bin_distribute_ratio is the last appended column.
     val ratioRef = BoundReference(childLen + numAppended - 1, DoubleType, ratioNullable)
 
     val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
       val ref = BoundReference(ordinal, attr.dataType, attr.nullable)
-      if (distSet.contains(ordinal)) {
+      // Match by attribute, as `output` does, so every copy of a DISTRIBUTE column is scaled.
+      if (distributeReplacements.contains(attr)) {
         // Cast to double, multiply, narrow back. These expressions bind at execution time, so the
         // analyzer's operand coercion never runs; a bare Multiply(FloatType, DoubleType) fails.
         Cast(Multiply(Cast(ref, DoubleType), ratioRef), attr.dataType)
@@ -343,9 +343,8 @@ case class BinByExec(
    * bin), other columns passed through.
    */
   private def buildNullRangeExpressions(): Seq[Expression] = {
-    val distSet = distributeColumns.map(bindOrdinal).toSet
     val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
-      if (distSet.contains(ordinal)) {
+      if (distributeReplacements.contains(attr)) {
         Literal.create(null, attr.dataType)
       } else {
         BoundReference(ordinal, attr.dataType, attr.nullable)
