@@ -4430,6 +4430,24 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_STATE_V4_INDEX_VERSION =
+    buildConf("spark.sql.streaming.join.stateFormatV4.indexVersion")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("How state format version 4 of stream-stream joins orders the state of an input. " +
+        "0: by the event time of the input, or by the equality key that has the first " +
+        "watermark, as in 4.4 and earlier and with " +
+        "spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by the column that " +
+        "the default mode evicts the input by, which is the event time for an input bounded " +
+        "only through a column cast to TIMESTAMP, or by the equality key that the opposite " +
+        "input's watermark bounds. A streaming query keeps the version recorded in its " +
+        "checkpoint, and one restarted from a checkpoint without it uses 0. A restart fails " +
+        "when the recorded version orders an input differently from the query.")
+      .version("4.5.0")
+      .intConf
+      .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")
+      .createWithDefault(1)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
@@ -4482,6 +4500,19 @@ object SQLConf {
         "When this config is disabled, Spark will just print warning message for users. " +
         "Prior to Spark 3.1.0, the behavior is disabling this config.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK =
+    buildConf("spark.sql.streaming.statefulOperator.checkJoinOutputWatermark")
+      .internal()
+      .doc("When true, the correctness check of chained stateful operators also covers, in " +
+        "append mode, an operator that drops late rows after a stream-stream join whose state " +
+        "of an input has no cutoff. " +
+        "When false, such a query only logs a warning. A streaming query restarted from a " +
+        "checkpoint written without this config uses false.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
