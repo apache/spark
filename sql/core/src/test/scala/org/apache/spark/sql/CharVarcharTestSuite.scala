@@ -687,6 +687,41 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61972: every reference to a union of char columns gets the widest length") {
+    withTable("t3", "t4", "t5") {
+      sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t4(id INT, c CHAR(4)) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql("INSERT INTO t3 VALUES (1, 'a')")
+      sql("INSERT INTO t4 VALUES (3, 'a')")
+      sql("INSERT INTO t5 VALUES (2, 'a'), (4, 'abcde')")
+      val union = "SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5"
+      val padded = "a" + " ".repeat(4)
+
+      // a union of a union
+      val nested = s"SELECT c FROM ($union) UNION ALL SELECT c FROM t4"
+      checkAnswer(sql(nested), Seq(Row(padded), Row(padded), Row("abcde"), Row(padded)))
+      checkColType(sql(nested).schema(0), CharType(5))
+      checkAnswer(
+        sql(s"SELECT * FROM ($nested) WHERE c = 'a'"),
+        Seq(Row(padded), Row(padded), Row(padded)))
+      // a renamed column
+      checkAnswer(
+        sql(s"SELECT k FROM (SELECT c AS k FROM ($union)) WHERE k = 'a'"),
+        Seq(Row(padded), Row(padded)))
+      // a CTE with more than one reference
+      checkAnswer(
+        sql(s"""WITH u AS ($union)
+               |SELECT u1.id FROM u u1 JOIN u u2 ON u1.id = u2.id
+               |WHERE u1.c = 'a' AND u2.c = 'a'""".stripMargin),
+        Seq(Row(1), Row(2)))
+      // an outer reference in a correlated subquery
+      checkAnswer(
+        sql(s"SELECT id FROM ($union) u WHERE EXISTS (SELECT 1 FROM t3 WHERE u.c = 'a')"),
+        Seq(Row(1), Row(2)))
+    }
+  }
+
   test("SPARK-59278: char type comparison: struct nullability is preserved") {
     // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
     // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
@@ -4174,6 +4209,20 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
         }
+      }
+    }
+  }
+
+  test("SPARK-61972: a union of char columns does not truncate over length values") {
+    withTempPath { dir =>
+      withTable("t", "t5") {
+        sql("SELECT '123456' as c").write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (c CHAR(2)) USING $format LOCATION '$dir'")
+        sql(s"CREATE TABLE t5 (c CHAR(5)) USING $format")
+        sql("INSERT INTO t5 VALUES ('a')")
+        checkAnswer(
+          sql("SELECT c FROM t UNION ALL SELECT c FROM t5"),
+          Seq(Row("123456"), Row("a" + " ".repeat(4))))
       }
     }
   }

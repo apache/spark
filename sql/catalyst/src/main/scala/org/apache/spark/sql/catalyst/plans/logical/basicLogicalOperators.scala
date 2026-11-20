@@ -504,16 +504,26 @@ object Union {
     Union (left :: right :: Nil)
   }
 
-  // updating nullability to make all the children consistent
-  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
+  // updating nullability to make all the children consistent, and the CHAR lengths of the raw
+  // types if the children have CHAR columns of different lengths, see
+  // CharVarcharUtils.widerCharRawType. ApplyCharTypePadding pads the values of the shorter ones.
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
+    mergeChildOutputs(childOutputs, widenCharLengths = true)
+
+  private[logical] def mergeChildOutputs(
+      childOutputs: Seq[Seq[Attribute]],
+      widenCharLengths: Boolean): Seq[Attribute] = {
     childOutputs.transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
+      val widerRawType = if (widenCharLengths) CharVarcharUtils.widerCharRawType(attrs) else None
+      val metadata = widerRawType.map(CharVarcharUtils.withRawType(firstAttr.metadata, _))
+        .getOrElse(firstAttr.metadata)
+      if (firstAttr.dataType == newDt && metadata == firstAttr.metadata) {
         firstAttr.withNullability(nullable)
       } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+        AttributeReference(firstAttr.name, newDt, nullable, metadata)(
           firstAttr.exprId, firstAttr.qualifier)
       }
     }

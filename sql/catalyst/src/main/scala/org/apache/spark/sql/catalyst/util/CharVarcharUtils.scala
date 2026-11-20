@@ -427,25 +427,35 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Pads the given attributes, the outputs of the children of a set operation at one position, so
-   * that CHAR columns and fields of different lengths at the same place all get the widest length.
-   * Returns the raw type with the widest lengths, which keeps the names of the first attribute's
-   * fields, and an expression for each attribute: the padded value, or the attribute if it already
-   * has the widest lengths. Returns None if the raw types are already the same, or if they are not
-   * all CHAR types, or structs and arrays of them, at the same places.
+   * The raw type of the output of a UNION at one position, given the outputs of its children
+   * there, if they are CHAR types, or structs and arrays of them, with different lengths at the
+   * same places: the widest lengths, as the SQL standard gives the union of CHAR(n) and CHAR(m)
+   * the length max(n, m). Keeps the names of the first attribute's fields. Returns None if the
+   * raw types are the same, or not all CHAR types of the same shape.
    */
-  def padToWiderCharLength(attrs: Seq[Attribute]): Option[(DataType, Seq[Expression])] = {
-    val rawTypes = attrs.map(attr => getRawType(attr.metadata))
-    if (rawTypes.exists(_.isEmpty) || rawTypes.distinct.length == 1) {
+  def widerCharRawType(attrs: Seq[Attribute]): Option[DataType] = {
+    val rawTypeStrings = attrs.map(attr => getRawTypeString(attr.metadata))
+    if (rawTypeStrings.exists(_.isEmpty) || rawTypeStrings.distinct.length == 1) {
       None
     } else {
-      rawTypes.map(_.get).map(Option(_)).reduce { (left, right) =>
-        for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
-      }.map { target =>
-        val padded = attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
-          padCharToTargetLength(attr, rawType, target, alwaysPad = false).getOrElse(attr)
-        }
-        (target, padded)
+      rawTypeStrings.map(s => Option(CatalystSqlParser.parseDataType(s.get))).reduce {
+        (left, right) => for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+      }
+    }
+  }
+
+  /**
+   * Pads the CHAR columns and fields of the given attribute that are shorter than those at the
+   * same places of the given raw type, see [[widerCharRawType]]. Like read-side padding, it does
+   * not truncate longer values. Returns the padded value and its raw type, which keeps the names
+   * of the attribute's fields, or None if the attribute is already as long.
+   */
+  def padCharToWiderLength(attr: Attribute, rawType: DataType): Option[(Expression, DataType)] = {
+    getRawType(attr.metadata).flatMap { attrRawType =>
+      widerCharType(attrRawType, rawType).filter(_ != attrRawType).map { wider =>
+        val padded = processStringForCharVarchar(
+          attr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
+        (padded, wider)
       }
     }
   }
