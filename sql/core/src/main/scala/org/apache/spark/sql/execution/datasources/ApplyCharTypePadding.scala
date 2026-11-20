@@ -19,18 +19,21 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, ExprId, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Union, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, WRITE_DELTA}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, UNION, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
   ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.Metadata
 
 /**
  * This rule performs string padding for char type.
@@ -88,10 +91,58 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           })
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
       padRowLevelConditions(padDeleteConditions(
-        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)))
+        ApplyCharTypePaddingHelper.paddingForStringComparison(
+          padUnionChildren(newPlan), padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+        padUnionChildren(plan),
+        padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+    }
+  }
+
+  /**
+   * The output of a Union takes the raw type of its first child. When its children have CHAR
+   * columns or fields of different lengths at the same position, this pads the shorter ones to the
+   * widest length and gives the output that length, as the SQL standard does for the union of
+   * CHAR(n) and CHAR(m). Otherwise the output keeps the length of the first child, and comparisons
+   * pad to it, so they do not match the values of a child with longer values.
+   */
+  private def padUnionChildren(plan: LogicalPlan): LogicalPlan = {
+    // The raw types of the outputs that change. transformUpWithNewOutput gives the references to
+    // them the new expression IDs, but keeps the metadata they had.
+    val newRawTypes = mutable.HashMap.empty[ExprId, Metadata]
+    val newPlan = plan.transformUpWithNewOutput({
+      case u: Union =>
+        val columns = u.children.map(_.output).transpose.map(CharVarcharUtils.padToWiderCharLength)
+        if (columns.forall(_.isEmpty)) {
+          u -> Nil
+        } else {
+          val newChildren = u.children.zipWithIndex.map { case (child, i) =>
+            val projectList = child.output.zip(columns).map {
+              case (attr, Some((rawType, padded))) if !(padded(i) eq attr) =>
+                Alias(padded(i), attr.name)(
+                  explicitMetadata = Some(CharVarcharUtils.withRawType(attr.metadata, rawType)))
+              case (attr, _) => attr
+            }
+            if (projectList == child.output) child else Project(projectList, child)
+          }
+          val newUnion = u.withNewChildren(newChildren)
+          val attrMapping = u.output.zip(newUnion.output).filterNot { case (a, b) => a == b }
+          attrMapping.foreach { case (_, attr) => newRawTypes(attr.exprId) = attr.metadata }
+          newUnion -> attrMapping
+        }
+    }, skipCond = p => p.analyzed || !p.containsPattern(UNION), canGetOutput = _.resolved)
+    if (newRawTypes.isEmpty) {
+      newPlan
+    } else {
+      // Not pruned by pattern: a subquery above the Union refers to its outputs without one.
+      newPlan.resolveOperatorsUpWithSubqueriesAndPruning(_ => true) {
+        case p =>
+          p.transformExpressions {
+            case a: AttributeReference if newRawTypes.get(a.exprId).exists(_ != a.metadata) =>
+              a.withMetadata(newRawTypes(a.exprId))
+          }
+      }
     }
   }
 

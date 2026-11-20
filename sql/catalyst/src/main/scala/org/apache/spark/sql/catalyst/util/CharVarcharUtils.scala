@@ -426,6 +426,55 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }
   }
 
+  /**
+   * Pads the given attributes, the outputs of the children of a set operation at one position, so
+   * that CHAR columns and fields of different lengths at the same place all get the widest length.
+   * Returns the raw type with the widest lengths, which keeps the names of the first attribute's
+   * fields, and an expression for each attribute: the padded value, or the attribute if it already
+   * has the widest lengths. Returns None if the raw types are already the same, or if they are not
+   * all CHAR types, or structs and arrays of them, at the same places.
+   */
+  def padToWiderCharLength(attrs: Seq[Attribute]): Option[(DataType, Seq[Expression])] = {
+    val rawTypes = attrs.map(attr => getRawType(attr.metadata))
+    if (rawTypes.exists(_.isEmpty) || rawTypes.distinct.length == 1) {
+      None
+    } else {
+      rawTypes.map(_.get).map(Option(_)).reduce { (left, right) =>
+        for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+      }.map { target =>
+        val padded = attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
+          padCharToTargetLength(attr, rawType, target, alwaysPad = false).getOrElse(attr)
+        }
+        (target, padded)
+      }
+    }
+  }
+
+  /** The metadata with the given raw type, for a value padded to the CHAR lengths of that type. */
+  def withRawType(metadata: Metadata, rawType: DataType): Metadata = {
+    new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType.catalogString)
+      .build()
+  }
+
+  // Like typeWithWiderCharLength, but keeps the field names of type1, and None for types that are
+  // not both CHAR types, or structs and arrays of them, with the same shape.
+  private def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
+    (type1, type2) match {
+      case (c1: CharType, c2: CharType) if c1.collation == c2.collation =>
+        Some(CharType(math.max(c1.length, c2.length), c1.collation))
+      case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+        val widerFields = fields1.zip(fields2).map { case (left, right) =>
+          widerCharType(left.dataType, right.dataType).map(dt => left.copy(dataType = dt))
+        }
+        if (widerFields.forall(_.isDefined)) Some(StructType(widerFields.map(_.get))) else None
+      case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+        widerCharType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+      case _ => None
+    }
+  }
+
   private def typeWithWiderCharLength(type1: DataType, type2: DataType): DataType = {
     (type1, type2) match {
       case (c1: CharType, c2: CharType) =>

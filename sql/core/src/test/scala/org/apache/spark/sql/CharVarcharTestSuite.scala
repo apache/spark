@@ -660,6 +660,33 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61972: union of char columns of different lengths") {
+    withTable("t3", "t5", "s3", "s5") {
+      sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql("INSERT INTO t3 VALUES (1, 'a')")
+      sql("INSERT INTO t5 VALUES (2, 'a')")
+      Seq(("t3", "t5"), ("t5", "t3")).foreach { case (first, second) =>
+        val union = s"SELECT id, c FROM $first UNION ALL SELECT id, c FROM $second"
+        // the output is CHAR(5), whichever child comes first, and every value is padded to it
+        val df = sql(s"SELECT * FROM ($union) u WHERE c = 'a'")
+        checkAnswer(df, Seq(Row(1, "a" + " ".repeat(4)), Row(2, "a" + " ".repeat(4))))
+        checkColType(df.schema(1), CharType(5))
+        checkAnswer(
+          sql(s"SELECT c FROM $first UNION SELECT c FROM $second"),
+          Row("a" + " ".repeat(4)))
+      }
+
+      sql(s"CREATE TABLE s3(s STRUCT<c: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE s5(s STRUCT<c: CHAR(5)>) USING $format")
+      sql("INSERT INTO s3 SELECT named_struct('c', 'a')")
+      sql("INSERT INTO s5 SELECT named_struct('c', 'a')")
+      val df = sql("SELECT s FROM s3 UNION ALL SELECT s FROM s5")
+      checkAnswer(df, Seq(Row(Row("a" + " ".repeat(4))), Row(Row("a" + " ".repeat(4)))))
+      checkColType(df.schema(0), new StructType().add("c", CharType(5)))
+    }
+  }
+
   test("SPARK-59278: char type comparison: struct nullability is preserved") {
     // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
     // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
