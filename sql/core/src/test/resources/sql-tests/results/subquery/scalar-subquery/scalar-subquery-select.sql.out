@@ -811,15 +811,15 @@ spark.sql.alwaysInlineCommonExpr	true
 
 
 -- !query
-select nullif((select max(id) from range(1, 4)), 0)
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0)
 -- !query schema
-struct<nullif(scalarsubquery(), 0):bigint>
+struct<nullif(scalarsubquery(), 0):int>
 -- !query output
 3
 
 
 -- !query
-select decode((select max(id) from range(1, 4)), 1, 'one', 3, 'three', 'other')
+select decode((select max(c) from values (1), (2), (3) as t(c)), 1, 'one', 3, 'three', 'other')
 -- !query schema
 struct<decode(scalarsubquery(), 1, one, 3, three, other):string>
 -- !query output
@@ -880,9 +880,9 @@ spark.sql.alwaysInlineCommonExpr	false
 
 
 -- !query
-select nullif((select max(id) from range(1, 4)), 0)
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0)
 -- !query schema
-struct<nullif(scalarsubquery(), 0):bigint>
+struct<nullif(scalarsubquery(), 0):int>
 -- !query output
 3
 

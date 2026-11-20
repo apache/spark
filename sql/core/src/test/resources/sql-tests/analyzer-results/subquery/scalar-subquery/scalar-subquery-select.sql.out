@@ -1509,24 +1509,28 @@ SetCommand (spark.sql.alwaysInlineCommonExpr,Some(true))
 
 
 -- !query
-select nullif((select max(id) from range(1, 4)), 0)
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0)
 -- !query analysis
-Project [nullif(scalar-subquery#x [], 0) AS nullif(scalarsubquery(), 0)#xL]
-:  :- Aggregate [max(id#xL) AS max(id)#xL]
-:  :  +- Range (1, 4, step=1)
-:  +- Aggregate [max(id#xL) AS max(id)#xL]
-:     +- Range (1, 4, step=1)
+Project [nullif(scalar-subquery#x [], 0) AS nullif(scalarsubquery(), 0)#x]
+:  :- Aggregate [max(c#x) AS max(c)#x]
+:  :  +- SubqueryAlias t
+:  :     +- LocalRelation [c#x]
+:  +- Aggregate [max(c#x) AS max(c)#x]
+:     +- SubqueryAlias t
+:        +- LocalRelation [c#x]
 +- OneRowRelation
 
 
 -- !query
-select decode((select max(id) from range(1, 4)), 1, 'one', 3, 'three', 'other')
+select decode((select max(c) from values (1), (2), (3) as t(c)), 1, 'one', 3, 'three', 'other')
 -- !query analysis
 Project [decode(scalar-subquery#x [], 1, one, 3, three, other) AS decode(scalarsubquery(), 1, one, 3, three, other)#x]
-:  :- Aggregate [max(id#xL) AS max(id)#xL]
-:  :  +- Range (1, 4, step=1)
-:  +- Aggregate [max(id#xL) AS max(id)#xL]
-:     +- Range (1, 4, step=1)
+:  :- Aggregate [max(c#x) AS max(c)#x]
+:  :  +- SubqueryAlias t
+:  :     +- LocalRelation [c#x]
+:  +- Aggregate [max(c#x) AS max(c)#x]
+:     +- SubqueryAlias t
+:        +- LocalRelation [c#x]
 +- OneRowRelation
 
 
@@ -1597,11 +1601,12 @@ SetCommand (spark.sql.alwaysInlineCommonExpr,Some(false))
 
 
 -- !query
-select nullif((select max(id) from range(1, 4)), 0)
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0)
 -- !query analysis
-Project [nullif(scalar-subquery#x [], 0) AS nullif(scalarsubquery(), 0)#xL]
-:  +- Aggregate [max(id#xL) AS max(id)#xL]
-:     +- Range (1, 4, step=1)
+Project [nullif(scalar-subquery#x [], 0) AS nullif(scalarsubquery(), 0)#x]
+:  +- Aggregate [max(c#x) AS max(c)#x]
+:     +- SubqueryAlias t
+:        +- LocalRelation [c#x]
 +- OneRowRelation
 
 

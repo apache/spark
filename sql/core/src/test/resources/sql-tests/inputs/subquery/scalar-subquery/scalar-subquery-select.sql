@@ -349,10 +349,10 @@ SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VAL
 set spark.sql.alwaysInlineCommonExpr=true;
 
 -- expected 3
-select nullif((select max(id) from range(1, 4)), 0);
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0);
 
 -- expected three
-select decode((select max(id) from range(1, 4)), 1, 'one', 3, 'three', 'other');
+select decode((select max(c) from values (1), (2), (3) as t(c)), 1, 'one', 3, 'three', 'other');
 
 -- correlated; expected (1, NULL), (2, 30)
 select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
@@ -374,7 +374,7 @@ select transform(array(0, 1, 2), x -> nullif(x, 0));
 set spark.sql.alwaysInlineCommonExpr=false;
 
 -- expected 3
-select nullif((select max(id) from range(1, 4)), 0);
+select nullif((select max(c) from values (1), (2), (3) as t(c)), 0);
 
 -- correlated; expected (1, NULL), (2, 30)
 select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
