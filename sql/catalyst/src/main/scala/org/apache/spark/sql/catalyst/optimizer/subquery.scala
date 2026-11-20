@@ -146,18 +146,25 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     _.containsAnyPattern(EXISTS_SUBQUERY, LIST_SUBQUERY)) {
     case Filter(condition, child)
       if SubqueryExpression.hasInOrCorrelatedExistsSubquery(condition) =>
-      val (withSubquery, withoutSubquery) =
-        splitConjunctivePredicates(condition)
-          .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
+      val conjuncts = splitConjunctivePredicates(condition)
+      // The deterministic, throwable conjuncts written last, e.g. the CHECK constraints of a write,
+      // stay above the joins that the subqueries are rewritten to, so that they are not evaluated
+      // on the rows these joins remove. The other conjuncts keep their written order below the
+      // joins, so that no conjunct is evaluated ahead of a throwable one written before it.
+      val (rest, stayUp) = conjuncts.splitAt(conjuncts.lastIndexWhere { c =>
+        !c.deterministic || !c.throwable || SubqueryExpression.hasInOrCorrelatedExistsSubquery(c)
+      } + 1)
+      val (withSubquery, pushDown) =
+        rest.partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
 
       // Construct the pruned filter condition.
-      val newFilter: LogicalPlan = withoutSubquery match {
+      val newFilter: LogicalPlan = pushDown match {
         case Nil => child
         case conditions => Filter(conditions.reduce(And), child)
       }
 
       // Filter the plan by applying left semi and left anti joins.
-      withSubquery.foldLeft(newFilter) {
+      val rewritten = withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
@@ -209,6 +216,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
+      stayUp.reduceOption(And).map(Filter(_, rewritten)).getOrElse(rewritten)
 
     // This case takes care of predicate subqueries in join conditions that are not pushed down
     // to the children nodes by [[PushDownPredicates]].
@@ -977,6 +985,15 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
             val aggValRef = query.output.head
 
+            // TODO(SPARK-61660): a scalar Python or external UDF in `resultWithZeroTups` (the
+            // result over zero rows) is lifted out of this branch by `ExtractPythonUDFs` /
+            // `PlanExternalUDFs` and evaluated for every outer row, as it was in
+            // DecorrelateInnerQuery before SPARK-61482, so it can fail on an outer row that has
+            // matching rows. SPARK-61660 tracks evaluating it only for the rows that take this
+            // branch here too; see the SPARK-61482 PR discussion on whether to do that with an
+            // `EvalOnlyWhen` marker (CASE 3 builds a `CaseWhen`, which would also need a drop rule
+            // in `SimplifyConditionals`) or by reading `If` / `CaseWhen` branch conditions
+            // directly in `ExtractPythonUDFs` / `PlanExternalUDFs`.
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause
               val subqueryResultExpr =

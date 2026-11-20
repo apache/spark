@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet,
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression,
   ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.types.StructType
@@ -46,12 +46,15 @@ trait ExternalUDF extends UnaryNode {
  * @param udf UDF expression evaluated by the worker session.
  * @param resultAttr Output attribute for the UDF expression.
  * @param child Input relation for the UDF.
+ * @param evalCondition if set, a deterministic condition over the child; the UDF is evaluated
+ *                      only for the child rows where it is true (see `EvalOnlyWhen`).
  */
 @Experimental
 case class ExecuteExternalUDF(
     udf: ExternalUserDefinedFunction,
     resultAttr: Attribute,
-    child: LogicalPlan)
+    child: LogicalPlan,
+    evalCondition: Option[Expression] = None)
   extends ExternalUDF {
 
   override def workerSpec: UDFWorkerSpecification = udf.workerSpec

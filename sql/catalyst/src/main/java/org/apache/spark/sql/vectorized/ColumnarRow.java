@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -40,10 +43,18 @@ public final class ColumnarRow extends InternalRow {
   private final int numFields;
 
   public ColumnarRow(ColumnVector data, int rowId) {
-    assert (data.dataType() instanceof StructType);
     this.data = data;
     this.rowId = rowId;
-    this.numFields = ((StructType) data.dataType()).size();
+    DataType dt = data.dataType();
+    if (dt instanceof StructType) {
+      this.numFields = ((StructType) dt).size();
+    } else {
+      // Struct-backed framework types map to PhysicalStructType but are not StructType.
+      PhysicalDataType pdt = PhysicalDataType.apply(dt);
+      assert pdt instanceof PhysicalStructType :
+        "ColumnarRow requires a struct-backed type, got: " + dt;
+      this.numFields = ((PhysicalStructType) pdt).fields().length;
+    }
   }
 
   @Override
@@ -232,7 +243,16 @@ public final class ColumnarRow extends InternalRow {
     } else if (dataType instanceof UserDefinedType<?> udt) {
       return get(ordinal, udt.sqlType());
     } else {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3155");
+      // Read any other type that has a physical type through it: framework types (e.g. a
+      // struct-backed type as PhysicalStructType), and types not matched above, such as TIME,
+      // CalendarIntervalType, GeometryType and GeographyType. Types without a physical type,
+      // and NullType, keep the error.
+      PhysicalDataType pdt = PhysicalDataType.apply(dataType);
+      if (pdt != UninitializedPhysicalType$.MODULE$ && pdt != PhysicalNullType$.MODULE$) {
+        return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
+      }
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3155", Map.of("dataType", String.valueOf(dataType)));
     }
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{chainsInWorker, correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1485,11 +1485,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // An in-process UDF never chains with worker UDFs, so it has no pipeline to preserve.
-        //
         // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
-        expression.mapChildren(applyExpr(_, parentIsUdf = chainsInWorker(expression),
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
@@ -1787,7 +1785,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if chainsInWorker(udf) =>
+          case udf: PythonUDF if isScalarPythonUDF(udf) =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
@@ -2626,17 +2624,12 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(FILTER), ruleId)(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic and the outer condition is not
-    // throwable (inner can be throwable as it was going to be evaluated first anyways).
-    // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
-    // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
-    // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
+    // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
+    // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
+    // inner condition must be deterministic.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (leading, following) =
-        splitConjunctivePredicates(fc).span(p => p.deterministic && !p.throwable)
-      val (cannotFail, rest) = following.partition(ExprUtils.canEvaluateUnconditionally)
-      val mergedFilter = (ExpressionSet(leading ++ cannotFail) --
+      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
+      val mergedFilter = (ExpressionSet(movable) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
@@ -3354,19 +3347,32 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
    * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
-   * canEvaluateInRight to prevent pushing these predicates on either side of the join.
+   * canEvaluateInRight to prevent pushing these predicates on either side of the join, as well as
+   * the other conjuncts that may not move (see [[splitMovable]]).
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, stayUp) =
-      condition.partition(cond => cond.deterministic && !cond.throwable)
+    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right))
+    val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
+      splitBySide(pushDownCandidates, left, right)
+
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+  }
+
+  /**
+   * Splits conjuncts that may move (see [[splitMovable]]) by the side of the join that can
+   * evaluate them, as [[split]] does.
+   *
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   */
+  private def splitBySide(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
-      pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
+      condition.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }
 
   /**
@@ -3378,12 +3384,15 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * such as a literal, belongs to neither side. It stays with the common conditions, so that a
    * condition that folds to false keeps its result without a lookup, instead of leaving a join
    * whose stream side is empty. A comparison of a lookup column with a constant moves as for a
-   * join; lookup planning still offers it to the connector as a lookup candidate.
+   * join; lookup planning still offers it to the connector as a lookup candidate. A conjunct that
+   * may not move (see [[splitMovable]]) is left out of the result too. That is decided over all
+   * the conjuncts: [[split]] sees only the ones with references, while the one that keeps later
+   * conjuncts in place may have none, such as `rand() < 0.5`.
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
-    val movable = condition.filterNot { cond =>
+    val movable = splitMovable(condition, Seq(join.left, join.right))._1.filterNot { cond =>
       cond.references.exists(join.right.outputSet.contains) && (
         if (cond.references.subsetOf(join.right.outputSet)) {
           !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
@@ -3420,8 +3429,11 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
-        split(splitConjunctivePredicates(filterCondition), left, right)
+      val (movable, stayUp) =
+        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
+      val (leftFilterConditions, rightFilterConditions, commonMovable) =
+        splitBySide(movable, left, right)
+      val commonFilterCondition = commonMovable ++ stayUp
       joinType match {
         case _: InnerLike =>
           // push down the single side `where` condition into respective sides
@@ -3429,9 +3441,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          // don't push throwable expressions into join condition
-          val (newJoinConditions, others) =
-            commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
+          // don't push throwable expressions into join condition, nor the other conjuncts that
+          // may not move
+          val (newJoinConditions, notInJoin) = commonMovable.partition(canEvaluateWithinJoin)
+          val others = notInJoin ++ stayUp
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)

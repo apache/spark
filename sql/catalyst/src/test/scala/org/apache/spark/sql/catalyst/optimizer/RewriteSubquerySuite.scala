@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CheckInvariant, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -204,5 +204,35 @@ class RewriteSubquerySuite extends PlanTest {
     val join = optimized.collectFirst { case j: Join => j }.get
     assert(join.condition.contains(outer.output(0) === inner.output(0)))
     assert(!join.condition.get.exists(_.isInstanceOf[IsNull]))
+  }
+
+  test("SPARK-61927: keep a throwable predicate above the join of a predicate subquery") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    // A CHECK constraint fails on a violating row, so it must not see the rows that the subquery
+    // removes.
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    val query = relation.where($"a".in(ListQuery(relInSubquery.select($"x"))) && check)
+    val correctAnswer = relation.join(relInSubquery, LeftSemi, Some($"a" === $"x")).where(check)
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-61927: keep a throwable predicate below the join if it is not written last") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    val inSubquery = $"a".in(ListQuery(relInSubquery.select($"x")))
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    // The subquery or the condition written after a throwable predicate must not be evaluated on
+    // the rows that it removes, so it stays below the join in the written order.
+    Seq(
+      (check && inSubquery) -> check,
+      (inSubquery && check && $"a" > 1) -> (check && $"a" > 1)).foreach {
+      case (condition, belowJoin) =>
+        val correctAnswer =
+          relation.where(belowJoin).join(relInSubquery, LeftSemi, Some($"a" === $"x"))
+        comparePlans(Optimize.execute(relation.where(condition).analyze), correctAnswer.analyze)
+    }
   }
 }

@@ -18,14 +18,18 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 /** Builds check and generated-column invariants for a write to a resolved V2 table. */
 private[sql] class TableConstraintResolution(
@@ -39,13 +43,10 @@ private[sql] class TableConstraintResolution(
       r: DataSourceV2Relation): V2WriteCommand = {
     val tableCheckInvariants =
       if (r.table.constraints != null && r.table.constraints.nonEmpty) {
+        val input = withCharVarcharTypes(v2Write.query.output, r)
         // Check constraint is the only enforced constraint for DSV2 tables.
         r.table.constraints.collect {
-          case c: Check =>
-            val unresolvedExpr = buildCatalystExpression(c)
-            val columnExtractors = mutable.Map[String, Expression]()
-            buildColumnExtractors(unresolvedExpr, columnExtractors)
-            CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+          case c: Check => buildCheckInvariant(c, input)
         }.toSeq
       } else {
         Seq.empty
@@ -57,12 +58,76 @@ private[sql] class TableConstraintResolution(
       condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
   }
 
-  private def buildCatalystExpression(c: Check): Expression = {
-    Option(c.predicate())
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(StoredExpressionFunctions.qualifyBuiltinFunctions(
-        catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())))
+  /**
+   * The output of the query of a write, with the CHAR and VARCHAR types of the table columns that
+   * `TableOutputResolver` removes from it. A CHECK condition resolved against it pads a string
+   * literal compared with a CHAR column, as the stored values are padded. A write that treats CHAR
+   * as STRING does not pad the values, so the output is kept as it is: `ApplyCharTypePadding` skips
+   * such a write, but not a condition read from its text under the fixed settings.
+   */
+  private def withCharVarcharTypes(
+      output: Seq[Attribute],
+      r: DataSourceV2Relation): Seq[Attribute] = {
+    val conf = SQLConf.get
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
+      output
+    } else {
+      val resolver = catalogManager.v1SessionCatalog.conf.resolver
+      val charVarcharColumns =
+        r.table.columns().filter(c => CharVarcharUtils.hasCharVarchar(c.dataType()))
+      output.map { a =>
+        charVarcharColumns.find(c => resolver(c.name(), a.name)).fold(a) { c =>
+          a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
+            .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY,
+              c.dataType().catalogString)
+            .build())
+        }
+      }
+    }
   }
+
+  private def buildCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
+    Option(c.predicate()).flatMap(V2ExpressionUtils.toCatalyst) match {
+      case Some(expr) => resolveCondition(toCheckInvariant(c, expr), input)
+      case None if SQLConf.get.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) =>
+        resolveCondition(toCheckInvariant(c, parseCondition(c)), input)
+      case None => readCheckInvariant(c, input)
+    }
+  }
+
+  private def resolveCondition(condition: Expression, input: Seq[Attribute]): Expression =
+    analyze(Filter(condition, LocalRelation(input))).asInstanceOf[Filter].condition
+
+  private def toCheckInvariant(c: Check, unresolvedExpr: Expression): CheckInvariant = {
+    val columnExtractors = mutable.Map[String, Expression]()
+    buildColumnExtractors(unresolvedExpr, columnExtractors)
+    CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+  }
+
+  /**
+   * Reads a CHECK condition from its text, independently of the settings of the writer. Only the
+   * condition is analyzed under the fixed settings, and the query of the write is not analyzed
+   * again. The result is resolved against attributes with the same expression IDs as the output of
+   * the query, so it can go to the [[Filter]] above the query as it is.
+   */
+  private def readCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
+    try {
+      val analyzed = SQLConf.withExistingConf(StoredExpressionText.fixedConf(SQLConf.get)) {
+        analyze(Filter(toCheckInvariant(c, parseCondition(c)), LocalRelation(input)))
+      }
+      // Check under the session's representation settings, as `analyzeStrict` does.
+      SimpleAnalyzer.checkAnalysis(analyzed)
+      analyzed.asInstanceOf[Filter].condition
+    } catch {
+      case e: AnalysisException =>
+        throw QueryCompilationErrors.unresolvableCheckConstraintError(c.name, c.predicateSql, e)
+    }
+  }
+
+  private def parseCondition(c: Check): Expression =
+    StoredExpressionFunctions.qualifyBuiltinFunctions(
+      catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql))
 
   /**
    * For each generated column whose value was provided by the write, add a CheckInvariant that

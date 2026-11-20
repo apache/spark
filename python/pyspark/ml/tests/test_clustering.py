@@ -144,19 +144,27 @@ class ClusteringTestsMixin:
             .select("weight", "features")
         )
 
+        self.assertEqual(BisectingKMeans().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         bkm = BisectingKMeans(
             k=2,
             maxIter=2,
             minDivisibleClusterSize=1.0,
             weightCol="weight",
+            intermediateStorageLevel="DISK_ONLY",
         )
         self.assertEqual(bkm.getK(), 2)
         self.assertEqual(bkm.getMaxIter(), 2)
         self.assertEqual(bkm.getMinDivisibleClusterSize(), 1.0)
         self.assertEqual(bkm.getWeightCol(), "weight")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "DISK_ONLY")
+        bkm.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        bkm.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "DISK_ONLY")
 
         model = bkm.fit(df)
         self.assertEqual(bkm.uid, model.uid)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
@@ -196,10 +204,12 @@ class ClusteringTestsMixin:
         with tempfile.TemporaryDirectory(prefix="bisecting_kmeans") as d:
             bkm.write().overwrite().save(d)
             bkm2 = BisectingKMeans.load(d)
+            self.assertEqual(bkm2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(bkm), str(bkm2))
 
             model.write().overwrite().save(d)
             model2 = BisectingKMeansModel.load(d)
+            self.assertEqual(model2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(model), str(model2))
 
     def test_gaussian_mixture(self):
@@ -351,7 +361,13 @@ class ClusteringTestsMixin:
             .sortWithinPartitions("id")
         )
 
-        lda = LDA(k=2, optimizer="online", seed=1)
+        self.assertEqual(LDA().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        lda = LDA(k=2, optimizer="online", seed=1, intermediateStorageLevel="DISK_ONLY")
+        self.assertEqual(lda.getIntermediateStorageLevel(), "DISK_ONLY")
+        lda.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(lda.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        lda.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(lda.getIntermediateStorageLevel(), "DISK_ONLY")
         lda.setMaxIter(1)
         self.assertEqual(lda.getK(), 2)
         self.assertEqual(lda.getOptimizer(), "online")
@@ -360,6 +376,7 @@ class ClusteringTestsMixin:
 
         model = lda.fit(df)
         self.assertEqual(lda.uid, model.uid)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertIsInstance(model, LDAModel)
         self.assertIsInstance(model, LocalLDAModel)
         self.assertNotIsInstance(model, DistributedLDAModel)
@@ -395,10 +412,12 @@ class ClusteringTestsMixin:
         with tempfile.TemporaryDirectory(prefix="local_lda") as d:
             lda.write().overwrite().save(d)
             lda2 = LDA.load(d)
+            self.assertEqual(lda2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(lda), str(lda2))
 
             model.write().overwrite().save(d)
             model2 = LocalLDAModel.load(d)
+            self.assertEqual(model2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(model), str(model2))
 
     def test_distributed_lda(self):
