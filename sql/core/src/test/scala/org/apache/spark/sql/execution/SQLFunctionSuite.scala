@@ -944,7 +944,7 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60805: session. calls follow spark.sql.legacy.persistentCatalogFirst") {
+  test("SPARK-60805: builtin./session. calls follow spark.sql.legacy.persistentCatalogFirst") {
     // With no same-named persistent schema, builtin./session. still reach the system namespace.
     withUserDefinedFunction("temp_fn" -> true, "perm_legacy" -> false) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
@@ -1018,6 +1018,27 @@ class SQLFunctionSuite extends SharedSparkSession {
           sql(createPerm)
           checkAnswer(sql("SELECT * FROM perm_pt()"), Row(3))
         }
+      }
+    }
+    // The same precedence between a built-in and a same-named persistent `builtin.` function.
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN 42")
+      withUserDefinedFunction("perm_abs" -> false) {
+        val createPerm = "CREATE OR REPLACE FUNCTION perm_abs() RETURNS INT RETURN builtin.abs(-1)"
+        sql(createPerm)
+        checkAnswer(sql("SELECT perm_abs()"), Row(1))
+        val selfCall = "CREATE OR REPLACE FUNCTION builtin.abs(x INT) RETURNS INT " +
+          "RETURN builtin.abs(x)"
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          sql(createPerm)
+          checkAnswer(sql("SELECT perm_abs()"), Row(42))
+          val cycle = intercept[AnalysisException](sql(selfCall))
+          assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
+        }
+        // By default the body calls the built-in, so it is no cycle.
+        sql(selfCall)
+        checkAnswer(sql("SELECT spark_catalog.builtin.abs(-5)"), Row(5))
       }
     }
   }
