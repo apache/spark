@@ -62,6 +62,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   private val keyOnly = "leftKey = rightKey"
+  private val oneSidedRange = "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 10 SECONDS"
 
   private def expectRejected(side: String): StreamAction = ExpectFailure[AnalysisException](
     e => assert(e.getMessage.contains(
@@ -78,8 +79,33 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
 
     test(s"reject a range join bounded on one side only before a window aggregation, V$version") {
       withJoinConf(version) {
-        val (leftInput, _, result) = countJoined(
-          "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 10 SECONDS", "rightTime")
+        val (leftInput, _, result) = countJoined(oneSidedRange, "rightTime")
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("right"))
+      }
+    }
+
+    // Only the right input has no cutoff, and the window comes from the left event time, which
+    // the output watermark bounds.
+    test(s"accept a range join bounded on one side only before a window on the bounded side, " +
+        s"V$version") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, result) = countJoined(oneSidedRange, "leftTime")
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+          AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)),
+          MultiAddData(leftInput, (3, 100L))(rightInput, (3, 100L)), CheckNewAnswer(),
+          AddData(rightInput, (3, 101L)), CheckNewAnswer((40L, 2L)))
+      }
+    }
+
+    test(s"reject a range join bounded on one side only before a node that the check does " +
+        s"not follow, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (_, right) = input("right")
+        val result = left.join(right, expr(oneSidedRange)).repartition(2)
+          .groupBy(window($"leftTime", "10 seconds")).count()
         testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("right"))
       }
     }
