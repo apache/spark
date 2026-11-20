@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDel
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, NullType}
 
 /**
  * A rule that rewrites MERGE operations using plans that operate on individual or groups of rows.
@@ -61,6 +61,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           val insertAction = removeMetadataAssignments(notMatchedActions).head
             .asInstanceOf[InsertAction]
           val filteredSource = insertAction.condition match {
+            // Filter requires a BOOLEAN condition, and MergeRows treats a NULL one (VOID) as FALSE
+            case Some(insertCond) if insertCond.dataType == NullType =>
+              Filter(Cast(insertCond, BooleanType), source)
             case Some(insertCond) => Filter(insertCond, source)
             case None => source
           }
