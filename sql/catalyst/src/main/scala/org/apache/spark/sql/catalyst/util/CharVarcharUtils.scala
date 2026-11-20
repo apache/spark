@@ -412,19 +412,28 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.
    */
-  def addPaddingInStringComparison(attrs: Seq[Attribute], alwaysPad: Boolean): Seq[Expression] = {
-    val rawTypes = attrs.map(attr => getRawType(attr.metadata))
+  def addPaddingInStringComparison(attrs: Seq[Attribute], alwaysPad: Boolean): Seq[Expression] =
+    addPaddingInStringComparison(attrs, attrs.map(attr => getRawType(attr.metadata)), alwaysPad)
+
+  /**
+   * Like the method above, for expressions with the given raw types, such as a scalar subquery or
+   * a column of an IN subquery, whose raw type is the one of their column.
+   */
+  def addPaddingInStringComparison(
+      exprs: Seq[Expression],
+      rawTypes: Seq[Option[DataType]],
+      alwaysPad: Boolean): Seq[Expression] = {
     if (rawTypes.exists(_.isEmpty)) {
-      attrs
-    } else if (attrs.exists(attr => !RowOrdering.isOrderable(attr.dataType))) {
+      exprs
+    } else if (exprs.exists(expr => !RowOrdering.isOrderable(expr.dataType))) {
       // Comparing a non-orderable type, such as a struct holding a MAP, is rejected later by
       // CheckAnalysis. Leave it alone so the error names the attribute the user wrote rather
       // than the rewritten struct.
-      attrs
+      exprs
     } else {
       val typeWithTargetCharLength = rawTypes.map(_.get).reduce(typeWithWiderCharLength)
-      attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
-        padCharToTargetLength(attr, rawType, typeWithTargetCharLength, alwaysPad).getOrElse(attr)
+      exprs.zip(rawTypes.map(_.get)).map { case (expr, rawType) =>
+        padCharToTargetLength(expr, rawType, typeWithTargetCharLength, alwaysPad).getOrElse(expr)
       }
     }
   }
@@ -461,6 +470,28 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         (padded, wider)
       }
     }
+  }
+
+  /**
+   * The raw type of a value with the given metadata and data type. The raw type of a column is in
+   * its metadata, and the raw types of fields of a struct built from columns, such as by
+   * `named_struct`, are in the metadata of the fields. None if neither has a CHAR or VARCHAR type.
+   */
+  def getRawType(metadata: Metadata, dataType: DataType): Option[DataType] = {
+    def nested(dt: DataType): Option[DataType] = dt match {
+      case StructType(fields) =>
+        val rawFields = fields.map(f => getRawType(f.metadata).orElse(nested(f.dataType)))
+        if (rawFields.forall(_.isEmpty)) {
+          None
+        } else {
+          Some(StructType(fields.zip(rawFields).map { case (f, raw) =>
+            f.copy(dataType = raw.getOrElse(f.dataType), metadata = cleanMetadata(f.metadata))
+          }))
+        }
+      case ArrayType(et, containsNull) => nested(et).map(ArrayType(_, containsNull))
+      case _ => None
+    }
+    getRawType(metadata).orElse(nested(dataType))
   }
 
   /** The metadata of the first attribute, with the raw type of [[widerCharRawType]] if any. */
@@ -517,7 +548,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   // Like typeWithWiderCharLength, but keeps the field names of type1, and None for types that are
   // not both CHAR types, or structs and arrays of them, with the same shape.
-  private def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
+  private[sql] def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
     (type1, type2) match {
       // collation is None for the default collation, and collationId compares the effective one
       case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>

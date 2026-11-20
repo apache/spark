@@ -737,6 +737,15 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(sql("SELECT id FROM t5 WHERE c IN (SELECT c FROM t3)"), Row(2))
       checkAnswer(sql("SELECT id FROM t3 WHERE c NOT IN (SELECT c FROM t5)"), Nil)
       checkAnswer(sql("SELECT id FROM t3 WHERE (id, c) IN (SELECT 1, c FROM t5)"), Row(1))
+      // scalar subqueries
+      checkAnswer(
+        sql("SELECT id FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5) " +
+          "WHERE c = (SELECT c FROM t3)"),
+        Seq(Row(1), Row(2)))
+      checkAnswer(sql("SELECT id FROM t5 WHERE c = (SELECT c FROM t3)"), Row(2))
+      checkAnswer(sql("SELECT id FROM t3 WHERE (SELECT c FROM t5) = c"), Row(1))
+      checkAnswer(sql("SELECT id FROM t3 WHERE (SELECT c FROM t5) = 'a'"), Row(1))
+      checkAnswer(sql("SELECT id FROM t3 WHERE 'a' = (SELECT c FROM t5)"), Row(1))
 
       Seq("SELECT c FROM t3 INTERSECT SELECT c FROM t5", s"SELECT c FROM t3 INTERSECT ($union)",
           "SELECT c FROM t5 INTERSECT SELECT c FROM t3").foreach { query =>
@@ -4280,6 +4289,40 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           Seq(Row(1, "a" + " ".repeat(2)), Row(2, "a" + " ".repeat(2)), Row(3, "abcde")))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'abcde'"), Row(3))
+      }
+
+      // a struct built from the columns has the raw types in the metadata of its fields
+      withView("vs") {
+        sql("CREATE VIEW vs AS SELECT id, named_struct('c', c) AS s " +
+          "FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5)")
+        val catalog = spark.sessionState.catalog
+        val view = catalog.getTableMetadata(TableIdentifier("vs"))
+        val storedSchema = StructType(view.schema.map {
+          case field @ StructField("s", StructType(Array(c)), _, _) =>
+            val metadata = CharVarcharUtils.withRawType(c.metadata, CharType(3))
+            field.copy(dataType = StructType(Array(c.copy(metadata = metadata))))
+          case field => field
+        })
+        catalog.alterTable(view.copy(schema = storedSchema))
+
+        checkAnswer(
+          sql("SELECT id FROM (SELECT id, s.c AS c FROM vs) WHERE c = 'a'"),
+          Seq(Row(1), Row(2)))
+        checkAnswer(sql("SELECT s.c FROM vs WHERE id = 3"), Row("abcde"))
+      }
+    }
+  }
+
+  test("SPARK-61972: an IN subquery of char columns without read-side padding") {
+    withTempPath { dir =>
+      withTable("t3", "t5") {
+        sql("SELECT 'a' as c").write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t3 (c CHAR(3)) USING $format LOCATION '$dir'")
+        sql(s"CREATE TABLE t5 (c CHAR(5)) USING $format LOCATION '$dir'")
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          checkAnswer(sql("SELECT c FROM t3 WHERE c IN (SELECT c FROM t5)"), Row("a"))
+          checkAnswer(sql("SELECT c FROM t5 WHERE c IN (SELECT c FROM t3)"), Row("a"))
+        }
       }
     }
   }

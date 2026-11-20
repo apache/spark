@@ -154,11 +154,19 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         val newProjectList = projectList.map {
           case a @ Alias(child, _) =>
             (for {
-              viewType <- CharVarcharUtils.getRawType(a.metadata)
+              viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
               attr <- queryAttr(child)
-              queryType <- CharVarcharUtils.getRawType(attr.metadata)
+              queryType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
               narrowed <- CharVarcharUtils.narrowCharToLength(child, queryType, viewType)
-            } yield a.withNewChildren(Seq(narrowed)).asInstanceOf[Alias]).getOrElse(a)
+            } yield {
+              // A rebuilt struct loses the metadata of its fields, which holds their raw types.
+              val newChild = if (narrowed.dataType == child.dataType) {
+                narrowed
+              } else {
+                Cast(narrowed, child.dataType, Some(conf.sessionLocalTimeZone))
+              }
+              a.withNewChildren(Seq(newChild)).asInstanceOf[Alias]
+            }).getOrElse(a)
           case other => other
         }
         if (newProjectList == projectList) {

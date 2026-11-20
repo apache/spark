@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   InSubquery,
   Literal,
   NamedExpression,
-  OuterReference
+  OuterReference,
+  ScalarSubquery
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, IN_SUBQUERY}
@@ -45,6 +46,24 @@ object ApplyCharTypePaddingHelper {
     def unapply(e: Expression): Option[Attribute] = e match {
       case a: Attribute => Some(a)
       case OuterReference(a: Attribute) => Some(a)
+      case _ => None
+    }
+  }
+
+  /** A scalar subquery of one CHAR column, with the metadata of that column. */
+  object CharScalarSubquery {
+    def unapply(e: Expression): Option[Metadata] = e match {
+      case s: ScalarSubquery if s.resolved && s.plan.output.length == 1 =>
+        Some(s.plan.output.head.metadata)
+      case _ => None
+    }
+  }
+
+  /** An operand of a comparison with a raw type: a column or a scalar subquery of one. */
+  object CharOperand {
+    def unapply(e: Expression): Option[Metadata] = e match {
+      case AttrOrOuterRef(attr) => Some(attr.metadata)
+      case CharScalarSubquery(metadata) => Some(metadata)
       case _ => None
     }
   }
@@ -161,46 +180,59 @@ object ApplyCharTypePaddingHelper {
           i.copy(value = newChildren.head, list = newChildren.tail)
         }
 
-      case i: InSubquery if i.resolved => padInSubquery(i)
+      // Like the cases above, for a scalar subquery of a CHAR column compared with a string
+      // literal, a column, or another scalar subquery.
+      case b @ BinaryComparison(e @ CharScalarSubquery(metadata), lit) if lit.foldable =>
+        padAttrLitCmp(e, metadata, padCharCol, lit).map(b.withNewChildren).getOrElse(b)
+
+      case b @ BinaryComparison(lit, e @ CharScalarSubquery(metadata)) if lit.foldable =>
+        padAttrLitCmp(e, metadata, padCharCol, lit)
+          .map(newChildren => b.withNewChildren(newChildren.reverse))
+          .getOrElse(b)
+
+      case b @ BinaryComparison(e1 @ CharOperand(m1), e2 @ CharOperand(m2))
+          if e1.isInstanceOf[ScalarSubquery] || e2.isInstanceOf[ScalarSubquery] =>
+        b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(
+          Seq(e1, e2), Seq(m1, m2).map(CharVarcharUtils.getRawType), padCharCol))
+
+      case i: InSubquery if i.resolved => padInSubquery(i, padCharCol)
 
       case other => other
     }
 
   /**
-   * For CHAR values compared with CHAR columns of a different length of an IN subquery, pads the
-   * shorter of each to the longer length. Like read-side padding, it does not truncate longer
-   * values. The columns are padded in a Project over the subquery.
+   * Pads each CHAR value of an IN subquery and the CHAR column of the subquery it is compared
+   * with, as a comparison of two columns pads them. The columns are padded in a Project over the
+   * subquery, which gives them the raw type of the padded length.
    */
-  private def padInSubquery(i: InSubquery): InSubquery = {
-    val rawTypes = i.values.zip(i.query.childOutputs).map {
-      case (AttrOrOuterRef(attr), col) => CharVarcharUtils.widerCharRawType(Seq(attr, col))
-      case _ => None
+  private def padInSubquery(i: InSubquery, padCharCol: Boolean): InSubquery = {
+    val padded = i.values.zip(i.query.childOutputs).map {
+      case (value @ CharOperand(metadata), col) =>
+        val valueType = CharVarcharUtils.getRawType(metadata)
+        val colType = CharVarcharUtils.getRawType(col.metadata)
+        val Seq(newValue, newCol) = CharVarcharUtils.addPaddingInStringComparison(
+          Seq(value, col), Seq(valueType, colType), padCharCol)
+        val target = for {
+          v <- valueType
+          c <- colType
+          wider <- CharVarcharUtils.widerCharType(c, v)
+        } yield wider
+        (newValue, Some(newCol).filterNot(_ eq col).map((_, target)))
+      case (value, _) => (value, None)
     }
-    if (rawTypes.forall(_.isEmpty)) {
-      i
+    if (padded.forall(_._2.isEmpty)) {
+      i.copy(values = padded.map(_._1))
     } else {
-      val newValues = i.values.zip(rawTypes).map {
-        case (e @ AttrOrOuterRef(attr), Some(rawType)) =>
-          CharVarcharUtils.padCharToWiderLength(attr, rawType).map {
-            case (padded, _) if e.isInstanceOf[OuterReference] =>
-              padded.transform { case a: Attribute if a.semanticEquals(attr) => OuterReference(a) }
-            case (padded, _) => padded
-          }.getOrElse(e)
-        case (e, _) => e
-      }
       val plan = i.query.plan
       // The plan can have more columns than values after de-correlation.
       val projectList = plan.output.zipWithIndex.map { case (col, idx) =>
-        rawTypes.lift(idx).flatten.flatMap(CharVarcharUtils.padCharToWiderLength(col, _)).map {
-          case (padded, paddedRawType) =>
-            Alias(padded, col.name)(
-              qualifier = col.qualifier,
-              explicitMetadata = Some(CharVarcharUtils.withRawType(col.metadata, paddedRawType)))
+        padded.lift(idx).flatMap(_._2).map { case (newCol, target) =>
+          val metadata = target.map(CharVarcharUtils.withRawType(col.metadata, _))
+            .getOrElse(col.metadata)
+          Alias(newCol, col.name)(qualifier = col.qualifier, explicitMetadata = Some(metadata))
         }.getOrElse(col)
       }
-      val newQuery =
-        if (projectList == plan.output) i.query else i.query.withNewPlan(Project(projectList, plan))
-      i.copy(values = newValues, query = newQuery)
+      i.copy(values = padded.map(_._1), query = i.query.withNewPlan(Project(projectList, plan)))
     }
   }
 
