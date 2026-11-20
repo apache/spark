@@ -2067,11 +2067,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   // Creates a table in `format` with two old rows, then adds columns whose existence defaults
   // have a NULL field, a NULL array element, a NULL nested struct or a decimal whose unscaled
-  // value overflows a long, at the top level or in a struct and array (s, a, n, ta, as, d, e, f,
-  // w); compact and wide decimals that fit in a long (i, l, c); and defaults that contain a map
-  // and also a NULL or an overflowing decimal, which keep the old error: in the map itself (m,
-  // md), in a map in a struct (sm), next to a map in a struct (sn, sw), and next to a map in an
-  // array (am).
+  // value overflows a long, at the top level or in a struct and array (s, a, n, ta, sa, d, e, f,
+  // w); compact and wide decimals that fit in a long (i, l, c); a binary value (b); and maps,
+  // with a NULL or an overflowing decimal value, in a struct, next to a NULL or an overflowing
+  // decimal in a struct, and in an array next to a NULL element (m, md, sm, sn, sw, am).
   private def withNullFieldAndWideDecimalDefaults(format: String)(f: => Unit): Unit = {
     val wide = "99999999999999999999999999999999999999"
     withSQLConf(
@@ -2090,7 +2089,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "n struct<x: int, inner: struct<y: int>> " +
           "default named_struct('x', 1, 'inner', cast(null as struct<y: int>)), " +
           "ta array<int> default array(1, null, 3), " +
-          "as array<struct<x: int>> " +
+          "sa array<struct<x: int>> " +
           "default array(named_struct('x', 1), cast(null as struct<x: int>)), " +
           s"d decimal(38, 0) default $wide, " +
           "e decimal(19, 0) default -9999999999999999999, " +
@@ -2100,6 +2099,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "c decimal(38, 10) default 123.5, " +
           "w struct<v: decimal(38, 0), vs: array<decimal(38, 0)>> " +
           s"default named_struct('v', $wide, 'vs', array($wide)), " +
+          "b binary default X'0102', " +
           "m map<string, int> default map('a', cast(null as int), 'b', 2), " +
           s"md map<string, decimal(38, 0)> default map('a', $wide), " +
           "sm struct<m: map<string, decimal(38, 0)>> " +
@@ -2115,21 +2115,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("vectorized readers fill existence defaults with NULL fields and wide decimals") {
+  test("SPARK-62034: vectorized readers fill existence defaults with NULL fields, wide " +
+    "decimals, binary values and maps") {
     val wide = BigDecimal("99999999999999999999999999999999999999")
-    val filledColumns = Seq("s", "a", "n", "ta", "as", "d", "e", "f", "w", "i", "l", "c")
-    val filledValues = Seq(Row(1, null), Row(1, Seq(1, null, 3)), Row(1, null), Seq(1, null, 3),
+    val columns = Seq("s", "a", "n", "ta", "sa", "d", "e", "f", "w", "i", "l", "c", "b", "m", "md",
+      "sm", "sn", "sw", "am")
+    val twoEntries = Map("a" -> 1, "b" -> 2)
+    // checkAnswer does not convert decimals inside arrays or maps to Scala BigDecimal.
+    val values = Seq(Row(1, null), Row(1, Seq(1, null, 3)), Row(1, null), Seq(1, null, 3),
       Seq(Row(1), null), wide, BigDecimal("-9999999999999999999"), BigDecimal("1.5"),
-      // checkAnswer does not convert decimals inside arrays to Scala BigDecimal.
       Row(wide, Seq(wide.bigDecimal)),
-      BigDecimal("1.25"), BigDecimal("999999999999999999"), BigDecimal("123.5"))
-    // The map branch does not give each row its own entries yet, so filling the NULL or the wide
-    // decimal of a default that contains a map would drop entries. Such defaults keep the old
-    // error: the reader's NULL check for a NULL, and an ArithmeticException for the decimal.
-    val nullError = "Cannot assign default column value"
-    val decimalError = "BigInteger out of long range"
-    val mapColumnErrors = Seq("m" -> nullError, "md" -> decimalError, "sm" -> decimalError,
-      "sn" -> nullError, "sw" -> decimalError, "am" -> nullError)
+      BigDecimal("1.25"), BigDecimal("999999999999999999"), BigDecimal("123.5"),
+      Array[Byte](1, 2), Map("a" -> null, "b" -> 2), Map("a" -> wide.bigDecimal),
+      Row(Map("a" -> wide.bigDecimal)), Row(null, twoEntries), Row(wide, twoEntries),
+      Seq(twoEntries, null))
     Seq("parquet", "orc").foreach { format =>
       withNullFieldAndWideDecimalDefaults(format) {
         // The catalog table reads through the V1 file format. Its files, read by path with the
@@ -2139,26 +2138,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         Seq(true, false).foreach { useV1 =>
           withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> (if (useV1) "parquet,orc" else "")) {
             val clue = s"$format, useV1 = $useV1"
-            def read(columns: String): DataFrame = if (useV1) {
-              sql(s"select id, $columns from t")
+            val df = if (useV1) {
+              sql(s"select id, ${columns.mkString(", ")} from t")
             } else {
               spark.read.schema(table.schema).format(format).load(table.location.toString)
-                .selectExpr("id" +: columns.split(", ").toSeq: _*)
+                .select("id", columns: _*)
             }
-            val df = read(filledColumns.mkString(", "))
-            val plan = df.queryExecution.executedPlan
-            assert(plan.exists(_.isInstanceOf[FileSourceScanExec]) == useV1, clue)
-            assert(plan.exists(_.isInstanceOf[BatchScanExec]) == !useV1, clue)
-            checkAnswer(df, Seq(Row(1 +: filledValues: _*), Row(2 +: filledValues: _*)))
-            // Only V1: the V2 reader factories do not close a file whose batch fails to
-            // initialize, which the suite's leaked-stream check reports.
-            if (useV1) mapColumnErrors.foreach { case (column, error) =>
-              val e = intercept[SparkException](read(column).collect())
-              assert(e.getCondition.startsWith("FAILED_READ_FILE"), s"$clue, $column")
-              val causes =
-                Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).mkString("\n")
-              assert(causes.contains(error), s"$clue, $column")
+            // The defaults are filled only by a columnar scan.
+            val scan = df.queryExecution.executedPlan.collectFirst {
+              case scan: FileSourceScanExec => scan
+              case scan: BatchScanExec => scan
             }
+            assert(scan.exists(_.isInstanceOf[FileSourceScanExec]) == useV1, clue)
+            assert(scan.exists(_.supportsColumnar), clue)
+            checkAnswer(df, Seq(Row(1 +: values: _*), Row(2 +: values: _*)))
           }
         }
       }

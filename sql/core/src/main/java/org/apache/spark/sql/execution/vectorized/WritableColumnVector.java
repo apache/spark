@@ -21,13 +21,12 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
-import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -802,7 +801,9 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (isStructLike(c.type)) {
+        if (c.type instanceof StructType || c.type instanceof VariantType
+            || c.type instanceof CalendarIntervalType
+            || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -814,160 +815,22 @@ public abstract class WritableColumnVector extends ColumnVector {
     return elementsAppended;
   }
 
-  // Types whose NULL values must be appended with appendStruct(true), which also appends a NULL
-  // to every child column.
-  private static boolean isStructLike(DataType type) {
-    return type instanceof StructType || type instanceof VariantType
-        || type instanceof CalendarIntervalType
-        || type instanceof AnyTimestampNanoType;
-  }
-
-  // Whether `value` contains a map at any depth.
-  private static boolean containsMap(Object value) {
-    if (value instanceof ArrayBasedMapData) {
-      return true;
-    }
-    Object[] elements = null;
-    if (value instanceof GenericArrayData arrayData) {
-      elements = arrayData.array();
-    } else if (value instanceof GenericInternalRow row) {
-      elements = row.values();
-    }
-    if (elements != null) {
-      for (Object element : elements) {
-        if (containsMap(element)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   /**
-   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
-   * above. A NULL nested in a struct or array, and a decimal whose unscaled value overflows a
-   * long, are appended too, unless the value contains a map: the map branch does not give each
-   * row its own entries yet (SPARK-60940), so such a value keeps failing as it did before, with
-   * Optional.empty() for the NULL and ArithmeticException for the decimal.
+   * Appends `length` copies of `value`, a Catalyst value of this vector's type such as a column's
+   * existence default. `RowToColumnConverter` appends it by the vector's data type, so NULLs nested
+   * in structs, arrays and maps, decimals of any precision, binary values and maps all take the
+   * same path as a row-to-columnar conversion, and each row gets its own map entries.
    * @param length: The number of instances to append
    * @param value value to append to the vector
-   * @return the number of values appended if the value maps to one of the append* methods above,
-   * or Optional.empty() otherwise.
    */
-  public Optional<Integer> appendObjects(int length, Object value) {
-    return appendObjectsImpl(length, value, !containsMap(value));
-  }
-
-  private Optional<Integer> appendObjectsImpl(
-      int length, Object value, boolean fillNullsAndWideDecimals) {
-    if (value == null) {
-      // A NULL field or element nested in a struct or array default value.
-      if (!fillNullsAndWideDecimals) {
-        return Optional.empty();
-      }
-      if (isStructLike(type)) {
-        for (int i = 0; i < length; ++i) {
-          appendStruct(true);
-        }
-      } else {
-        appendNulls(length);
-      }
-      return Optional.of(length);
+  public void appendObjects(int length, Object value) {
+    RowToColumnConverter converter =
+      new RowToColumnConverter(new StructType().add("value", type, true));
+    InternalRow row = new GenericInternalRow(new Object[] {value});
+    WritableColumnVector[] vectors = new WritableColumnVector[] {this};
+    for (int i = 0; i < length; i++) {
+      converter.convert(row, vectors);
     }
-    if (value instanceof Boolean) {
-      return Optional.of(appendBooleans(length, (Boolean) value));
-    }
-    if (value instanceof Byte) {
-      return Optional.of(appendBytes(length, (Byte) value));
-    }
-    if (value instanceof Decimal decimal) {
-      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
-        return Optional.of(appendInts(length, (int) decimal.toUnscaledLong()));
-      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
-        return Optional.of(appendLongs(length, decimal.toUnscaledLong()));
-      } else {
-        if (!fillNullsAndWideDecimals) {
-          // Keeps the old ArithmeticException for a value that contains a map.
-          decimal.toUnscaledLong();
-        }
-        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
-        byte[] bytes = integer.toByteArray();
-        int result = 0;
-        for (int i = 0; i < length; ++i) {
-          result += appendByteArray(bytes, 0, bytes.length);
-        }
-        return Optional.of(result);
-      }
-    }
-    if (value instanceof Double) {
-      return Optional.of(appendDoubles(length, (Double) value));
-    }
-    if (value instanceof Float) {
-      return Optional.of(appendFloats(length, (Float) value));
-    }
-    if (value instanceof Integer) {
-      return Optional.of(appendInts(length, (Integer) value));
-    }
-    if (value instanceof Long) {
-      return Optional.of(appendLongs(length, (Long) value));
-    }
-    if (value instanceof Short) {
-      return Optional.of(appendShorts(length, (Short) value));
-    }
-    if (value instanceof UTF8String utf8) {
-      byte[] bytes = utf8.getBytes();
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        result += appendByteArray(bytes, 0, bytes.length);
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof GenericArrayData arrayData) {
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        appendArray(arrayData.numElements());
-        for (Object element : arrayData.array()) {
-          if (arrayData().appendObjectsImpl(1, element, fillNullsAndWideDecimals).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += arrayData.numElements();
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof GenericInternalRow row) {
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        appendStruct(false);
-        for (int j = 0; j < row.values().length; ++j) {
-          Object element = row.values()[j];
-          if (childColumns[j].appendObjectsImpl(1, element, fillNullsAndWideDecimals).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += row.values().length;
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof ArrayBasedMapData data) {
-      appendArray(length);
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        for (Object key : data.keyArray().array()) {
-          if (childColumns[0].appendObjectsImpl(1, key, fillNullsAndWideDecimals).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        for (Object val: data.valueArray().array()) {
-          if (childColumns[1].appendObjectsImpl(1, val, fillNullsAndWideDecimals).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += data.keyArray().numElements();
-      }
-      return Optional.of(result);
-    }
-    return Optional.empty();
   }
 
   // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
