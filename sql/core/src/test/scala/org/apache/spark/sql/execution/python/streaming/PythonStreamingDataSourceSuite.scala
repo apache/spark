@@ -1512,6 +1512,38 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  test("python streaming sink fails under a continuous trigger instead of dropping rows") {
+    assume(shouldTestPandasUDFs)
+    val dataSource =
+      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    withTempDir { dir =>
+      val checkpointDir = new File(dir, "checkpoint")
+      checkpointDir.mkdir()
+      val outputDir = new File(dir, "output")
+      outputDir.mkdir()
+      val q = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .option("numPartitions", "1")
+        .load()
+        .select($"value".cast("int").as("id"))
+        .writeStream
+        .format(dataSourceName)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .trigger(Trigger.Continuous("1 second"))
+        .start(outputDir.getAbsolutePath)
+      try {
+        val e = intercept[StreamingQueryException] {
+          q.awaitTermination(waitTimeout.toMillis)
+        }
+        assert(e.getMessage.contains("write method for Python data source should not be called"))
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
   test("python streaming sink: invalid write mode") {
     assume(shouldTestPandasUDFs)
     // The data source write the number of rows and partitions into batchId.json in
