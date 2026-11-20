@@ -72,9 +72,9 @@ class WorkerMetrics:
     """One collector per Python worker process, reset by the worker before each task.
 
     set stores a supplied value; increment adds to a counter.
-    set_current_timestamp stores the epoch nanoseconds under name, appending "Ns".
+    set_current_timestamp reads the clock and stores epoch nanoseconds.
     measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
-    to_dict combines both dictionaries, appending "Ns" to the duration names.
+    to_dict combines both dictionaries.
     """
 
     _instance: ClassVar[Optional["WorkerMetrics"]] = None
@@ -101,8 +101,8 @@ class WorkerMetrics:
         self._duration_totals_ns: dict[str, int] = {}
 
     def set_current_timestamp(self, name: str) -> None:
-        """Read the current clock and store its epoch nanoseconds under name + "Ns"."""
-        self.set(name + "Ns", time.time_ns())
+        """Read the current clock and store its epoch nanoseconds under name."""
+        self.set(name, time.time_ns())
 
     def set(self, name: str, value: int) -> None:
         """Store the supplied value unchanged, replacing any earlier value."""
@@ -124,10 +124,6 @@ class WorkerMetrics:
     def to_dict(self) -> dict[str, int]:
         """Build the numeric report dictionary consumed by report_metrics.
 
-        Counters, bytes, and epoch timestamps already have their reporting units. The
-        accumulated duration totals are reported in nanoseconds, with "Ns" appended to their names.
+        Every value is reported as stored, so timestamps and durations are in nanoseconds.
         """
-        return {
-            **self._values_in_report_units,
-            **{name + "Ns": ns for name, ns in self._duration_totals_ns.items()},
-        }
+        return {**self._values_in_report_units, **self._duration_totals_ns}

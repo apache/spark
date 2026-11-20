@@ -77,10 +77,10 @@ class WorkerMetricsTests(unittest.TestCase):
 
     def test_constructor_reuses_collector_without_reset(self):
         metrics = WorkerMetrics()
-        metrics.set("memoryBytesSpilled", 123)
+        metrics.set("bootTimestampNs", 123)
         metrics.increment("rows", 2)
         self.assertIs(WorkerMetrics(), metrics)
-        self.assertEqual(WorkerMetrics().to_dict(), {"memoryBytesSpilled": 123, "rows": 2})
+        self.assertEqual(WorkerMetrics().to_dict(), {"bootTimestampNs": 123, "rows": 2})
 
     def test_reset_isolates_new_task_from_existing_timer(self):
         metrics = WorkerMetrics()
@@ -98,13 +98,13 @@ class WorkerMetricsTests(unittest.TestCase):
         previous_timer.add_duration_ns(3_000_000)
         self.assertIs(WorkerMetrics(), metrics)
         self.assertEqual(
-            metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDurationNs": 2_000_000}
+            metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2_000_000}
         )
 
     def test_set_current_timestamp_uses_epoch_nanoseconds(self):
         metrics = WorkerMetrics()
         with patch("pyspark.worker_metrics.time.time_ns", return_value=1_700_000_000_123_456_789):
-            metrics.set_current_timestamp("bootTimestamp")
+            metrics.set_current_timestamp("bootTimestampNs")
         self.assertEqual(metrics.to_dict(), {"bootTimestampNs": 1_700_000_000_123_456_789})
 
     def test_durations_are_reported_in_exact_nanoseconds(self):
@@ -116,10 +116,10 @@ class WorkerMetricsTests(unittest.TestCase):
         ):
             with metrics.measure("duration"):
                 pass
-            self.assertEqual(metrics.to_dict(), {"durationNs": 600})
+            self.assertEqual(metrics.to_dict(), {"duration": 600})
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_dict(), {"durationNs": 1_300})
+        self.assertEqual(metrics.to_dict(), {"duration": 1_300})
 
     def test_nested_timings_are_inclusive(self):
         metrics = WorkerMetrics()
@@ -130,7 +130,7 @@ class WorkerMetricsTests(unittest.TestCase):
             with metrics.measure("outer"):
                 with metrics.measure("inner"):
                     pass
-        self.assertEqual(metrics.to_dict(), {"outerNs": 5_000_000, "innerNs": 2_000_000})
+        self.assertEqual(metrics.to_dict(), {"outer": 5_000_000, "inner": 2_000_000})
 
     def test_reuse_timer_scope(self):
         metrics = WorkerMetrics()
@@ -145,7 +145,7 @@ class WorkerMetricsTests(unittest.TestCase):
                         pass
             with timer:
                 pass
-        self.assertEqual(metrics.to_dict(), {"durationNs": 3_000_000})
+        self.assertEqual(metrics.to_dict(), {"duration": 3_000_000})
 
     def test_accumulate_and_propagate_exception(self):
         metrics = WorkerMetrics()
@@ -158,7 +158,7 @@ class WorkerMetricsTests(unittest.TestCase):
                     raise ValueError("worker failure")
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_dict(), {"durationNs": 3_000_000})
+        self.assertEqual(metrics.to_dict(), {"duration": 3_000_000})
 
 
 class ReadInThreadTests(PySparkBaseTestCase):

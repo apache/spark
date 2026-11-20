@@ -22,6 +22,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, ClosedChannelException, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -514,12 +515,6 @@ private[spark] object BasePythonRunner extends Logging {
     }.toMap
   }
 
-  /** The current epoch time in nanoseconds, matching the worker's `time.time_ns()`. */
-  private[python] def currentTimeNanos(): Long = {
-    val now = Instant.now()
-    TimeUnit.SECONDS.toNanos(now.getEpochSecond) + now.getNano
-  }
-
   /**
    * Decode the init response that follows START_OF_INIT_RESPONSE: a length-prefixed JSON object
    * that is `{}` once the worker is initialized, or carries an `error` if initialization failed.
@@ -905,7 +900,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Iterator[OUT] = {
-    val startTimeNs = BasePythonRunner.currentTimeNanos()
+    // Epoch time, to compare with the worker's time.time_ns() timestamps.
+    val startTimeNs = ChronoUnit.NANOS.between(Instant.EPOCH, Instant.now())
     val env = SparkEnv.get
 
     // Log task context information at the start of computation
