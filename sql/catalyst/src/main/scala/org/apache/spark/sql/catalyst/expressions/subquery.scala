@@ -451,7 +451,8 @@ case class ScalarSubquery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
     outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
-  override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+  override def toString: String = s"scalar-subquery#${exprId.id} $conditionString" +
+    countBugResult.map(r => s" countBugResult=$r").getOrElse("")
   override lazy val canonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
