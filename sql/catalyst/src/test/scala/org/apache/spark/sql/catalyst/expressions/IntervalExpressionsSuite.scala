@@ -567,13 +567,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // rule returns, so that a failure tells which form lost the context.
       // A rule that replaces a node calls `copyTagsFrom` on the replacement, as `SimplifyCasts`
       // does when it replaces a cast to the same type with its child: the expression takes the
-      // context of an ANSI or a TRY cast, and keeps its own under a LEGACY cast, which has none.
+      // context of an ANSI or a TRY cast, and keeps its own under a LEGACY cast, which has none,
+      // and under an ANSI cast built outside `withOrigin`, whose context has no origin.
       val replacingCasts = Seq(
-        EvalMode.ANSI -> castContext,
-        EvalMode.TRY -> castContext,
-        EvalMode.LEGACY -> context).map { case (evalMode, expected) =>
-        val plan = Project(
-          Seq(Alias(sameTypeCast(newExpr(), evalMode), "c")()), OneRowRelation())
+        sameTypeCast(newExpr(), EvalMode.ANSI) -> castContext,
+        sameTypeCast(newExpr(), EvalMode.TRY) -> castContext,
+        sameTypeCast(newExpr(), EvalMode.LEGACY) -> context,
+        { val e = newExpr(); Cast(e, e.dataType, None, EvalMode.ANSI) } -> context
+      ).map { case (cast, expected) =>
+        val plan = Project(Seq(Alias(cast, "c")()), OneRowRelation())
         SimplifyCasts(plan).expressions.head.children.head -> expected
       }
       // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
