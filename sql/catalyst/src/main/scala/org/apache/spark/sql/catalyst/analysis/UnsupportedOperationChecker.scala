@@ -191,15 +191,21 @@ object UnsupportedOperationChecker extends Logging {
 
   // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
   // it: no watermark in the join keys, and no range condition that bounds the input by the
-  // watermark of the other input. A left semi join only emits left rows.
+  // watermark of the other input. With allowMultiple, an input that eviction picks another column
+  // for counts too, since its state keeps rows of any event time. A left semi join only emits
+  // left rows.
   private def joinInputWithoutStateCutoff(join: Join): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
       Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
         .collectFirst {
-          case (side, input, other) if input.output.exists(hasEventTimeCol) &&
+          case (side, input, other) if input.output.exists(hasEventTimeCol) && (
               StreamingJoinHelper.getStateValueWatermark(
-                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
+                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty ||
+              SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) &&
+              StreamingJoinHelper.getStateValueWatermarkColumn(input.output, other.outputSet,
+                condition, Some(1000000)).exists { case (column, _) => !hasEventTimeCol(column) }
+              ) => side
         }
     case _ => None
   }
