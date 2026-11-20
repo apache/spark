@@ -60,6 +60,16 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   later, which restarts and then puts new NULL values under a separate NULL key. To drop such keys,
   use a new checkpoint location.
 
+- Since Spark 4.4, a struct field, an array element, or a map value that `unpivot` (or `melt`),
+  `rollup`, `cube`, or `groupingSets` of the Dataset API computes from a column that an outer join
+  makes nullable, for example the field of a struct value of `unpivot`, is nullable. Previously,
+  it was non-nullable and returned a wrong value, such as `0`, instead of NULL. As a result, an
+  existing query started before Spark 4.3 that keeps such a struct, array, or map in its state, for
+  example as a grouping key of a streaming aggregation, fails to restart with
+  `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new checkpoint location, or set
+  `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the state of such a query
+  can hold the wrong keys.
+
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
 - Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.

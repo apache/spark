@@ -28,7 +28,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -88,25 +87,13 @@ case class ArrowEvalPythonExec(
     child: SparkPlan,
     evalType: Int,
     override val evalCondition: Option[Expression] = None)(
-    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonSQLMetrics {
+    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonPhaseMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
 
-  override protected def additionalMetrics: Map[String, SQLMetric] = {
-    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF &&
-        !conf.legacyPandasConversionUDF && conf.pythonUDFDetailedTimingEnabled) {
-      createPythonPhaseMetrics()
-    } else {
-      Map.empty
-    }
-  }
-
-  // SQL metrics are fixed with the plan; use that decision if the session setting changes later.
   private def pythonRunnerConfMap: Map[String, String] =
-    ArrowPythonRunner.getPythonRunnerConfMap(conf).updated(
-      SQLConf.PYTHON_UDF_DETAILED_TIMING_ENABLED.key,
-      pythonMetrics.contains("pythonNumTimingReports").toString)
+    ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {

@@ -1119,7 +1119,13 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10) tab(col);
 
 **Errors:**
 - Throws an error if rank values are outside [0.0, 1.0].
-- Returns NULL if the input sketch is NULL.
+
+**Notes:**
+- A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+- NULL elements in a rank array already typed as ARRAY&lt;DOUBLE&gt; are treated as 0.0,
+  requesting the minimum quantile. For example, `ARRAY(0.5D, NULL)` is accepted.
+  A NULL-containing array that needs an implicit element cast, such as `ARRAY(0.5, NULL)`,
+  fails analysis.
 
 ---
 
@@ -1137,9 +1143,11 @@ kll_sketch_get_rank_double(sketch, value)
 | Argument | Type | Description |
 |----------|------|-------------|
 | `sketch` | BINARY | A KLL sketch of the corresponding type |
-| `value` | Corresponding type (BIGINT, FLOAT, or DOUBLE) | The value to find the rank for |
+| `value` | Corresponding type (BIGINT, FLOAT, or DOUBLE), or ARRAY of that type | Value(s) to find the rank for |
 
-Returns a DOUBLE representing the normalized rank between 0.0 and 1.0.
+Returns normalized ranks between 0.0 and 1.0:
+- If `value` is a scalar: Returns DOUBLE
+- If `value` is an array: Returns ARRAY&lt;DOUBLE&gt; of the same length
 
 **Examples:**
 ```sql
@@ -1148,6 +1156,14 @@ SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col), 3)
 FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 -- Result: approximately 0.43 (3 is around the 43rd percentile)
 ```
+
+**Notes:**
+- A NULL sketch, scalar NULL value, or NULL value array returns NULL.
+- NULL elements in a value array already typed with the matching element type (BIGINT, FLOAT,
+  or DOUBLE) are treated as zero, returning the rank of zero. For example, `ARRAY(3L, NULL)`
+  is accepted by `kll_sketch_get_rank_bigint`.
+  A NULL-containing array that needs an implicit element cast fails analysis: `ARRAY(3, NULL)`
+  for the bigint getter, or `ARRAY(3.0, NULL)` for the float and double getters.
 
 ---
 
