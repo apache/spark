@@ -3355,8 +3355,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
-  private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right))
+  private def split(
+      condition: Seq[Expression],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      afterBarrier: Boolean = false) = {
+    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right), afterBarrier)
     val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
       splitBySide(pushDownCandidates, left, right)
 
@@ -3394,8 +3398,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
-  private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
-    val movable = splitMovable(condition, Seq(join.left, join.right))._1.filterNot { cond =>
+  private def splitLookupJoin(
+      condition: Seq[Expression],
+      join: ExternalLookupJoin,
+      afterBarrier: Boolean = false) = {
+    val (canMove, _) = splitMovable(condition, Seq(join.left, join.right), afterBarrier)
+    val movable = canMove.filterNot { cond =>
       cond.references.exists(join.right.outputSet.contains) && (
         if (cond.references.subsetOf(join.right.outputSet)) {
           !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
@@ -3426,23 +3434,28 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  /**
+   * Returns true if the conditions of a filter over a join of `joinType` with `condition` are
+   * written after a conjunct that keeps the ones that can fail in place (see the `afterBarrier`
+   * parameter of [[splitMovable]]). An inner join, including an inner as-of join and an inner
+   * external lookup join, evaluates its condition before the filter, so the filter's conditions
+   * are written after it, as at the end of its ON clause, and a non-deterministic or throwable
+   * conjunct of it keeps the ones that can fail in place. So does such a conjunct of the
+   * condition of a left semi or left anti join, which decides which left rows reach the filter.
+   * The other joins keep every row of the side that they push the filter's conditions to.
+   */
+  private def hasBarrier(joinType: JoinType, condition: Option[Expression]): Boolean =
+    (joinType.isInstanceOf[InnerLike] || joinType == LeftSemi || joinType == LeftAnti) &&
+      condition.exists(cond => !cond.deterministic || cond.throwable)
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      // An inner join evaluates its condition before the filter, so the filter's conditions are
-      // written after it, as at the end of its ON clause, and a non-deterministic or throwable
-      // conjunct of it keeps the ones that can fail in place. So does such a conjunct of the
-      // condition of a left semi or left anti join, which decides which left rows reach the
-      // filter. The other joins keep every row of the side that they push the filter's
-      // conditions to.
-      val afterBarrier =
-        (joinType.isInstanceOf[InnerLike] || joinType == LeftSemi || joinType == LeftAnti) &&
-          joinCondition.exists(cond => !cond.deterministic || cond.throwable)
-      val (movable, stayUp) = splitMovable(
-        splitConjunctivePredicates(filterCondition), Seq(left, right), afterBarrier)
+      val (movable, stayUp) = splitMovable(splitConjunctivePredicates(filterCondition),
+        Seq(left, right), hasBarrier(joinType, joinCondition))
       val (leftFilterConditions, rightFilterConditions, commonMovable) =
         splitBySide(movable, left, right)
       val commonFilterCondition = commonMovable ++ stayUp
@@ -3532,7 +3545,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(filterCondition, j: ExternalLookupJoin) =>
       val conjuncts = splitConjunctivePredicates(filterCondition)
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
-        splitLookupJoin(conjuncts, j)
+        splitLookupJoin(conjuncts, j, hasBarrier(j.joinType, j.condition))
       val (newJoinConditions, rightFilterConditionsToPush) = j.joinType match {
         case Inner =>
           // don't push throwable expressions into join condition
@@ -3587,8 +3600,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
     case f @ Filter(filterCondition, j: AsOfJoin) =>
-      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
-        split(splitConjunctivePredicates(filterCondition), j.left, j.right)
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) = split(
+        splitConjunctivePredicates(filterCondition), j.left, j.right,
+        hasBarrier(j.joinType, j.condition))
       if (leftFilterConditions.isEmpty) {
         f
       } else {

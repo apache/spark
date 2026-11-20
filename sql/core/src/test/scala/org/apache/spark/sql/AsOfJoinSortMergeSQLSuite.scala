@@ -1317,6 +1317,30 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("SPARK-62137: WHERE on the left input that can fail is not pushed below an inner as-of " +
+    "join ahead of its throwable ON condition") {
+    // The CASE WHEN is false on the only pair, since 5 > 9 is false, so the join drops the only
+    // left row, the one where the division is by zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("asof_guard_l", "asof_guard_r") {
+        sql("CREATE TABLE asof_guard_l USING parquet AS " +
+          "SELECT * FROM VALUES (1, 10, 9, 5) AS l(k, t, v, f)")
+        sql("CREATE TABLE asof_guard_r USING parquet AS " +
+          "SELECT * FROM VALUES (1, 5, 9) AS r(k, t, g)")
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT a.k
+              |FROM asof_guard_l a ASOF JOIN asof_guard_r b
+              |  MATCH_CONDITION (a.t >= b.t)
+              |  ON a.k = b.k AND CASE WHEN a.f < 0 THEN raise_error('neg') ELSE a.f > b.g END
+              |WHERE 10 / (a.v - 9) < 100
+              |""".stripMargin),
+          Nil)
+      }
+    }
+  }
+
   test("WHERE on the right input runs after the closest match, unlike the same ON predicate") {
     withTradeQuoteTables {
       // The 10:00:11 trade's closest quote is 180.20. WHERE drops the trade, while ON skips

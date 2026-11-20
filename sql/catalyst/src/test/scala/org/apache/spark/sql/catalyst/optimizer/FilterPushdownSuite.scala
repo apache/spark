@@ -1730,6 +1730,26 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(onQuery), onQuery)
   }
 
+  test("SPARK-62137: as-of joins: do not push a where condition that can fail ahead of a " +
+    "throwable join condition") {
+    // The division is built in ANSI mode, where it can fail. An inner as-of join drops the left
+    // rows that its condition gives no match, so after the throwable conjunct of the condition, a
+    // where condition that can fail stays above the join. A condition that can not fail is
+    // pushed. A left outer as-of join keeps every left row, so both are pushed below it.
+    val divide = Divide(leftValue, Literal(2), NumericEvalContext(EvalMode.ANSI))
+    val condition = Some(leftKey === rightKey && IsNull(RaiseError(Literal("boom"))))
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft, asOfRight, condition, joinType)
+        .where(divide > 1 && leftValue > 1)
+      val correctAnswer = if (joinType == LeftOuter) {
+        asOfJoin(asOfLeft.where(divide > 1 && leftValue > 1), asOfRight, condition, joinType)
+      } else {
+        asOfJoin(asOfLeft.where(leftValue > 1), asOfRight, condition, joinType).where(divide > 1)
+      }
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("as-of joins: push a right-side join condition into the right side") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       val originalQuery = asOfJoin(
