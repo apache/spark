@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, GenericInternalRow, IsNotNull, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -709,12 +709,9 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int]) {
 
-    // Filter the joined rows based on the given condition. A row whose watermarked join key is
-    // NULL can never match, and eviction by that key may never reach it, so it fails this filter.
-    val preJoinFilter = Predicate.create(
-      (preJoinFilterExpr ++ joinKeyOrdinalForWatermark.map(i => IsNotNull(joinKeys(i))))
-        .reduceOption(And).getOrElse(Literal(true)),
-      inputAttributes).eval _
+    // Filter the joined rows based on the given condition.
+    val preJoinFilter =
+      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = SymmetricHashJoinStateManager(
       joinSide = joinSide,
@@ -879,8 +876,13 @@ case class StreamingSymmetricHashJoinExec(
         // condition no matter what other side row it's matched with. This allows us to avoid
         // adding it to the state, and generate an outer join row immediately (or do nothing in
         // the case of inner join).
-        if (preJoinFilter(thisRow)) {
-          val key = keyGenerator(thisRow)
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        // A row whose watermarked join key is NULL can never match, and eviction by that key may
+        // never reach it, so it is handled as a row that fails the pre join filter.
+        // TODO(SPARK-61382): NULLs in the other equality keys still reach the state and can match
+        //   each other. Rows with a NULL watermarked key that a checkpoint already holds are not
+        //   drained: state formats V2 and V3 never evict them.
+        if (key != null && !joinKeyOrdinalForWatermark.exists(key.isNullAt)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.
