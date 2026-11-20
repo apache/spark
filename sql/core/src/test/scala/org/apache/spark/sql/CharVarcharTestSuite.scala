@@ -684,6 +684,16 @@ trait CharVarcharTestSuite extends QueryTest {
       // Dataset.to reorders the fields of the struct and keeps the column's metadata.
       val df = spark.table("t").to(StructType.fromDDL("s STRUCT<v: STRING, c: STRING>"))
       checkAnswer(df.selectExpr("s.v = 'a'", "s.c = 'x'"), Row(true, true))
+      // It matches field names case-insensitively, and takes the target's spelling.
+      val renamed = spark.table("t").to(StructType.fromDDL("s STRUCT<C: STRING, V: STRING>"))
+      checkAnswer(renamed.selectExpr("s.C = 'x'", "s.V = 'a'"), Row(true, true))
+    }
+    withTable("t") {
+      sql(s"CREATE TABLE t(n STRUCT<s: STRUCT<c: CHAR(3), v: STRING>>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('s', named_struct('c', 'x', 'v', 'a')))")
+      // The fields of a nested struct are reordered too.
+      val df = spark.table("t").to(StructType.fromDDL("n STRUCT<s: STRUCT<v: STRING, c: STRING>>"))
+      checkAnswer(df.selectExpr("n.s.c = 'x'", "n.s.v = 'a'"), Row(true, true))
     }
   }
 

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -58,27 +59,30 @@ object ApplyCharTypePaddingHelper {
    * or VARCHAR field keeps its length although its data type is a string.
    */
   object RawTypedRef {
-    def unapply(e: Expression): Option[DataType] = e match {
+    // A value whose type no longer matches its raw type, e.g. after a cast, has none.
+    def unapply(e: Expression): Option[DataType] = rawType(e).filter { rawType =>
+      DataTypeUtils.equalsIgnoreNullability(
+        CharVarcharUtils.replaceCharVarcharWithString(rawType), e.dataType)
+    }
+
+    private def rawType(e: Expression): Option[DataType] = e match {
       case AttrOrOuterRef(attr) => CharVarcharUtils.getRawType(attr.metadata)
       case GetStructField(child, ordinal, _) =>
         child.dataType match {
           case current: StructType if ordinal < current.length =>
-            val field = current(ordinal)
-            // Look the field up by name: its position in the raw type can differ, for example
-            // after Dataset.to reorders the fields of a struct and keeps the column's metadata.
-            // A field whose type no longer matches its raw type has none.
-            unapply(child).collect { case raw: StructType => raw.fields.find(_.name == field.name) }
-              .flatten
-              .map(_.dataType)
-              .filter { rawType =>
-                DataTypeUtils.equalsIgnoreNullability(
-                  CharVarcharUtils.replaceCharVarcharWithString(rawType), field.dataType)
-              }
+            // Look the field up by name, as Dataset.to matches fields: it can reorder and
+            // rename the fields of a struct at any level, and keeps the column's metadata.
+            val name = current(ordinal).name
+            rawType(child).flatMap {
+              case raw: StructType => raw.fields.find(f => SQLConf.get.resolver(f.name, name))
+              case _ => None
+            }.map(_.dataType)
           case _ => None
         }
       case _ => None
     }
   }
+
 
   private[sql] def readSidePadding(
       relation: LogicalPlan,
