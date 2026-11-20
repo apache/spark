@@ -157,16 +157,18 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * Checks for a stateful operator after a stream-stream join whose state of an input has no
-   * cutoff, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. A query from
-   * a checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   * Checks, in append mode, for an operator that drops late rows after a stream-stream join whose
+   * state of an input has no cutoff, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other
+   * operators. It takes the optimized plan, whose join conditions eviction uses. A query from a
+   * checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled &&
       SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
     try {
       plan.foreach { subPlan =>
-        if (outputMode == InternalOutputModes.Append && isStatefulOperation(subPlan)) {
+        // TODO: Update mode is not checked, although its aggregations also drop late rows.
+        if (outputMode == InternalOutputModes.Append && dropsLateRows(subPlan)) {
           subPlan.foreach {
             case j: Join if j ne subPlan =>
               joinInputWithoutStateCutoff(j).foreach { side =>
@@ -189,7 +191,7 @@ object UnsupportedOperationChecker extends Logging {
 
   // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
   // it: no watermark in the join keys, and no range condition that bounds the input by the
-  // watermark of the other input. A left semi join only emits stored left rows.
+  // watermark of the other input. A left semi join only emits left rows.
   private def joinInputWithoutStateCutoff(join: Join): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
@@ -201,6 +203,19 @@ object UnsupportedOperationChecker extends Logging {
         }
     case _ => None
   }
+
+  // A stateful operator that drops the input rows below its watermark for late rows. Its
+  // physical operator filters by an event-time column of its input, so it needs one.
+  private def dropsLateRows(p: LogicalPlan): Boolean = p.isStreaming &&
+    p.children.exists(_.output.exists(hasEventTimeCol)) && (p match {
+      case _: Aggregate | _: Distinct | _: Deduplicate | _: DeduplicateWithinWatermark => true
+      case Join(left, right, _, _, _) => left.isStreaming && right.isStreaming
+      case f: FlatMapGroupsWithState => f.timeout == GroupStateTimeout.EventTimeTimeout
+      case f: FlatMapGroupsInPandasWithState => f.timeout == GroupStateTimeout.EventTimeTimeout
+      case t: TransformWithState => t.timeMode == EventTime
+      case t: TransformWithStateInPySpark => t.timeMode == EventTime
+      case _ => false
+    })
 
   private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Option[String] = p match {
     // TODO: remove operators from this list as support for avro encoding is added

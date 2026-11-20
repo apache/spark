@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.sql.Timestamp
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
@@ -49,11 +50,12 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // A window count over the join of the two inputs.
-  private def countJoined(condition: String, time: String)
+  private def countJoined(
+      condition: String, time: String, joinType: String = "inner", where: String = "true")
       : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], DataFrame) = {
     val (leftInput, left) = input("left")
     val (rightInput, right) = input("right")
-    val result = left.join(right, expr(condition))
+    val result = left.join(right, expr(condition), joinType).where(where)
       .groupBy(window(col(time), "10 seconds")).count()
       .select($"window.start".cast("long"), $"count")
     (leftInput, rightInput, result)
@@ -91,6 +93,87 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
           MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
           AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)))
+      }
+    }
+
+    // The optimizer moves the range into the join condition, which eviction uses.
+    test(s"accept a time-interval join with its range in a filter above it, V$version") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, result) = countJoined(keyOnly, "leftTime",
+          where = "rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 SECONDS")
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+          AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)))
+      }
+    }
+
+    test(s"accept a left semi join bounded on its left input before a window aggregation, " +
+        s"V$version") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, result) = countJoined(
+          "leftKey = rightKey AND leftTime > rightTime - INTERVAL 5 SECONDS", "leftTime",
+          joinType = "left_semi")
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+          AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 1L)))
+      }
+    }
+
+    test(s"accept a stream-static join before a window aggregation, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val result = left.join(Seq(1, 2).toDF("rightKey"), expr(keyOnly))
+          .groupBy(window($"leftTime", "10 seconds")).count()
+          .select($"window.start".cast("long"), $"count")
+        testStream(result)(
+          AddData(leftInput, (1, 5L)), CheckNewAnswer(),
+          AddData(leftInput, (2, 40L)), CheckNewAnswer(),
+          AddData(leftInput, (3, 41L)), CheckNewAnswer((0L, 1L)))
+      }
+    }
+
+    // flatMapGroupsWithState drops late rows only with an event-time timeout.
+    test(s"accept a key-only join before flatMapGroupsWithState without a timeout, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (rightInput, right) = input("right")
+        val result = left.join(right, expr(keyOnly)).select($"leftKey", $"leftTime")
+          .as[(Int, Timestamp)].groupByKey(_._1)
+          .flatMapGroupsWithState(OutputMode.Append(), GroupStateTimeout.NoTimeout()) {
+            (key: Int, rows: Iterator[(Int, Timestamp)], _: GroupState[Int]) =>
+              Iterator(key -> rows.size)
+          }
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L), (2, 5L))(rightInput, (2, 5L)), CheckNewAnswer((2, 1)),
+          MultiAddData(leftInput, (3, 30L))(rightInput, (8, 30L)), CheckNewAnswer(),
+          // Not late for the join, and joins the stored left (1, 5).
+          AddData(rightInput, (1, 40L)), CheckNewAnswer((1, 1)))
+      }
+    }
+
+    test(s"reject a key-only join before a deduplication without an event-time key, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (_, right) = input("right")
+        val result = left.join(right, expr(keyOnly)).select($"leftKey", $"leftTime")
+          .dropDuplicates("leftKey")
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+      }
+    }
+
+    test(s"reject a key-only join in a SQL CTE before a window aggregation, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (_, right) = input("right")
+        withTempView("l", "r") {
+          left.createOrReplaceTempView("l")
+          right.createOrReplaceTempView("r")
+          val result = spark.sql("WITH j AS (SELECT * FROM l JOIN r ON leftKey = rightKey) " +
+            "SELECT count(*) FROM j GROUP BY window(leftTime, '10 seconds')")
+          testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+        }
       }
     }
 
@@ -135,9 +218,17 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           testStream(result)(start,
             MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer(), StopStream)
         }
-        removeCheckJoinOutputWatermark(checkpoint)
+        // The checkpoint of this version is checked when the query restarts.
         testStream(result)(start,
-          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer())
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), expectRejected("left"))
+        removeCheckJoinOutputWatermark(checkpoint)
+        val logAppender = new LogAppender("join output watermark")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          testStream(result)(start,
+            MultiAddData(leftInput, (3, 50L))(rightInput, (3, 50L)), ProcessAllAvailable())
+        }
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")))
       }
     }
   }
