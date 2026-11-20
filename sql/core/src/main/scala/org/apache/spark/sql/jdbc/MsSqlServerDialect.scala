@@ -91,16 +91,28 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case _ => super.dialectFunctionName(funcName)
     }
 
+    // MsSqlServer converts a value to NVARCHAR the way Spark's CAST(x AS STRING) does only for
+    // integral, DECIMAL, DATE and string sources. Others render differently, for example FLOAT
+    // and REAL with at most 6 significant digits (123.456789 -> '123.457', 1234567.0 ->
+    // '1.23457e+006'), BIT as '1' or '0', DATETIME as 'Jan  1 2024 12:00AM' and VARBINARY bytes
+    // as UTF-16 text, so a pushed cast from them would compare different strings than Spark.
+    // TODO: some expressions over a refused cast do not depend on its rendering and could still
+    // be pushed: IS [NOT] NULL as the null check on the cast's input, COUNT as COUNT of the
+    // input, and a BOOLEAN-to-STRING cast used directly as a grouping or sort key as
+    // CASE WHEN b = 1 THEN 'true' WHEN b = 0 THEN 'false' END. Comparisons must stay refused.
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      (exprDataType, dataType) match {
-        // MsSqlServer converts FLOAT and REAL to strings with at most 6 significant digits
-        // (123.456789 -> '123.457', 1234567.0 -> '1.23457e+006', 100.0 -> '100') and BIT to
-        // '1' or '0', so the pushed cast would not match Spark's CAST(x AS STRING).
-        case (FloatType | DoubleType | BooleanType, _: StringType) =>
+      dataType match {
+        case _: StringType if !rendersCastToStringAsSpark(exprDataType) =>
           throw new UnsupportedOperationException(
-            s"Cannot push down CAST from ${exprDataType.sql} to STRING")
+            s"Cannot push down CAST from ${exprDataType.sql} to ${dataType.sql}")
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
+    }
+
+    private def rendersCastToStringAsSpark(from: DataType): Boolean = from match {
+      case ByteType | ShortType | IntegerType | LongType | DateType => true
+      case _: DecimalType | _: StringType => true
+      case _ => false
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =

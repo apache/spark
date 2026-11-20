@@ -1397,19 +1397,32 @@ class JDBCSuite extends SharedSparkSession {
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
-  test("SPARK-62136: MsSqlServer does not push down CAST from FLOAT, DOUBLE or BOOLEAN to STRING") {
+  test("SPARK-62136: MsSqlServer pushes down CAST to STRING only from types it renders as Spark") {
     val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
-    def castToString(from: DataType): Option[String] =
-      msSqlServer.compileExpression(new V2Cast(FieldReference("c"), from, StringType))
-    Seq(FloatType, DoubleType, BooleanType).foreach { from =>
-      assert(castToString(from).isEmpty, from)
+    def compileCast(dialect: JdbcDialect, from: DataType, to: DataType): Option[String] =
+      dialect.compileExpression(new V2Cast(FieldReference("c"), from, to))
+    val refusedSources =
+      Seq(FloatType, DoubleType, BooleanType, TimestampType, TimestampNTZType, BinaryType)
+    refusedSources.foreach { from =>
+      Seq(StringType, CharType(5), VarcharType(5)).foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isEmpty, s"$from -> $to")
+      }
     }
-    Seq(IntegerType, LongType, DecimalType(10, 2)).foreach { from =>
-      assert(castToString(from) === Some("CAST(\"c\" AS NVARCHAR(MAX))"), from)
+    Seq(ByteType, ShortType, IntegerType, LongType, DecimalType(10, 2), DateType, StringType)
+      .foreach { from =>
+        assert(compileCast(msSqlServer, from, StringType) ===
+          Some("CAST(\"c\" AS NVARCHAR(MAX))"), from)
+      }
+    // Only casts to STRING are refused.
+    Seq(FloatType, DoubleType, BooleanType).foreach { from =>
+      Seq(IntegerType, DecimalType(10, 2)).foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isDefined, s"$from -> $to")
+      }
     }
     // Other dialects keep pushing these casts.
-    assert(JdbcDialects.get("jdbc:").compileExpression(
-      new V2Cast(FieldReference("c"), DoubleType, StringType)).isDefined)
+    refusedSources.foreach { from =>
+      assert(compileCast(JdbcDialects.get("jdbc:"), from, StringType).isDefined, from)
+    }
   }
 
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {

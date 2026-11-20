@@ -296,15 +296,21 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     assert(rows(0).getString(0) === "amy")
   }
 
-  test("SPARK-62136: CAST of FLOAT, DOUBLE or BOOLEAN to STRING is not pushed down") {
+  test("SPARK-62136: CAST to STRING from types MsSqlServer renders differently is not pushed") {
     val table = s"$catalogName.cast_to_string"
-    withTable(table) {
+    val tsTable = s"$catalogName.cast_ts_bin_to_string"
+    withTable(table, tsTable) {
       sql(s"CREATE TABLE $table (id INT, d DOUBLE, r FLOAT, b BOOLEAN, s STRING)")
       sql(s"INSERT INTO $table VALUES (1, 1.5, 1.5, true, '1.5'), " +
         "(2, 100.0, 100.0, false, '100.0'), (3, 123.456789, 123.4567, true, '123.456789'), " +
         "(4, 1234567.0, 1234567.0, false, '100')")
+      sql(s"CREATE TABLE $tsTable (id INT, ts TIMESTAMP, bin BINARY, s STRING)")
+      sql(s"INSERT INTO $tsTable VALUES " +
+        "(1, TIMESTAMP '2024-01-01 00:00:00', X'616263', '2024-01-01 00:00:00'), " +
+        "(2, TIMESTAMP '2024-06-15 12:30:45', X'78797A', 'abc')")
       // If pushed, MsSqlServer would render d as '1.5', '100', '123.457' and '1.23457e+006',
-      // r as '123.457' and b as '1' or '0', so each of these queries would return wrong rows.
+      // r as '123.457', b as '1' or '0', ts as 'Jan  1 2024 12:00AM' and bin as UTF-16 text,
+      // so each of these queries would return wrong rows.
       val cases = Seq(
         s"SELECT id FROM $table WHERE CAST(d AS STRING) = '100.0'" -> Seq(Row(2)),
         s"SELECT id FROM $table WHERE CAST(d AS STRING) = '123.456789'" -> Seq(Row(3)),
@@ -320,7 +326,16 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         s"SELECT id FROM $table WHERE CAST(b AS STRING) = 'true'" -> Seq(Row(1), Row(3)),
         s"SELECT id FROM $table WHERE CAST(b AS STRING) = 'false'" -> Seq(Row(2), Row(4)),
         s"SELECT id FROM $table WHERE CAST(b AS STRING) IN ('true', 'false')" ->
-          Seq(Row(1), Row(2), Row(3), Row(4)))
+          Seq(Row(1), Row(2), Row(3), Row(4)),
+        s"SELECT id FROM $tsTable WHERE CAST(ts AS STRING) = '2024-01-01 00:00:00'" ->
+          Seq(Row(1)),
+        s"SELECT id FROM $tsTable WHERE startswith(CAST(ts AS STRING), '2024-06')" -> Seq(Row(2)),
+        s"SELECT MAX(CAST(ts AS STRING)) FROM $tsTable" -> Seq(Row("2024-06-15 12:30:45")),
+        s"SELECT x.id, y.id FROM $tsTable x JOIN $tsTable y ON CAST(x.ts AS STRING) = y.s" ->
+          Seq(Row(1, 1)),
+        s"SELECT id FROM $tsTable WHERE CAST(bin AS STRING) = 'abc'" -> Seq(Row(1)),
+        s"SELECT x.id, y.id FROM $tsTable x JOIN $tsTable y ON CAST(x.bin AS STRING) = y.s" ->
+          Seq(Row(1, 2)))
       withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
         cases.foreach { case (query, expected) =>
           val df = sql(query)
