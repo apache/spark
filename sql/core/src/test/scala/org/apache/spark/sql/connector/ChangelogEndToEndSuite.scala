@@ -79,6 +79,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       Array.empty,
       new util.HashMap[String, String]())
     cat.clearChangeRows(ident)
+    cat.setChangelogProperties(ident, ChangelogProperties())
   }
 
   private def makeChangeRow(

@@ -248,9 +248,10 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     -> [Filter (carry-over: _del_cnt=1 AND _ins_cnt=1
    *                             AND _rv_cnt=2 AND _min_rv=_max_rv)]
    *     -> Generate(Inline(__spark_cdc_events))   // re-emit one row per buffered input
+   *     -> Project (generated columns + scalar rowId, count and row-version helpers)
    *     -> [Project (update relabel)]
-   *     -> Project (drop helper columns)
    *     -> Project (strip internal EventTimeWatermark metadata)
+   *     -> Project (drop count and row-version helpers, retain rowId helpers)
    * }}}
    *
    * ==Runtime walkthrough==
@@ -296,18 +297,23 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     the batch path -- groups with `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND
    *     _min_rv = _max_rv` are dropped wholesale.
    *  4. [[Generate]] using `Inline(events)` to re-emit one output row per buffered input
-   *     row. A Project selects the generated columns and preserves scalar rowId helpers
-   *     for subsequent post-processing.
-   *  5. [[Project]] (only when update detection is requested) applying the same
+   *     row while retaining the aggregate outputs.
+   *  5. [[Project]] selects the generated columns and scalar rowId, count and row-version
+   *     helpers. It drops duplicate grouping columns and the buffered events array. The
+   *     count and row-version helpers remain available for update relabeling, and the
+   *     rowId helpers remain available for subsequent net-change computation.
+   *  6. [[Project]] (only when update detection is requested) applying the same
    *     `CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION`
    *     guard and `_change_type` relabel as the batch path.
-   *  6. [[Project]] (via [[removeHelperColumns]]) drops count and row-version helpers.
-   *     RowId helpers remain available until the final changelog output projection.
-   *  7. Final [[Project]] (via [[stripCommitTimestampWatermarkMetadata]]) clears the
+   *  7. [[Project]] (via [[stripCommitTimestampWatermarkMetadata]]) clears the
    *     `EventTimeWatermark.delayKey` from the user-visible `_commit_timestamp`
    *     attribute so a downstream user-supplied `withWatermark` on a different column
    *     does not interact with our internal watermark via the global multi-watermark
    *     policy.
+   *  8. [[Project]] (via [[removeHelperColumns]]) drops count and row-version helpers.
+   *     If net-change computation follows, it replaces the rowId helpers with its own
+   *     grouping helpers and drops those at its output. Otherwise, the final changelog
+   *     output projection drops the rowId helpers.
    */
   private def addStreamingRowLevelPostProcessing(
       plan: LogicalPlan,
@@ -381,8 +387,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       Filter(Not(buildCarryOverPairPredicate(aggregated)), aggregated)
     } else aggregated
 
-    // Keep the aggregate's rowIds through Generate. A Project selects the generated data
-    // columns instead of their duplicate grouping outputs, while retaining scalar rowIds.
+    // Preserve scalar rowId, count and row-version helpers through Generate. The Project
+    // selects generated data columns instead of duplicate grouping outputs, keeps those
+    // helpers for subsequent post-processing, and drops the buffered events array.
     val eventsAttr = getAttribute(filtered, HelperColumn.Events)
     val generatorOutput: Seq[Attribute] = watermarked.output.map { col =>
       AttributeReference(col.name, col.dataType, col.nullable, col.metadata)()

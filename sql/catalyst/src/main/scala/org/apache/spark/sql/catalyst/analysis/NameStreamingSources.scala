@@ -109,7 +109,10 @@ object NameStreamingSources extends Rule[LogicalPlan] {
       case named @ NamedStreamingRelation(_: NamedStreamingRelation, _) =>
         named
 
-      // Follow the unary operators inserted by changelog resolution.
+      // Propagate the name through any unary operator above the source, such as the ones
+      // changelog resolution inserts. A node with several children stops propagation, except
+      // the TransformWithState case below. Must follow the nested-wrapper case, because
+      // NamedStreamingRelation is itself a UnaryNode.
       case NamedStreamingRelation(unary: UnaryNode, sourceIdentifyingName) =>
         unary.mapChildren { child =>
           propagateSourceNames(NamedStreamingRelation(child, sourceIdentifyingName))
