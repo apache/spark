@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -183,7 +183,10 @@ object UnsupportedOperationChecker extends Logging {
         if (outputMode == InternalOutputModes.Append && dropsLateRows(subPlan)) {
           subPlan.foreach {
             case j: Join if j ne subPlan =>
-              joinInputWithoutStateCutoff(j).foreach { side =>
+              // An input counts unless the operator's event times come only from other inputs.
+              val sources = eventTimeSources(subPlan, j)
+              joinInputWithoutStateCutoff(j,
+                  input => sources.forall(_.exists(input.outputSet.contains))).foreach { side =>
                 throwError("Detected pattern of possible 'correctness' issue: the state of the " +
                   s"$side input of a stream-stream join has no cutoff, so the join can emit its " +
                   "old rows below its output watermark, and a later stateful operator drops them " +
@@ -206,16 +209,39 @@ object UnsupportedOperationChecker extends Logging {
   // watermark of the other input. A left semi join only emits left rows.
   // TODO: An input evicted by another column is not checked yet, such as the right input of
   //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
-  private def joinInputWithoutStateCutoff(join: Join): Option[String] = join match {
+  private def joinInputWithoutStateCutoff(
+      join: Join, counts: LogicalPlan => Boolean): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
       Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
+        .filter { case (_, input, _) => counts(input) }
         .collectFirst {
           case (side, input, other) if input.output.exists(hasEventTimeCol) &&
               StreamingJoinHelper.getStateValueWatermark(
                 input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
         }
     case _ => None
+  }
+
+  // The columns of `join`'s output that the event-time columns of `operator`'s input are computed
+  // from, or None when the path from the operator down to the join has a node other than a
+  // projection, a filter, a watermark or an expansion, such as the one of a sliding window.
+  private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
+    def trace(plan: LogicalPlan, attrs: AttributeSet): Option[AttributeSet] = plan match {
+      case p if p eq join => Some(attrs)
+      case Project(list, child) =>
+        trace(child, AttributeSet(list.filter(e => attrs.contains(e.toAttribute))
+          .flatMap(_.references)))
+      case Filter(_, child) => trace(child, attrs)
+      case w: EventTimeWatermark => trace(w.child, attrs)
+      case Expand(projections, output, child) =>
+        trace(child, AttributeSet(output.indices.filter(i => attrs.contains(output(i)))
+          .flatMap(i => projections.flatMap(_(i).references))))
+      case _ => None
+    }
+    operator.children.find(_.exists(_ eq join)).flatMap { child =>
+      trace(child, AttributeSet(child.output.filter(hasEventTimeCol)))
+    }
   }
 
   // A stateful operator that drops the input rows below its watermark for late rows. Its
