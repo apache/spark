@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -157,12 +158,23 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * Checks, in append mode, for an operator that drops late rows after a stream-stream join whose
-   * state of an input has no cutoff, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other
-   * operators. It takes the optimized plan, whose join conditions eviction uses. A query from a
-   * checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   * Checks, in append mode, for an operator that drops late rows after a stream-stream join that
+   * emits the rows of an input whose state has no cutoff, as
+   * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
+   * plan, whose join conditions eviction uses, with its CTE references inlined: the optimizer
+   * keeps some CTE definitions, such as MATERIALIZED ones, whose joins would be missed. A query
+   * from a checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    // A stream-stream join without an equality predicate fails in planning with its own error.
+    val hasJoinWithoutEquality = plan.exists {
+      case j @ Join(l, r, _, _, _) => l.isStreaming && r.isStreaming &&
+        ExtractEquiJoinKeys.unapply(j).isEmpty
+      case _ => false
+    }
+    if (hasJoinWithoutEquality) {
+      return
+    }
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled &&
       SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
     try {
@@ -192,6 +204,8 @@ object UnsupportedOperationChecker extends Logging {
   // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
   // it: no watermark in the join keys, and no range condition that bounds the input by the
   // watermark of the other input. A left semi join only emits left rows.
+  // TODO: An input evicted by another column is not checked yet, such as the right input of
+  //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
   private def joinInputWithoutStateCutoff(join: Join): Option[String] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
