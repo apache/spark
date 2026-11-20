@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -206,6 +207,22 @@ object UnsupportedOperationChecker extends Logging {
               StreamingJoinHelper.getStateValueWatermarkColumn(input.output, other.outputSet,
                 condition, Some(1000000)).exists { case (column, _) => !hasEventTimeCol(column) }
               ) => side
+        }
+    // With allowMultiple, an input is evicted by its equality key that the other input's
+    // watermark bounds. Where that is neither the key earlier versions evicted both inputs by
+    // nor the input's event time, its state keeps rows of any event time.
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+        if left.isStreaming && right.isStreaming &&
+          SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) =>
+      def watermarked(keys: Seq[Expression]): Option[Int] = Some(keys.indexWhere {
+        case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
+        case _ => false
+      }).filter(_ >= 0)
+      val shared = watermarked(leftKeys).orElse(watermarked(rightKeys))
+      Seq(("left", leftKeys, rightKeys), ("right", rightKeys, leftKeys))
+        .take(if (joinType == LeftSemi) 1 else 2).collectFirst {
+          case (side, keys, otherKeys) if watermarked(otherKeys).exists { i =>
+            !shared.contains(i) && watermarked(Seq(keys(i))).isEmpty } => side
         }
     case _ => None
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -36,7 +36,7 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
   }
 
   // The watermarks are on different equality keys: la on the left and rb on the right. A
-  // negative time gives a NULL key.
+  // negative left b gives a NULL lb.
   private def crossedKeyJoin()
       : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
     val leftInput = MemoryStream[(Int, Int)]
@@ -149,6 +149,44 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
           AssertOnQuery { q =>
             q.lastProgress.stateOperators.head.numRowsUpdated == 2
           })
+      }
+    }
+  }
+
+  // A window aggregation on la after a join on la = ra AND lb = rb, or on la = ra only.
+  private def countJoined(crossed: Boolean): (MemoryStream[(Int, Int)], DataFrame) = {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("a", "b")
+      .select(timestamp_seconds($"a").as("la"), timestamp_seconds($"b").as("lb"))
+      .withWatermark("la", "10 seconds")
+    val right = rightInput.toDF().toDF("a", "b")
+      .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
+      .withWatermark(if (crossed) "rb" else "ra", "10 seconds")
+    val condition = if (crossed) "la = ra AND lb = rb" else "la = ra"
+    val result = left.join(right, expr(condition))
+      .groupBy(window($"la", "10 seconds")).count()
+      .select($"window.start".cast("long"), $"count")
+    (leftInput, result)
+  }
+
+  // The left input is evicted by lb, so its state keeps rows of any la.
+  for (version <- Seq(2, 4)) {
+    test(s"reject a window aggregation after a join with crossed watermarked keys, V$version") {
+      withJoinConf(version) {
+        val (leftInput, result) = countJoined(crossed = true)
+        testStream(result)(
+          AddData(leftInput, (1, 5)),
+          ExpectFailure[AnalysisException](e => assert(e.getMessage.contains(
+            "the state of the left input of a stream-stream join has no cutoff")),
+            typeIsSuperClass = true))
+      }
+    }
+
+    test(s"accept a window aggregation after a join on one watermarked key, V$version") {
+      withJoinConf(version) {
+        val (leftInput, result) = countJoined(crossed = false)
+        testStream(result)(AddData(leftInput, (1, 5)), CheckNewAnswer())
       }
     }
   }
