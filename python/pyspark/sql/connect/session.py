@@ -1171,6 +1171,18 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
+    def listFiles(self) -> List[str]:
+        # LIST FILES and LIST ARCHIVES do not list the artifacts of the other sessions of the
+        # server since Spark 4.4.
+        return [row[0] for row in self.sql("LIST FILES").collect()]
+
+    listFiles.__doc__ = PySparkSession.listFiles.__doc__
+
+    def listArchives(self) -> List[str]:
+        return [row[0] for row in self.sql("LIST ARCHIVES").collect()]
+
+    listArchives.__doc__ = PySparkSession.listArchives.__doc__
+
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,

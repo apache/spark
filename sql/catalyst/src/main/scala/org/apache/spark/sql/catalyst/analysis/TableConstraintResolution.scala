@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
@@ -42,9 +42,10 @@ private[sql] class TableConstraintResolution(
       r: DataSourceV2Relation): V2WriteCommand = {
     val tableCheckInvariants =
       if (r.table.constraints != null && r.table.constraints.nonEmpty) {
+        val input = CharVarcharUtils.withCharVarcharTypes(v2Write.query.output, r.table.columns())
         // Check constraint is the only enforced constraint for DSV2 tables.
         r.table.constraints.collect {
-          case c: Check => buildCheckInvariant(c, v2Write.query)
+          case c: Check => buildCheckInvariant(c, input)
         }.toSeq
       } else {
         Seq.empty
@@ -56,14 +57,17 @@ private[sql] class TableConstraintResolution(
       condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
   }
 
-  private def buildCheckInvariant(c: Check, query: LogicalPlan): Expression = {
+  private def buildCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
     Option(c.predicate()).flatMap(V2ExpressionUtils.toCatalyst) match {
-      case Some(expr) => toCheckInvariant(c, expr)
+      case Some(expr) => resolveCondition(toCheckInvariant(c, expr), input)
       case None if SQLConf.get.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) =>
-        toCheckInvariant(c, parseCondition(c))
-      case None => readCheckInvariant(c, query)
+        resolveCondition(toCheckInvariant(c, parseCondition(c)), input)
+      case None => readCheckInvariant(c, input)
     }
   }
+
+  private def resolveCondition(condition: Expression, input: Seq[Attribute]): Expression =
+    analyze(Filter(condition, LocalRelation(input))).asInstanceOf[Filter].condition
 
   private def toCheckInvariant(c: Check, unresolvedExpr: Expression): CheckInvariant = {
     val columnExtractors = mutable.Map[String, Expression]()
@@ -74,13 +78,13 @@ private[sql] class TableConstraintResolution(
   /**
    * Reads a CHECK condition from its text, independently of the settings of the writer. Only the
    * condition is analyzed under the fixed settings, and the query of the write is not analyzed
-   * again. The result is resolved against the same attributes as the query, so it can go to the
-   * [[Filter]] above the query as it is.
+   * again. The result is resolved against attributes with the same expression IDs as the output of
+   * the query, so it can go to the [[Filter]] above the query as it is.
    */
-  private def readCheckInvariant(c: Check, query: LogicalPlan): Expression = {
+  private def readCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
     try {
       val analyzed = SQLConf.withExistingConf(StoredExpressionText.fixedConf(SQLConf.get)) {
-        analyze(Filter(toCheckInvariant(c, parseCondition(c)), LocalRelation(query.output)))
+        analyze(Filter(toCheckInvariant(c, parseCondition(c)), LocalRelation(input)))
       }
       // Check under the session's representation settings, as `analyzeStrict` does.
       SimpleAnalyzer.checkAnalysis(analyzed)

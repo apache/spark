@@ -3342,6 +3342,58 @@
     ],
     "sqlState" : "KD000"
   },
+  "GRAPH_ID_TYPE_MISMATCH" : {
+    "message" : [
+      "The vertex ID column <idColumn> and the edge columns <srcColumn> and <dstColumn> must have the same data type, but their types are <idType>, <srcType> and <dstType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_INVALID" : {
+    "message" : [
+      "The graph is invalid."
+    ],
+    "subClass" : {
+      "DUPLICATE_VERTICES" : {
+        "message" : [
+          "The vertices DataFrame contains <count> duplicate vertex IDs in the column <idColumn>."
+        ]
+      },
+      "EDGE_VERTEX_NOT_IN_VERTICES" : {
+        "message" : [
+          "The edges DataFrame references <count> vertex IDs in the columns <srcColumn> or <dstColumn> that are not present in the vertices DataFrame."
+        ]
+      },
+      "EDGE_VERTICES_COUNT_MISMATCH" : {
+        "message" : [
+          "The edges DataFrame references <edgeVertexCount> distinct vertex IDs, but the vertices DataFrame contains only <vertexCount>."
+        ]
+      },
+      "NULL_IDS" : {
+        "message" : [
+          "The <dataFrameKind> DataFrame contains NULL values in the columns: <columns>."
+        ]
+      }
+    },
+    "sqlState" : "23000"
+  },
+  "GRAPH_NULL_DATAFRAME" : {
+    "message" : [
+      "The <dataFrameKind> DataFrame must not be null."
+    ],
+    "sqlState" : "22004"
+  },
+  "GRAPH_PROPERTIES_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "The key column <columnName> of the <dataFrameKind> DataFrame has the type <actualType>, but the graph uses the type <expectedType> for this column."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_UNSUPPORTED_ID_TYPE" : {
+    "message" : [
+      "The column <columnName> of the <dataFrameKind> DataFrame has the unsupported type <columnType>. Vertex IDs must have one of the types: <supportedTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
       "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>."
