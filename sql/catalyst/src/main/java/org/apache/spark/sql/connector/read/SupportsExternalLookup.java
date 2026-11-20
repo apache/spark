@@ -39,19 +39,18 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * Selects the offered predicates that this source serves as one lookup access path, and returns
    * their positions in {@code candidates}. Spark offers {@code =}, {@code <=>}, {@code <},
    * {@code <=}, {@code >}, {@code >=} comparisons of a lookup-side {@link NamedReference} with a
-   * {@link LookupParameter}; the array is never empty. In every offered comparison the reference
-   * is {@code children()[0]} and the parameter is {@code children()[1]}: when the query writes
-   * the lookup column on the right, Spark flips the operator, so {@code s.ts < t.event_time} is
-   * offered as {@code event_time > ?}. Spark offers
-   * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
-   * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such
-   * as UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup
-   * column of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the
-   * parameter cannot fail to evaluate. When a selected predicate is a range comparison whose
-   * parameter reads a stream column, each request holds exactly one parameter row. It offers no
-   * comparison on VARCHAR under {@code spark.sql.charVarchar.standardSemantics.enabled}, and never
-   * one on FLOAT, DOUBLE, CHAR, a string with another collation, a complex type or any other type.
-   * For example:
+   * {@link LookupParameter}; the array is never empty. In every offered comparison the reference is
+   * {@code children()[0]} and the parameter is {@code children()[1]}: when the query writes the
+   * lookup column on the right, Spark flips the operator, so {@code s.ts < t.event_time} is offered
+   * as {@code event_time > ?}. Spark offers {@code =} and {@code <=>} only on a lookup column of an
+   * integral type, BOOLEAN, DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR
+   * whose collation compares bytes, such as UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >}
+   * and {@code >=} only on a lookup column of an integral type, DECIMAL, DATE, TIMESTAMP or
+   * TIMESTAMP_NTZ, and only when the parameter cannot fail to evaluate. When a selected predicate
+   * is a range comparison whose parameter reads a stream column, each request holds exactly one
+   * parameter row. It offers no comparison on VARCHAR under
+   * {@code spark.sql.charVarchar.standardSemantics.enabled}, and never one on FLOAT, DOUBLE, CHAR,
+   * a string with another collation, a complex type or any other type. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [1, 0], that is [event_time >= ?, tenant = ?]
@@ -90,7 +89,8 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   {@link ExternalLookupReader#lookupBatch} defines. Do not select a predicate that the source
    *   cannot evaluate that way, and do not select unsupported names or shapes.</li>
    *   <li>An empty result means no access path fits; the query then fails.</li>
-   *   <li>The input array and its elements are read-only.</li>
+   *   <li>The input array and its elements are read-only. The returned positions refer to the
+   *   offered order, so Spark fails the query if the source changes the array.</li>
    * </ul>
    * Spark calls this method only on builders of lookup scans, at most once, after any filter
    * pushdown and before column pruning. Besides filter pushdown and column pruning, Spark calls

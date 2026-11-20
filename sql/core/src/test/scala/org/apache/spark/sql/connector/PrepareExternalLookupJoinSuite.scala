@@ -506,12 +506,15 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
       (_ => Array(-1), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "-1", "numCandidates" -> "1")),
+        Map("index" -> "-1", "maxIndex" -> "0")),
       (_.indices.toArray :+ 1,
         "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "1", "numCandidates" -> "1")),
+        Map("index" -> "1", "maxIndex" -> "0")),
       (_ => Array(0, 0), "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
-        Map("index" -> "0", "predicate" -> "id = ?"))).foreach {
+        Map("index" -> "0", "predicate" -> "id = ?")),
+      // The input array is read-only.
+      ({ candidates => candidates(0) = null; Array(0) },
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.MODIFIED_CANDIDATES", Map.empty)).foreach {
       case (select, condition, parameters) =>
         checkError(
           exception = prepareError(lookupJoinOnId(
@@ -519,6 +522,23 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
           condition = condition,
           parameters = Map("table" -> QUOTED_TABLE_NAME) ++ parameters)
     }
+  }
+
+  test("a connector that reorders the candidates in place fails instead of binding wrongly") {
+    val Seq(streamId, streamLabel) = stream.output
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING", select = {
+      candidates =>
+        // Sorted by field name in descending order, the candidates read [label = ?, id = ?], so
+        // [1, 0] means (id, label) to this connector, but (label, id) in the offered order.
+        java.util.Arrays.sort(
+          candidates, Ordering.by[Predicate, String](_.children()(0).toString).reverse)
+        Array(1, 0)
+    }))
+    val Seq(id, label) = lookup.output
+    checkError(
+      exception = prepareError(lookupJoin(lookup, streamId === id && streamLabel === label)),
+      condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.MODIFIED_CANDIDATES",
+      parameters = Map("table" -> QUOTED_TABLE_NAME))
   }
 
   test("a left outer join makes NOT NULL lookup columns nullable") {

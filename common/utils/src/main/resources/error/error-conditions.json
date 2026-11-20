@@ -2420,7 +2420,7 @@
       },
       "INVALID_SELECTED_PREDICATE_INDEX" : {
         "message" : [
-          "`selectLookupPredicates()` returned the index <index>, which is not a position in the <numCandidates> candidates offered by Spark."
+          "`selectLookupPredicates()` returned the index <index>, but the valid indexes are from 0 to <maxIndex>."
         ]
       },
       "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
@@ -2431,6 +2431,11 @@
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "MODIFIED_CANDIDATES" : {
+        "message" : [
+          "`selectLookupPredicates()` modified its input array of candidates. It must leave the array as Spark offered it, because the returned indexes refer to the offered order."
         ]
       },
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {

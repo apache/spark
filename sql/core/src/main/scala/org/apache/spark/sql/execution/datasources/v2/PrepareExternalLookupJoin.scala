@@ -186,8 +186,12 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
-    val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
-      lookupBuilder.selectLookupPredicates(offeredPredicates))
+    // The connector selects by position, so it receives a copy, which Spark checks afterwards: a
+    // copy that the connector reordered would bind the parameters to the wrong predicates.
+    val passedPredicates = offeredPredicates.clone()
+    val selectedPredicates = selectedCandidates(tableName, offeredPredicates,
+      offeredCandidates.toIndexedSeq, passedPredicates,
+      lookupBuilder.selectLookupPredicates(passedPredicates))
     val selectedConjuncts = selectedPredicates.flatMap(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that
@@ -373,13 +377,19 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
    * Maps the connector's selection, positions in the offered array, back to the offered
    * candidates, in the connector's order, which defines the fields of each request parameter row.
    * Positions keep two candidates of the same shape, for example the same lookup field compared
-   * with two different join-side values, distinguishable.
+   * with two different join-side values, distinguishable. `passed` is the copy of `offered` that
+   * the connector received; it must still hold the offered predicates in the offered order.
    */
   private def selectedCandidates(
       tableName: String,
       offered: Array[V2Predicate],
-      candidates: Seq[OfferedLookupPredicate],
+      candidates: IndexedSeq[OfferedLookupPredicate],
+      passed: Array[V2Predicate],
       selected: Array[Int]): Seq[OfferedLookupPredicate] = {
+    if (!offered.indices.forall(index => passed(index) eq offered(index))) {
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, "MODIFIED_CANDIDATES", Map.empty)
+    }
     if (selected == null) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
@@ -388,21 +398,19 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
-    val byIndex = candidates.toIndexedSeq
-    val seen = new java.util.BitSet(offered.length)
+    val seen = mutable.BitSet.empty
     selected.toSeq.map { index =>
-      if (index < 0 || index >= offered.length) {
+      if (index < 0 || index >= candidates.length) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "INVALID_SELECTED_PREDICATE_INDEX",
-          Map("index" -> index.toString, "numCandidates" -> offered.length.toString))
+          Map("index" -> index.toString, "maxIndex" -> (candidates.length - 1).toString))
       }
-      if (seen.get(index)) {
+      if (!seen.add(index)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "DUPLICATE_SELECTED_PREDICATE",
           Map("index" -> index.toString, "predicate" -> offered(index).describe()))
       }
-      seen.set(index)
-      byIndex(index)
+      candidates(index)
     }
   }
 

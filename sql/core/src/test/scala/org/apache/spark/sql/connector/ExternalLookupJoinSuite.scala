@@ -770,9 +770,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       ("nullKeySelection", "true", "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
       ("selectionMode", "negative", "INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "-1", "numCandidates" -> "1")),
+        Map("index" -> "-1", "maxIndex" -> "0")),
       ("selectionMode", "outOfRange", "INVALID_SELECTED_PREDICATE_INDEX",
-        Map("index" -> "1", "numCandidates" -> "1")),
+        Map("index" -> "1", "maxIndex" -> "0")),
       ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE",
         Map("index" -> "0", "predicate" -> "id = ?")),
       ("maxBatchSize", "0", "NON_POSITIVE_MAX_PARAMETER_ROWS", Map("value" -> "0"))).foreach {
@@ -6234,12 +6234,11 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
         SimpleExternalLookupDataSource.lookupCandidateDescriptions.set(
           candidates.map(_.toString).toSeq)
         val supportedPredicates = Set("=", "<=>", "<", "<=", ">", ">=")
-        val supported = candidates.indices.filter { index =>
-          val candidate = candidates(index)
+        val supported = positionsWhere(candidates) { candidate =>
           supportedPredicates.contains(candidate.name()) &&
             candidate.children()(0).asInstanceOf[NamedReference]
               .fieldNames().sameElements(Array("id"))
-        }.toArray
+        }
         val selected = selectionMode match {
           case "all" => supported
           case "last" => supported.takeRight(1)
@@ -7197,13 +7196,6 @@ object CompactDecimalRows {
         columnar(amounts)
     }
   }
-}
-
-/** Helpers for the test implementations of `SupportsExternalLookup.selectLookupPredicates`. */
-object ExternalLookupSelection {
-  /** The positions of the candidates that satisfy `predicate`, in the offered order. */
-  def positionsWhere(candidates: Array[Predicate])(predicate: Predicate => Boolean): Array[Int] =
-    candidates.indices.filter(index => predicate(candidates(index))).toArray
 }
 
 case class TestExternalLookup(
