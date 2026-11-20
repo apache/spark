@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{
+  DefaultValueExpression,
   DeleteFromTable,
+  GeneratedColumnExpression,
   LogicalPlan,
   MergeIntoTable,
   OverwriteByExpression,
@@ -32,10 +34,14 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Rejects optional references in the expressions of a statement that modifies table data and
- * that was built without the SQL parser, which rejects them in SQL text (see
- * `OptionalReferenceValidation`). A missing column must not silently change which rows a
- * statement deletes or updates.
+ * Rejects optional references in the statements that do not support them and that were built
+ * without the SQL parser, which rejects them in SQL text (see `OptionalReferenceValidation`):
+ *  - in the expressions of a statement that modifies table data, because a missing column must
+ *    not silently change which rows a statement deletes or updates;
+ *  - in the DEFAULT and GENERATED ALWAYS AS expressions of a column definition, which an API such
+ *    as `Catalog.createTable` parses on its own, because they are stored with the table.
+ *
+ * The rest of this doc is about the first kind.
  *
  * The source of a MERGE is checked too, like the source query of the SQL statement.
  * `Dataset.mergeInto` and the Spark Connect MERGE command put the plan of the source DataFrame
@@ -57,9 +63,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * {{{
  *   df.writeTo("t").overwrite(expr("deleted_at? IS NULL"))
  *   spark.table("s").selectExpr("pk", "attrs?['active'] AS active").as("s").mergeInto("t", ...)
+ *   spark.catalog.createTable("t", "parquet", schemaWithDefault("missing?"), Map.empty)
  * }}}
  */
-object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
+object CheckOptionalReferences extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsPattern(COMMAND)) {
@@ -67,11 +74,9 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
         statementName(operator).foreach { statement =>
           operator.expressions.foreach(checkExpression(_, statement))
         }
+        operator.expressions.foreach(checkColumnDefinitionExpressions)
         operator match {
           case merge: MergeIntoTable =>
-            // TODO: An unbound named parameter marker `:p?` in the SQL text of a source DataFrame
-            // is not rejected: by default, `SubstituteParamsParser` replaces it with the text NULL
-            // before the text is parsed, which leaves nothing in the plan for this check to find.
             OptionalReferences
               .unresolvedOptionalReference(merge.sourceTable)
               .map(_.origin)
@@ -145,6 +150,23 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
         inPlan(subquery.plan).orElse(subquery.children.iterator.flatMap(inExpression).nextOption())
       case _ =>
         expression.children.iterator.flatMap(inExpression).nextOption()
+    }
+  }
+
+  /** Rejects an optional reference in a DEFAULT or GENERATED ALWAYS AS of `expression`. */
+  private def checkColumnDefinitionExpressions(expression: Expression): Unit = {
+    expression.foreach {
+      case default: DefaultValueExpression =>
+        checkDdlExpression(default.child, "DEFAULT")
+      case generation: GeneratedColumnExpression =>
+        checkDdlExpression(generation.child, "GENERATED ALWAYS AS")
+      case _ =>
+    }
+  }
+
+  private def checkDdlExpression(expression: Expression, clause: String): Unit = {
+    OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
+      throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(clause, reference.origin)
     }
   }
 

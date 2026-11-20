@@ -92,7 +92,7 @@ object OptionalReferences {
    * reference of the analyzed plan that the analysis resolved to a [[nullReference]], see
    * [[markResolvedNullReference]]. The rest of the analysis can replace that NULL, e.g. by folding
    * an extraction from it, the IF whose condition it is, or the row of an inline table that holds
-   * it, so the mark is what keeps the decision for `CheckOptionalReferencesInDml`, which reads it
+   * it, so the mark is what keeps the decision for `CheckOptionalReferences`, which reads it
    * in the analyzed operations of a MERGE source. The optional references of the body of a view
    * or SQL function that the plan reads do not count: that body is analyzed in an analysis
    * context of its own.

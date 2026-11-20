@@ -637,6 +637,41 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("merge into fails if the source has an unbound optional named parameter marker") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val sqlText = "SELECT pk, :p? AS archived FROM source WHERE pk = :q"
+      Seq(false, true).foreach { constantsOnly =>
+        withSQLConf(
+            SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+            SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString) {
+          // The marker without a value is the NULL of a missing reference, also when another
+          // marker of the source has a value.
+          val source = spark.sql(sqlText, Map("q" -> 1))
+          checkError(
+            exception = intercept[AnalysisException] {
+              source.as("s")
+                .mergeInto(tableNameAsString, $"s.pk" === col(tableNameAsString + ".pk"))
+                .whenMatched(expr("s.archived IS NULL"))
+                .delete()
+                .merge()
+            },
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = ":p?",
+              start = sqlText.indexOf(":p?"),
+              stop = sqlText.indexOf(":p?") + 2))
+        }
+      }
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
   test("merge into uses a source that a drop of a missing optional field left unchanged") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

@@ -94,12 +94,12 @@ class OptionalReferencesAnalysisSuite extends SparkFunSuite {
     relations.clear()
     val condition = InSubquery(Seq(AttributeReference("a", IntegerType)()),
       ListQuery(nestedSubqueries(depth = 20, relations)))
-    CheckOptionalReferencesInDml(DeleteFromTable(LocalRelation(), condition))
+    CheckOptionalReferences(DeleteFromTable(LocalRelation(), condition))
     assert(relations.map(_.visits).toSet == Set(1))
     assert(relations.map(_.markLookups).toSet == Set(1))
 
     relations.clear()
-    CheckOptionalReferencesInDml(MergeIntoTable(
+    CheckOptionalReferences(MergeIntoTable(
       targetTable = LocalRelation(),
       sourceTable = nestedSubqueries(depth = 20, relations),
       mergeCondition = Literal(true),
@@ -123,7 +123,7 @@ class OptionalReferencesAnalysisSuite extends SparkFunSuite {
       UpdateTable(LocalRelation(a), Seq(Assignment(a, Literal(1))), Some(IsNull(missing)))
     ).foreach { update =>
       checkError(
-        exception = intercept[AnalysisException](CheckOptionalReferencesInDml(update)),
+        exception = intercept[AnalysisException](CheckOptionalReferences(update)),
         condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
         sqlState = "0A000",
         parameters = Map("context" -> "UPDATE"))

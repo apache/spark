@@ -387,7 +387,7 @@ class OptionalReferencesParserSuite extends PlanTest {
       Seq(true, false).foreach { enabled =>
         withOptionalReferences(enabled) {
           val substituted =
-            new SubstituteParamsParser().substitute(sqlText, positionalParams = parameters)._1
+            new SubstituteParamsParser().substitute(sqlText, positionalParams = parameters).sqlText
           assert(substituted == sqlText.replace("?", "'1'"), sqlText)
         }
       }
@@ -432,15 +432,18 @@ class OptionalReferencesParserSuite extends PlanTest {
 
       // The parameter markers of such a statement are substituted.
       val substitutor = new SubstituteParamsParser()
-      assert(substitutor.substitute("SET VAR v = :p?", Map("p" -> "1"))._1 == "SET VAR v = 1")
-      assert(substitutor.substitute("SET VAR v = :p?", Map("q" -> "1"))._1 == "SET VAR v = NULL")
+      def substitute(sqlText: String, namedParameters: Map[String, String]): String =
+        substitutor.substitute(sqlText, namedParameters).sqlText
+      assert(substitute("SET VAR v = :p?", Map("p" -> "1")) == "SET VAR v = 1")
+      // An unbound optional marker stays, so that the analysis resolves it to NULL.
+      assert(substitute("SET VAR v = :p?", Map("q" -> "1")) == "SET VAR v = :p?")
       assert(
-        substitutor.substitute("SET VAR v = coalesce(a?, ?)", positionalParams = List("1"))._1 ==
-        "SET VAR v = coalesce(a?, 1)"
+        substitutor.substitute("SET VAR v = coalesce(a?, ?)", positionalParams = List("1"))
+          .sqlText == "SET VAR v = coalesce(a?, 1)"
       )
       // As before, a `?` in free text is not a parameter marker.
       assert(
-        substitutor.substitute("SET spark.a.b=c?d", positionalParams = List("1"))._1 ==
+        substitutor.substitute("SET spark.a.b=c?d", positionalParams = List("1")).sqlText ==
         "SET spark.a.b=c?d"
       )
     }
@@ -631,21 +634,33 @@ class OptionalReferencesParserSuite extends PlanTest {
     }
   }
 
-  test("unbound optional named parameter markers are substituted with NULL") {
+  test("a parameter marker of a DECLARE CURSOR query does not select optional references") {
+    withOptionalReferences(enabled = true) {
+      // The marker of the cursor query has no location, because it is bound when the cursor is
+      // opened, but the grammar parsed it as a parameter marker.
+      val script = "BEGIN DECLARE c CURSOR FOR SELECT first(DISTINCT ?) FROM t; SELECT :x; END"
+      val substitution = new SubstituteParamsParser().substitute(script, Map("x" -> "3"))
+      assert(substitution.sqlText == script.replace(":x", "3"))
+      assert(!substitution.parsedWithOptionalReferences)
+    }
+  }
+
+  test("unbound optional named parameter markers stay in the text") {
     withOptionalReferences(enabled = true) {
       val substitutor = new SubstituteParamsParser()
       def substitute(sqlText: String, namedParameters: Map[String, String]): String =
-        substitutor.substitute(sqlText, namedParameters)._1
+        substitutor.substitute(sqlText, namedParameters).sqlText
 
-      assert(substitute("SELECT :x?, :y?", Map("x" -> "1")) == "SELECT 1, NULL")
+      // An unbound optional marker stays, so that the analysis resolves it to the NULL of a missing
+      // reference, as it does without parameter values.
+      assert(substitute("SELECT :x?, :y?", Map("x" -> "1")) == "SELECT 1, :y?")
       assert(substitute("SELECT :x ?, :x?", Map("x" -> "1")) == "SELECT 1, 1")
-      assert(
-        substitute("SELECT :x? WHERE :x? IS NULL", Map.empty) == "SELECT NULL WHERE NULL IS NULL"
-      )
+      val unbound = "SELECT :x? WHERE :x? IS NULL"
+      assert(substitute(unbound, Map("y" -> "1")) == unbound)
       assert(substitute("SELECT :x?::INT", Map("x" -> "'5'")) == "SELECT '5'::INT")
       // A keyword or an identifier right after the `?` stays separate from the value.
       assert(substitute("SELECT :x?AND true", Map("x" -> "false")) == "SELECT false AND true")
-      assert(substitute("SELECT :x?AS c, :y?_c", Map("x" -> "1")) == "SELECT 1 AS c, NULL _c")
+      assert(substitute("SELECT :x?AS c, :y?_c", Map("x" -> "1")) == "SELECT 1 AS c, :y?_c")
 
       val sqlText = "SELECT :y?, :y"
       checkError(
@@ -661,7 +676,7 @@ class OptionalReferencesParserSuite extends PlanTest {
       SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
       val substituted = new SubstituteParamsParser().substitute("SELECT :\"x\"?", Map("x" -> "1"))
-      assert(substituted._1 == "SELECT 1")
+      assert(substituted.sqlText == "SELECT 1")
     }
   }
 

@@ -186,6 +186,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         "persistent_var_fn" -> false,
         "persistent_var_table_fn" -> false,
         "persistent_label_var_fn" -> false,
+        "persistent_label_var_table_fn" -> false,
         "temporary_var_fn" -> true) {
       // No variable `x` exists, so the optional references are NULL when the functions are created.
       withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
@@ -193,9 +194,25 @@ class SQLFunctionSuite extends SharedSparkSession {
           "RETURN coalesce(x?, 0) + coalesce(session.x?, 0)")
         sql("CREATE FUNCTION persistent_var_table_fn() RETURNS TABLE (v INT) " +
           "RETURN SELECT coalesce(x?, 0)")
-        sql("BEGIN lbl: BEGIN CREATE FUNCTION persistent_label_var_fn() RETURNS INT " +
-          "RETURN coalesce(lbl.x?, 0); END; END")
         sql("CREATE TEMPORARY FUNCTION temporary_var_fn() RETURNS INT RETURN coalesce(x?, 0)")
+        // Nor does a label qualify a name of the body, so a dependency on a label fails when the
+        // function is created rather than when it is called outside of the labeled block, as for
+        // a view.
+        Seq(
+          "CREATE FUNCTION persistent_label_var_fn() RETURNS INT RETURN coalesce(lbl.x?, 0)",
+          "CREATE FUNCTION persistent_label_var_table_fn() RETURNS TABLE (v INT) " +
+            "RETURN SELECT coalesce(lbl.x?, 0)"
+        ).foreach { createFunction =>
+          Seq("", "DECLARE x INT DEFAULT 7; ").foreach { declare =>
+            val e = intercept[AnalysisException] {
+              sql(s"BEGIN lbl: BEGIN $declare$createFunction; END; END")
+            }
+            assert(e.getCondition.startsWith("UNRESOLVED_COLUMN"), e.getMessage)
+            assert(e.getMessageParameters.get("objectName") == "`lbl`.`x`", e.getMessage)
+          }
+        }
+        assert(!spark.catalog.functionExists("persistent_label_var_fn"))
+        assert(!spark.catalog.functionExists("persistent_label_var_table_fn"))
       }
       def checkPersistentFunctions(): Unit = {
         checkAnswer(sql("SELECT persistent_var_fn()"), Row(0))
@@ -211,55 +228,49 @@ class SQLFunctionSuite extends SharedSparkSession {
       } finally {
         sql("DROP TEMPORARY VARIABLE x")
       }
-      // Nor the variables of a SQL script, also through the label of their compound statement.
+      // Nor the variables of a SQL script.
       checkAnswer(sql("BEGIN DECLARE x INT DEFAULT 7; SELECT persistent_var_fn(); END"), Row(0))
       checkAnswer(
-        sql("BEGIN lbl: BEGIN DECLARE x INT DEFAULT 7; SELECT persistent_label_var_fn(); END; END"),
+        sql("BEGIN lbl: BEGIN DECLARE x INT DEFAULT 7; SELECT persistent_var_fn(); END; END"),
         Row(0))
     }
   }
 
   test("SPARK-61494: a view defined in a labeled block does not resolve the label in the body of " +
     "a SQL function created with optional references, also in a session that leaves them unset") {
-    withUserDefinedFunction("label_fn" -> true, "persistent_label_fn" -> false) {
+    withUserDefinedFunction("label_fn" -> true) {
       withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
         sql("BEGIN lbl: BEGIN " +
-          "CREATE TEMPORARY FUNCTION label_fn() RETURNS INT RETURN lbl.missing?; " +
-          "CREATE FUNCTION persistent_label_fn() RETURNS INT RETURN lbl.missing?; END; END")
+          "CREATE TEMPORARY FUNCTION label_fn() RETURNS INT RETURN lbl.missing?; END; END")
       }
-      // The functions keep the setting, so their label-qualified references are NULL in a query
-      // of the labeled block.
-      checkAnswer(
-        sql("BEGIN lbl: BEGIN SELECT label_fn(), persistent_label_fn(); END; END"),
-        Row(null, null))
+      // The function keeps the setting, so its label-qualified reference is NULL in a query of the
+      // labeled block.
+      checkAnswer(sql("BEGIN lbl: BEGIN SELECT label_fn(); END; END"), Row(null))
       withTempView("label_v", "label_c") {
-        withView("label_pv") {
-          sql("CREATE TEMPORARY VIEW label_v AS SELECT 1 AS m")
-          // A read of the view sees no label, so each definition fails when it is created.
-          Seq(
-            "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT label_fn() AS m",
-            "CREATE VIEW label_pv AS SELECT persistent_label_fn() AS m",
-            "ALTER VIEW label_v AS SELECT label_fn() AS m",
-            "CACHE TABLE label_c AS SELECT label_fn() AS m"
-          ).foreach { definition =>
-            val script = s"BEGIN lbl: BEGIN $definition; END; END"
-            val call = definition.split(" ").find(_.endsWith("_fn()")).get
-            checkError(
-              exception = intercept[AnalysisException](sql(script)),
-              condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-              parameters = Map("objectName" -> "`lbl`.`missing`"),
-              context = ExpectedContext(
-                fragment = call,
-                start = script.indexOf(call),
-                stop = script.indexOf(call) + call.length - 1))
-          }
-          // A captured label-qualified variable without `?` still resolves.
-          checkAnswer(
-            sql("BEGIN lbl: BEGIN DECLARE y INT DEFAULT 1; " +
-              "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT lbl.y AS y; " +
-              "SELECT * FROM label_v; END; END"),
-            Row(1))
+        sql("CREATE TEMPORARY VIEW label_v AS SELECT 1 AS m")
+        // A read of the view sees no label, so each definition fails when it is created.
+        Seq(
+          "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT label_fn() AS m",
+          "ALTER VIEW label_v AS SELECT label_fn() AS m",
+          "CACHE TABLE label_c AS SELECT label_fn() AS m"
+        ).foreach { definition =>
+          val script = s"BEGIN lbl: BEGIN $definition; END; END"
+          val call = "label_fn()"
+          checkError(
+            exception = intercept[AnalysisException](sql(script)),
+            condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+            parameters = Map("objectName" -> "`lbl`.`missing`"),
+            context = ExpectedContext(
+              fragment = call,
+              start = script.indexOf(call),
+              stop = script.indexOf(call) + call.length - 1))
         }
+        // A captured label-qualified variable without `?` still resolves.
+        checkAnswer(
+          sql("BEGIN lbl: BEGIN DECLARE y INT DEFAULT 1; " +
+            "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT lbl.y AS y; " +
+            "SELECT * FROM label_v; END; END"),
+          Row(1))
       }
     }
   }

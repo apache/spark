@@ -29,9 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
-  DefaultValueExpression,
   Filter,
-  GeneratedColumnExpression,
   LateralJoin,
   LogicalPlan,
   RepartitionByExpression,
@@ -41,7 +39,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLAN_EXPRESSION}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -162,12 +159,6 @@ class ResolveOptionalReferences(
       expression: Expression,
       attributeGroups: => Seq[Seq[Attribute]],
       isTopLevel: Boolean): Expression = expression match {
-    // The parser rejects optional references in these clauses of SQL text, but a column definition
-    // of an API, such as `Catalog.createTable`, parses its expressions on its own.
-    case default: DefaultValueExpression =>
-      rejectInDdl(default, "DEFAULT")
-    case generation: GeneratedColumnExpression =>
-      rejectInDdl(generation, "GENERATED ALWAYS AS")
     case unresolvedAttribute: UnresolvedAttribute
         if OptionalReferences.optionalNamePartIndices(unresolvedAttribute).nonEmpty &&
         OptionalReferences.resolvesToNull(
@@ -177,9 +168,9 @@ class ResolveOptionalReferences(
           resolver = conf.resolver,
           isVariableQualifier = variableResolution.isVariableQualifier(
             _,
-            includeScopeLabels = !isViewQuery)
+            includeScopeLabels = canResolveScopeLabels)
         ) =>
-      // The NULL keeps the position of the reference, e.g. for `CheckOptionalReferencesInDml`.
+      // The NULL keeps the position of the reference, e.g. for `CheckOptionalReferences`.
       CurrentOrigin.withOrigin(unresolvedAttribute.origin) {
         val nullReference = OptionalReferences.nullReference()
         if (isTopLevel) {
@@ -200,13 +191,6 @@ class ResolveOptionalReferences(
       other.mapChildren(replace(_, attributeGroups, isTopLevel = false))
     case other =>
       other
-  }
-
-  private def rejectInDdl(expression: Expression, clause: String): Expression = {
-    OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
-      throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(clause, reference.origin)
-    }
-    expression
   }
 
   private def wrapSubqueryPlan[T <: SubqueryExpression](subquery: T): T = subquery.plan match {
@@ -337,12 +321,16 @@ object ResolveOptionalReferences {
   }
 
   /**
-   * Whether the plan is the query of a view that is read or defined. A view cannot see the
-   * variables of a SQL script, so a label does not qualify a name there, and a definition that
-   * depends on a label fails when the view is created rather than when it is read.
+   * Whether a label of a SQL script can qualify a name. It cannot in the query of a view that is
+   * read or defined, or in the body of a persistent SQL function that is called or created: they
+   * cannot see the variables of a script, so a definition that depends on a label fails when it
+   * is created rather than when it is read or called.
    */
-  private def isViewQuery: Boolean =
-    AnalysisContext.get.catalogAndNamespace.nonEmpty || AnalysisContext.get.isViewDefinition
+  private def canResolveScopeLabels: Boolean = {
+    val context = AnalysisContext.get
+    context.catalogAndNamespace.isEmpty && !context.isViewDefinition &&
+      !context.isPersistentSQLFunctionBody
+  }
 
   private def isPlanOfSubquery: Boolean = AnalysisContext.get.isSubqueryPlan
 

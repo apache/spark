@@ -164,7 +164,7 @@ class SparkSqlParser extends AbstractSqlParser {
           } else {
             // Modern mode: Perform parameter substitution during parsing.
             val substitution =
-              ParameterHandler.substituteParametersForParsing(variableSubstituted, context)
+              ParameterHandler.substituteParameters(variableSubstituted, context)
             // Only set hasParameters if the context actually contains parameters. The substituted
             // text is parsed with the optional references that the substitution parsed it with.
             (substitution.sqlText, substitution.positionMapper, contextHasParams,

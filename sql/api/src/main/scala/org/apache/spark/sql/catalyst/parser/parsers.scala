@@ -592,7 +592,7 @@ object AbstractParser extends Logging {
   }
 
   /** The number of positional parameter markers that the last parse of `parser` used. */
-  private def positionalParameterMarkerCount(parser: SqlBaseParser): Int = {
+  private[parser] def positionalParameterMarkerCount(parser: SqlBaseParser): Int = {
     parser.getParseListeners.asScala
       .collectFirst { case processor: UnclosedCommentProcessor =>
         processor.positionalParameterMarkerCount

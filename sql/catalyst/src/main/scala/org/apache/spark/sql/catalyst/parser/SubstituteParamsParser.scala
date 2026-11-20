@@ -33,11 +33,6 @@ object ParameterExpectation extends Enumeration {
 }
 
 /**
- * A parameter substitution parser that replaces parameter markers in SQL text with their values.
- * This parser finds parameter markers and substitutes them with provided values to produce
- * a modified SQL string ready for execution.
- */
-/**
  * The result of a parameter substitution.
  *
  * @param sqlText The SQL text with the values of the parameter markers.
@@ -54,6 +49,11 @@ case class ParameterSubstitution(
     positionMapper: PositionMapper,
     parsedWithOptionalReferences: Boolean)
 
+/**
+ * A parameter substitution parser that replaces parameter markers in SQL text with their values.
+ * This parser finds parameter markers and substitutes them with provided values to produce
+ * a modified SQL string ready for execution.
+ */
 class SubstituteParamsParser extends Logging {
 
   /**
@@ -63,27 +63,11 @@ class SubstituteParamsParser extends Logging {
    * @param sqlText          The original SQL text containing parameter markers
    * @param namedParams      Map of named parameter values (paramName -> value)
    * @param positionalParams List of positional parameter values in order
-   * @return A tuple of (modified SQL string with parameters substituted,
-   *                   number of consumed positional parameters)
+   * @return The SQL text with the parameters substituted, the number of consumed positional
+   *   parameters, the position mapper, and whether the statement was parsed with optional
+   *   references, see [[ParameterSubstitution]]
    */
   def substitute(
-      sqlText: String,
-      namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty,
-      expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown,
-      allParametersAreNamed: Boolean = true,
-      originalArgs: Seq[Any] = Seq.empty,
-      originalParamNames: Seq[String] = Seq.empty): (String, Int, PositionMapper) = {
-    val substitution = substituteParameters(sqlText, namedParams, positionalParams,
-      expectationType, allParametersAreNamed, originalArgs, originalParamNames)
-    (substitution.sqlText, substitution.consumedPositionalParams, substitution.positionMapper)
-  }
-
-  /**
-   * Same as [[substitute]], but also returns whether the statement was parsed with optional
-   * references, see [[ParameterSubstitution.parsedWithOptionalReferences]].
-   */
-  def substituteParameters(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty,
@@ -117,12 +101,14 @@ class SubstituteParamsParser extends Logging {
     val (ctx, parameterLocations) = parseParameterLocations() match {
       // A rule that accepts any tokens, such as `SET .*?`, parses a statement such as
       // `SET VAR v = :p?`, which is not valid without optional references. Only the parser that
-      // builds the plan can tell, so parse a statement with a `?` that is not a parameter marker
-      // again with optional references.
-      case (_, locations)
+      // builds the plan can tell, so parse a statement with a `?` that the grammar did not parse
+      // as a parameter marker again with optional references. The markers of a DECLARE CURSOR
+      // query are bound when the cursor is opened, so they have no locations here, but they are
+      // parameter markers too.
+      case _
           if parser.optional_references_enabled &&
             AbstractParser.questions(tokenStream).length >
-            locations.positionalParameterLocations.length &&
+            AbstractParser.positionalParameterMarkerCount(parser) &&
             AbstractParser.restartWithOptionalReferences(parser, tokenStream) =>
         parseParameterLocations()
       case parsed =>
@@ -203,10 +189,10 @@ class SubstituteParamsParser extends Logging {
             substitutions += Substitution(location, namedReplacement(sqlText, location, value))
           }
         case None if locationList.forall(_.optional) =>
-          // An optional named parameter marker (`:name?`) without a value is NULL.
-          locationList.foreach { location =>
-            substitutions += Substitution(location, namedReplacement(sqlText, location, "NULL"))
-          }
+          // An optional named parameter marker (`:name?`) without a value stays in the text, so
+          // that the analysis resolves it to the NULL of a missing reference, as it does without
+          // parameter values. A text `NULL` would be a NULL value: a VARIANT path of it would fail,
+          // and the DML check could not reject it in a source that is analyzed before a MERGE.
         case None =>
           // Use the first location that is not optional for error reporting
           val location = locationList.find(!_.optional).getOrElse(locationList.head)
@@ -312,6 +298,6 @@ object SubstituteParamsParser {
   def substitute(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, Int, PositionMapper) =
+      positionalParams: List[String] = List.empty): ParameterSubstitution =
     instance.substitute(sqlText, namedParams, positionalParams)
 }

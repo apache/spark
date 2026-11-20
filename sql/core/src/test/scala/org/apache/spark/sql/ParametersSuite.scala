@@ -1444,6 +1444,43 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("an unbound optional named parameter marker is the NULL of a missing reference, also " +
+    "when other parameters have values") {
+    // A VARIANT path of a missing reference is NULL, but one of a NULL value is an error.
+    val query = "SELECT CAST(:p?:a AS STRING) AS a, :q AS q"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        checkAnswer(spark.sql(query, Map("q" -> 1)), Row(null, 1))
+        checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 1 AS q"), Row(null, 1))
+      }
+    }
+  }
+
+  test("a parameter marker of a DECLARE CURSOR query does not select optional references") {
+    // The marker of the cursor query is bound when the cursor is opened, so the substitution of
+    // `:x` does not substitute it. The script has no optional reference, so `DISTINCT ?` is a
+    // parameter marker, not a reference to the column `distinct`. See also
+    // `OptionalReferencesParserSuite`, which checks the parse mode that the substitution reports.
+    val script =
+      """BEGIN
+        |  DECLARE r INT;
+        |  DECLARE c CURSOR FOR SELECT first(DISTINCT ?) AS f FROM VALUES (2) AS t(`distinct`);
+        |  OPEN c USING 1;
+        |  FETCH c INTO r;
+        |  CLOSE c;
+        |  SELECT r, :x AS x;
+        |END""".stripMargin
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true"
+    ) {
+      checkAnswer(spark.sql(script, Map("x" -> 3)), Row(1, 3))
+    }
+  }
+
   test("positional parameter values that a statement with optional references does not use") {
     Seq(false, true).foreach { constantsOnly =>
       withSQLConf(

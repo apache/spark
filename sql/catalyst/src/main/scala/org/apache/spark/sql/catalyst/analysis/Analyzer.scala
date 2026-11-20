@@ -207,11 +207,13 @@ case class AnalysisContext(
     // while the session disables optional references, because a SQL function that the query calls
     // keeps the setting with which it was created.
     isViewDefinition: Boolean = false,
-    // Whether the plan under analysis is the body of a persistent SQL function. Its optional
-    // references (`x?`) do not resolve to the session or SQL script variables of the caller,
-    // because a persistent function cannot depend on temporary objects: such a reference stays
-    // the NULL it was when the function was created, as in a persistent view. See
-    // `VariableResolution.resolveMultipartName`.
+    // Whether the plan under analysis is the body of a persistent SQL function, when it is called
+    // or created. Its optional references (`x?`) do not resolve to the session or SQL script
+    // variables of the caller, and a label of the caller does not qualify them, because a
+    // persistent function cannot depend on temporary objects: such a reference means the same
+    // at every call as when the function was created, as in a persistent view, and a dependency
+    // on a label fails at CREATE FUNCTION. See `VariableResolution.resolveMultipartName` and
+    // `ResolveOptionalReferences`.
     isPersistentSQLFunctionBody: Boolean = false,
     // The origins of the optional references (`x?`) of the plan under analysis that this analysis
     // resolved to NULL, in the order of `OptionalReferences.nullReference`. The contexts of
@@ -386,6 +388,19 @@ object AnalysisContext {
   def withViewDefinition[A](f: => A): A = {
     val originContext = value.get()
     set(originContext.copy(isViewDefinition = true))
+    try f finally { set(originContext) }
+  }
+
+  /**
+   * Runs `f`, the analysis of the body of a SQL function that is being created, with
+   * `isPersistentSQLFunctionBody` set to `isPersistent`, so that the body resolves its optional
+   * references when it is created as it does when it is called.
+   */
+  def withPersistentSQLFunctionBody[A](isPersistent: Boolean)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(isPersistentSQLFunctionBody = isPersistent)
+    context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
+    set(context)
     try f finally { set(originContext) }
   }
 
@@ -679,12 +694,15 @@ class Analyzer(
    * that function's dependency rather than becoming one of the function under creation.
    */
   def executeWithReferredTempVariablesUnderIdentifier(
-      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+      plan: LogicalPlan,
+      isPersistentSQLFunctionBody: Boolean = false): (LogicalPlan, Seq[Seq[String]]) = {
     AnalysisContext.withNewAnalysisContext {
       AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
-        val analyzed = executeSameContext(plan)
-        // Read the accumulator before the context is restored on exit.
-        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+        AnalysisContext.withPersistentSQLFunctionBody(isPersistentSQLFunctionBody) {
+          val analyzed = executeSameContext(plan)
+          // Read the accumulator before the context is restored on exit.
+          (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+        }
       }
     }
   }
@@ -809,7 +827,7 @@ class Analyzer(
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions,
-      CheckOptionalReferencesInDml),
+      CheckOptionalReferences),
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Unresolve Relations", Once,
