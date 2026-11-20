@@ -247,15 +247,19 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
  *      /    \
  *   plan0    plan1
  *
+ * A filter or inner join below the top one whose condition has a conjunct that may not move (see
+ * `PredicateHelper.splitMovable`) is not flattened, but is one of the plans, with its condition.
+ *
  * Note: This pattern currently only works for left-deep trees.
  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   /**
-   * Flatten all inner joins, which are next to each other.
+   * Flatten all inner joins, which are next to each other, but the ones below a filter or inner
+   * join that `flattenBelow` keeps as one plan.
    * Return a list of logical plans to be joined with a boolean for each plan indicating if it
-   * was involved in an explicit cross join. Also returns the entire list of join conditions for
-   * the left-deep tree.
+   * was involved in an explicit cross join. Also returns the list of join conditions for the
+   * flattened left-deep tree.
    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
@@ -271,20 +275,23 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 
   /**
-   * [[flattenJoin]] below the top join or filter, where a join or filter with a condition that
-   * may not move (see `PredicateHelper.splitMovable`) is one of the plans, with its condition. It
-   * removes a row on which its condition is NULL, so no condition above it is evaluated on the row.
+   * [[flattenJoin]] below the top join or filter, where a filter or inner join with a condition
+   * that may not move (see `PredicateHelper.splitMovable`) is one of the plans, with its
+   * condition. It removes a row on which its condition is NULL, so no condition above it is
+   * evaluated on the row. It is the first plan, which `ReorderJoin` joins the others to, and it
+   * is an `Inner` plan also under a cross join, so that `StarSchemaDetection`, which only reorders
+   * `Inner` base tables, does not join it after them.
    */
   private def flattenBelow(plan: LogicalPlan, parentJoinType: InnerLike)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = {
     val condition = plan match {
-      case j: Join => j.condition
-      case f: Filter => Some(f.condition)
+      case Join(_, _, _: InnerLike, cond, JoinHint.NONE) => cond
+      case Filter(cond, Join(_, _, _: InnerLike, _, JoinHint.NONE)) => Some(cond)
       case _ => None
     }
     if (condition.exists(c =>
         splitMovable(splitConjunctivePredicates(c), plan.children)._2.nonEmpty)) {
-      (Seq((plan, parentJoinType)), Seq.empty)
+      (Seq((plan, Inner)), Seq.empty)
     } else {
       flattenJoin(plan, parentJoinType)
     }

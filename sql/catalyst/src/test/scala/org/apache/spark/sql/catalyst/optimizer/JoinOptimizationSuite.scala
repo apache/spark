@@ -195,6 +195,10 @@ class JoinOptimizationSuite extends PlanTest {
         .join(w, condition = Some($"g" === $"e"))
         .select($"a", $"b", $"c", $"d", $"g", $"h", $"e", $"f")
       comparePlans(ReorderJoin(query.analyze), answer.analyze)
+      // It is an `Inner` plan also under a cross join, so that StarSchemaDetection, which only
+      // reorders `Inner` base tables, does not join it after them.
+      assert(ExtractFiltersAndInnerJoins.unapply(lower.join(w, Cross).join(z)).map(_._1.map(_._2))
+        === Some(Seq(Inner, Cross, Inner)))
     }
   }
 
