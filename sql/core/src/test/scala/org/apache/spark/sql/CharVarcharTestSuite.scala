@@ -660,6 +660,23 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61970: char type comparison: struct field and string literal") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3)>, n STRUCT<s: STRUCT<c: CHAR(3)>>) USING $format")
+      sql("INSERT INTO t VALUES (struct('a'), struct(struct('a')))")
+      testConditions(spark.table("t"), Seq(
+        ("s.c = 'a'", true),
+        ("'a' = s.c", true),
+        ("s.c = 'a  '", true),
+        ("s.c > 'a'", false),
+        ("s.c IN ('a', 'b')", true),
+        ("s.c = 'abcd'", false),
+        ("n.s.c = 'a'", true),
+        ("n.s.c IN ('b', 'a')", true),
+        ("s.c <=> null", false)))
+    }
+  }
+
   test("SPARK-59278: char type comparison: struct nullability is preserved") {
     // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
     // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.

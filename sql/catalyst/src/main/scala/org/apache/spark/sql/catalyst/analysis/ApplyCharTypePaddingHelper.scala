@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   BinaryComparison,
   Expression,
+  GetStructField,
   In,
   Literal,
   NamedExpression,
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
-import org.apache.spark.sql.types.{CharType, Metadata, StringType}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -44,6 +45,22 @@ object ApplyCharTypePaddingHelper {
     def unapply(e: Expression): Option[Attribute] = e match {
       case a: Attribute => Some(a)
       case OuterReference(a: Attribute) => Some(a)
+      case _ => None
+    }
+  }
+
+  /**
+   * A column, or a field of a struct column reached through [[GetStructField]], with the raw type
+   * of that column or field. The raw type is the one recorded in the column's metadata, so a CHAR
+   * or VARCHAR field keeps its length although its data type is a string.
+   */
+  object RawTypedRef {
+    def unapply(e: Expression): Option[DataType] = e match {
+      case AttrOrOuterRef(attr) => CharVarcharUtils.getRawType(attr.metadata)
+      case GetStructField(child, ordinal, _) =>
+        unapply(child).collect {
+          case struct: StructType if ordinal < struct.length => struct(ordinal).dataType
+        }
       case _ => None
     }
   }
@@ -84,46 +101,37 @@ object ApplyCharTypePaddingHelper {
     expression match {
       // String literal is treated as char type when it's compared to a char type column.
       // We should pad the shorter one to the longer length.
-      case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
-        padAttrLitCmp(e, attr.metadata, padCharCol, lit)
+      case b @ BinaryComparison(e @ RawTypedRef(c: CharType), lit) if lit.foldable =>
+        padAttrLitCmp(e, c, padCharCol, lit)
           .map { newChildren =>
             b.withNewChildren(newChildren)
           }
           .getOrElse(b)
 
-      case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
-        padAttrLitCmp(e, attr.metadata, padCharCol, lit)
+      case b @ BinaryComparison(lit, e @ RawTypedRef(c: CharType)) if lit.foldable =>
+        padAttrLitCmp(e, c, padCharCol, lit)
           .map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }
           .getOrElse(b)
 
-      case i @ In(e @ AttrOrOuterRef(attr), list)
-          if i.resolved && attr.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
-        CharVarcharUtils
-          .getRawType(attr.metadata)
-          .flatMap {
-            case c: CharType =>
-              // Compute the length of every list element in place, so that each length stays
-              // aligned with the element it came from. NULL elements have no length: they can
-              // never match, so they are left untouched instead of being padded.
-              val literalCharLengths = list.map { lit =>
-                Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
-              }
-              val targetLen = (c.length +: literalCharLengths.flatten).max
-              Some(
-                i.copy(
-                  value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-                  list = list.zip(literalCharLengths).map {
-                    case (lit, Some(charLength)) =>
-                      addPadding(lit, charLength, targetLen, alwaysPad = false)
-                    case (lit, None) => lit
-                  }
-                )
-              )
-            case _ => None
+      case i @ In(e @ RawTypedRef(c: CharType), list)
+          if i.resolved && e.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
+        // Compute the length of every list element in place, so that each length stays
+        // aligned with the element it came from. NULL elements have no length: they can
+        // never match, so they are left untouched instead of being padded.
+        val literalCharLengths = list.map { lit =>
+          Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
+        }
+        val targetLen = (c.length +: literalCharLengths.flatten).max
+        i.copy(
+          value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
+          list = list.zip(literalCharLengths).map {
+            case (lit, Some(charLength)) =>
+              addPadding(lit, charLength, targetLen, alwaysPad = false)
+            case (lit, None) => lit
           }
-          .getOrElse(i)
+        )
 
       // For char type column or inner field comparison, pad the shorter one to the longer length.
       case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
@@ -163,33 +171,29 @@ object ApplyCharTypePaddingHelper {
 
   private def padAttrLitCmp(
       expr: Expression,
-      metadata: Metadata,
+      c: CharType,
       padCharCol: Boolean,
       lit: Expression): Option[Seq[Expression]] = {
     if (expr.dataType.isInstanceOf[StringType]) {
-      CharVarcharUtils.getRawType(metadata).flatMap {
-        case c: CharType =>
-          val str = lit.eval().asInstanceOf[UTF8String]
-          if (str == null) {
-            None
+      val str = lit.eval().asInstanceOf[UTF8String]
+      if (str == null) {
+        None
+      } else {
+        val stringLitLen = str.numChars()
+        if (c.length < stringLitLen) {
+          Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
+        } else if (c.length > stringLitLen) {
+          val paddedExpr = if (padCharCol) {
+            createStringRPad(expr, Literal(c.length))
           } else {
-            val stringLitLen = str.numChars()
-            if (c.length < stringLitLen) {
-              Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
-            } else if (c.length > stringLitLen) {
-              val paddedExpr = if (padCharCol) {
-                createStringRPad(expr, Literal(c.length))
-              } else {
-                expr
-              }
-              Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
-            } else if (padCharCol) {
-              Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
-            } else {
-              None
-            }
+            expr
           }
-        case _ => None
+          Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
+        } else if (padCharCol) {
+          Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
+        } else {
+          None
+        }
       }
     } else {
       None
