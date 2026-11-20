@@ -4758,6 +4758,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -6185,7 +6194,8 @@ object SQLConf {
   val PYTHON_UDF_DETAILED_TIMING_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
       .internal()
-      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .doc("When true, collect detailed timing metrics for supported Python UDFs. " +
+        "Detailed timing is not collected when spark.python.udf.pipelined.enabled is true.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -7194,6 +7204,18 @@ object SQLConf {
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
         "be applied only when any artifact is added to the session.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_LIST_ALL_SESSIONS_RESOURCES =
+    buildConf("spark.sql.legacy.listAllSessionsResources")
+      .internal()
+      .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
+        "of every session, as before Spark 4.4, also in a session whose artifacts are isolated. " +
+        "When false, such a session lists those added to it and those added to the SparkContext " +
+        "outside of any session.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
