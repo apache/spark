@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LEGACY_CTE_SUBSTITUTE_DML_TARGET}
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE references or CTE definitions depending
@@ -379,7 +379,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteRelations: Seq[(String, CTERelationDef)],
       recursiveCTERelation: Option[(String, CTERelationDef)],
       unresolvedRelation: UnresolvedRelation): LogicalPlan = {
-    if (recursiveCTERelation.isDefined && conf.resolver(recursiveCTERelation.get._1, table)) {
+    if (unresolvedRelation.isWriteTarget && !conf.getConf(LEGACY_CTE_SUBSTITUTE_DML_TARGET)) {
+      // A CTE cannot be written to, so a write target, such as the target of a DELETE, UPDATE
+      // or MERGE, never refers to a same-named CTE in scope. As with an INSERT target, the rest
+      // of the statement still sees the CTE. The legacy config restores the substitution.
+      unresolvedRelation
+    } else if (recursiveCTERelation.isDefined &&
+        conf.resolver(recursiveCTERelation.get._1, table)) {
       // self-reference is found
       recursiveCTERelation.map {
         case (_, d) =>

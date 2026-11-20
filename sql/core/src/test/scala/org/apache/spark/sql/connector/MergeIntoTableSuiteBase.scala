@@ -1314,6 +1314,111 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("merge target is not replaced by a same-named CTE") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (3, 30, 'hr')")
+      // Make the unqualified table name resolve to the target table.
+      sql(s"USE cat.${namespace.mkString(".")}")
+      val target = ident.name
+
+      // The CTE shadows the target table name only in the MERGE source. The statement must merge
+      // into the table it names, not into the table that the CTE reads.
+      sql(
+        s"""WITH $target AS (TABLE $sourceNameAsString)
+           |MERGE INTO $target t
+           |USING (SELECT pk, salary + 1 AS salary, dep FROM $target) s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET salary = s.salary
+           |WHEN NOT MATCHED THEN INSERT *
+           |""".stripMargin)
+      // The named table is loaded with the write privileges of the statement.
+      assertLastTransactionWriteLoadOptions()
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 11, "hr"), Row(2, 200, "software"), Row(3, 31, "hr")))
+      checkAnswer(
+        sql(s"SELECT * FROM $sourceNameAsString"),
+        Seq(Row(1, 10, "hr"), Row(3, 30, "hr")))
+
+      // A CTE body that is not a bare table reference.
+      sql(
+        s"""WITH $target AS (SELECT * FROM $tableNameAsString WHERE dep = 'hr')
+           |MERGE INTO $target t
+           |USING (SELECT pk FROM $target) s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN DELETE
+           |""".stripMargin)
+      assertLastTransactionWriteLoadOptions()
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 200, "software") :: Nil)
+    }
+  }
+
+  test("merge target that matches only a CTE is not found") {
+    withTable(sourceNameAsString) {
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (2, 20, 'software')")
+      // Look up the unqualified target in the namespace of the table that the CTE reads.
+      sql(s"USE cat.${namespace.mkString(".")}")
+
+      // No table or view has the name of the CTE, so the target is not found, whatever the CTE
+      // body is. The statement must not merge into the table that the CTE reads.
+      Seq(
+        s"TABLE $sourceNameAsString",
+        s"SELECT * FROM $sourceNameAsString WHERE salary > 10").foreach { cteBody =>
+        val query = s"WITH cte_only AS ($cteBody) " +
+          "MERGE INTO cte_only t USING (SELECT * FROM cte_only) s ON t.pk = s.pk " +
+          "WHEN MATCHED THEN UPDATE SET salary = -1"
+        val start = query.indexOf("MERGE INTO cte_only") + "MERGE INTO ".length
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relationName" -> "`cte_only`"),
+          context = ExpectedContext(fragment = "cte_only", start = start, stop = start + 7))
+      }
+      checkAnswer(
+        sql(s"SELECT * FROM $sourceNameAsString"),
+        Seq(Row(1, 10, "hr"), Row(2, 20, "software")))
+    }
+  }
+
+  test("merge target is replaced by a same-named CTE with the legacy config") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (3, 30, 'hr')")
+      // Make the unqualified table name resolve to the target table.
+      sql(s"USE cat.${namespace.mkString(".")}")
+      val target = ident.name
+
+      // With the legacy config, the statement merges into the table that the CTE reads, not into
+      // the table it names.
+      withSQLConf(SQLConf.LEGACY_CTE_SUBSTITUTE_DML_TARGET.key -> "true") {
+        sql(
+          s"""WITH $target AS (TABLE $sourceNameAsString)
+             |MERGE INTO $target t
+             |USING (SELECT pk, salary + 1 AS salary, dep FROM $target) s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET salary = s.salary
+             |WHEN NOT MATCHED THEN INSERT *
+             |""".stripMargin)
+      }
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 100, "hr"), Row(2, 200, "software")))
+      checkAnswer(
+        sql(s"SELECT * FROM $sourceNameAsString"),
+        Seq(Row(1, 11, "hr"), Row(3, 31, "hr")))
+    }
+  }
+
   test("merge with cached source and transactional checks") {
     withTable(sourceNameAsString) {
       // create target table
