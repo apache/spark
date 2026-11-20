@@ -300,7 +300,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         joinType = "inner", tolerance = null,
         allowExactMatches = true, direction = "backward"),
       Seq(
-        Row(10, "z", "c", 7, "z", 7)
+        Row("z", 10, "c", 7, 7)
       )
     )
   }
@@ -313,9 +313,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
         joinType = "leftouter", tolerance = null,
         allowExactMatches = true, direction = "backward"),
       Seq(
-        Row(1, "x", "a", null, null, null),
-        Row(5, "y", "b", null, null, null),
-        Row(10, "z", "c", 7, "z", 7)
+        Row("x", 1, "a", null, null),
+        Row("y", 5, "b", null, null),
+        Row("z", 10, "c", 7, 7)
       )
     )
   }
@@ -1176,11 +1176,11 @@ class SortMergeAsOfJoinSuite extends QueryTest
         joinType = "inner", tolerance = null,
         allowExactMatches = true, direction = "backward"),
       Seq(
-        Row("A", 5, "A", 2, "a1"),
-        Row("A", 10, "A", 7, "a2"),
-        Row("A", 15, "A", 12, "a3"),
-        Row("B", 3, "B", 1, "b1"),
-        Row("B", 8, "B", 6, "b2")
+        Row("A", 5, 2, "a1"),
+        Row("A", 10, 7, "a2"),
+        Row("A", 15, 12, "a3"),
+        Row("B", 3, 1, "b1"),
+        Row("B", 8, 6, "b2")
       )
     )
   }
@@ -1774,7 +1774,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
               other = right, leftAsOf = right.col("v"), rightAsOf = left.col("v") * 1000,
               usingColumns = Seq("k"), joinType = "left", tolerance = null,
               allowExactMatches = true, direction = direction)
-            checkAnswer(reversed, Row("B", Long.MaxValue, null, null) :: Nil)
+            checkAnswer(reversed, Row("B", Long.MaxValue, null) :: Nil)
             val op = assertAsOfJoinCodegen(reversed, codegen)
             assert(op.metrics("numAsOfCursorTasks").value == 0,
               s"Expected the buffered scan:\n${reversed.queryExecution.executedPlan}")
@@ -2400,7 +2400,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         allowExactMatches = true, direction = "backward"),
       Seq(
         // grp=1, left.ts=5: right.ts=4 (4 <= 5) -> match
-        Row(1, 5, "b", 1, 4, "y")
+        Row(1, 5, "b", 4, "y")
         // grp=null rows: no match (EqualTo semantics)
       )
     )
@@ -2411,9 +2411,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
         joinType = "leftouter", tolerance = null,
         allowExactMatches = true, direction = "backward"),
       Seq(
-        Row(null, 5, "a", null, null, null),
-        Row(1, 5, "b", 1, 4, "y"),
-        Row(null, 10, "c", null, null, null)
+        Row(null, 5, "a", null, null),
+        Row(1, 5, "b", 4, "y"),
+        Row(null, 10, "c", null, null)
       )
     )
   }
@@ -2620,7 +2620,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "backward"),
         Seq(
-          Row(10, "z", "c", 7, "z", 7)
+          Row("z", 10, "c", 7, 7)
         )
       )
     }
@@ -2663,8 +2663,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "forward"),
         Seq(
-          Row("A", 5, "A", 6, "a"),
-          Row("A", 10, "A", 12, "c")
+          Row("A", 5, 6, "a"),
+          Row("A", 10, 12, "c")
         )
       )
     }
@@ -2705,8 +2705,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "nearest"),
         Seq(
-          Row("A", 5, "A", 3, "a"),
-          Row("A", 10, "A", 12, "c")
+          Row("A", 5, 3, "a"),
+          Row("A", 10, 12, "c")
         )
       )
     }
@@ -2765,8 +2765,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "backward"),
         Seq(
-          Row("A", 8, "A", 3, "aa"),
-          Row("B", 8, "B", 5, bestVal)
+          Row("A", 8, 3, "aa"),
+          Row("B", 8, 5, bestVal)
         )
       )
     }

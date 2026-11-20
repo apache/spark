@@ -1153,6 +1153,108 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  gridTest("joinAsOf with using columns returns one column per name in Connect")(
+    for {
+      singlePass <- Seq(false, true)
+      sortMerge <- Seq(false, true)
+      joinType <- Seq("inner", "left")
+    } yield (singlePass, sortMerge, joinType)) { case (singlePass, sortMerge, joinType) =>
+    withSQLConf(
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      val left = createLocalRelationProto(
+        attrs = Seq(
+          AttributeReference("lts", IntegerType)(), AttributeReference("k", IntegerType)()),
+        data = Seq.empty)
+      val right = createLocalRelationProto(
+        attrs = Seq(
+          AttributeReference("k", IntegerType)(), AttributeReference("rts", IntegerType)()),
+        data = Seq.empty)
+      def relation(usingColumns: String*): proto.Relation = proto.Relation
+        .newBuilder()
+        .setAsOfJoin(
+          proto.AsOfJoin
+            .newBuilder()
+            .setLeft(left)
+            .setRight(right)
+            .setLeftAsOf("lts".protoAttr)
+            .setRightAsOf("rts".protoAttr)
+            .addAllUsingColumns(usingColumns.asJava)
+            .setJoinType(joinType)
+            .setAllowExactMatches(true)
+            .setDirection("backward"))
+        .build()
+
+      val analyzed = spark.sessionState.executePlan(transform(relation("k"))).analyzed
+      // The key comes first, then the other left columns, then the other right columns.
+      assert(analyzed.output.map(_.name) == Seq("k", "lts", "rts"))
+      val e = intercept[AnalysisException] {
+        spark.sessionState.executePlan(transform(relation("missing"))).analyzed
+      }
+      assert(e.getCondition == "UNRESOLVED_USING_COLUMN_FOR_JOIN")
+      assert(e.getMessageParameters.get("colName") == "`missing`")
+    }
+  }
+
+  // The PySpark client refers to a key as a column of its DataFrame: a plan id on the name.
+  gridTest("joinAsOf with using columns resolves plan-id keys in Connect")(
+    Seq(false, true)) { singlePass =>
+    withSQLConf(
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      def row(values: Int*): GenericInternalRow = new GenericInternalRow(values.toArray[Any])
+      def withPlanId(relation: proto.Relation, id: Long): proto.Relation =
+        relation.toBuilder.setCommon(proto.RelationCommon.newBuilder().setPlanId(id)).build()
+      def key(name: String, id: Long): proto.Expression = proto.Expression
+        .newBuilder()
+        .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(name)
+            .setPlanId(id))
+        .build()
+      val left = withPlanId(
+        createLocalRelationProto(
+          attrs = Seq(
+            AttributeReference("lts", IntegerType)(), AttributeReference("k", IntegerType)()),
+          data = Seq(row(5, 1), row(5, 2))),
+        1L)
+      val right = withPlanId(
+        createLocalRelationProto(
+          attrs = Seq(
+            AttributeReference("k", IntegerType)(), AttributeReference("rts", IntegerType)()),
+          data = Seq(row(1, 4))),
+        2L)
+      def relation(l: proto.Relation, r: proto.Relation, lk: proto.Expression,
+          rk: proto.Expression): proto.Relation = proto.Relation
+        .newBuilder()
+        .setAsOfJoin(
+          proto.AsOfJoin
+            .newBuilder()
+            .setLeft(l)
+            .setRight(r)
+            .setLeftAsOf(lk)
+            .setRightAsOf(rk)
+            .addUsingColumns("k")
+            .setJoinType("left")
+            .setAllowExactMatches(true)
+            .setDirection("backward"))
+        .build()
+      def rows(rel: proto.Relation): Seq[Row] = {
+        val analyzed = spark.sessionState.executePlan(transform(rel)).analyzed
+        org.apache.spark.sql.classic.Dataset.ofRows(spark, analyzed).collect().toSeq
+          .sortBy(_.toString)
+      }
+      // Fails if the plan-id keys do not resolve against the analyzed inputs.
+      assert(rows(relation(left, right, key("lts", 1L), key("rts", 2L))).map(_.toString) ==
+        Seq("[1,5,4]", "[2,5,null]"))
+    }
+  }
+
   test("SPARK-60096: joinAsOf with an attached IN-subquery is an internal error") {
     // joinAsOf(right, id, rid, joinExprs = id IN <plan id>) analyzes the join condition eagerly.
     val right = createLocalRelationProto(Seq(AttributeReference("rid", IntegerType)()), Seq.empty)
