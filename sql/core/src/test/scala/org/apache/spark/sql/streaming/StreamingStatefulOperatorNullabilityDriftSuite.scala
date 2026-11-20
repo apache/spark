@@ -35,7 +35,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
  * Driver: `PropagateEmptyRelation` drops empty `Union` branches without a streaming
  * guard, so the surviving branch's per-column nullability becomes the Union's
  * nullability and propagates into a stateful operator above -- across microbatches or
- * restarts.
+ * restarts. New checkpoints keep the branches (SPARK-62057), so the Union scenarios write
+ * their checkpoints with pruning on, as checkpoints of earlier versions still prune.
  *
  * Coverage:
  *   - New-query (default conf): originally-failing scenarios now complete cleanly.
@@ -78,11 +79,15 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
     (inputA, inputB, dfA, dfB)
   }
 
+  // Checkpoints of earlier versions record that PropagateEmptyRelation drops empty Union branches.
+  private def withUnionBranchDrop(f: => Unit): Unit = withSQLConf(
+    SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true")(f)
+
   private def runUnionBranchDropRestart(
       buildSources: () => (MemoryStream[Int], MemoryStream[Int], DataFrame, DataFrame),
       buildQuery: (DataFrame, DataFrame) => DataFrame,
       outputMode: OutputMode,
-      nullableToNonNullable: Boolean): Unit = {
+      nullableToNonNullable: Boolean): Unit = withUnionBranchDrop {
     withTempDir { checkpointDir =>
       val checkpointPath = checkpointDir.getAbsolutePath
 
@@ -254,6 +259,7 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
 
     withTempDir { checkpointDir =>
       withSQLConf(
+        SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true",
         SQLConf.STATE_SCHEMA_CHECK_ENABLED.key -> "false",
         SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -280,6 +286,7 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
     "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE still triggers on restart") {
     withTempDir { checkpointDir =>
       withSQLConf(
+        SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true",
         SQLConf.STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false") {
         val (inputA, inputB, dfA, dfB) = buildTwoSources()
         val aggregated = dfA.union(dfB).groupBy($"key").count()

@@ -111,11 +111,17 @@ class PropagateEmptyRelationSuite extends PlanTest {
     // A new plan for each run, as the optimizer skips a rule on a plan it did not change before.
     def query: LogicalPlan =
       streaming.union(LocalRelation(Seq($"b".int), isStreaming = true)).analyze
+    def allEmpty: LogicalPlan = LocalRelation(Seq($"a".int), isStreaming = true)
+      .union(LocalRelation(Seq($"b".int), isStreaming = true)).analyze
     comparePlans(Optimize.execute(query), query)
+    comparePlans(Optimize.execute(allEmpty), allEmpty)
 
     withSQLConf(
         SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true") {
       comparePlans(Optimize.execute(query), streaming)
+      val collapsed = Optimize.execute(allEmpty)
+      comparePlans(collapsed, LocalRelation(allEmpty.output, isStreaming = true))
+      assert(collapsed.isStreaming)
     }
   }
 
