@@ -30,8 +30,8 @@ import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.util.{TaskInputThreads, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   val envCommand = if (Utils.isWindows) {
@@ -113,6 +113,22 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
         .find { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
       assert(stdinWriterThread.isEmpty)
     }
+  }
+
+  test("SPARK-62031: tell that the stdin writer thread reads the input of its task") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    // Whether a thread that the task does not wait for was registered for the task.
+    def registered(rdd: RDD[String]): Boolean = {
+      rdd.mapPartitions { lines =>
+        val registered = TaskInputThreads.unawaitedFlag(TaskContext.get()).get()
+        lines.foreach(_ => ())
+        Iterator(registered)
+      }.collect().head
+    }
+    val lines = sc.makeRDD(Seq("a", "b"), 1)
+    assert(registered(lines.pipe(Seq("cat"))))
+    // Only for the tasks that pipe their input.
+    assert(!registered(lines))
   }
 
   test("advanced pipe") {
