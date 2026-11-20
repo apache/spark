@@ -299,6 +299,25 @@ object DoubleBucketFunction extends ScalarFunction[Int] {
     Math.floorMod(value.toLong, numBuckets.toLong).toInt
 }
 
+case class UnboundDecimalBucketFunction(declared: DecimalType) extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = DecimalBucketFunction(declared)
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+// A `bucket` that declares `declared` for the value whatever it is bound to, and hashes the
+// unscaled digits it reads. Consistent with BucketTransform in InMemoryBaseTable.scala.
+case class DecimalBucketFunction(declared: DecimalType) extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = Math.floorMod(
+    input.getDecimal(1, declared.precision, declared.scale).toJavaBigDecimal.unscaledValue
+      .hashCode.toLong, input.getInt(0).toLong).toInt
+}
+
 object UnboundStringBucketFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = StringBucketFunction
   override def description(): String = name()

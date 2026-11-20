@@ -63,8 +63,9 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
  *                  `KeyedShuffleSpec.createPartitioning`. The cogroup pairs its groups by those
  *                  bytes, so such a key goes to the function by storage, as the keyed side's
  *                  column of the same bytes does, even where a datetime value of its type would
- *                  be read differently (`datetimeCastKeepsValue`). Kept on the expression so that
- *                  an executor resolves the call as the driver did.
+ *                  be read differently (`datetimeCastKeepsValue`), or a decimal has more
+ *                  precision than declared. Kept on the expression so that an executor resolves
+ *                  the call as the driver did.
  */
 case class TransformExpression(
     function: BoundFunction,
@@ -437,29 +438,49 @@ object TransformExpression extends Logging {
    *
    * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
    * which is how a function read it before this check, apart from two datetime or interval types,
-   * which go as they are only as `datetimeCastKeepsValue` says, or by their physical type alone
-   * with `datetimeByStorage`, for a transform rebuilt over a cogroup's key (`storedKey`). A
-   * numeric argument narrower than declared (`UpCastRule.legalNumericPrecedence`), e.g. a
-   * `SMALLINT` against an `INT` or an `INT` against a `DOUBLE`, is held as another JVM type, so it
-   * is cast. That gives the value a magic `invoke` got from Java's widening before this check,
-   * which can lose digits for a `BIGINT` against a `DOUBLE` as it did there, and needs no time
-   * zone. Anything else is refused, a `DATE` against a `TIMESTAMP` in particular, whose cast takes
-   * the session time zone. A call whose arguments all suit is still refused when the method it
+   * which go as they are only as `datetimeCastKeepsValue` says, and a decimal, which needs no more
+   * precision than declared. A transform rebuilt over a cogroup's key (`storedKey`) takes such a
+   * key by its storage: two datetime or interval types by their physical type alone, and a
+   * decimal of the declared scale whatever its precision, a user-defined type by its `sqlType`,
+   * since the keyed side's column holds no value of more digits than declared, so a key that has
+   * more pairs with nothing wherever it lands. The function gets such a key's `Decimal` as it is,
+   * as before SPARK-61812, so one that checks its declared precision fails on it. A numeric
+   * argument narrower than declared (`UpCastRule.legalNumericPrecedence`), e.g. a `SMALLINT`
+   * against an `INT` or an `INT` against a `DOUBLE`, is held as another JVM type, so it is cast.
+   * That gives the value a magic `invoke` got from Java's widening before this check, which can
+   * lose digits for a `BIGINT` against a `DOUBLE` as it did there, and needs no time zone.
+   * Anything else is refused, a `DATE` against a `TIMESTAMP` in particular, whose cast takes the
+   * session time zone. A call whose arguments all suit is still refused when the method it
    * invokes cannot take them, see `methodLookupFailure`.
    */
   private def atDeclaredType(
       argument: Expression,
       declaredType: DataType,
-      datetimeByStorage: Boolean): Option[Expression] =
-    (argument.dataType, declaredType) match {
-      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false,
-          datetimeByStorage = datetimeByStorage) =>
-        Some(argument)
-      case (argumentType, _) if UpCastRule.legalNumericPrecedence(argumentType, declaredType) =>
-        Some(Cast(argument, declaredType))
-      case _ =>
-        None
+      storedKey: Boolean): Option[Expression] = {
+    val argumentType = argument.dataType
+    val keyOfDeclaredScale = storedKey && ((sqlType(argumentType), sqlType(declaredType)) match {
+      case (f: DecimalType, t: DecimalType) => f.scale == t.scale
+      case _ => false
+    })
+    if (keyOfDeclaredScale ||
+        storedAlike(argumentType, declaredType, nested = false, datetimeByStorage = storedKey)) {
+      Some(argument)
+    } else if (UpCastRule.legalNumericPrecedence(argumentType, declaredType)) {
+      Some(Cast(argument, declaredType))
+    } else {
+      None
     }
+  }
+
+  /**
+   * The type a value of `dataType` is stored as: a user-defined type's `sqlType`, through every
+   * user-defined type it wraps, as `storedAlike` unwraps them. `UserDefinedType.sqlType` unwraps
+   * one.
+   */
+  private def sqlType(dataType: DataType): DataType = dataType match {
+    case udt: UserDefinedType[_] => sqlType(udt.sqlType)
+    case other => other
+  }
 
   /**
    * Why the method `call` invokes does not take its arguments, or `None` when it does. `Invoke`
@@ -512,18 +533,19 @@ object TransformExpression extends Logging {
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
-   *  - two decimals of one scale, so that the unscaled digits a function reads are the same. At the
-   *    top level the function gets the `Decimal` itself, whatever precision it declares, e.g. a
-   *    `DECIMAL(12,2)` key of a cogroup that does not coerce its keys against a function declaring
-   *    `DECIMAL(10,2)`, see `KeyedShuffleSpec.createPartitioning`. Nested in an unsafe row, a
-   *    decimal is read at the declared precision: it is stored as a `long` up to
-   *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
-   *    and both on one side of that.
+   *  - two decimals of one scale, so that the unscaled digits a function reads are the same, and
+   *    `to` of no less precision, so that Spark's cast to `to` keeps every value, as the write path
+   *    casts it. A value of more digits than declared would reach the function as it is here, and
+   *    as `NULL` or a failure there (SPARK-61812). At the top level the function gets the `Decimal`
+   *    itself, so either storage goes. Nested in an unsafe row, a decimal is read at the declared
+   *    precision: it is stored as a `long` up to `Decimal.MAX_LONG_DIGITS` digits and as bytes
+   *    above, so there both have to be on one side of that.
    * With `anyNestedPrecision`, a nested decimal of any precision on one side of that. With
    * `datetimeByStorage`, two datetime or interval types by their physical type alone, whatever
    * they hold, e.g. a `TIME` and a `TIMESTAMP`. `keysStoredAlike` asks both; a transform rebuilt
    * over a cogroup's key stored alike (`storedKey`) asks only the latter, so that a nested decimal
-   * of more precision than declared still fails while planning.
+   * of more precision than declared still fails while planning, and takes a top-level decimal of
+   * more precision in `atDeclaredType` instead.
    */
   private def storedAlike(
       from: DataType,
@@ -545,8 +567,12 @@ object TransformExpression extends Logging {
       case (f: MapType, t: MapType) =>
         alike(f.keyType, t.keyType, nested = true) && alike(f.valueType, t.valueType, nested = true)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && (!nested || ((anyNestedPrecision || f.precision <= t.precision) &&
-          DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
+        f.scale == t.scale && (if (nested) {
+          (anyNestedPrecision || f.precision <= t.precision) &&
+            DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)
+        } else {
+          f.precision <= t.precision
+        })
       case (_: DatetimeType | _: AnsiIntervalType, _: DatetimeType | _: AnsiIntervalType)
           if !datetimeByStorage && !datetimeCastKeepsValue(from, to) => false
       case _ =>

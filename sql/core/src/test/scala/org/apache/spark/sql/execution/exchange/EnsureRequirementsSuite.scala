@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class EnsureRequirementsSuite extends SharedSparkSession {
@@ -1936,6 +1936,144 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61812: a cogroup places a decimal key of more precision, keyed on either side") {
+    // A key of more precision than the layout's `DECIMAL(10,2)` column, also as a user-defined type
+    // over it, is placed by the digits the keyed side's are (`TransformExpression.storedKey`),
+    // whichever side of the cogroup is keyed. The function reads its argument from the row, since
+    // a magic `invoke` cannot take a user-defined type (see SPARK-60027's test for that).
+    class DecimalUDT extends UserDefinedType[Decimal] {
+      override def sqlType: DataType = DecimalType(12, 2)
+      override def serialize(obj: Decimal): Any = obj
+      override def deserialize(datum: Any): Decimal = datum.asInstanceOf[Decimal]
+      override def userClass: Class[Decimal] = classOf[Decimal]
+    }
+    val decimalBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = Math.floorMod(
+        input.getDecimal(1, 10, 2).toJavaBigDecimal.unscaledValue.hashCode, input.getInt(0))
+    }
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    for (keyType <- Seq(DecimalType(12, 2), new DecimalUDT); keyedLeft <- Seq(true, false)) {
+      val side = if (keyedLeft) "left" else "right"
+      val name = s"a ${keyType.simpleString} key, keyed on the $side"
+      val column = AttributeReference("column", DecimalType(10, 2))()
+      val key = AttributeReference("key", keyType)()
+      val keyedPlan = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(decimalBucket, Seq(column), Some(4))),
+        (0 until 4).map(InternalRow(_))))
+      val plainPlan = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val output = AttributeReference("value", IntegerType)() :: Nil
+      val cogroup = if (keyedLeft) {
+        FlatMapCoGroupsInPandasExec(Seq(column), Seq(key), pythonUdf, output, keyedPlan, plainPlan)
+      } else {
+        FlatMapCoGroupsInPandasExec(Seq(key), Seq(column), pythonUdf, output, plainPlan, keyedPlan)
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val keyed = EnsureRequirements.apply(cogroup).collect {
+          case s: ShuffleExchangeExec => s.outputPartitioning
+        }.collect { case k: KeyedPartitioning => k }
+        assert(keyed.size == 1, s"$name: the other side is shuffled onto the bucket layout")
+        val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(key))
+        Seq("123.45", "0.07", "-9.99").foreach { v =>
+          val stored = TransformExpression(decimalBucket,
+            Seq(Literal(Decimal(BigDecimal(v), 10, 2), DecimalType(10, 2))), Some(4))
+          assert(placed.eval(InternalRow(Decimal(BigDecimal(v), 12, 2))) ==
+            stored.eval(InternalRow.empty), s"$name: $v")
+        }
+      }
+    }
+  }
+
+  test("SPARK-61812: a join shuffles both sides, not onto a layout declaring a narrower decimal") {
+    // A function declaring a narrower decimal than its column would get values the write path's
+    // cast turns into `NULL` or a failure, so Spark does not evaluate it: both sides shuffle, with
+    // the layout on either side. One declaring the column's own or a wider decimal keeps the
+    // layout. Two sides on the same layout evaluate nothing, so they keep it whatever it declares.
+    def decimalBucket(declared: DecimalType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val l = AttributeReference("l", DecimalType(12, 2))()
+    val r = AttributeReference("r", DecimalType(12, 2))()
+    def keyed(declared: DecimalType, key: Attribute): SparkPlan =
+      new DummySparkPlanWithBatchScanChild(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(decimalBucket(declared), Seq(key), Some(4))),
+        (0 until 4).map(InternalRow(_))))
+    def shuffles(left: SparkPlan, right: SparkPlan): Seq[Partitioning] =
+      EnsureRequirements.apply(SortMergeJoinExec(l :: Nil, r :: Nil, Inner, None, left, right))
+        .collect { case s: ShuffleExchangeExec => s.outputPartitioning }
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val declarations =
+        Seq(DecimalType(10, 2) -> false, DecimalType(12, 2) -> true, DecimalType(20, 2) -> true)
+      for ((declared, keepsLayout) <- declarations; keyedLeft <- Seq(true, false)) {
+        val name = s"$declared, keyed on the ${if (keyedLeft) "left" else "right"}"
+        val other = DummySparkPlan(outputPartitioning = SinglePartition)
+        val planned = if (keyedLeft) {
+          shuffles(keyed(declared, l), other)
+        } else {
+          shuffles(other, keyed(declared, r))
+        }
+        if (keepsLayout) {
+          assert(planned.size == 1 && planned.head.isInstanceOf[KeyedPartitioning],
+            s"$name: $planned")
+        } else {
+          assert(planned.size == 2 && planned.forall(_.isInstanceOf[HashPartitioning]),
+            s"$name: $planned")
+        }
+      }
+      val sameLayout = shuffles(keyed(DecimalType(10, 2), l), keyed(DecimalType(10, 2), r))
+      assert(sameLayout.isEmpty, s"two sides on one layout: $sameLayout")
+    }
+  }
+
+  test("SPARK-61812: a cogroup takes the hash shuffle over a layout declaring a narrower " +
+      "decimal (a key stored otherwise pairs wrongly, SPARK-60782)") {
+    // Spark does not shuffle a cogroup side onto a layout whose function declares a narrower
+    // decimal than its column, as for any layout it cannot evaluate. A key of the column's type
+    // pairs by the hash shuffle. A key stored otherwise than the column, here a `DECIMAL(20,2)`,
+    // is hashed by its own type, so its groups do not pair: a cogroup that does not coerce its
+    // keys does so with `spark.sql.sources.v2.bucketing.shuffle.enabled` off too (SPARK-60782).
+    val decimalBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    Seq(DecimalType(12, 2), DecimalType(20, 2)).foreach { keyType =>
+      val column = AttributeReference("column", DecimalType(12, 2))()
+      val key = AttributeReference("key", keyType)()
+      val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(decimalBucket, Seq(column), Some(4))),
+        (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val cogroup = FlatMapCoGroupsInPandasExec(Seq(column), Seq(key), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val shuffles = EnsureRequirements.apply(cogroup).collect {
+          case s: ShuffleExchangeExec => s.outputPartitioning
+        }
+        assert(shuffles.size == 2 && shuffles.forall(_.isInstanceOf[HashPartitioning]),
+          s"a $keyType key: $shuffles")
+      }
+    }
+  }
+
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
     // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
     // have another key stored otherwise than the layout's column: a `BIGINT` against a function
@@ -1946,7 +2084,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // wrongly too, so it fails, while planning, with an error that names the key and its type. The
     // storage check needs no call, so nothing is logged about the transform first. A key stored as
     // the column is but that the function cannot take even by storage fails too: a nested decimal
-    // of more precision than declared.
+    // of more precision than declared. A layout Spark cannot evaluate is not shuffled onto, so
+    // such a key takes the hash shuffle there, see SPARK-61812's cogroup test.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType

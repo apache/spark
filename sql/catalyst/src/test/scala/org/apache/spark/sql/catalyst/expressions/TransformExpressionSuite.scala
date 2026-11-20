@@ -246,11 +246,21 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         InternalRow(5), structField, true),
       ("a user-defined type against its sqlType", new IntUDT, IntegerType, 5,
         (row: InternalRow) => row.getInt(1), true),
-      // At the top level the function gets the `Decimal` itself, so a key of the declared scale
-      // with more precision, e.g. a cogroup's, is taken.
+      // SPARK-61812: a decimal of the declared scale is taken with no more precision than
+      // declared, whose cast keeps every value. At the top level the function gets the `Decimal`
+      // itself, so either storage goes.
       ("a decimal with more precision at the declared scale",
         DecimalType(12, 2), DecimalType(10, 2), Decimal(BigDecimal("123.45"), 12, 2),
-        unscaled(_.getDecimal(1, 10, 2)), true),
+        structField, false),
+      ("a decimal with more precision, stored as bytes against a long",
+        DecimalType(20, 2), DecimalType(18, 2), Decimal(BigDecimal("123.45"), 20, 2),
+        structField, false),
+      ("a decimal with more precision, both stored as bytes",
+        DecimalType(38, 10), DecimalType(20, 10), Decimal(BigDecimal("123.45"), 38, 10),
+        structField, false),
+      ("a decimal with less precision, stored as a long against bytes",
+        DecimalType(18, 2), DecimalType(20, 2), Decimal(BigDecimal("123.45"), 18, 2),
+        unscaled(_.getDecimal(1, 20, 2)), true),
       // Nested in an unsafe row, a decimal of up to 18 digits is a `long`, and a wider one bytes,
       // and it is read at the declared precision. So it is taken only with no more precision than
       // declared, and on the same side of 18 digits.
@@ -361,6 +371,95 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val argument = BoundReference(0, from, nullable = true)
       assert(TypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to")
       assert(AnsiTypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to, ANSI")
+    }
+  }
+
+  test("SPARK-61812: a decimal goes as another one only as its cast keeps it") {
+    // The write path casts an argument to the declared type, so a decimal a function takes as it
+    // is has to be one that cast keeps: of the declared scale with no more precision. A value of
+    // more digits than declared would reach the function as it is, and the write path as `NULL`
+    // or a failure.
+    val types = for (p <- Seq(5, 10, 12, 18, 19, 20, 38); s <- Seq(0, 2, 10) if s <= p)
+      yield DecimalType(p, s)
+    def taken(from: DataType, to: DataType): Boolean = TransformExpression(
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(to)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = "test.bucket"
+        override def produceResult(input: InternalRow): Int = 0
+      }, Seq(BoundReference(0, from, nullable = true))).evaluableFunction.isDefined
+    // The values of the most digits each type holds, so that a cast keeping them keeps every one.
+    def values(t: DecimalType): Seq[Decimal] = {
+      val largest = BigDecimal(BigInt(10).pow(t.precision) - 1, t.scale)
+      Seq(largest, BigDecimal(0), -largest).map(Decimal(_, t.precision, t.scale))
+    }
+    val takenPairs = for (from <- types; to <- types if from != to && taken(from, to))
+      yield (from, to)
+    takenPairs.foreach { case (from, to) =>
+      Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
+        values(from).foreach { raw =>
+          assert(Cast(Literal(raw, from), to, None, mode).eval() == raw, s"$from against $to")
+        }
+      }
+    }
+    assert(takenPairs.contains((DecimalType(10, 2), DecimalType(12, 2))) &&
+      takenPairs.contains((DecimalType(18, 2), DecimalType(20, 2))) &&
+      !takenPairs.contains((DecimalType(12, 2), DecimalType(10, 2))), takenPairs)
+  }
+
+  test("SPARK-61812: a cogroup's key takes a decimal of more precision as it is") {
+    // A transform rebuilt over a cogroup's key of another type than the layout's column
+    // (`storedKey`) takes a decimal of the declared scale whatever its precision: the keyed side's
+    // column holds no value of more digits than declared, so a key that has more pairs with
+    // nothing wherever it lands, and one that fits is placed by the digits the keyed side's are.
+    // A user-defined type goes by its `sqlType`. Not one of another scale, nor a nested one of more
+    // precision.
+    class DecimalUDT(underlying: DataType) extends UserDefinedType[Decimal] {
+      override def sqlType: DataType = underlying
+      override def serialize(obj: Decimal): Any = obj
+      override def deserialize(datum: Any): Decimal = datum.asInstanceOf[Decimal]
+      override def userClass: Class[Decimal] = classOf[Decimal]
+    }
+    def bucket(declared: DataType)(read: InternalRow => Long): ScalarFunction[Int] =
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = "test.bucket"
+        override def produceResult(input: InternalRow): Int =
+          Math.floorMod(read(input), input.getInt(0).toLong).toInt
+      }
+    val unscaledTop = (row: InternalRow) => row.getDecimal(1, 10, 2).toUnscaledLong
+    def struct(dataType: DataType): StructType = new StructType().add("d", dataType)
+    // (what, the key's type, the declared type, whether a marked transform takes it)
+    Seq(
+      ("a decimal with more precision", DecimalType(12, 2), DecimalType(10, 2), true),
+      ("a user-defined type over a decimal with more precision", new DecimalUDT(DecimalType(12, 2)),
+        DecimalType(10, 2), true),
+      ("a decimal with more precision against a user-defined type", DecimalType(12, 2),
+        new DecimalUDT(DecimalType(10, 2)), true),
+      ("a user-defined type over one over a decimal with more precision",
+        new DecimalUDT(new DecimalUDT(DecimalType(12, 2))), DecimalType(10, 2), true),
+      ("a decimal of another scale", DecimalType(12, 3), DecimalType(10, 2), false),
+      ("a nested decimal with more precision", struct(DecimalType(12, 2)),
+        struct(DecimalType(10, 2)), false)
+    ).foreach { case (what, keyType, declared, taken) =>
+      val key = BoundReference(0, keyType, nullable = true)
+      val marked = TransformExpression(bucket(declared)(unscaledTop), Seq(key), Some(4),
+        storedKey = true)
+      assert(marked.evaluableFunction.isDefined == taken, what)
+      assert(!marked.copy(storedKey = false).evaluableFunction.isDefined, s"$what, unmarked")
+      if (taken) {
+        def stored(t: DataType): DecimalType = t match {
+          case udt: UserDefinedType[_] => stored(udt.sqlType)
+          case d: DecimalType => d
+        }
+        val k = stored(keyType)
+        val unsafe = UnsafeProjection.create(Seq(key))
+          .apply(InternalRow(Decimal(BigDecimal("0.05"), k.precision, k.scale)))
+        assert(marked.eval(unsafe) == 1, what)
+      }
     }
   }
 
