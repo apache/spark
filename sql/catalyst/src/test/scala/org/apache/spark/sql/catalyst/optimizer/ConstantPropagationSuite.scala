@@ -605,6 +605,12 @@ class ConstantPropagationSuite extends PlanTest {
         checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
           $"i" === 0, $"id".cast(DoubleType) > $"total" / Literal(0.0) && $"i" === 0)
       }
+      // Nor where `spark.sql.optimizer.excludedRules` excludes `FoldablePropagation`, which then
+      // does not put them in.
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> FoldablePropagation.ruleName) {
+        checkOrdered(withTotal, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
+          $"i" === 0, $"id".cast(DoubleType) > $"total" / Literal(0.0) && $"i" === 0)
+      }
       // Then the equalities are also ordered as since SPARK-60983: `i = 0`, after the conjunct
       // that the constants fold to TRUE, does not count as one that can fail, so the written
       // order is kept. `10 / zero` makes the condition fail to fold once `zero` is in.
