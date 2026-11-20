@@ -2994,7 +2994,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
+      pushDownPredicate(filter, u.child, keepFailableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
@@ -3115,14 +3115,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   private def pushDownPredicate(
       filter: Filter,
       grandchild: LogicalPlan,
-      keepThrowableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      keepFailableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild. With `keepThrowableUp`, a throwable predicate is not pushed even when
-    // it is written first, as the operator in between can drop rows it would then see.
+    // come from grandchild. With `keepFailableUp`, a predicate that can fail, i.e. one that
+    // `ExprUtils.canEvaluateUnconditionally` rejects such as a throwable one or an ANSI division,
+    // is not pushed even when it is written first, as the operator in between can drop rows it
+    // would then see.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
     val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
-      cond.deterministic && !(keepThrowableUp && cond.throwable) &&
+      cond.deterministic && (!keepFailableUp || ExprUtils.canEvaluateUnconditionally(cond)) &&
         cond.references.subsetOf(grandchild.outputSet)
     }
 

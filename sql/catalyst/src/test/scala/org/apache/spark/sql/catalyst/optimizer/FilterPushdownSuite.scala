@@ -1001,6 +1001,24 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(outerQuery), outerAnswer)
   }
 
+  test("SPARK-62143: a condition that can fail is not pushed through a generate that can drop " +
+    "rows") {
+    // The division is built in ANSI mode, where it can fail, and is not throwable. The generate
+    // outputs no row for an empty array, so below it the division would see rows it never sees
+    // above it, even though nothing is written before it. A condition that can not fail is still
+    // pushed.
+    val divide = Divide($"b", $"a", NumericEvalContext(EvalMode.ANSI))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(divide > 1 && $"b" > 1)
+      .analyze
+    val correctAnswer = testRelationWithArrayType.where($"b" > 1)
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(divide > 1)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
   test("SPARK-60633: a throwable condition is not pushed through an aggregate ahead of the " +
     "conditions before it") {
     val originalQuery = testRelation.groupBy($"a")($"a", count($"b") as "c")
