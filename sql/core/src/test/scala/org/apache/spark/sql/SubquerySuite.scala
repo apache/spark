@@ -3759,7 +3759,8 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-60473: NOT IN subquery on non-nullable float/double columns with -0.0/0.0 and NaNs") {
-    withTable("spark_60473_t", "spark_60473_u", "spark_60473_v") {
+    withTable("spark_60473_t", "spark_60473_u",
+        "spark_60473_t2", "spark_60473_u2", "spark_60473_v") {
       sql("CREATE TABLE spark_60473_t (x DOUBLE NOT NULL) USING parquet")
       sql("CREATE TABLE spark_60473_u (y DOUBLE NOT NULL) USING parquet")
       sql("INSERT INTO spark_60473_t VALUES (0.0D)")
@@ -3771,16 +3772,18 @@ class SubquerySuite extends SharedSparkSession
         Nil)
 
       // Single column NOT IN with NaN
-      sql("DELETE FROM spark_60473_t")
-      sql("DELETE FROM spark_60473_u")
-      sql("INSERT INTO spark_60473_t VALUES (cast('NaN' as double))")
-      sql("INSERT INTO spark_60473_u VALUES (cast('NaN' as double))")
+      sql("CREATE TABLE spark_60473_t2 (x DOUBLE NOT NULL) USING parquet")
+      sql("CREATE TABLE spark_60473_u2 (y DOUBLE NOT NULL) USING parquet")
+      sql("INSERT INTO spark_60473_t2 VALUES (cast('NaN' as double))")
+      sql("INSERT INTO spark_60473_u2 VALUES (cast('NaN' as double))")
       checkAnswer(
-        sql("SELECT * FROM spark_60473_t WHERE x NOT IN (SELECT y FROM spark_60473_u)"),
+        sql(
+          "SELECT * FROM spark_60473_t2 WHERE x NOT IN (SELECT y FROM spark_60473_u2)"),
         Nil)
 
       // Multi-column NOT IN with non-nullable columns
-      sql("CREATE TABLE spark_60473_v (x1 DOUBLE NOT NULL, x2 FLOAT NOT NULL) USING parquet")
+      sql(
+        "CREATE TABLE spark_60473_v (x1 DOUBLE NOT NULL, x2 FLOAT NOT NULL) USING parquet")
       sql("INSERT INTO spark_60473_v VALUES (0.0D, -0.0F)")
       checkAnswer(
         sql("""SELECT * FROM spark_60473_v
@@ -3789,8 +3792,9 @@ class SubquerySuite extends SharedSparkSession
 
       // Nested condition with ExistenceJoin
       checkAnswer(
-        sql("""SELECT * FROM spark_60473_t
-              |WHERE 1 = 0 OR x NOT IN (SELECT y FROM spark_60473_u)""".stripMargin),
+        sql("""SELECT * FROM spark_60473_t2
+              |WHERE 1 = 0
+              |  OR x NOT IN (SELECT y FROM spark_60473_u2)""".stripMargin),
         Nil)
     }
   }
