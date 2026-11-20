@@ -43,10 +43,10 @@ class Table(Output):
     physical storage.
 
     :param table_properties: A dict where the keys are the property names and the values are the
-        property values. These properties will be set on the table. A property that an earlier
-        run of this dataset declared and that is missing from this dict is removed from the
-        table when the dataset is next materialized. Properties the definition never declared
-        are left in place; see the migration guide for exceptions.
+        property values. These properties will be set on the table. If the table already exists
+        and has a property that an earlier run declared in this dict and that is no longer in
+        it, that property is removed from the table (see the migration guide for exceptions).
+        Properties never declared in this dict are left in place.
     :param partition_cols: A list containing the column names of the partition columns.
     :param cluster_by: A list containing the column names of the cluster columns.
     :param schema Explicit Spark SQL schema to materialize this table with. Supports either a
