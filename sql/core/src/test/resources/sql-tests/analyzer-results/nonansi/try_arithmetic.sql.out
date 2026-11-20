@@ -736,3 +736,88 @@ SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)
 -- !query analysis
 Project [try_negative(INTERVAL '-178956970-8' YEAR TO MONTH) AS try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query analysis
+Project [try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) AS try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query analysis
+Project [try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) AS try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c)
+-- !query analysis
+Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8))
+-- !query analysis
+Project [try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000, false)) AS try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000))#x, try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000, false)) AS try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(true)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "try_abs(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_negative('abc')
+-- !query analysis
+Project [try_negative(abc) AS try_negative(abc)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(make_interval(0, 1))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 0, 0, 0, 0.000000)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(make_interval(0, 1, 0, 0, 0, 0, 0.000000))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "try_abs(make_interval(0, 1))"
+  } ]
+}

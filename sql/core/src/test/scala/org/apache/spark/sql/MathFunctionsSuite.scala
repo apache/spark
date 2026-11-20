@@ -736,11 +736,9 @@ class MathFunctionsSuite extends SharedSparkSession {
     ).toDF("i", "l")
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-        // With ANSI mode off, the minimum value wraps around as with `abs` and `negative`.
-        val minI = if (ansi) null else Int.MinValue
-        val minL = if (ansi) null else Long.MinValue
+        // NULL on overflow in both modes, as try_add.
         val expected = Seq(
-          Row(minI, minL, minI, minL),
+          Row(null, null, null, null),
           Row(1, 1L, 1, -1L),
           Row(Int.MaxValue, Long.MaxValue, -Int.MaxValue, -Long.MaxValue),
           Row(null, null, null, null))

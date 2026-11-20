@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegralType, NumericType}
+import org.apache.spark.sql.types.{AnsiIntervalType, CalendarIntervalType, DataType, IntegralType, NumericType}
 
 case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -55,25 +54,9 @@ case class TryEval(child: Expression) extends UnaryExpression {
     copy(child = newChild)
 }
 
-/**
- * The replacement of `try_abs` and `try_negative` over `child`: `nullOnOverflow` over an integral
- * value under ANSI mode, which returns NULL where `ansi` raises ARITHMETIC_OVERFLOW, and `ansi`
- * otherwise. With ANSI mode off, the functions behave as `abs` and `negative` do.
- */
-private[expressions] object TryUnaryArithmetic {
-  def replacement(
-      child: Expression,
-      nullOnOverflow: Expression => Expression,
-      ansi: Expression => Expression): Expression = child.dataType match {
-    case _: IntegralType if SQLConf.get.ansiEnabled => nullOnOverflow(child)
-    case _ => ansi(child)
-  }
-}
-
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of `expr`. Under ANSI mode, it returns " +
-    "NULL instead of raising an overflow error when `expr` is the minimum value of an integral " +
-    "type. Otherwise it is the same as `abs`.",
+  usage = "_FUNC_(expr) - Returns the absolute value of `expr`, and NULL on overflow. " +
+    "The acceptable input types are the same as for `abs`.",
   arguments = """
     Arguments:
       * expr - The numeric or interval value to take the absolute value of.
@@ -83,8 +66,8 @@ private[expressions] object TryUnaryArithmetic {
     Examples:
       > SELECT _FUNC_(-1);
        1
-      > SELECT _FUNC_(-2147483647);
-       2147483647
+      > SELECT _FUNC_(-2147483648);
+       NULL
       > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
        1-1
   """,
@@ -92,8 +75,11 @@ private[expressions] object TryUnaryArithmetic {
   group = "math_funcs")
 case class TryAbs(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(expr: Expression) = this(expr,
-    TryUnaryArithmetic.replacement(expr, IntegralAbsOrNull, Abs(_)))
+  def this(expr: Expression) = this(expr, expr.dataType match {
+    case _: IntegralType | _: AnsiIntervalType => AbsOrNull(expr)
+    // The other types that `abs` accepts cannot overflow.
+    case _ => Abs(expr)
+  })
 
   override def prettyName: String = "try_abs"
 
@@ -104,9 +90,8 @@ case class TryAbs(expr: Expression, replacement: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the negated value of `expr`. Under ANSI mode, it returns " +
-    "NULL instead of raising an overflow error when `expr` is the minimum value of an integral " +
-    "type. Otherwise it is the same as `negative`.",
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`, and NULL on overflow. " +
+    "The acceptable input types are the same as for `negative`.",
   arguments = """
     Arguments:
       * expr - The expression to negate.
@@ -116,8 +101,8 @@ case class TryAbs(expr: Expression, replacement: Expression)
     Examples:
       > SELECT _FUNC_(1);
        -1
-      > SELECT _FUNC_(2147483647);
-       -2147483647
+      > SELECT _FUNC_(-2147483648);
+       NULL
       > SELECT _FUNC_(INTERVAL '1-1' YEAR TO MONTH);
        -1-1
   """,
@@ -125,8 +110,11 @@ case class TryAbs(expr: Expression, replacement: Expression)
   group = "math_funcs")
 case class TryNegative(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(expr: Expression) = this(expr,
-    TryUnaryArithmetic.replacement(expr, IntegralNegateOrNull, UnaryMinus(_)))
+  def this(expr: Expression) = this(expr, expr.dataType match {
+    case _: IntegralType | _: AnsiIntervalType | CalendarIntervalType => NegateOrNull(expr)
+    // The other types that `negative` accepts cannot overflow.
+    case _ => UnaryMinus(expr)
+  })
 
   override def prettyName: String = "try_negative"
 

@@ -567,9 +567,8 @@ def sqrt(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_abs(col: "ColumnOrName") -> Column:
     """
-    Returns the absolute value of `col`. Under ANSI mode, it returns null instead of raising
-    an overflow error when `col` is the minimum value of an integral type. Otherwise it is the
-    same as :meth:`abs`.
+    Returns the absolute value of `col` and the result is null on overflow. The acceptable
+    input types are the same as for :meth:`abs`.
 
     .. versionadded:: 4.5.0
 
@@ -602,15 +601,10 @@ def try_abs(col: "ColumnOrName") -> Column:
     |NULL|      NULL|
     +----+----------+
 
-    Example 2: Overflow results in NULL when ANSI mode is on
+    Example 2: Overflow results in NULL
 
     >>> import pyspark.sql.functions as sf
-    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
-    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
-    >>> try:
-    ...     spark.range(1).select(sf.try_abs(sf.lit(-sys.maxsize - 1))).show()
-    ... finally:
-    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    >>> spark.range(1).select(sf.try_abs(sf.lit(-sys.maxsize - 1))).show()
     +-----------------------------+
     |try_abs(-9223372036854775808)|
     +-----------------------------+
@@ -946,9 +940,8 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_negative(col: "ColumnOrName") -> Column:
     """
-    Returns the negated value of `col`. Under ANSI mode, it returns null instead of raising
-    an overflow error when `col` is the minimum value of an integral type. Otherwise it is the
-    same as :meth:`negative`.
+    Returns the negated value of `col` and the result is null on overflow. The acceptable
+    input types are the same as for :meth:`negative`.
 
     .. versionadded:: 4.5.0
 
@@ -981,15 +974,10 @@ def try_negative(col: "ColumnOrName") -> Column:
     |NULL|           NULL|
     +----+---------------+
 
-    Example 2: Overflow results in NULL when ANSI mode is on
+    Example 2: Overflow results in NULL
 
     >>> import pyspark.sql.functions as sf
-    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
-    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
-    >>> try:
-    ...     spark.range(1).select(sf.try_negative(sf.lit(-sys.maxsize - 1))).show()
-    ... finally:
-    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    >>> spark.range(1).select(sf.try_negative(sf.lit(-sys.maxsize - 1))).show()
     +----------------------------------+
     |try_negative(-9223372036854775808)|
     +----------------------------------+

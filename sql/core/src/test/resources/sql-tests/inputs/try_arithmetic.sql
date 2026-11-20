@@ -133,3 +133,13 @@ SELECT try_negative(2147483647 + 1);
 SELECT try_abs(interval -2 year), try_negative(interval 2 second);
 SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH);
 SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH);
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND);
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND);
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c);
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8));
+
+-- Invalid input types
+SELECT try_abs(true);
+SELECT try_negative('abc');
+SELECT try_abs(make_interval(0, 1));

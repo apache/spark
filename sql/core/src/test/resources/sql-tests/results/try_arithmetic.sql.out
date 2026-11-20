@@ -1056,27 +1056,125 @@ struct<try_abs(INTERVAL '-2' YEAR):interval year,try_negative(INTERVAL '02' SECO
 -- !query
 SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH)
 -- !query schema
-struct<>
+struct<try_abs(INTERVAL '-178956970-8' YEAR TO MONTH):interval year to month>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  }
-}
+NULL
 
 
 -- !query
 SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)
 -- !query schema
+struct<try_negative(INTERVAL '-178956970-8' YEAR TO MONTH):interval year to month>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query schema
+struct<try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query schema
+struct<try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c)
+-- !query schema
+struct<try_abs(c):interval year to month,try_negative(c):interval year to month>
+-- !query output
+1-1	1-1
+NULL	NULL
+
+
+-- !query
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8))
+-- !query schema
+struct<try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000)):interval,try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000)):interval>
+-- !query output
+-1 months -2 days	NULL
+
+
+-- !query
+SELECT try_abs(true)
+-- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
-  "sqlState" : "22015"
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "try_abs(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_negative('abc')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'abc'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "try_negative('abc')"
+  } ]
+}
+
+
+-- !query
+SELECT try_abs(make_interval(0, 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 0, 0, 0, 0.000000)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(make_interval(0, 1, 0, 0, 0, 0, 0.000000))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "try_abs(make_interval(0, 1))"
+  } ]
 }

@@ -224,11 +224,12 @@ private[expressions] object UnaryArithmetic {
 }
 
 /**
- * [[Abs]] or [[UnaryMinus]] over an integral value that returns NULL where the ANSI form raises
- * ARITHMETIC_OVERFLOW. Both overflow only on the minimum value of the type. Under ANSI mode,
- * `try_abs` and `try_negative` are replaced with a subclass, see [[TryUnaryArithmetic]].
+ * [[Abs]] or [[UnaryMinus]] that returns NULL where the ANSI form raises an overflow error, in
+ * every mode. It cannot raise itself, so the subclasses are [[NoThrow]]. Over an integral value
+ * or an ANSI interval, both overflow only on the minimum value of the type. `try_abs` and
+ * `try_negative` are replaced with a subclass over the types that can overflow.
  */
-abstract class IntegralUnaryArithmeticOrNull extends UnaryExpression {
+abstract class UnaryArithmeticOrNull extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def nullable: Boolean = true
@@ -243,14 +244,19 @@ abstract class IntegralUnaryArithmeticOrNull extends UnaryExpression {
   /** The Java code of the result for `value`, which is not the minimum value of its type. */
   protected def opCode(value: String): String
 
-  protected override def nullSafeEval(input: Any): Any = {
-    val value = input.asInstanceOf[Number].longValue
-    dataType match {
-      case ByteType => if (value == Byte.MinValue) null else op(value).toByte
-      case ShortType => if (value == Short.MinValue) null else op(value).toShort
-      case IntegerType => if (value == Int.MinValue) null else op(value).toInt
-      case LongType => if (value == Long.MinValue) null else op(value)
-    }
+  protected override def nullSafeEval(input: Any): Any = dataType match {
+    case ByteType =>
+      val v = input.asInstanceOf[Byte]
+      if (v == Byte.MinValue) null else op(v).toByte
+    case ShortType =>
+      val v = input.asInstanceOf[Short]
+      if (v == Short.MinValue) null else op(v).toShort
+    case IntegerType | _: YearMonthIntervalType =>
+      val v = input.asInstanceOf[Int]
+      if (v == Int.MinValue) null else op(v).toInt
+    case LongType | _: DayTimeIntervalType =>
+      val v = input.asInstanceOf[Long]
+      if (v == Long.MinValue) null else op(v)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -270,25 +276,61 @@ abstract class IntegralUnaryArithmeticOrNull extends UnaryExpression {
   }
 }
 
-case class IntegralAbsOrNull(child: Expression) extends IntegralUnaryArithmeticOrNull {
+case class AbsOrNull(child: Expression) extends UnaryArithmeticOrNull with NoThrow {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegralType, AnsiIntervalType))
+
   override def prettyName: String = "try_abs"
 
   override protected def op(value: Long): Long = math.abs(value)
 
   override protected def opCode(value: String): String = s"java.lang.Math.abs($value)"
 
-  override protected def withNewChildInternal(newChild: Expression): IntegralAbsOrNull =
+  override protected def withNewChildInternal(newChild: Expression): AbsOrNull =
     copy(child = newChild)
 }
 
-case class IntegralNegateOrNull(child: Expression) extends IntegralUnaryArithmeticOrNull {
+/**
+ * Also over a [[CalendarInterval]], which overflows when one of its fields is the minimum value
+ * of its type.
+ */
+case class NegateOrNull(child: Expression) extends UnaryArithmeticOrNull with NoThrow {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegralType, AnsiIntervalType, CalendarIntervalType))
+
   override def prettyName: String = "try_negative"
 
   override protected def op(value: Long): Long = -value
 
   override protected def opCode(value: String): String = s"-($value)"
 
-  override protected def withNewChildInternal(newChild: Expression): IntegralNegateOrNull =
+  protected override def nullSafeEval(input: Any): Any = dataType match {
+    case CalendarIntervalType =>
+      val v = input.asInstanceOf[CalendarInterval]
+      if (v.months == Int.MinValue || v.days == Int.MinValue || v.microseconds == Long.MinValue) {
+        null
+      } else {
+        IntervalUtils.negate(v)
+      }
+    case _ => super.nullSafeEval(input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
+    case CalendarIntervalType =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+           |if ($c.months == Integer.MIN_VALUE || $c.days == Integer.MIN_VALUE ||
+           |    $c.microseconds == Long.MIN_VALUE) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = $iu.negate($c);
+           |}
+           |""".stripMargin)
+    case _ => super.doGenCode(ctx, ev)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): NegateOrNull =
     copy(child = newChild)
 }
 
