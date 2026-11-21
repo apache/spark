@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, In, InSet, Literal,
   ScalarSubquery, StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
@@ -616,6 +616,175 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         sql("SELECT c IN (null, 'A'), c IN ('A', null), c IN (null, 'zz') FROM t"),
         Row(true, true, null))
+    }
+  }
+
+  test("char type comparison: IN list mixing CHAR columns with other elements") {
+    // `c IN (e1, e2)` must return what `c = e1 OR c = e2` returns, where each equality pads its
+    // own sides: c is padded against a CHAR column of another length and a string literal, but
+    // not against a STRING or VARCHAR column.
+    val lists = Seq(
+      Seq("c5", "s"), Seq("s", "c5"), Seq("c5", "v"), Seq("c5", "'x'"), Seq("s", "'a'"),
+      Seq("c5", "s", "v", "'x'", "null"), Seq("c5b", "s"), Seq("c5b", "v"), Seq("c5b", "s", "'b'"),
+      Seq("s", "v"))
+
+    def checkInAsOr(table: String, value: String): Unit = {
+      val df = spark.table(table)
+      val ins = lists.flatMap { list =>
+        val elems = list.mkString(", ")
+        Seq(s"$value IN ($elems)", s"$value NOT IN ($elems)")
+      }
+      val ors = lists.flatMap { list =>
+        val or = list.map(e => s"$value = $e").mkString(" OR ")
+        Seq(s"$or", s"NOT ($or)")
+      }
+      checkAnswer(df.selectExpr(ins: _*), df.selectExpr(ors: _*))
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+        s"USING $format")
+      sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a', 'a')")
+      testConditions(spark.table("t"), Seq(
+        ("c = c5", true),
+        ("c = s", false),
+        ("c = v", false),
+        ("c IN (c5, s)", true),
+        ("c IN (s, c5)", true),
+        ("c NOT IN (c5, s)", false),
+        ("c IN (c5, v)", true),
+        ("c IN (c5, 'x')", true),
+        ("c IN (s, 'a')", true),
+        ("c IN (c5, s, v, 'x', null)", true),
+        // s and v hold 'a' without the padding of c, so they must not be padded to match it.
+        ("c IN (c5b, s)", false),
+        ("c IN (c5b, v)", false),
+        ("c IN (c5b, s, 'b')", false),
+        ("c IN (s, v)", false)))
+      checkInAsOr("t", "c")
+
+      // A list of only columns and literals keeps all its literals in one IN.
+      val ins = spark.table("t").selectExpr("c IN (c5, 'x', s, 'y')").queryExecution.analyzed
+        .flatMap(_.expressions.flatMap(_.collect { case i: In => i }))
+      assert(ins.length == 3 && ins.exists(i => i.list.length == 2 && i.list.forall(_.foldable)))
+    }
+
+    // Without read-side padding the CHAR columns are padded in the predicate instead.
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+          s"USING $format")
+        sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a', 'a')")
+        testConditions(spark.table("t"), Seq(
+          ("c IN (c5, s)", true),
+          ("c IN (c5, v)", true),
+          ("c IN (c5, 'x')", true),
+          ("c IN (s, 'a')", true)))
+        checkInAsOr("t", "c")
+      }
+    }
+
+    // s and v hold the value that c reads, so they match c only if c is not padded for them.
+    Seq("true", "false").foreach { readSidePadding =>
+      withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+            s"USING $format")
+          sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a ', 'a ')")
+          testConditions(spark.table("t"), Seq(
+            ("c = s", true),
+            ("c = v", true),
+            ("c IN (c5b, s)", true),
+            ("c IN (c5b, v)", true)))
+          checkInAsOr("t", "c")
+        }
+      }
+    }
+
+    // The value is an OuterReference in a correlated subquery.
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")
+      sql(s"CREATE TABLE t2(c5 CHAR(5), c5b CHAR(5), s STRING) USING $format")
+      sql("INSERT INTO t1 VALUES ('a')")
+      sql("INSERT INTO t2 VALUES ('a', 'b', 'a')")
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (t2.c5, t2.s))"),
+        Row("a "))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (t2.c5b, t2.s))"),
+        Nil)
+    }
+
+    // CHAR fields nested in structs.
+    withTable("t") {
+      sql(s"CREATE TABLE t(c STRUCT<f: CHAR(2)>, c5 STRUCT<f: CHAR(5)>, s STRUCT<f: STRING>) " +
+        s"USING $format")
+      sql("INSERT INTO t VALUES (struct('a'), struct('a'), struct('a'))")
+      testConditions(spark.table("t"), Seq(
+        ("c = c5", true),
+        ("c = s", false),
+        ("c IN (c5, s)", true),
+        ("c IN (s, c5)", true),
+        ("c IN (s)", false)))
+      // Padding a struct that is an outer reference references it more than once.
+      Seq("t.c = t2.c5", "t.c IN (t2.c5, t2.s)").foreach { cond =>
+        checkAnswer(
+          sql(s"SELECT 1 FROM t WHERE EXISTS (SELECT 1 FROM t AS t2 WHERE $cond)"),
+          Row(1))
+      }
+    }
+  }
+
+  test("char type comparison: IN list keeps the order of elements that can fail") {
+    // Like the OR of the equalities, the IN must not evaluate an element that can fail if an
+    // element written ahead of it matches.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, c CHAR(2), c2 CHAR(2), c5 CHAR(5), c5a CHAR(5), s STRING, " +
+          s"arr ARRAY<STRING>) USING $format")
+        sql("INSERT INTO t VALUES (1, 'a', 'a', 'b', 'a', 'x', array('y'))")
+        val cond = "c IN (s, c2, element_at(arr, 10), c5)"
+        testConditions(spark.table("t"), Seq((cond, true)))
+        checkAnswer(spark.table("t").where(cond).select("c"), Row("a "))
+
+        // The matching element needs padding: a CHAR column of another length, or a string
+        // literal shorter than the value. Check each condition on its own, as an element that
+        // fails and is shared by several items of a SELECT list may be evaluated for all of them.
+        Seq(
+          "c IN (s, c5a, element_at(arr, 10))" -> true,
+          "c NOT IN (s, c5a, element_at(arr, 10))" -> false,
+          "c IN (s, 'a', c5, element_at(arr, 10))" -> true,
+          "c NOT IN (s, 'a', c5, element_at(arr, 10))" -> false
+        ).foreach { case (cond, expected) =>
+          testConditions(spark.table("t"), Seq((cond, expected)))
+        }
+        // If no element matches and one is NULL, the IN is NULL, like the OR of the equalities.
+        checkAnswer(
+          sql("SELECT c IN (s, c5, CAST(NULL AS STRING), element_at(arr, 1)), " +
+            "c NOT IN (s, c5, CAST(NULL AS STRING), element_at(arr, 1)) FROM t"),
+          Row(null, null))
+
+        // A constant that fails is only evaluated when the query reaches it, so the analysis must
+        // not evaluate it to pad it.
+        checkAnswer(
+          sql("SELECT CASE WHEN i > 0 THEN c IN (c2, element_at(array('a'), 10)) END FROM t"),
+          Row(true))
+        checkAnswer(
+          sql("SELECT CASE WHEN i > 0 THEN c IN ('a', element_at(array('a'), 10)) END FROM t"),
+          Row(true))
+        checkAnswer(
+          sql("SELECT CASE WHEN i < 0 THEN c = element_at(array('a'), 10) END FROM t"),
+          Row(null))
+        assert(sql("SELECT c IN (c5, element_at(array('a'), 10)) FROM t").schema.length == 1)
+        // A constant that can fail but does not is padded like a string literal.
+        testConditions(spark.table("t"), Seq(("c IN (c5, element_at(array('a'), 1))", true)))
+
+        // A list that mixes padding kinds but pads nothing, as c2 has the length of c, keeps its
+        // IN.
+        val ins = spark.table("t").selectExpr("c IN (c2, s)").queryExecution.analyzed
+          .flatMap(_.expressions.flatMap(_.collect { case i: In => i }))
+        assert(ins.length == 1 && ins.head.list.length == 2)
+      }
     }
   }
 
