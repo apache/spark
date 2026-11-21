@@ -97,19 +97,32 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
+    // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
+    // They stay in a filter above all the joins, which takes the place of the top join or filter.
+    // `CombineFilters` does not combine a condition that can fail from a filter above into it.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
+      // The first join that covers the references of a condition can be below the filter or the
+      // join that the condition is written in, where it would be evaluated on rows that a join
+      // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
+      // above all the joins. `conditions` are in their written order: the ones of a lower join or
+      // filter before the ones above it. A movable condition written after a kept one can not
+      // fail, so it goes into a join, and any filter that `createOrderedJoin` adds only has
+      // conditions written before the kept ones.
+      val (movable, keptAbove) = splitMovable(conditions, input.map(_._1))
+      val joined = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions)
+          createOrderedJoin(starJoinPlan ++ rest, movable)
         } else {
-          createOrderedJoin(input, conditions)
+          createOrderedJoin(input, movable)
         }
       } else {
-        createOrderedJoin(input, conditions)
+        createOrderedJoin(input, movable)
       }
+      val reordered = keptAbove.reduceLeftOption(And).map(Filter(_, joined)).getOrElse(joined)
 
       if (p.sameOutput(reordered)) {
         reordered

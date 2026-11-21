@@ -51,7 +51,8 @@ object LDASuite {
     "learningOffset" -> 1023.0,
     "learningDecay" -> 0.52,
     "subsamplingRate" -> 0.051,
-    "docConcentration" -> Array(2.0)
+    "docConcentration" -> Array(2.0),
+    "intermediateStorageLevel" -> "DISK_ONLY"
   )
 }
 
@@ -85,6 +86,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(lda.getSubsamplingRate === 0.05)
     assert(lda.getOptimizeDocConcentration)
     assert(lda.getTopicDistributionCol === "topicDistribution")
+    assert(lda.getIntermediateStorageLevel === "MEMORY_AND_DISK")
   }
 
   test("LDA validate input dataset") {
@@ -100,6 +102,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
       .setK(9)
       .setTopicConcentration(0.56)
       .setTopicDistributionCol("myOutput")
+      .setIntermediateStorageLevel("DISK_ONLY")
 
     assert(lda.getFeaturesCol === "test_feature")
     assert(lda.getMaxIter === 33)
@@ -108,6 +111,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(lda.getK === 9)
     assert(lda.getTopicConcentration === 0.56)
     assert(lda.getTopicDistributionCol === "myOutput")
+    assert(lda.getIntermediateStorageLevel === "DISK_ONLY")
 
 
     // setOptimizer

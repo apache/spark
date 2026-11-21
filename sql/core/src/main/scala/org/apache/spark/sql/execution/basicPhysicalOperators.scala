@@ -215,21 +215,25 @@ trait GeneratePredicateHelper extends PredicateHelper {
    *
    * So the states are generated with `ctx.currentVars` swapped for copies whose code is blank;
    * `input` keeps its code, and the states read only the columns' variables.
-   * `exprCodesNeedEvaluate` is then empty (nothing to hoist); its (empty) evaluation code is
-   * returned with the states and emitted by the caller anyway, so a future change that does hoist
-   * a column fails no stage rather than dropping a declaration. This hiding is the precondition
-   * `generatePredicateCode` documents for `subExprStates`, done here so a caller need not repeat
-   * it.
+   * `exprCodesNeedEvaluate`, which only the split fills, is then empty, as asserted, and is not
+   * emitted, unlike in `ProjectExec` and `ExpandExec`, which evaluate their states up front:
+   * `generatePredicateCode` loads each column, and a split state takes the columns it reads as
+   * parameters. Copies that keep the code would not do: kept inline, a state would declare a
+   * column that `generatePredicateCode` declares too, and split, the column's code would reach
+   * `exprCodesNeedEvaluate`. This hiding is the precondition `generatePredicateCode` documents
+   * for `subExprStates`, done here so a caller need not repeat it.
    */
   protected def subExprStatesToEliminate(
       ctx: CodegenContext,
       equivalentExpressions: EquivalentExpressions,
-      input: Seq[ExprCode]): (Map[ExpressionEquals, SubExprEliminationState], String) = {
+      input: Seq[ExprCode]): Map[ExpressionEquals, SubExprEliminationState] = {
     val savedVars = ctx.currentVars
     ctx.currentVars = input.map(_.copy(code = EmptyBlock)).toIndexedSeq
     try {
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(equivalentExpressions)
-      (subExprs.states, evaluateVariables(subExprs.exprCodesNeedEvaluate))
+      assert(subExprs.exprCodesNeedEvaluate.isEmpty,
+        "the states must not carry the code of an input column, see subExprStatesToEliminate")
+      subExprs.states
     } finally {
       ctx.currentVars = savedVars
     }
@@ -540,9 +544,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // Eliminate the common subexpressions of `otherPreds` only when one of them is not cheap,
-    // per `CollapseProject.isCheap`. Elimination has a cost: a state adds a local variable, or
-    // with the split above `methodSplitThreshold` a method and up to two mutable fields, per
-    // common subexpression. Sharing a cheap subexpression, such as the struct field of
+    // per `CollapseProject.isCheap`. Kept inline, a state computes the repeated expression once,
+    // before the first conjunct that references it, instead of at each occurrence, so it adds no
+    // local variable, but when the code of the states together exceeds `methodSplitThreshold`
+    // and the parameters of each fit in a Java method, each common subexpression becomes a
+    // method with up to two mutable fields, which is known only once the states are generated,
+    // after this gate. Sharing a cheap subexpression, such as the struct field of
     // `s.x > 5 AND s.x < 100`, does not pay for that, since computing it again is a slot read.
     // A column that conjuncts share is never a common subexpression, as `EquivalentExpressions`
     // skips leaf expressions. `subexpressionElimination.filterExec.enabled` turns this off
@@ -551,10 +558,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       conf.subexpressionEliminationFilterExecEnabled && otherPreds.nonEmpty &&
       otherPredsEquivalentExpressions.getCommonSubexpressions.exists(!CollapseProject.isCheap(_))
 
-    val (subExprStates, subExprInputEval) = if (eliminateSubExprs) {
+    val subExprStates = if (eliminateSubExprs) {
       subExprStatesToEliminate(ctx, otherPredsEquivalentExpressions, input)
     } else {
-      (Map.empty[ExpressionEquals, SubExprEliminationState], "")
+      Map.empty[ExpressionEquals, SubExprEliminationState]
     }
 
     val predicateCode = generatePredicateCode(
@@ -573,7 +580,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $subExprInputEval
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

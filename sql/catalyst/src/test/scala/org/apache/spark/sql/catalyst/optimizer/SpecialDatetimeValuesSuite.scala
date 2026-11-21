@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Concat, CreateArray, ElementAt, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MINUTE
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class SpecialDatetimeValuesSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -69,6 +69,10 @@ class SpecialDatetimeValuesSuite extends PlanTest {
   test("applyForExpression folds special timestamp values") {
     val cast = Cast(Literal("epoch"), TimestampType, Some("UTC"))
     assert(SpecialDatetimeValues.applyForExpression(cast) == Literal(0L, TimestampType))
+    Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
+      assert(SpecialDatetimeValues.applyForExpression(Cast(Literal("epoch"), dt, Some("UTC"))) ==
+        Literal(TimestampNanosVal.ZERO, dt))
+    }
   }
 
   test("applyForExpression leaves non-special casts and other expressions unchanged") {
@@ -80,7 +84,8 @@ class SpecialDatetimeValuesSuite extends PlanTest {
   test("SPARK-59112: special datetime values from CHAR/VARCHAR") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val stringTypes = Seq(CharType(10), VarcharType(10))
-      val datetimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+      val datetimeTypes = Seq(DateType, TimestampType, TimestampNTZType,
+        TimestampLTZNanosType(9), TimestampNTZNanosType(7))
       val expressions = for {
         stringType <- stringTypes
         datetimeType <- datetimeTypes
@@ -140,8 +145,60 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61538: special nanosecond timestamp values") {
+    testSpecialDatetimeValues { zoneId =>
+      for {
+        p <- Seq(7, 8, 9)
+        (nanosType, microType) <- Seq(
+          TimestampLTZNanosType(p) -> TimestampType,
+          TimestampNTZNanosType(p) -> TimestampNTZType)
+      } {
+        def fold(e: Expression, dt: DataType): Any = {
+          val in = Project(Seq(Alias(Cast(e, dt, Some(zoneId.getId)), "c")()), LocalRelation())
+          Optimize.execute(in.analyze).expressions.head match {
+            case Alias(Literal(v, `dt`), _) => v
+            case other => fail(s"$e AS $dt was not folded to a literal: $other")
+          }
+        }
+        // Equal to the micro value cast to the nanos type.
+        Seq("epoch", " Epoch ", "today", "tomorrow", "yesterday CET").map(Literal(_)).foreach { e =>
+          val expected =
+            Cast(Literal(fold(e, microType), microType), nanosType, Some(zoneId.getId)).eval()
+          assert(fold(e, nanosType) === expected, s"$e AS $nanosType")
+        }
+        assert(fold(Concat(Seq(Literal("ep"), Literal("och"))), nanosType) ===
+          TimestampNanosVal.ZERO)
+        // `now` is floored to the precision and close to the micro `now`.
+        val now = fold(Literal(" NOW "), nanosType).asInstanceOf[TimestampNanosVal]
+        val microNow = fold(Literal("now"), microType).asInstanceOf[Long]
+        assert(Math.abs(now.epochMicros - microNow) <= MICROS_PER_MINUTE)
+        assert(now.nanosWithinMicro % math.pow(10, 9 - p).toInt === 0)
+      }
+    }
+  }
+
+  test("SPARK-61538: non-special or non-foldable strings cast to nanosecond timestamps are kept") {
+    val str = AttributeReference("s", StringType)()
+    Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
+      Seq(Literal("epochs"), Literal("now UTC"), Literal("2020-01-01"),
+          Literal(null, StringType), str).foreach { e =>
+        val cast = Cast(e, dt, Some("UTC"))
+        assert(SpecialDatetimeValues.applyForExpression(cast) == cast)
+      }
+    }
+  }
+
+  test("SPARK-61538: a foldable string that fails to evaluate is left to a nanosecond cast") {
+    val failing = ElementAt(CreateArray(Seq(Literal("epoch"))), Literal(2), failOnError = true)
+    Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
+      val cast = Cast(failing, dt, Some("UTC"))
+      assert(SpecialDatetimeValues.applyForExpression(cast) == cast)
+    }
+  }
+
   test("SPARK-60032: a cast of a special value reads the current date unless it is 'epoch'") {
-    Seq(DateType, TimestampType, TimestampNTZType).foreach { dt =>
+    Seq(DateType, TimestampType, TimestampNTZType, TimestampLTZNanosType(9),
+        TimestampNTZNanosType(7)).foreach { dt =>
       Seq("now", " Today ", "TOMORROW", "yesterday", "tomorrow CET").foreach { s =>
         assert(SpecialDatetimeValues.readsCurrentDate(UTF8String.fromString(s), dt), s"$s $dt")
       }

@@ -53,7 +53,7 @@ class ArrowStreamSerializer(Serializer):
     write_start_stream : bool
         If True, writes the START_ARROW_STREAM marker before the first
         output batch. Default False.
-    collect_timing : bool
+    detailed_timing_enabled : bool
         Record combined Arrow IPC and stream I/O time in worker metrics.
         Enable only for UDF paths that report the corresponding SQL metrics.
 
@@ -68,12 +68,12 @@ class ArrowStreamSerializer(Serializer):
         write_start_stream: bool = False,
         flush_per_batch: bool = False,
         *,
-        collect_timing: bool = False,
+        detailed_timing_enabled: bool = False,
     ) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
         self._flush_per_batch: bool = flush_per_batch
-        self._collect_timing = collect_timing
+        self._detailed_timing_enabled = detailed_timing_enabled
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
@@ -83,7 +83,9 @@ class ArrowStreamSerializer(Serializer):
         import pyarrow as pa
 
         write_timer = (
-            WorkerMetrics().measure("pythonDataWriteTime") if self._collect_timing else None
+            WorkerMetrics().measure("pythonDataWriteTime")
+            if self._detailed_timing_enabled
+            else None
         )
         clock = time.perf_counter_ns
         write_duration_ns = 0
@@ -116,7 +118,9 @@ class ArrowStreamSerializer(Serializer):
         """Load batches from a plain Arrow stream."""
         import pyarrow as pa
 
-        read_timer = WorkerMetrics().measure("pythonDataReadTime") if self._collect_timing else None
+        read_timer = (
+            WorkerMetrics().measure("pythonDataReadTime") if self._detailed_timing_enabled else None
+        )
         clock = time.perf_counter_ns
         read_duration_ns = 0
         try:
@@ -151,10 +155,10 @@ class ArrowStreamSerializer(Serializer):
 
         # Signal the JVM after the first batch succeeds, so errors during
         # batch creation can be reported before the Arrow stream starts.
-        if self._collect_timing:
+        if self._detailed_timing_enabled:
             start_ns = time.perf_counter_ns()
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
-        if self._collect_timing:
+        if self._detailed_timing_enabled:
             duration_ns = time.perf_counter_ns() - start_ns
             WorkerMetrics().measure("pythonDataWriteTime").add_duration_ns(duration_ns)
         yield from itertools.chain([first], batch_iterator)

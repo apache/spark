@@ -278,9 +278,9 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
 case class ColumnarStreamOffset(json: String) extends Offset
 
 /**
- * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the offset that each
- * micro-batch starts after, the end of the last one, for every trigger, and the limit on the data
- * of a micro-batch, its default read limit, all the available data unless it limits it. With
+ * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the starting progress
+ * boundary of each micro-batch, the end of the last one, for every trigger, and the limit on the
+ * data of a micro-batch, its default read limit, all the available data unless it limits it. With
  * `Trigger.AvailableNow`, Spark runs micro-batches up to the first latest offset without a limit
  * that Spark asks for, rather than wrapping the stream in one that asks for the latest offset from
  * the initial offset: in one micro-batch, or within the limit in several.

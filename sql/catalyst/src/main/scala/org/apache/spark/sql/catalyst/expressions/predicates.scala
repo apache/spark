@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -228,6 +229,95 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: PythonUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
+  }
+
+  /**
+   * The output columns of `plan` that can fail to compute. Under whole-stage codegen, a
+   * projection or an aggregation computes a deterministic column for a row only when a condition
+   * above first reads it, and `PushPredicateThroughNonJoin` pushes a condition below a projection
+   * with the expression substituted. So a condition over such a column can fail as its expression
+   * does. The columns are:
+   *  - A deterministic column of a [[Project]] whose expression
+   *    [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a column of its child.
+   *  - A result column of an [[Aggregate]] whose expression, with each aggregate function taken
+   *    as its value, is deterministic and rejected by it. Only an aggregation with grouping keys
+   *    under whole-stage codegen computes it lazily, so this is conservative for the others,
+   *    e.g. a global aggregation or an `ObjectHashAggregateExec`.
+   *
+   * These operators pass such columns of their children through:
+   *  - [[Filter]] and [[Sample]].
+   *  - [[LocalLimit]], [[GlobalLimit]] and [[Offset]]. A global limit or an offset passes them
+   *    through only when its input has a single partition; otherwise the exchange below it
+   *    computes every column, and this is conservative.
+   *  - [[Sort]]. It passes them through only when the physical plan removes it as redundant, as
+   *    when its child is already sorted; otherwise it computes every column, and this is
+   *    conservative.
+   *  - [[Join]], from both sides. Only the streamed side of a broadcast hash join passes them
+   *    through; a build side, a shuffled hash join or a sort-merge join computes every column, so
+   *    this is conservative for them.
+   *
+   * Other columns and operators do not count:
+   *  - A non-deterministic column, computed for every row the operator outputs, and the grouping
+   *    keys and aggregate functions of an aggregation, computed on every row it gets.
+   *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
+   *    `Window` or `Repartition`, whose input rows get every column computed.
+   *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
+   *    this run, and a `Tail` is only at the top of a plan.
+   */
+  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+    case Project(projectList, child) =>
+      val below = failableOutput(child)
+      AttributeSet(projectList.collect {
+        case a: Alias if a.child.deterministic &&
+            (!ExprUtils.canEvaluateUnconditionally(a.child) ||
+              a.child.references.exists(below.contains)) => a.toAttribute
+        case a: Attribute if below.contains(a) => a
+      })
+    case agg: Aggregate =>
+      AttributeSet(agg.aggregateExpressions.flatMap {
+        case a: Alias =>
+          val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
+          if (result.deterministic && !ExprUtils.canEvaluateUnconditionally(result)) {
+            Some(a.toAttribute)
+          } else {
+            None
+          }
+        case _ => None
+      })
+    case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
+      failableOutput(plan.children.head)
+    case _ => AttributeSet.empty
+  }
+
+  /**
+   * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
+   * others, by pushing them below a join, moving them into the condition of a join or combining
+   * them into the filter below, and the ones that may not. A non-deterministic or throwable
+   * conjunct may not, and nor may a conjunct written after it that can fail: one that
+   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
+   * inputs of the joins or of the filter below, that can fail (see
+   * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
+   * dropped. The conjuncts that may not move are returned in their written order.
+   *
+   * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
+   * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
+   * condition of the join below them, so only the ones that can not fail may move.
+   */
+  protected def splitMovable(
+      conditions: Seq[Expression],
+      plans: Seq[LogicalPlan],
+      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) = {
+    val (leading, following) = if (afterBarrier) {
+      (Nil, conditions)
+    } else {
+      conditions.span(cond => cond.deterministic && !cond.throwable)
+    }
+    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
+    val (cannotFail, stayUp) = following.partition { cond =>
+      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+    }
+    (leading ++ cannotFail, stayUp)
   }
 
   /**
