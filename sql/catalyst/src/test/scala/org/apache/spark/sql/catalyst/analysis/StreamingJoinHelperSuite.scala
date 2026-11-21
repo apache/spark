@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -46,6 +48,85 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           Some(condition), Some(10000L)) === expected)
       }
     }
+  }
+
+  test("state watermark extraction ignores columns outside both attribute sets") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftOffset = AttributeReference("leftOffset", LongType)()
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val rightDelay = AttributeReference("rightDelay", DayTimeIntervalType())()
+    val conditions = Seq(
+      leftTime > TimestampAddInterval(rightTime, rightDelay),
+      leftTime.cast(LongType) + leftOffset > rightTime.cast(LongType))
+    val logAppender = new LogAppender("state watermark extraction")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      conditions.foreach { condition =>
+        withClue(condition.sql) {
+          // Eviction solves one column of an input at a time, so the other columns of the input
+          // are in neither attribute set, and their values are unknown.
+          assert(StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
+            Some(condition), Some(10000L)) === None)
+        }
+      }
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
+  }
+
+  test("a cutoff solved for another column than the event time keeps the earlier minimum") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def cutoff(condition: Expression): Option[Long] = StreamingJoinHelper.getStateValueWatermark(
+      AttributeSet(Seq(leftTime, expiry)), AttributeSet(Seq(rightTime)), Some(condition),
+      Some(100000L))
+    val constant = leftTime.cast(LongType) > 10
+    // The cutoff from expiry applies to leftTime on the whole-input path, so the constant caps it.
+    assert(cutoff(rightTime <= expiry && constant) === Some(10000L))
+    // A cutoff on leftTime itself is not capped.
+    assert(cutoff(leftTime > rightTime && constant) === Some(100000L))
+    assert(cutoff(leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === None)
+  }
+
+  test("a cutoff through a truncating cast keeps the earlier minimum") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def cutoff(condition: Expression): Option[Long] = StreamingJoinHelper.getStateValueWatermark(
+      AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)), Some(condition), Some(100000L))
+    val truncating = leftTime.cast(LongType) >= rightTime.cast(LongType) - 5
+    assert(cutoff(truncating) === Some(94999L))
+    assert(cutoff(truncating && leftTime.cast(LongType) > 10) === Some(10000L))
+    // The sum gives no cutoff that rises with the watermark, so it does not count.
+    assert(cutoff(leftTime > rightTime &&
+      leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === Some(100000L))
+  }
+
+  test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val leftNtz = AttributeReference("leftNtz", TimestampNTZType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def column(condition: Expression): Option[Attribute] =
+      StreamingJoinHelper.getStateValueWatermarkColumn(Seq(expiry, leftTime, leftNtz),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(10000L)).map(_._1)
+    // expiry comes first in input order, but state format 4 probes by the event time.
+    assert(column(expiry > rightTime && leftTime > rightTime) === Some(leftTime))
+    assert(column(expiry > rightTime) === Some(expiry))
+    assert(column(Cast(leftNtz, TimestampType, Some("UTC")) > rightTime) === None)
+
+    // Among other TIMESTAMP columns, the first in input order wins.
+    val deadline = AttributeReference("deadline", TimestampType)()
+    Seq(Seq(leftTime, expiry, deadline) -> expiry, Seq(leftTime, deadline, expiry) -> deadline)
+      .foreach { case (inputAttributes, expected) =>
+        assert(StreamingJoinHelper.getStateValueWatermarkColumn(inputAttributes,
+          AttributeSet(Seq(rightTime)), Some(rightTime <= expiry && rightTime <= deadline),
+          Some(10000L)).map(_._1) === Some(expected))
+      }
   }
 
   test("extract watermark from time condition") {
@@ -167,8 +248,16 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)  // non-time attributes
     assert(watermarkFrom("leftTime > rightTime + interval 1 month") === None) // month not allowed
 
-    // Test static comparisons
-    assert(watermarkFrom("cast(leftTime AS LONG) > 10") === Some(10000))
+    // A cutoff needs a conjunct that can be rearranged to `leftTime > rightTime + c`, so that
+    // it rises with the opposite watermark.
+    assert(watermarkFrom("cast(leftTime AS LONG) > 10") === None)
+    assert(watermarkFrom("CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100") === None)
+    assert(watermarkFrom("100 < CAST(rightTime AS LONG) + CAST(leftTime AS LONG)") === None)
+    assert(watermarkFrom(
+      "leftTime > rightTime + interval 5 seconds AND cast(leftTime AS LONG) > 10") ===
+      Some(15000))
+    assert(watermarkFrom("leftTime > rightTime + interval 95 seconds AND " +
+      "CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100") === Some(105000))
 
     // Test non-positive results
     assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 10") === Some(0))

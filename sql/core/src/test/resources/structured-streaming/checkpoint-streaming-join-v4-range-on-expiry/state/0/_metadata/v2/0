@@ -1,0 +1,2 @@
+v2
+{"operatorInfo":{"operatorId":0,"operatorName":"symmetricHashJoin"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":5,"stateSchemaFilePaths":["file:/checkpoint/state/0/_stateSchema/default/0_b362cec7-7a5a-4a42-8d51-91bfc3c5dcd0"]}],"operatorPropertiesJson":"{\"useVirtualColumnFamilies\":true}"}

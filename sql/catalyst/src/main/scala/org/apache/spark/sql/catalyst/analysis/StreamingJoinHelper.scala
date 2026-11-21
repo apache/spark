@@ -66,13 +66,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
    * @param eventWatermark                watermark defined on the input event data
+   * @param risingCutoffsOnly             whether only conjuncts whose cutoff rises with the
+   *                                      watermark give a cutoff. Earlier versions also took
+   *                                      constant-only and negative-sign conjuncts.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      risingCutoffsOnly: Boolean = true): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -82,8 +86,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
-        getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
+        getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
+          attributesWithEventWatermark, eventWatermark, risingCutoffsOnly)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -92,6 +96,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
+    var truncatingCutoff = false
     val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
@@ -111,10 +116,47 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       if (stateWatermark.nonEmpty) {
         logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
           log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
+        truncatingCutoff ||= predicate.exists {
+          case Cast(c, _: IntegralType, _, _) => !c.dataType.isInstanceOf[IntegralType]
+          case _ => false
+        }
       }
       stateWatermark
     }
-    allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+    val cutoff = allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+    // A cutoff through a truncating cast, or one solved for another column on an input whose
+    // event time the rising-only rule leaves unbounded, keeps the minimum of earlier versions,
+    // constant-only conjuncts included.
+    val eventTime = attributesToFindStateWatermarkFor.filter(_.metadata.contains(delayKey))
+    val keepEarlierMinimum = risingCutoffsOnly && cutoff.isDefined && (truncatingCutoff ||
+      eventTime.nonEmpty && eventTime.size < attributesToFindStateWatermarkFor.size &&
+      getStateValueWatermark(eventTime, attributesWithEventWatermark, joinCondition,
+        eventWatermark).isEmpty)
+    if (!keepEarlierMinimum) cutoff else getStateValueWatermark(attributesToFindStateWatermarkFor,
+      attributesWithEventWatermark, joinCondition, eventWatermark, risingCutoffsOnly = false)
+  }
+
+  /**
+   * Get the column that evicts the state of an input with its own watermark, with its state value
+   * watermark. That is the event time if the condition bounds it, and otherwise the first other
+   * TIMESTAMP column in input order that the condition bounds. Each column is solved on its own,
+   * so the cutoff applies to the column that the condition bounds.
+   */
+  def getStateValueWatermarkColumn(
+      inputAttributes: Seq[Attribute],
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+    val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    val references = joinCondition.map(_.references).getOrElse(AttributeSet.empty)
+    val candidates = eventTime.toSeq ++ inputAttributes.filter { a =>
+      a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
+        references.contains(a)
+    }
+    candidates.iterator.flatMap { a =>
+      getStateValueWatermark(AttributeSet(a), attributesWithEventWatermark, joinCondition,
+        eventWatermark).map(a -> _)
+    }.nextOption()
   }
 
   /**
@@ -132,7 +174,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       rightExpr: Expression,
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      risingCutoffsOnly: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -186,6 +229,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // The cutoff must rise with the watermark: `watermark + c < leftTime`. Without the watermark
+    // term, the cutoff never rises and caps the other conjuncts' cutoffs. With `-watermark`, the
+    // cutoff falls, and later rightTime values can still match old leftTime values.
+    val watermarkTerms = terms.filter(_.references.exists { a =>
+      attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
+    })
+    if (risingCutoffsOnly &&
+        (watermarkTerms.size != 1 || watermarkTerms.head.isInstanceOf[UnaryMinus])) {
+      return None
+    }
+
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)
@@ -197,6 +251,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +
