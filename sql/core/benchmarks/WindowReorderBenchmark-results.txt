@@ -1,0 +1,24 @@
+================================================================================================
+WindowReorder: stack reordering of the window chain
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 21.0.3+7-LTS-152 on Mac OS X 26.4.1
+Apple M4 Pro
+window batch over three partition specs:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+baseline (window reorder off)                     10637          10749          90          1.6         634.0       1.0X
+optimized (window reorder on)                      7659           7768          96          2.2         456.5       1.4X
+
+
+================================================================================================
+WindowReorder: wide collect_list output in the window chain
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 21.0.3+7-LTS-152 on Mac OS X 26.4.1
+Apple M4 Pro
+ranking windows with a wide event list:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+baseline (window reorder off)                      5935           6104         110          2.8         353.7       1.0X
+optimized (window reorder on)                      5552           5755         264          3.0         330.9       1.1X
+
+
