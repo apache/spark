@@ -18,14 +18,13 @@ import filecmp
 import os
 import sys
 import warnings
-from collections.abc import Sized
+from collections.abc import Callable, Sized
 from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Dict,
     Generic,
@@ -1989,6 +1988,47 @@ class SparkSession(SparkConversionMixin):
             )
 
         return DataFrame(self._jsparkSession.table(tableName), self)
+
+    def getOrCreateDataFrame(self, path: str, create: Callable[[], DataFrame]) -> DataFrame:
+        """Returns the :class:`DataFrame` stored at ``path``, computing and storing it first if
+        it is not already there. The dataset is stored as Parquet.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        path : str
+            Directory holding the dataset. The caller supplies it, so a scheduled pipeline can
+            keep its runs apart by including a run identifier in it.
+        create : function
+            Zero-argument function returning the :class:`DataFrame` to store. It is called only
+            when ``path`` does not already hold a complete dataset.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        Supports Spark Classic only.
+
+        Completeness is tracked with a marker file written under ``path`` once the data is
+        stored, so a path left behind by an interrupted write is recomputed rather than read
+        back as if it were finished.
+
+        Examples
+        --------
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "ids")
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(3)).count()
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(100)).count()
+        3
+        3
+        """
+        if not self._jsparkSession.isDataFrameMaterialized(path):
+            self._jsparkSession.materializeDataFrame(create()._jdf, path)
+        return self.read.parquet(path)
 
     @property
     def read(self) -> DataFrameReader:
