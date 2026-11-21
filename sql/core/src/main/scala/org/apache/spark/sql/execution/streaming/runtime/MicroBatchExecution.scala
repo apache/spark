@@ -33,14 +33,14 @@ import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
-import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
@@ -227,14 +227,17 @@ class MicroBatchExecution(
     val disabledSources =
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
-    // Read the source evolution enforcement from the last written offset log entry. If no entries
-    // are found, use the session config value.
-    val enforceNamed = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+    // Read the source evolution enforcement from the last written offset log entry; an entry
+    // without metadata tracks its sources by position. If no entries are found, use the session
+    // config value.
+    val enforceNamedInCheckpoint = initialLatestOffsetSeq.map { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-          .map(_.toBoolean)
-      }
-    }.getOrElse(sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
+      }.exists(_.toBoolean)
+    }
+    val enforceNamed = enforceNamedInCheckpoint.getOrElse(
+      sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
+    checkSourceNames(enforceNamed, enforceNamedInCheckpoint)
 
     // SPARK-57489: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
     // deterministic order by default, but streaming deduplication binds state-store keys by
@@ -350,11 +353,6 @@ class MicroBatchExecution(
     sources = sourcesWithNames.map(_._1)
 
     if (enforceNamed) {
-      // When enforcement is enabled, all sources should be named after validation in analysis.
-      // This assertion ensures that the validation in NameStreamingSources worked correctly.
-      assert(sourcesWithNames.forall(s => s._2 != Unassigned),
-        "All sources should be named at this point - validation should have happened in analysis")
-
       // Create source ID mapping using names (for OffsetMap format)
       sourceIdMap = sourcesWithNames.map { case (source, sourceIdentifyingName) =>
         sourceIdentifyingName.nameOpt match {
@@ -470,6 +468,42 @@ class MicroBatchExecution(
 
       case _ =>
         throw new IllegalArgumentException(s"unknown sink type for $sink")
+    }
+  }
+
+  /**
+   * Rejects source names that do not fit the source tracking of this run. Runs before any source is
+   * created, so that a rejected run writes nothing under the checkpoint's sources/ directory.
+   */
+  private def checkSourceNames(
+      enforceNamed: Boolean,
+      enforceNamedInCheckpoint: Option[Boolean]): Unit = {
+    val sources = StreamingSourceIdentifyingName.collectSources(analyzedPlan)
+    val hasNamedSources = sources.exists(_._2.nameOpt.isDefined)
+    val unnamedSources = sources.zipWithIndex.collect {
+      case ((source, Unassigned), i) => s"Leaf position $i - $source"
+    }
+    def unnamedSourcesError: Throwable =
+      QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
+        unnamedSources.mkString("\n"))
+    val checkpointVersion = initialLatestOffsetSeq.map(_._2.version)
+    // Offset log VERSION_1 cannot track sources by name, so the config alone is rejected there.
+    checkpointVersion.filter(_ < OffsetSeqLog.VERSION_2).foreach { version =>
+      if (sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
+        throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
+      }
+    }
+    if (enforceNamed && hasNamedSources && unnamedSources.nonEmpty) {
+      throw unnamedSourcesError
+    }
+    (enforceNamedInCheckpoint, checkpointVersion) match {
+      case (Some(false), Some(version)) if hasNamedSources =>
+        throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
+      case (Some(true), _) if unnamedSources.nonEmpty =>
+        throw QueryCompilationErrors.cannotDisableSourceEvolutionOnExistingCheckpointError()
+      case (None, _) if enforceNamed && unnamedSources.nonEmpty =>
+        throw unnamedSourcesError
+      case _ =>
     }
   }
 
@@ -590,8 +624,7 @@ class MicroBatchExecution(
 
     // For existing queries, the offset log format version is read from the last written offset log
     // entry; for new queries, it is resolved from the session config (honoring any feature-driven
-    // minimums). Restarting with an incompatible feature set on an existing checkpoint is rejected
-    // inside the manager.
+    // minimums).
     if (latestStartedBatch.isEmpty) {
       // If no offset log entries are found, assert that the query does not have any committed
       // batches to be extra safe.
