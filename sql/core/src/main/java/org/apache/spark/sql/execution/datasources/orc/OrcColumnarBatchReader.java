@@ -197,6 +197,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
 
     StructType requiredSchema = new StructType(requiredFields);
+    // Analyze the EXISTS_DEFAULT values once, and only when a column is missing.
+    Object[] defaultValues = null;
     for (int i = 0; i < requiredFields.length; i++) {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
@@ -216,7 +218,10 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           }
           // Check if the missing column has an associated default value in the schema metadata.
           // If so, fill the corresponding column vector with the value.
-          Object defaultValue = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)[i];
+          if (defaultValues == null) {
+            defaultValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema);
+          }
+          Object defaultValue = defaultValues[i];
           if (defaultValue == null) {
             missingCol.putNulls(0, capacity);
           } else if (missingCol.appendObjects(capacity, defaultValue).isEmpty()) {

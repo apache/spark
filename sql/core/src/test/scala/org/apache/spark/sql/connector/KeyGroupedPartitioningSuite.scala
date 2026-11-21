@@ -122,6 +122,16 @@ abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSu
     collect(plan) { case s: BatchScanExec => s }
   }
 
+  /** The nodes of the whole-stage codegen stages of `plan`, down to their inputs. */
+  protected def codegenStageNodes(plan: SparkPlan): Seq[SparkPlan] = {
+    def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
+      case _: InputAdapter => Nil
+      case _ => plan +: plan.children.flatMap(inStage)
+    }
+    collect(plan) { case stage: WholeStageCodegenExec => stage }
+      .flatMap(stage => inStage(stage.child))
+  }
+
 }
 
 /**
@@ -3559,6 +3569,27 @@ class KeyGroupedPartitioningSuite
         assert(allGroupPartitions.size === 1,
           "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
       }
+    }
+  }
+
+  test("SPARK-60541: a checkpointed scan with a transform partitioning stays in whole-stage " +
+      "codegen") {
+    // The test catalog's `bucket` has only `produceResult`, so a node that evaluates it runs
+    // outside whole-stage codegen. The scan of the checkpoint only reports it in its partitioning.
+    createTable(items, Array(Column.create("id", LongType), Column.create("name", StringType)),
+      Array(bucket(4, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'a'), (2, 'b'), (3, 'a'), (5, 'c')")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.table(s"testcat.ns.$items").localCheckpoint().groupBy("name").count()
+      checkAnswer(df, Seq(Row("a", 2), Row("b", 1), Row("c", 1)))
+      val plan = df.queryExecution.executedPlan
+      val scans = collect(plan) { case r: RDDScanExec => r }
+      assert(scans.size == 1 && (scans.head.outputPartitioning match {
+        case k: physical.KeyedPartitioning =>
+          k.expressions.exists(_.isInstanceOf[TransformExpression])
+        case _ => false
+      }), s"test setup:\n$plan")
+      assert(codegenStageNodes(plan).exists(_.isInstanceOf[RDDScanExec]), plan)
     }
   }
 

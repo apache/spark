@@ -856,7 +856,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // 1) add a column `true AS alwaysTrue` to the result of the aggregate
             // 2) insert a left outer domain join between the outer query and this aggregate
             // 3) rewrite the original aggregate's output column using the default value of the
-            //    aggregate function and the alwaysTrue column.
+            //    aggregate function and the alwaysTrue column (wrapping the default in an
+            //    `EvalOnlyWhen` marker when it holds a lifted Python or external UDF; see below).
             //
             // For example, T1 left outer join T2' with `alwaysTrue` marker:
             // +---+------+------------+--------------------------------+
@@ -868,11 +869,15 @@ object DecorrelateInnerQuery extends PredicateHelper {
             if (groupingExpressions.isEmpty && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
+              val evalUdfConditionally = SQLConf.get.getConf(
+                SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
               val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
               val expressions = ArrayBuffer.empty[NamedExpression]
               // Create new aliases for aggregate expressions that have non-null default
-              // values and reconstruct the output with the `alwaysTrue` marker.
+              // values, or default values that can't be evaluated statically (see
+              // `RewriteCorrelatedScalarSubquery.tryEvalExpr`), and reconstruct the output with
+              // the `alwaysTrue` marker.
               val projectList = newAggregate.aggregateExpressions.map { a =>
                 resultMap.get(a.exprId) match {
                   // Aggregate expression is not subject to the count bug.
@@ -883,11 +888,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
                     a.toAttribute.withNullability(true)
                   case Some(default) =>
                     assert(a.isInstanceOf[Alias], s"Cannot have non-aliased expression $a in " +
-                      s"aggregate that evaluates to non-null value with zero tuples.")
+                      s"aggregate that may not evaluate to null with zero tuples.")
                     val newAttr = a.newInstance()
                     val ref = newAttr.toAttribute.withNullability(true)
                     expressions += newAttr
-                    Alias(If(IsNull(alwaysTrueRef), default, ref), a.name)(a.exprId)
+                    val noMatch = IsNull(alwaysTrueRef)
+                    // Python and external UDFs are evaluated before this Project for every row
+                    // of the join, outside the If. Mark them so that they are evaluated only for
+                    // the rows that take this branch (unless turned off by the config above).
+                    val onZeroTups =
+                      if (evalUdfConditionally && EvalOnlyWhen.hasLiftedUDF(default)) {
+                        EvalOnlyWhen(noMatch, default)
+                      } else {
+                        default
+                      }
+                    Alias(If(noMatch, onZeroTups, ref), a.name)(a.exprId)
                 }
               }
               // Insert a placeholder left outer domain join between the outer query and

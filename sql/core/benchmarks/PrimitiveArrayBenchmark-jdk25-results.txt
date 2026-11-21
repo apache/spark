@@ -2,11 +2,11 @@
 Write primitive arrays in dataset
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 Write an array in Dataset:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                 192            214          20         43.8          22.8       1.0X
-Double                                              229            255          20         36.7          27.3       0.8X
+Int                                                 178            234          27         47.0          21.3       1.0X
+Double                                              297            334          25         28.2          35.4       0.6X
 
 

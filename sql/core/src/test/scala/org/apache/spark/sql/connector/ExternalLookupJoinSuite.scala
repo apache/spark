@@ -28,8 +28,8 @@ import scala.reflect.{classTag, ClassTag}
 
 import com.google.common.base.Ticker
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException,
-  SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable,
+  SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Row, SaveMode,
   SQLContext}
@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupC
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connector.ExternalLookupSelection.positionsWhere
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable,
   InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table,
   TableCapability, TableCatalog, TableChange,
@@ -67,14 +68,16 @@ import org.apache.spark.sql.execution.{CoalesceExec, LocalTableScanExec}
 import org.apache.spark.sql.execution.datasources.{FileFormat, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
-  FileDataSourceV2, PrepareExternalLookupJoin, StreamingDataSourceV2ScanRelation,
+  FileDataSourceV2, LowLatencyClock, PrepareExternalLookupJoin, StreamingDataSourceV2ScanRelation,
   TableCapabilityCheck}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.ExternalLookupJoinExec
+import org.apache.spark.sql.execution.joins.{ExternalLookupJoinEvaluatorFactory,
+  ExternalLookupJoinExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.{LowLatencyMemoryStream,
+  LowLatencyMemoryStreamPartitionReader}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, count, current_date,
   current_timestamp, date_from_unix_date, expr, length, lit, max, raise_error, rand, struct,
@@ -82,9 +85,9 @@ import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, count, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, InsertableRelation,
   RelationProvider, SchemaRelationProvider}
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase,
-  StreamTest, Trigger}
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.{ResultsCollector, StreamingQuery, StreamingQueryException,
+  StreamRealTimeModeE2ESuiteBase, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.util.{GlobalSingletonManualClock, StreamManualClock}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, DoubleType,
   IntegerType, MapType, StringType, StructType, UserDefinedType}
@@ -766,9 +769,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     Seq(
       ("nullKeySelection", "true", "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
-      ("selectionMode", "nullElement", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "null")),
-      ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
-      ("selectionMode", "copy", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
+      ("selectionMode", "negative", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "-1", "maxPosition" -> "0")),
+      ("selectionMode", "outOfRange", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "1", "maxPosition" -> "0")),
+      ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE",
+        Map("position" -> "0", "predicate" -> "id = ?")),
+      ("selectionMode", "modifyCandidates", "MODIFIED_CANDIDATES",
+        Map("position" -> "0", "predicate" -> "id = ?")),
       ("maxBatchSize", "0", "NON_POSITIVE_MAX_PARAMETER_ROWS", Map("value" -> "0"))).foreach {
       case (option, value, subClass, parameters) =>
         val lookup = spark.read
@@ -2891,6 +2899,24 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(metrics("lookupTime").value > 0)
   }
 
+  test("a micro-batch lookup join does not use the real-time mode request size") {
+    // A real-time request of one stream row, the default set here explicitly, does not apply to
+    // a micro-batch, whose first request takes the three rows that the source allows.
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1") {
+      val lookup = spark.read
+        .format(classOf[SimpleExternalLookupDataSource].getName)
+        .option("maxBatchSize", "3")
+        .load()
+      val left = streamOf(Seq(1, 3, 2, 4).toDF("id"))
+      val run = runStream(left.join(lookup, left("id") === lookup("id")))
+      QueryTest.sameRows(
+        Seq(Row(1, 1, "engineering"), Row(1, 1, "research"), Row(2, 2, "sales")),
+        run.rows).foreach(fail(_))
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(3, 1))
+      assert(run.lookupJoin.metrics("numInputBatches").value === 2)
+    }
+  }
+
   test("a lookup join computes its key once per stream row that passes the stream condition") {
     // A UDF over the badge computes the key, and counts its calls. The stream condition
     // `verified` reads only the stream, so the join checks it before it computes the key, and
@@ -3804,7 +3830,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("the cache TTL counts from an entry's write, not from its last hit") {
     // Each batch is one stream row of employee 2. The clock reads 0 when the first batch caches
     // the employee, 0.6ms when the second hits the entry, and 1.2ms when the third probes it:
-    // past the 1ms TTL since the write, but not since the hit.
+    // past the 1ms TTL since the write, but not since the hit. The third batch stops full, so it
+    // is not known as the last, and its write of the employee reads the clock once more.
     ExternalLookupTestTicker.reset(reading => if (reading == 1) 0L else 600000L)
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
@@ -3815,7 +3842,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val rows = runWithTestTicker(
       left.join(lookup, left("id") === lookup("id"), "inner"), Seq(2, 2, 2))
     assert(rows.size === 3)
-    assert(ExternalLookupTestTicker.readings.get() === 3)
+    assert(ExternalLookupTestTicker.readings.get() === 4)
     assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
   }
 
@@ -4000,17 +4027,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // Each row of employee 1 and a two-letter department takes 92 bytes in the cache, a sixteenth
     // of 1472, and the employee has five. The residual reads the department, so the cache would
     // keep every row of the employee, and the second row takes the employee past its share. The
-    // first batch then reads no further, as when it caches nothing, and the second requests the
-    // employee again. Each badge swipe is a batch of its own.
+    // first batch, of the first two badge swipes, then reads no further, as when it caches
+    // nothing. The third swipe is the last batch, which the end of the input stops, so it caches
+    // nothing and requests the employee again.
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
-      .option("maxBatchSize", "1")
+      .option("maxBatchSize", "2")
       .load()
       .hint("external_lookup", "cache_max_bytes=1472")
-    val swipes = streamOf(Seq((1, "lobby"), (1, "garage")).toDF("employee", "door"))
+    val swipes =
+      streamOf(Seq((1, "lobby"), (1, "garage"), (1, "dock")).toDF("employee", "door"))
     val condition =
       swipes("employee") === lookup("id") && lookup("department") =!= swipes("door")
-    Seq("left_semi" -> Seq(Row(1, "lobby"), Row(1, "garage")), "left_anti" -> Nil).foreach {
+    val everySwipe = Seq(Row(1, "lobby"), Row(1, "garage"), Row(1, "dock"))
+    Seq("left_semi" -> everySwipe, "left_anti" -> Nil).foreach {
       case (joinType, expected) =>
         SimpleExternalLookupDataSource.resetCounters()
         SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 5).map(i => s"a$i")))
@@ -4028,6 +4058,85 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
           Seq("cursor", "cursor", "reader"), joinType)
         assert(run.lookupJoin.metrics("numCacheHits").value === 0, joinType)
+    }
+  }
+
+  test("a partition whose input ends at the request cap returns its rows and closes its reader") {
+    // Each request takes two stream rows, so the last batch of each input stops full. It does not
+    // look for more input, so it is not known as the last, but the partition finds the end of its
+    // input once the batch is read, and closes its reader.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+    // Employee 1 has two departments, employee 2 one, and employees 3 and 4 none.
+    def expected(ids: Seq[Int], joinType: String): Seq[Row] = ids.flatMap { id =>
+      val departments = SimpleExternalLookupDataSource.departmentsById.get().getOrElse(id, Nil)
+      joinType match {
+        case "inner" => departments.map(Row(id, id, _))
+        case "left_outer" if departments.isEmpty => Seq(Row(id, null, null))
+        case "left_outer" => departments.map(Row(id, id, _))
+        case "left_semi" => if (departments.isEmpty) Nil else Seq(Row(id))
+        case "left_anti" => if (departments.isEmpty) Seq(Row(id)) else Nil
+      }
+    }
+    for {
+      ids <- Seq(Seq(1, 3), Seq(1, 3, 2, 4))
+      joinType <- Seq("inner", "left_outer", "left_semi", "left_anti")
+    } {
+      SimpleExternalLookupDataSource.resetCounters()
+      val badges = streamOf(ids.toDF("id"))
+      val run = runStream(badges.join(lookup, badges("id") === lookup("id"), joinType))
+      QueryTest.sameRows(expected(ids, joinType), run.rows)
+        .foreach(error => fail(s"$joinType $ids: $error"))
+      val requests = ids.length / 2
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq.fill(requests)(2),
+        s"$joinType $ids")
+      assert(SimpleExternalLookupDataSource.readerCount.get() === 1, s"$joinType $ids")
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
+        Seq.fill(requests)("cursor") :+ "reader", s"$joinType $ids")
+    }
+    // One task computes both partitions in turn under the coalesce, so it outlives the first: the
+    // partition, not the end of the task, closes each reader, before the next partition's cursor.
+    // The stream rows go to the partitions in turn, so each partition's two rows fill one request.
+    val ids = Seq(1, 3, 2, 4)
+    for (joinType <- Seq("inner", "left_outer", "left_semi", "left_anti")) {
+      SimpleExternalLookupDataSource.resetCounters()
+      val badges = streamOf(ids.toDF("id"), numPartitions = 2)
+      val run =
+        runStream(badges.join(lookup, badges("id") === lookup("id"), joinType).coalesce(1))
+      QueryTest.sameRows(expected(ids, joinType), run.rows)
+        .foreach(error => fail(s"$joinType: $error"))
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2, 2), joinType)
+      assert(SimpleExternalLookupDataSource.readerCount.get() === 2, joinType)
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
+        Seq("cursor", "reader", "cursor", "reader"), joinType)
+    }
+  }
+
+  test("a last batch caches nothing when the end of its input stops it") {
+    // The residual reads the department, so a cache keeps every row of a key, and a semi or anti
+    // batch that caches reads on until it has them all. A batch that the end of the input stops
+    // is the last, so it caches nothing and reads only its first match. A last batch that stops
+    // full does not look for more input, so it is not known as the last: it reads every row of
+    // the employee to cache them, though no later batch reads the cache.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+    for {
+      (doors, rowsRead) <- Seq(Seq("lobby") -> 1, Seq("lobby", "garage") -> 5)
+      joinType <- Seq("left_semi", "left_anti")
+    } {
+      SimpleExternalLookupDataSource.resetCounters()
+      SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 5).map(i => s"a$i")))
+      val swipes = streamOf(doors.map(1 -> _).toDF("employee", "door"))
+      val condition =
+        swipes("employee") === lookup("id") && lookup("department") =!= swipes("door")
+      val expected = if (joinType == "left_semi") doors.map(Row(1, _)) else Nil
+      checkStream(swipes.join(lookup, condition, joinType), expected)
+      assert(SimpleExternalLookupDataSource.resultRowsRead.get() === rowsRead, s"$joinType $doors")
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 1, s"$joinType $doors")
     }
   }
 
@@ -5556,6 +5665,93 @@ class ExternalLookupJoinBatchTimeSuite extends StreamTest {
 class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    SimpleExternalLookupDataSource.resetCounters()
+  }
+
+  /** A clock for the real-time batches, so that a batch ends only when a test advances it. */
+  private def useManualClock(): GlobalSingletonManualClock = {
+    GlobalSingletonManualClock.reset()
+    val clock = new GlobalSingletonManualClock()
+    LowLatencyClock.setClock(clock)
+    clock
+  }
+
+  /** The lookup table, whose requests take at most `maxBatchSize` stream rows. */
+  private def lookupTable(maxBatchSize: Int, options: (String, String)*): DataFrame =
+    spark.read.format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", maxBatchSize.toString)
+      .options(options.toMap)
+      .load()
+
+  /** The output rows of the join for stream rows `ids`: key 1 has two lookup rows, key 2 one. */
+  private def joinOutputs(joinType: String, ids: Int*): Seq[String] = ids.flatMap { id =>
+    val departments = SimpleExternalLookupDataSource.departmentsById.get().getOrElse(id, Nil)
+    joinType match {
+      case "inner" => departments.map(department => s"$id:$department")
+      case "left_outer" if departments.isEmpty => Seq(s"$id:null")
+      case "left_outer" => departments.map(department => s"$id:$department")
+      case "left_semi" => if (departments.nonEmpty) Seq(id.toString) else Nil
+      case "left_anti" => if (departments.isEmpty) Seq(id.toString) else Nil
+    }
+  }
+
+  /** Starts the join of `input` with `lookup`, on the key that `streamKey` computes from "id". */
+  private def startJoin(
+      queryName: String,
+      joinType: String,
+      input: LowLatencyMemoryStream[Int],
+      lookup: DataFrame,
+      streamKey: Column => Column = identity): StreamingQuery = {
+    val stream = input.toDF().toDF("id")
+    val joined = stream.join(lookup, streamKey(stream("id")) === lookup("id"), joinType)
+    runStreamingQuery(queryName, joinType match {
+      case "left_semi" | "left_anti" => joined.select(stream("id").cast("string"))
+      case _ => joined.select(concat(stream("id").cast("string"), lit(":"),
+        coalesce(lookup("department"), lit("null"))))
+    })
+  }
+
+  private def outputs: Seq[String] =
+    Option(ResultsCollector.get(sinkName)).map(_.asScala.toSeq).getOrElse(Nil)
+
+  private def streamExecution(query: StreamingQuery) =
+    query.asInstanceOf[StreamingQueryWrapper].streamingQuery
+
+  /** Waits until `condition` holds, and fails at once if the query fails first. */
+  private def awaitQuery(query: StreamingQuery)(condition: => Boolean): Unit = {
+    eventually(timeout(60.seconds)) {
+      assert(query.exception.isDefined || condition, s"outputs: $outputs")
+    }
+    query.exception.foreach(error => throw error)
+  }
+
+  private def awaitOutputs(query: StreamingQuery, expected: Seq[String]): Unit =
+    awaitQuery(query)(outputs.sorted == expected.sorted)
+
+  /** Ends the current real-time batch, and waits until the next one starts. */
+  private def endBatch(query: StreamingQuery, clock: GlobalSingletonManualClock): Unit = {
+    val batchId = streamExecution(query).getLatestExecutionContext().batchId
+    clock.advance(defaultTrigger.batchDurationMs)
+    awaitQuery(query)(streamExecution(query).getLatestExecutionContext().batchId > batchId)
+  }
+
+  /**
+   * Waits until the task of the lookup join waits in the real-time source for the next stream
+   * row. The task reads its input, joins it and writes its output in one thread, so it emits
+   * nothing more until a row arrives or the batch ends.
+   */
+  private def awaitTaskWaitingForInput(query: StreamingQuery): Unit = awaitQuery(query) {
+    val joinClass = classOf[ExternalLookupJoinEvaluatorFactory].getName
+    Thread.getAllStackTraces.values.asScala.exists { frames =>
+      frames.exists { frame =>
+        frame.getClassName == classOf[LowLatencyMemoryStreamPartitionReader].getName &&
+          frame.getMethodName == "nextWithTimeout"
+      } && frames.exists(_.getClassName.startsWith(joinClass))
+    }
+  }
+
   test("real-time mode stops a lookup join that cannot be planned when the query starts") {
     val input = LowLatencyMemoryStream[Long](2)
     val left = input.toDF().toDF("id")
@@ -5574,28 +5770,226 @@ class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase
     }
   }
 
-  test("real-time mode rejects external lookup join") {
-    SimpleExternalLookupDataSource.resetCounters()
-    val input = LowLatencyMemoryStream[Int](2)
-    val left = input.toDF().toDF("id")
-    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    val joined = left.join(lookup, left("id") === lookup("id"))
-      .select(concat(col("department"), lit("-"), left("id").cast("string")).as("output"))
-
-    val query = runStreamingQuery("external_lookup_rtm", joined)
-    try {
-      eventually(timeout(60.seconds)) {
-        checkError(
-          exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
-          condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
-          parameters = Map(
-            "errorType" -> "operator",
-            "message" -> "org.apache.spark.sql.execution.joins.ExternalLookupJoinExec is"))
+  Seq("inner", "left_outer", "left_semi", "left_anti").foreach { joinType =>
+    test(s"real-time mode sends each stream row's lookup request as it reads the row: $joinType") {
+      val clock = useManualClock()
+      val input = LowLatencyMemoryStream.singlePartition[Int]
+      val query = startJoin(s"external_lookup_rtm_one_row_$joinType", joinType, input,
+        lookupTable(maxBatchSize = 2))
+      try {
+        // The source allows two stream rows per request, but by default a real-time request
+        // takes one, so the join sends it and emits its output as soon as it reads the row, with
+        // the batch still running. Key 3 has no lookup row, so the inner and left semi joins emit
+        // nothing for it, but its request is still sent.
+        val ids = Seq(1, 3, 2, 4)
+        ids.indices.foreach { n =>
+          input.addData(ids(n))
+          awaitQuery(query) {
+            SimpleExternalLookupDataSource.requestCount.get() == n + 1 &&
+              outputs.sorted == joinOutputs(joinType, ids.take(n + 1): _*).sorted
+          }
+        }
+        assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1, 1, 1, 1))
+        endBatch(query, clock)
+        awaitOutputs(query, joinOutputs(joinType, ids: _*))
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 4)
+      } finally {
+        query.stop()
       }
+      assert(query.exception.isEmpty)
+    }
+  }
+
+  // The micro-batch tests cover a request of more than one row for each join type, so this test
+  // of the non-default request size runs one.
+  test("real-time mode fills a request of more rows before it sends it") {
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1000") {
+      val clock = useManualClock()
+      val input = LowLatencyMemoryStream.singlePartition[Int]
+      // The join computes the key of each stream row that it reads once, so the calls of the
+      // key count the rows that it has read.
+      val countedKey = udf { (id: Int) =>
+        CountingKeyUDF.calls.incrementAndGet()
+        id
+      }
+      CountingKeyUDF.calls.set(0)
+      val query = startJoin("external_lookup_rtm_multi_row_request", "inner", input,
+        lookupTable(maxBatchSize = 2), countedKey(_))
+      try {
+        // A request takes up to the two stream rows that the source allows, and its output
+        // comes once the request is full, before the next stream row arrives. Each addition
+        // fills a request and starts the next. Each full request has a key with lookup rows, so
+        // that the join emits rows for it.
+        input.addData(1, 3, 2)
+        awaitOutputs(query, joinOutputs("inner", 1, 3))
+        input.addData(4, 1)
+        awaitOutputs(query, joinOutputs("inner", 1, 3, 2, 4))
+        input.addData(3, 5)
+        awaitOutputs(query, joinOutputs("inner", 1, 3, 2, 4, 1, 3))
+        // The last request is not full, so the join sends it when the batch ends. The batch ends
+        // only once the join has read row 5, so that the row is in this batch.
+        awaitQuery(query)(CountingKeyUDF.calls.get() == 7)
+        endBatch(query, clock)
+        // Key 5 has no lookup row, so the request sizes, not the outputs, show that the join
+        // sent the last request. The third request is served from the cache.
+        awaitQuery(query) {
+          SimpleExternalLookupDataSource.requestSizes.asScala.toSeq == Seq(2, 2, 1)
+        }
+        assert(outputs.sorted === joinOutputs("inner", 1, 3, 2, 4, 1, 3, 5).sorted)
+      } finally {
+        query.stop()
+      }
+      assert(query.exception.isEmpty)
+    }
+  }
+
+  test("real-time mode caches lookup results within a batch, and starts each batch empty") {
+    val clock = useManualClock()
+    val input = LowLatencyMemoryStream.singlePartition[Int]
+    val query = startJoin("external_lookup_rtm_cache", "left_outer", input,
+      lookupTable(maxBatchSize = 2))
+    def requestedKeys: Seq[Int] = SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq
+    try {
+      // Each stream row has its own request, and the repeated keys are served from the cache,
+      // all before the batch ends.
+      input.addData(1, 2, 3, 4, 1, 2, 5)
+      awaitOutputs(query, joinOutputs("left_outer", 1, 2, 3, 4, 1, 2, 5))
+      assert(requestedKeys === Seq(1, 2, 3, 4, 5))
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1, 1, 1, 1, 1))
+      val lookupJoin = streamExecution(query).lastExecution.executedPlan.collectFirst {
+        case join: ExternalLookupJoinExec => join
+      }.get
+      endBatch(query, clock)
+      assert(requestedKeys === Seq(1, 2, 3, 4, 5))
+      // The metrics reach the driver when the tasks of the batch end.
+      assert(lookupJoin.metrics("numInputBatches").value === 7)
+      assert(lookupJoin.metrics("numLookupRequests").value === 5)
+      assert(lookupJoin.metrics("numCacheHits").value === 2)
+      // The next batch runs new tasks, whose caches start empty.
+      input.addData(1, 2, 3)
+      awaitOutputs(query, joinOutputs("left_outer", 1, 2, 3, 4, 1, 2, 5, 1, 2, 3))
+      assert(requestedKeys === Seq(1, 2, 3, 4, 5, 1, 2, 3))
     } finally {
       query.stop()
     }
-    assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
+    assert(query.exception.isEmpty)
+  }
+
+  test("real-time mode runs a streaming aggregation after a lookup join") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val clock = useManualClock()
+      val input = LowLatencyMemoryStream.singlePartition[Int]
+      val stream = input.toDF().toDF("id")
+      val lookup = lookupTable(maxBatchSize = 2)
+      val counts = stream.join(lookup, stream("id") === lookup("id"))
+        .groupBy(lookup("department")).count()
+        .select(concat(col("department"), lit(":"), col("count").cast("string")))
+      val query = runStreamingQuery("external_lookup_rtm_aggregation", counts)
+      try {
+        // The aggregation updates the count of a department for each joined row, during the
+        // batch.
+        input.addData(1, 2, 1, 2, 1)
+        val counts = Seq("engineering:1", "research:1", "sales:1",
+          "engineering:2", "research:2", "sales:2", "engineering:3", "research:3")
+        awaitOutputs(query, counts)
+        val shuffles = streamExecution(query).lastExecution.executedPlan.collect {
+          case shuffle: ShuffleExchangeExec => shuffle.pipelined
+        }
+        assert(shuffles === Seq(true))
+        endBatch(query, clock)
+        awaitOutputs(query, counts)
+      } finally {
+        query.stop()
+      }
+      assert(query.exception.isEmpty)
+    }
+  }
+
+  test("real-time mode runs a lookup join after a shuffle of the stream") {
+    val clock = useManualClock()
+    val input = LowLatencyMemoryStream.singlePartition[Int]
+    val stream = input.toDF().toDF("id").repartition(1, col("id"))
+    val lookup = lookupTable(maxBatchSize = 2)
+    val joined = stream.join(lookup, stream("id") === lookup("id"), "left_outer")
+      .select(concat(stream("id").cast("string"), lit(":"),
+        coalesce(lookup("department"), lit("null"))))
+    val query = runStreamingQuery("external_lookup_rtm_shuffled_stream", joined)
+    try {
+      input.addData(1, 2, 3, 4, 5)
+      awaitOutputs(query, joinOutputs("left_outer", 1, 2, 3, 4, 5))
+      val lookupJoin = streamExecution(query).lastExecution.executedPlan.collectFirst {
+        case join: ExternalLookupJoinExec => join
+      }.get
+      assert(lookupJoin.collect { case shuffle: ShuffleExchangeExec => shuffle.pipelined } ===
+        Seq(true))
+      endBatch(query, clock)
+      awaitOutputs(query, joinOutputs("left_outer", 1, 2, 3, 4, 5))
+    } finally {
+      query.stop()
+    }
+    assert(query.exception.isEmpty)
+  }
+
+  test("stopping a real-time query during a lookup request closes the reader") {
+    useManualClock()
+    val input = LowLatencyMemoryStream.singlePartition[Int]
+    val query = startJoin("external_lookup_rtm_stop", "inner", input,
+      lookupTable(maxBatchSize = 1, "responseDelayMillis" -> "60000"))
+    try {
+      input.addData(1)
+      awaitQuery(query)(SimpleExternalLookupDataSource.requestStarted.get().getCount == 0)
+    } finally {
+      query.stop()
+    }
+    assert(query.exception.isEmpty)
+    eventually(timeout(60.seconds)) {
+      assert(SimpleExternalLookupDataSource.closeCount.get() === 1)
+    }
+    assert(SimpleExternalLookupDataSource.readerCount.get() === 1)
+    // The stop interrupted the request before it returned.
+    assert(SimpleExternalLookupDataSource.requestCount.get() === 0)
+  }
+
+  // A known limitation of requests of more than one row: the join has no time bound on a request.
+  // It sends a request once the request is full or the batch ends. The output of a full request
+  // comes at once, and the join closes the request's cursor before it waits for the next stream
+  // row. A request of the default size of one row is full as soon as it has its row.
+  test("real-time mode holds a lookup request that is not full until the batch ends") {
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1000") {
+      val clock = useManualClock()
+      val input = LowLatencyMemoryStream.singlePartition[Int]
+      // The join computes the key of each stream row that it reads once, so the calls of the
+      // key count the rows that it has read.
+      val countedKey = udf { (id: Int) =>
+        CountingKeyUDF.calls.incrementAndGet()
+        id
+      }
+      CountingKeyUDF.calls.set(0)
+      val query = startJoin("external_lookup_rtm_partial_request", "left_outer", input,
+        lookupTable(maxBatchSize = 2), countedKey(_))
+      try {
+        input.addData(1, 2)
+        // The request is full, so the join sends it and emits its output with no further row.
+        awaitOutputs(query, joinOutputs("left_outer", 1, 2))
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+        // The task then waits for the next stream row, with the request's cursor closed.
+        awaitTaskWaitingForInput(query)
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor"))
+        input.addData(3)
+        // Once the join has read row 3, the task waits for the next stream row again. The
+        // request of key 3 is not full, so the join neither sends it nor emits its row.
+        awaitQuery(query)(CountingKeyUDF.calls.get() == 3)
+        awaitTaskWaitingForInput(query)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+        assert(outputs.sorted === joinOutputs("left_outer", 1, 2).sorted)
+        endBatch(query, clock)
+        awaitOutputs(query, joinOutputs("left_outer", 1, 2, 3))
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 2)
+      } finally {
+        query.stop()
+      }
+      assert(query.exception.isEmpty)
+    }
   }
 }
 
@@ -5832,7 +6226,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
       private var acceptedPredicates = Array.empty[Predicate]
       private var selectedLookupPredicates = Seq.empty[String]
 
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
         if (nullKeySelection) return null
         SimpleExternalLookupDataSource.lookupCandidates.set(candidates.map { candidate =>
           val field = candidate.children()(0).asInstanceOf[NamedReference]
@@ -5842,7 +6236,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
         SimpleExternalLookupDataSource.lookupCandidateDescriptions.set(
           candidates.map(_.toString).toSeq)
         val supportedPredicates = Set("=", "<=>", "<", "<=", ">", ">=")
-        val supported = candidates.filter { candidate =>
+        val supported = positionsWhere(candidates) { candidate =>
           supportedPredicates.contains(candidate.name()) &&
             candidate.children()(0).asInstanceOf[NamedReference]
               .fieldNames().sameElements(Array("id"))
@@ -5852,14 +6246,18 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
           case "last" => supported.takeRight(1)
           case "reversed" => supported.reverse
           case "duplicate" => supported.take(1) ++ supported.take(1)
-          // An equal-shaped predicate that is not one of the offered instances.
-          case "copy" => supported.take(1).map(p => new Predicate(p.name(), p.children()))
-          case "nullElement" => Array[Predicate](null)
+          case "negative" => Array(-1)
+          case "outOfRange" => Array(candidates.length)
+          case "modifyCandidates" => supported
         }
-        selectedLookupPredicates = selected.filter(_ != null).map(_.name()).map {
+        selectedLookupPredicates = selected.filter(candidates.indices.contains).map { index =>
+          candidates(index).name()
+        }.map {
           case "<" | "<=" | ">" | ">=" if ignoreSelectedRanges => "any"
           case name => name
         }.toSeq
+        // The input array is read-only; this mode writes into it.
+        if (selectionMode == "modifyCandidates") candidates(0) = null
         selected
       }
 
@@ -6118,14 +6516,15 @@ object CompositeExternalLookupTable extends Table with SupportsRead {
     private var requiredSchema = CompositeExternalLookupDataSource.outputSchema
     private var selectedLookupPredicates = Seq.empty[(String, String)]
 
-    override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
-      val supported = candidates.filter { predicate =>
+    override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
+      val supported = positionsWhere(candidates) { predicate =>
         val field = predicate.children()(0).asInstanceOf[NamedReference]
           .fieldNames().mkString(".")
         (field == "tenant" && predicate.name() == "=") ||
           (field == "id" && Set("=", "<", "<=", ">", ">=").contains(predicate.name()))
       }
-      val selected = supported.map { predicate =>
+      val selected = supported.map { index =>
+        val predicate = candidates(index)
         predicate.name() -> predicate.children()(0).asInstanceOf[NamedReference]
           .fieldNames().mkString(".")
       }.toSeq
@@ -6183,12 +6582,12 @@ object ValidityExternalLookupTable extends Table with SupportsRead {
     new SupportsExternalLookup {
       // With requireValidFrom, the source serves a lookup only with a predicate on validFrom.
       private val requireValidFrom = options.getBoolean("requireValidFrom", false)
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
         offered.set(candidates.map(_.toString).toSeq)
         if (requireValidFrom && !candidates.exists(_.toString.startsWith("validFrom"))) {
           Array.empty
         } else {
-          candidates
+          candidates.indices.toArray
         }
       }
       override def build(): Scan = new Scan {
@@ -6321,8 +6720,8 @@ case class SemanticKeyExternalLookupTable(keyType: String) extends Table with Su
     new SupportsExternalLookup with SupportsPushDownRequiredColumns {
       private var requiredSchema = schema()
 
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter { candidate =>
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates) { candidate =>
           candidate.name() == "=" &&
             candidate.children()(0).asInstanceOf[NamedReference]
               .fieldNames().sameElements(Array("key"))
@@ -6390,8 +6789,8 @@ object CaseInsensitiveExternalLookupTable extends Table with SupportsRead {
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     val maxBatchSize = options.getInt("maxBatchSize", 100)
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup =
@@ -6488,8 +6887,8 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = ReadSchemaExternalLookupScan(readSchema, kind)
     }
 }
@@ -6554,8 +6953,8 @@ object MetricsExternalLookupTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = MetricsExternalLookupScan
     }
 }
@@ -6629,8 +7028,8 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
       SimpleExternalLookupScan(100, 0, failAt = "none", mutateAfterRequest = false,
         nullCursor = false, schema(), excludeResearch = false, Seq("="))
     case _ => new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        Array(0)
       override def build(): Scan = kind match {
         case "unknownField" => NoExternalLookupScan(new StructType().add("unknown", "int"))
         case "duplicateField" =>
@@ -6861,8 +7260,8 @@ case class UserTypeExternalLookupTable(container: String, value: String)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = UserTypeExternalLookupScan(schema(), container, value)
     }
 }
@@ -6962,8 +7361,8 @@ case class TypedKeyExternalLookupTable(keyType: String, ranges: Boolean = false)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(candidate => (candidate.name() == "=") != ranges).take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(candidate => (candidate.name() == "=") != ranges).take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup = TestExternalLookup(
@@ -7033,8 +7432,8 @@ object ReusedRowExternalLookupTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup =
@@ -7124,8 +7523,8 @@ case class EvolvingExternalLookupTable(lookupOnly: Boolean) extends Table with S
     new SupportsExternalLookup with SupportsPushDownRequiredColumns {
       private var requiredSchema = schema()
       override def pruneColumns(required: StructType): Unit = requiredSchema = required
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = EvolvingExternalLookupScan(requiredSchema)
     }
 }

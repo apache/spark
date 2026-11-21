@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, ExternalLookupJoin, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, ExternalLookupJoin, LogicalPlan, MergeRows, PlanHelper, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -95,17 +95,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // predicates, which cannot hold a memoized value, and a definition hoisted into a child would
       // leave them reading a column only that `Project` produces, or leave the command over a child
       // its planner does not expect. A `Call` evaluates its arguments, but `InvokeProcedures`
-      // needs them to fold to literals over its `ResolvedProcedure`, which neither a `With` nor a
-      // `Project` under it allows. So a deterministic definition is substituted whatever it costs
-      // (see `canSubstitute`), and the copies compound with nesting, as with
+      // needs them to fold to literals over its procedure, which neither a `With` nor a `Project`
+      // under it allows. So a deterministic definition is substituted whatever it costs (see
+      // `canSubstitute`), and the copies compound with nesting, as with
       // `spark.sql.alwaysInlineCommonExpr`. Each copy is evaluated wherever the expression is: a
       // CHECK predicate stored by ALTER TABLE at every later write, and a `Call` argument when it
       // is folded, so an impure foldable such as `aes_encrypt` over literals is folded per copy.
-      // Analysis lets no command but `CreateVariable` hold a nondeterministic expression; a `Call`
-      // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
-      // rejects it as not foldable. A nondeterministic definition read more than once keeps its
-      // `With`. `CreateVariable` is matched above instead: its default is evaluated and need not
-      // fold, so a definition there worth memoizing keeps its `With`.
+      // Of commands, analysis lets only `CreateVariable` hold a nondeterministic expression; a
+      // `Call` can hold one too, and `InvokeProcedures` rejects one that is left after
+      // optimization as not foldable. A nondeterministic definition read more than once keeps
+      // its `With`. `CreateVariable` is matched above instead: its default is evaluated and need
+      // not fold, so a definition there worth memoizing keeps its `With`.
       case c @ (_: Command | _: Call) =>
         c.mapExpressions(inlineCommandWiths)
       // No definition is evaluated in a projection below an external lookup join. One over its
@@ -468,6 +468,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // while the branch may not be. It stays where it is and memoizes its definition per entry
         // instead, but only the definitions that gain something from it.
         inlineWithsThatGainNothing(newExpr)
+
+      // `MergeRowsExec` evaluates an instruction only for the rows of its kind (matched, not
+      // matched or not matched by source) that no earlier instruction of that kind took, and its
+      // outputs only for the rows its condition selects. So a whole instruction is a conditional
+      // branch: a project under `MergeRows` would evaluate a definition for every joined row, and
+      // could fail the MERGE on a row that never selects the clause.
+      case i: MergeRows.Instruction => inlineWithsThatGainNothing(i)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

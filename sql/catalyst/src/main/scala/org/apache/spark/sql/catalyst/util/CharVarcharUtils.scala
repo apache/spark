@@ -24,6 +24,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -160,6 +161,33 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       .withMetadata(metadata)
       .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
       .build()
+  }
+
+  /**
+   * Adds the CHAR/VARCHAR types of the V2 `columns` to the attributes of `output` with the same
+   * names. `TableOutputResolver.applyColumnMetadata` removes them from the query of a write. An
+   * expression stored with the table, such as a CHECK condition or a generation expression,
+   * resolved against the result pads a string literal compared with a CHAR column, as the write
+   * pads the stored values. A write that treats CHAR as STRING does not pad the values, so the
+   * types are removed instead, also those of a query that reads a CHAR column and already matches
+   * the table: `ApplyCharTypePadding` skips such a write, but not an expression analyzed under the
+   * fixed settings of `StoredExpressionText`.
+   */
+  def withCharVarcharTypes(output: Seq[Attribute], columns: Array[Column]): Seq[Attribute] = {
+    val conf = SQLConf.get
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
+      output.map(a => a.withMetadata(cleanMetadata(a.metadata)))
+    } else {
+      val charVarcharColumns = columns.filter(c => hasCharVarchar(c.dataType()))
+      output.map { a =>
+        charVarcharColumns.find(c => conf.resolver(c.name(), a.name)).fold(a) { c =>
+          a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
+            .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, c.dataType().catalogString)
+            .build())
+        }
+      }
+    }
   }
 
   def getRawTypeString(metadata: Metadata): Option[String] = {

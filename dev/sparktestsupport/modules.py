@@ -39,6 +39,7 @@ all_modules = []
 #   standard library.
 ignored_file_patterns = (
     # Contributor docs.
+    ".agents/*.md",
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -56,6 +57,7 @@ ignored_file_patterns = (
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
+    ".ignore",
     # Build and test workflow wrappers or schedulers.
     "/.github/workflows/benchmark.yml",
     "/.github/workflows/branch*_scheduler.yml",
@@ -85,33 +87,30 @@ ignored_file_patterns = (
     "/.github/workflows/images/",
     "/.github/workflows/stale.yml",
     "/.github/workflows/test_report.yml",
+    "/.github/workflows/update_build_status.js",
     "/.github/workflows/update_build_status.yml",
     # Linters, formatters, and their configs. These are typically triggered by
     # the `precondition` job regardless of modifications to these files.
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
+    "/dev/agent_docs_lint.py",
     "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
     "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
-    "/dev/eslint.js",
     "/dev/java-file-header",
     "/dev/lint-java",
-    "/dev/lint-js",
     "/dev/lint-python",
     "/dev/lint-r*",
     "/dev/lint-scala",
     "/dev/mima",
-    "/dev/package-lock.json",
-    "/dev/package.json",
     "/dev/reformat-python",
     "/dev/sbt-checkstyle",
     "/dev/scalafmt",
     "/dev/scalastyle",
-    "/dev/spark-test-image/lint/",
     "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
     # Maintainer tools.
@@ -144,9 +143,10 @@ ignored_file_patterns = (
     "/conf/",
     # Binder infra. CI does not test this.
     "/binder/",
-    # UI tests. These are typically triggered by the `precondition` job
-    # regardless of modifications to these files.
-    "/ui-test/",
+    # UI test harness files. UI tests are typically triggered by the
+    # `precondition` job regardless of modifications to these files. Nested
+    # files under `ui-test/` are not ignored because `lint-js` claims them.
+    "/ui-test/*",
 )
 
 
@@ -688,6 +688,17 @@ mllib = Module(
     ],
 )
 
+graph = Module(
+    name="graph",
+    dependencies=[sql, graphx],
+    source_file_regexes=[
+        "graph/",
+    ],
+    sbt_test_goals=[
+        "graph/test",
+    ],
+)
+
 pipelines = Module(
     name="pipelines",
     dependencies=[sql],
@@ -714,7 +725,8 @@ examples = Module(
     name="examples",
     dependencies=[graphx, mllib, streaming, hive],
     source_file_regexes=[
-        "examples/",
+        # The Rust examples are tested by the rust-sdk module instead.
+        "examples/(?!src/main/rust/)",
     ],
     sbt_test_goals=[
         "examples/test",
@@ -734,9 +746,7 @@ pyspark_base = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core, pyspark_base],
-    source_file_regexes=[
-        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
-    ],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -779,7 +789,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
+    source_file_regexes=["python/pyspark/sql"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -840,8 +850,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
-        "pyspark.sql.tests.test_inprocess_udf",
-        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
@@ -1928,6 +1936,18 @@ docs = Module(
     ],
 )
 
+# The Rust SDK of native data sources, a Cargo workspace that neither Maven nor SBT builds. The
+# rust-sdk job of build_and_test.yml tests it with its examples, against the C header it binds.
+rust_sdk = Module(
+    name="rust-sdk",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/native/rust/",
+        "examples/src/main/rust/",
+        r"sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource\.h",
+    ],
+)
+
 build = Module(
     name="build",
     dependencies=[],
@@ -1936,6 +1956,27 @@ build = Module(
         "dev/test-dependencies.sh",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
+)
+
+lint_js = Module(
+    name="lint-js",
+    dependencies=[],
+    source_file_regexes=[
+        # Keep in sync with LINT_TARGET_FILES in dev/lint-js. In the future we should expand
+        # dev/lint-js to lint all JavaScript in the repo, at which point these can become one rule
+        # for all `.js`.
+        r"core/src/main/resources/org/apache/spark/ui/static/.*\.js$",
+        r"sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/.*\.js$",
+        r"docs/js/.*\.js$",
+        r"dev/lint-js$",
+        r"dev/eslint\.js$",
+        r"dev/package(-lock)?\.json$",
+        # Broader than the lint targets so nested files do not fall through to
+        # the root module. Direct children of ui-test/ stay ignored above.
+        r"ui-test/",
+        r"dev/spark-test-image/lint/",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
 )
 
 yarn = Module(

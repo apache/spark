@@ -105,9 +105,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       }
 
       protected override def read(): OUT = {
-        if (writer.exception.isDefined) {
-          throw writer.exception.get
-        }
+        throwIfWriterFailed()
         try {
           if (reader != null && batchLoaded) {
             batchLoaded = processor.loadBatch()
