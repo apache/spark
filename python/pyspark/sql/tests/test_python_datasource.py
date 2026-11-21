@@ -31,9 +31,11 @@ from pyspark.errors import AnalysisException, PySparkNotImplementedError, Python
 from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
+    ClusteredDistribution,
     DataSource,
     DataSourceArrowWriter,
     DataSourceReader,
+    DataSourceStreamWriter,
     DataSourceWriter,
     EqualNullSafe,
     EqualTo,
@@ -47,9 +49,14 @@ from pyspark.sql.datasource import (
     LessThan,
     LessThanOrEqual,
     Not,
+    NullOrdering,
+    OrderedDistribution,
+    SortDirection,
+    SortOrder,
     StringContains,
     StringEndsWith,
     StringStartsWith,
+    UnspecifiedDistribution,
     WriterCommitMessage,
 )
 from pyspark.sql.functions import spark_partition_id
@@ -1491,6 +1498,629 @@ class BasePythonDataSourceTestsMixin:
             df.write.format("arrow_sink").mode("append").save(d)
             df2 = self.spark.read.format("json").load(d)
             assertDataFrameEqual(df2, df)
+
+    WRITE_DIST_CONF = "spark.sql.python.writeDistributionAndOrdering.enabled"
+
+    # AQE coalescing would merge the post-shuffle partitions of these tiny test inputs back
+    # into a single task, which hides how the required distribution split them up.
+    NO_COALESCE_CONF = "spark.sql.adaptive.coalescePartitions.enabled"
+
+    # Without coalescing, every one of the default 200 shuffle partitions would start a Python
+    # write task. Keys "a" and "b" still land in different partitions out of 4.
+    SHUFFLE_PARTITIONS_CONF = "spark.sql.shuffle.partitions"
+
+    def _write_conf(self, enabled=True):
+        return {
+            "spark.sql.adaptive.enabled": True,
+            self.WRITE_DIST_CONF: enabled,
+            self.NO_COALESCE_CONF: False,
+            self.SHUFFLE_PARTITIONS_CONF: 4,
+        }
+
+    def _register_write_requirements_source(
+        self,
+        name,
+        path,
+        distribution=None,
+        ordering=None,
+        strictly_required=None,
+        num_partitions=None,
+        advisory_size=None,
+    ):
+        """Registers a data source whose writer records the rows each task received.
+
+        Each task writes the rows it was handed to its own JSON file under `path`, so a
+        test can read them back with `_read_tasks` and assert on how Spark distributed and
+        ordered the data. Files are used rather than an in-memory collection because the
+        writer runs in a separate Python worker process.
+        """
+
+        class TestWriter(DataSourceWriter):
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                rows = [[row.key, row.value] for row in iterator]
+                output = os.path.join(path, f"{TaskContext.get().partitionId()}.json")
+                with open(output, "w") as f:
+                    json.dump(rows, f)
+                return WriterCommitMessage()
+
+            if distribution is not None:
+
+                def requiredDistribution(self):
+                    return distribution
+
+            if ordering is not None:
+
+                def requiredOrdering(self):
+                    return ordering
+
+            if strictly_required is not None:
+
+                def distributionStrictlyRequired(self):
+                    return strictly_required
+
+            if num_partitions is not None:
+
+                def requiredNumPartitions(self):
+                    return num_partitions
+
+            if advisory_size is not None:
+
+                def advisoryPartitionSizeInBytes(self):
+                    return advisory_size
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return name
+
+            def writer(self, schema, overwrite):
+                return TestWriter()
+
+        self.spark.dataSource.register(TestDataSource)
+
+    def _read_tasks(self, path):
+        """Returns the rows each write task received, as a list of lists of [key, value]."""
+        tasks = []
+        for entry in sorted(os.listdir(path)):
+            with open(os.path.join(path, entry)) as f:
+                rows = json.load(f)
+            # Skip tasks that got no rows; they say nothing about distribution.
+            if rows:
+                tasks.append(rows)
+        return tasks
+
+    def _input_tasks(self, df):
+        """Returns the rows in each non-empty partition of `df`, in `_read_tasks` form."""
+        # spark_partition_id rather than df.rdd, which Spark Connect does not support.
+        tasks = {}
+        for r in df.select("key", "value", spark_partition_id().alias("pid")).collect():
+            tasks.setdefault(r.pid, []).append([r.key, r.value])
+        return [tasks[pid] for pid in sorted(tasks)]
+
+    def _write_df(self):
+        # Start from several partitions with interleaved keys, so that a required
+        # distribution has to move rows in order to co-locate them.
+        return self.spark.createDataFrame(
+            [(k, v) for v in range(3) for k in ["a", "b"]], "key string, value int"
+        ).repartition(4)
+
+    def test_write_no_requirements_keeps_input_layout(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_default") as d:
+            self._register_write_requirements_source("write_req_default", d)
+            df = self._write_df()
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_default").mode("append").save()
+                expected = self._input_tasks(df)
+            # A writer that asks for nothing gets the input partitioning untouched.
+            self.assertEqual(self._read_tasks(d), expected)
+
+    def test_write_clustered_distribution(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_clustered") as d:
+            self._register_write_requirements_source(
+                "write_req_clustered", d, distribution=ClusteredDistribution((("key",),))
+            )
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_clustered").mode("append").save()
+            tasks = self._read_tasks(d)
+            # Rows are clustered by `key`, so each task sees exactly one key.
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            # The two keys land in two different tasks, and no row is lost.
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_required_ordering(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_ordering") as d:
+            self._register_write_requirements_source(
+                "write_req_ordering",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                ordering=[SortOrder(("key",)), SortOrder(("value",), SortDirection.DESCENDING)],
+            )
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_ordering").mode("append").save()
+            # Within each task rows arrive sorted by key asc, then value desc.
+            for rows in self._read_tasks(d):
+                self.assertEqual(rows, sorted(rows, key=lambda r: (r[0], -r[1])))
+
+    def test_write_null_ordering(self):
+        df = self.spark.createDataFrame(
+            [("a", v) for v in [1, None, 2]], "key string, value int"
+        ).repartition(3)
+        cases = [
+            # Without an explicit null ordering, nulls go first for an ascending sort and last
+            # for a descending one.
+            ("write_req_nulls_default_asc", SortOrder(("value",)), [None, 1, 2]),
+            (
+                "write_req_nulls_default",
+                SortOrder(("value",), SortDirection.DESCENDING),
+                [2, 1, None],
+            ),
+            (
+                "write_req_nulls_first",
+                SortOrder(("value",), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
+                [None, 2, 1],
+            ),
+        ]
+        for name, order, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=ClusteredDistribution((("key",),)), ordering=[order]
+                )
+                with self.sql_conf(self._write_conf()):
+                    df.write.format(name).mode("append").save()
+                self.assertEqual([[v for _, v in rows] for rows in self._read_tasks(d)], [expected])
+
+    def test_write_nested_column_path(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_nested") as d:
+            self._register_write_requirements_source(
+                "write_req_nested", d, distribution=ClusteredDistribution((("s", "k"),))
+            )
+            df = self._write_df().selectExpr("key", "value", "named_struct('k', key) AS s")
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_nested").mode("append").save()
+            # Clustering by the nested field `s.k`, which equals `key`, co-locates each key.
+            tasks = self._read_tasks(d)
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_requirements_use_writer_inputs(self):
+        # The planning writer gets the write's schema, options and overwrite flag: it clusters
+        # by the column named in an option, and only when all three are what the write passed.
+        with tempfile.TemporaryDirectory(prefix="write_req_inputs") as d:
+
+            class InputsWriter(DataSourceWriter):
+                def __init__(self, schema, options, overwrite):
+                    self.schema = schema
+                    self.options = options
+                    self.overwrite = overwrite
+
+                def write(self, iterator):
+                    from pyspark import TaskContext
+
+                    rows = [[row.key, row.value] for row in iterator]
+                    output = os.path.join(d, f"{TaskContext.get().partitionId()}.json")
+                    with open(output, "w") as f:
+                        json.dump(rows, f)
+                    return WriterCommitMessage()
+
+                def requiredDistribution(self):
+                    assert self.schema.fieldNames() == ["key", "value"], self.schema
+                    assert self.overwrite is True, self.overwrite
+                    return ClusteredDistribution(((self.options["cluster_by"],),))
+
+            class InputsDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "write_req_inputs"
+
+                def writer(self, schema, overwrite):
+                    return InputsWriter(schema, self.options, overwrite)
+
+            self.spark.dataSource.register(InputsDataSource)
+            with self.sql_conf(self._write_conf()):
+                writer = self._write_df().write.format("write_req_inputs")
+                writer.option("cluster_by", "key").mode("overwrite").save()
+            tasks = self._read_tasks(d)
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_requirements_planned_once(self):
+        # Spark reads each requirement separately, but asks the Python writer only once per write.
+        with tempfile.TemporaryDirectory(prefix="write_req_once") as d:
+            calls = os.path.join(d, "calls")
+
+            def record(method):
+                with open(calls, "a") as f:
+                    f.write(method + "\n")
+
+            class CountingWriter(DataSourceWriter):
+                def write(self, iterator):
+                    return WriterCommitMessage()
+
+                def requiredDistribution(self):
+                    record("requiredDistribution")
+                    return ClusteredDistribution((("key",),))
+
+                def distributionStrictlyRequired(self):
+                    record("distributionStrictlyRequired")
+                    return True
+
+                def requiredNumPartitions(self):
+                    record("requiredNumPartitions")
+                    return 0
+
+                def advisoryPartitionSizeInBytes(self):
+                    record("advisoryPartitionSizeInBytes")
+                    return 0
+
+                def requiredOrdering(self):
+                    record("requiredOrdering")
+                    return [SortOrder(("value",))]
+
+            class CountingDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "write_req_once"
+
+                def writer(self, schema, overwrite):
+                    return CountingWriter()
+
+            self.spark.dataSource.register(CountingDataSource)
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_once").mode("append").save()
+            with open(calls) as f:
+                recorded = f.read().split()
+            # Each requirement was evaluated exactly once.
+            self.assertEqual(
+                sorted(recorded),
+                [
+                    "advisoryPartitionSizeInBytes",
+                    "distributionStrictlyRequired",
+                    "requiredDistribution",
+                    "requiredNumPartitions",
+                    "requiredOrdering",
+                ],
+            )
+
+    def test_write_non_strict_distribution(self):
+        # A single key spread over several input partitions, with a tiny advisory size, so that
+        # adaptive execution splits its skewed shuffle partition whenever it is allowed to.
+        df = self.spark.createDataFrame(
+            [("a", v) for v in range(40)], "key string, value int"
+        ).repartition(4)
+        for strict in [True, False]:
+            name = f"write_req_strict_{str(strict).lower()}"
+            with self.subTest(strict=strict), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name,
+                    d,
+                    distribution=ClusteredDistribution((("key",),)),
+                    strictly_required=strict,
+                    advisory_size=1,
+                )
+                with self.sql_conf(self._write_conf()):
+                    df.write.format(name).mode("append").save()
+                tasks = self._read_tasks(d)
+                self.assertEqual(sum(len(rows) for rows in tasks), 40)
+                # Only a best-effort distribution may split the key across tasks.
+                if strict:
+                    self.assertEqual(len(tasks), 1)
+                else:
+                    self.assertGreater(len(tasks), 1)
+
+    def test_write_invalid_strictly_required(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_bad_strict") as d:
+            self._register_write_requirements_source(
+                "write_req_bad_strict",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                strictly_required="false",
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_bad_strict").mode("append").save()
+            self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+
+    def test_write_required_num_partitions(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_num_parts") as d:
+            self._register_write_requirements_source(
+                "write_req_num_parts",
+                d,
+                distribution=ClusteredDistribution((("value",),)),
+                num_partitions=2,
+            )
+            # More distinct values than requested partitions, which the 4 shuffle partitions of
+            # `_write_conf` would otherwise spread over more than 2 tasks.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_num_parts").mode("append").save()
+            tasks = self._read_tasks(d)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 16)
+
+    def test_write_ordered_distribution(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_ordered_dist") as d:
+            self._register_write_requirements_source(
+                "write_req_ordered_dist",
+                d,
+                distribution=OrderedDistribution((SortOrder(("value",)),)),
+            )
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_ordered_dist").mode("append").save()
+            tasks = self._read_tasks(d)
+            # Range partitioning by `value`: each task holds a contiguous range of values, and
+            # the ranges increase with the partition id. Hash clustering would interleave them.
+            self.assertGreater(len(tasks), 1)
+            for prev, cur in zip(tasks, tasks[1:]):
+                self.assertLess(max(v for _, v in prev), min(v for _, v in cur))
+            self.assertEqual(sorted(v for rows in tasks for _, v in rows), list(range(16)))
+
+    def test_write_unspecified_distribution_with_ordering(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_unspec") as d:
+            self._register_write_requirements_source(
+                "write_req_unspec",
+                d,
+                distribution=UnspecifiedDistribution(),
+                ordering=[SortOrder(("value",))],
+            )
+            # One partition holding the values in descending order, so the sort must reorder it.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in reversed(range(6))], "key string, value int"
+            ).coalesce(1)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_unspec").mode("append").save()
+            # Ordering alone is a local sort, so rows stay in their partition but arrive sorted.
+            self.assertEqual(
+                [[v for _, v in rows] for rows in self._read_tasks(d)], [list(range(6))]
+            )
+
+    def test_write_requirements_disabled(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_disabled") as d:
+            self._register_write_requirements_source(
+                "write_req_disabled",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                ordering=[SortOrder(("value",), SortDirection.DESCENDING)],
+            )
+            df = self._write_df()
+            with self.sql_conf(self._write_conf(enabled=False)):
+                df.write.format("write_req_disabled").mode("append").save()
+                expected = self._input_tasks(df)
+            # With the config off the requirements are ignored: the input layout is untouched.
+            self.assertEqual(self._read_tasks(d), expected)
+
+    def test_write_requirements_skipped_for_streaming(self):
+        # The requirements come from the batch writer, which this streaming-only sink lacks,
+        # so a streaming write must not ask for them.
+        class StreamOnlyWriter(DataSourceStreamWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                rows = [row.id for row in iterator]
+                output = os.path.join(self.path, f"{TaskContext.get().partitionId()}.json")
+                with open(output, "w") as f:
+                    json.dump(rows, f)
+                return WriterCommitMessage()
+
+            def commit(self, messages, batchId):
+                pass
+
+            def abort(self, messages, batchId):
+                pass
+
+        class StreamOnlySink(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_stream_only"
+
+            def streamWriter(self, schema, overwrite):
+                return StreamOnlyWriter(self.options["path"])
+
+        with tempfile.TemporaryDirectory(prefix="write_req_stream") as root:
+            src, out, ckpt = (os.path.join(root, n) for n in ("src", "out", "ckpt"))
+            os.mkdir(out)
+            self.spark.range(0, 6).write.json(src)
+            self.spark.dataSource.register(StreamOnlySink)
+            with self.sql_conf(self._write_conf()):
+                q = (
+                    self.spark.readStream.schema("id long")
+                    .json(src)
+                    .writeStream.format("write_req_stream_only")
+                    .option("checkpointLocation", ckpt)
+                    .trigger(availableNow=True)
+                    .start(out)
+                )
+                q.awaitTermination()
+            self.assertIsNone(q.exception())
+            written = []
+            for entry in os.listdir(out):
+                with open(os.path.join(out, entry)) as f:
+                    written.extend(json.load(f))
+            self.assertEqual(sorted(written), list(range(6)))
+
+    def test_write_requirements_skipped_for_continuous(self):
+        # A continuous query builds its write on the thread that starts it, which must not ask
+        # the batch writer for requirements either: this sink's batch writer requires a
+        # distribution that continuous execution rejects.
+        class NoopStreamWriter(DataSourceStreamWriter):
+            def write(self, iterator):
+                for _ in iterator:
+                    pass
+                return WriterCommitMessage()
+
+            def commit(self, messages, batchId):
+                pass
+
+            def abort(self, messages, batchId):
+                pass
+
+        class ClusteredWriter(DataSourceWriter):
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+            def requiredDistribution(self):
+                return ClusteredDistribution((("value",),))
+
+        class ContinuousSink(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_continuous"
+
+            def writer(self, schema, overwrite):
+                return ClusteredWriter()
+
+            def streamWriter(self, schema, overwrite):
+                return NoopStreamWriter()
+
+        self.spark.dataSource.register(ContinuousSink)
+        with tempfile.TemporaryDirectory(prefix="write_req_continuous") as ckpt:
+            with self.sql_conf(self._write_conf()):
+                q = (
+                    self.spark.readStream.format("rate")
+                    .load()
+                    .writeStream.format("write_req_continuous")
+                    .option("checkpointLocation", ckpt)
+                    .trigger(continuous="1 second")
+                    .start()
+                )
+            try:
+                self.assertTrue(q.isActive)
+                self.assertIsNone(q.exception())
+            finally:
+                q.stop()
+
+    def test_write_invalid_requirement_values(self):
+        cases = [
+            ("write_req_bad_num_parts_bool", dict(num_partitions=True)),
+            ("write_req_bad_num_parts_big", dict(num_partitions=2**31)),
+            ("write_req_bad_advisory_big", dict(advisory_size=2**63)),
+            ("write_req_bad_ordering_type", dict(ordering="value")),
+            ("write_req_bad_direction", dict(ordering=[SortOrder(("value",), "asc")])),
+            (
+                "write_req_bad_null_ordering",
+                dict(ordering=[SortOrder(("value",), SortDirection.ASCENDING, "first")]),
+            ),
+        ]
+        for name, requirements in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=ClusteredDistribution((("key",),)), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+
+    def test_write_partition_sizing_without_distribution(self):
+        cases = [
+            ("write_req_bad_num_parts", dict(num_partitions=3), "PARTITION_NUM"),
+            ("write_req_bad_advisory", dict(advisory_size=1024), "PARTITION_SIZE"),
+        ]
+        for name, requirements, error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=UnspecifiedDistribution(), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn(
+                    f"INVALID_WRITE_DISTRIBUTION.{error}_WITH_UNSPECIFIED_DISTRIBUTION",
+                    str(cm.exception),
+                )
+
+    def test_write_partition_sizing_below_one_means_none(self):
+        # Values below 1 mean no requirement, including ones that would overflow the JVM fields.
+        with tempfile.TemporaryDirectory(prefix="write_req_below_one") as d:
+            self._register_write_requirements_source(
+                "write_req_below_one",
+                d,
+                distribution=UnspecifiedDistribution(),
+                num_partitions=-(2**40),
+                advisory_size=-(2**70),
+            )
+            df = self._write_df()
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_below_one").mode("append").save()
+                expected = self._input_tasks(df)
+            self.assertEqual(self._read_tasks(d), expected)
+
+    def test_write_num_partitions_and_advisory_size(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_both_sizes") as d:
+            self._register_write_requirements_source(
+                "write_req_both_sizes",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                num_partitions=3,
+                advisory_size=1024,
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_both_sizes").mode("append").save()
+            self.assertIn("INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_AND_SIZE", str(cm.exception))
+
+    def test_write_empty_distribution(self):
+        cases = [
+            ("write_req_empty_clustering", ClusteredDistribution(()), "'clustering'"),
+            ("write_req_empty_ordering", OrderedDistribution(()), "'ordering'"),
+        ]
+        for name, distribution, field in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, distribution=distribution)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_EMPTY_DISTRIBUTION", str(cm.exception))
+                self.assertIn(f"empty {field}", str(cm.exception))
+
+    def test_write_invalid_column_path(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_bad_column") as d:
+            # A bare string is a common mistake: a column must be a tuple of name parts.
+            self._register_write_requirements_source(
+                "write_req_bad_column", d, distribution=ClusteredDistribution(("key",))
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_bad_column").mode("append").save()
+            self.assertIn("DATA_SOURCE_INVALID_COLUMN_PATH", str(cm.exception))
+
+    def test_write_invalid_distribution_type(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_bad_dist") as d:
+            self._register_write_requirements_source(
+                "write_req_bad_dist", d, distribution="clustered by key"
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_bad_dist").mode("append").save()
+            self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+
+    def test_write_unknown_column(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_unknown_column") as d:
+            self._register_write_requirements_source(
+                "write_req_unknown_column", d, distribution=ClusteredDistribution((("nosuch",),))
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_unknown_column").mode("append").save()
+            self.check_error(
+                exception=cm.exception,
+                errorClass="_LEGACY_ERROR_TEMP_1137",
+                messageParameters={"name": "nosuch", "outputStr": "key,value"},
+            )
 
     def test_data_source_type_mismatch(self):
         class TestDataSource(DataSource):

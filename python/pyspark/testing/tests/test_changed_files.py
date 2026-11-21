@@ -104,6 +104,21 @@ class ChangedFilesSelectionTests(unittest.TestCase):
             with self.subTest(desc):
                 self.assertEqual(self._is_relevant(module, [file]), expected)
 
+    def test_every_sql_worker_script_has_proxy(self):
+        # A script missing from the map would leave its tests unselected when only it changes.
+        import pyspark.sql.worker
+
+        worker_dir = os.path.dirname(pyspark.sql.worker.__file__)
+        for name in sorted(os.listdir(worker_dir)):
+            if not name.endswith(".py"):
+                continue
+            with open(os.path.join(worker_dir, name)) as f:
+                if 'if __name__ == "__main__":' not in f.read():
+                    continue
+            module = "pyspark.sql.worker." + name.removesuffix(".py")
+            with self.subTest(module):
+                self.assertIn(module, PySparkBaseTestCase._ENTRY_POINT_PROXIES)
+
     def test_skip_if_changed_files_irrelevant(self):
         class _Dummy(PySparkBaseTestCase):
             pass
