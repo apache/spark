@@ -1173,7 +1173,7 @@ class SparkSession:
 
     def listFiles(self) -> List[str]:
         # LIST FILES and LIST ARCHIVES do not list the artifacts of the other sessions of the
-        # server since Spark 4.4.
+        # server since Spark 4.5.
         return [row[0] for row in self.sql("LIST FILES").collect()]
 
     listFiles.__doc__ = PySparkSession.listFiles.__doc__
