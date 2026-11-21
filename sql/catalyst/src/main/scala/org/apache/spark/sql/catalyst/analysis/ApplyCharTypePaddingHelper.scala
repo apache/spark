@@ -59,9 +59,12 @@ object ApplyCharTypePaddingHelper {
    * or VARCHAR field keeps its length although its data type is a string.
    */
   object RawTypedRef {
-    // A value whose type no longer matches its raw type, e.g. after a cast, has none.
-    def unapply(e: Expression): Option[DataType] = rawType(e).filter { rawType =>
-      DataTypeUtils.equalsIgnoreNullability(
+    // A value whose type no longer matches its raw type, e.g. after a cast, has none. A CHAR
+    // value is any string, as its collation can change while it keeps its metadata, as with
+    // Dataset.to.
+    def unapply(e: Expression): Option[DataType] = rawType(e).filter {
+      case _: CharType => e.dataType.isInstanceOf[StringType]
+      case rawType => DataTypeUtils.equalsIgnoreNullability(
         CharVarcharUtils.replaceCharVarcharWithString(rawType), e.dataType)
     }
 
@@ -69,12 +72,15 @@ object ApplyCharTypePaddingHelper {
       case AttrOrOuterRef(attr) => CharVarcharUtils.getRawType(attr.metadata)
       case GetStructField(child, ordinal, _) =>
         child.dataType match {
-          case current: StructType if ordinal < current.length =>
-            // Look the field up by name, as Dataset.to matches fields: it can reorder and
-            // rename the fields of a struct at any level, and keeps the column's metadata.
+          case current: StructType =>
+            // The raw struct usually has the fields of the current one. Dataset.to can reorder
+            // and rename the fields of a struct at any level, and keeps the column's metadata,
+            // so a field with another name is looked up by name, as Dataset.to matches them.
             val name = current(ordinal).name
             rawType(child).flatMap {
-              case raw: StructType => raw.fields.find(f => SQLConf.get.resolver(f.name, name))
+              case raw: StructType =>
+                raw.lift(ordinal).filter(_.name == name)
+                  .orElse(raw.fields.find(f => SQLConf.get.resolver(f.name, name)))
               case _ => None
             }.map(_.dataType)
           case _ => None
@@ -82,7 +88,6 @@ object ApplyCharTypePaddingHelper {
       case _ => None
     }
   }
-
 
   private[sql] def readSidePadding(
       relation: LogicalPlan,
@@ -120,41 +125,37 @@ object ApplyCharTypePaddingHelper {
     expression match {
       // String literal is treated as char type when it's compared to a char type column.
       // We should pad the shorter one to the longer length.
-      case b @ BinaryComparison(e @ RawTypedRef(c: CharType), lit) if isStringConstant(lit) =>
-        padAttrLitCmp(e, c, padCharCol, lit)
-          .map { newChildren =>
-            b.withNewChildren(newChildren)
-          }
-          .getOrElse(b)
+      // The constant is checked first, so that the raw type is only parsed when it is needed.
+      // With a constant on one side, none of the cases below can match.
+      case b @ BinaryComparison(e, lit) if isStringConstant(lit) => e match {
+        case RawTypedRef(c: CharType) =>
+          padAttrLitCmp(e, c, padCharCol, lit).map(b.withNewChildren).getOrElse(b)
+        case _ => b
+      }
 
-      case b @ BinaryComparison(lit, e @ RawTypedRef(c: CharType)) if isStringConstant(lit) =>
-        padAttrLitCmp(e, c, padCharCol, lit)
-          .map { newChildren =>
-            b.withNewChildren(newChildren.reverse)
-          }
-          .getOrElse(b)
+      case b @ BinaryComparison(lit, e) if isStringConstant(lit) => e match {
+        case RawTypedRef(c: CharType) =>
+          padAttrLitCmp(e, c, padCharCol, lit)
+            .map(newChildren => b.withNewChildren(newChildren.reverse))
+            .getOrElse(b)
+        case _ => b
+      }
 
-      case i @ In(e @ RawTypedRef(c: CharType), list)
-          if i.resolved && e.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
-        val values = list.map(tryEvalString)
-        if (values.exists(_.isEmpty)) {
-          // An element fails to evaluate: leave the failure to the evaluation of the query.
-          i
-        } else {
-          // Compute the length of every list element in place, so that each length stays
-          // aligned with the element it came from. NULL elements have no length: they can
-          // never match, so they are left untouched instead of being padded.
-          val literalCharLengths = values.map(_.get.map(_.numChars()))
-          val targetLen = (c.length +: literalCharLengths.flatten).max
-          i.copy(
-            value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-            list = list.zip(literalCharLengths).map {
-              case (lit, Some(charLength)) =>
-                addPadding(lit, charLength, targetLen, alwaysPad = false)
-              case (lit, None) => lit
-            }
-          )
-        }
+      case i @ In(e @ RawTypedRef(c: CharType), list) if i.resolved && list.forall(_.foldable) =>
+        // Compute the length of every list element in place, so that each length stays aligned
+        // with the element it came from. NULL elements have no length: they can never match, so
+        // they are left untouched instead of being padded. As in ConstantFolding, an element that
+        // fails to evaluate is left as it is, and its failure to the evaluation of the query.
+        val literalCharLengths = list.map(lit => tryEvalString(lit).flatten.map(_.numChars()))
+        val targetLen = (c.length +: literalCharLengths.flatten).max
+        i.copy(
+          value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
+          list = list.zip(literalCharLengths).map {
+            case (lit, Some(charLength)) =>
+              addPadding(lit, charLength, targetLen, alwaysPad = false)
+            case (lit, None) => lit
+          }
+        )
 
       // For char type column or inner field comparison, pad the shorter one to the longer length.
       case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
@@ -213,30 +214,23 @@ object ApplyCharTypePaddingHelper {
       c: CharType,
       padCharCol: Boolean,
       lit: Expression): Option[Seq[Expression]] = {
-    if (expr.dataType.isInstanceOf[StringType]) {
-      // A NULL, or a constant that fails to evaluate, is left as it is.
-      val str = tryEvalString(lit).flatten.orNull
-      if (str == null) {
-        None
-      } else {
-        val stringLitLen = str.numChars()
-        if (c.length < stringLitLen) {
-          Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
-        } else if (c.length > stringLitLen) {
-          val paddedExpr = if (padCharCol) {
-            createStringRPad(expr, Literal(c.length))
-          } else {
-            expr
-          }
-          Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
-        } else if (padCharCol) {
-          Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
+    // A NULL, or a constant that fails to evaluate, is left as it is.
+    tryEvalString(lit).flatten.flatMap { str =>
+      val stringLitLen = str.numChars()
+      if (c.length < stringLitLen) {
+        Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
+      } else if (c.length > stringLitLen) {
+        val paddedExpr = if (padCharCol) {
+          createStringRPad(expr, Literal(c.length))
         } else {
-          None
+          expr
         }
+        Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
+      } else if (padCharCol) {
+        Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
+      } else {
+        None
       }
-    } else {
-      None
     }
   }
 

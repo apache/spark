@@ -2232,6 +2232,34 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61970: merge with conditions on a CHAR field of a struct") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, s STRUCT<c: CHAR(3)>, dep STRING")
+
+      append("pk INT NOT NULL, s STRUCT<c: STRING>, dep STRING",
+        """{ "pk": 1, "s": { "c": "a" }, "dep": "hr" }
+          |{ "pk": 2, "s": { "c": "b" }, "dep": "software" }
+          |{ "pk": 3, "s": { "c": "x" }, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t.s.c IN ('a', 'b')
+           |WHEN MATCHED AND t.s.c = 'a' THEN
+           | DELETE
+           |WHEN MATCHED THEN
+           | UPDATE SET dep = 'matched'
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT pk, dep FROM $tableNameAsString"),
+        Row(2, "matched") :: Row(3, "hr") :: Nil)
+    }
+  }
+
   test("SPARK-61462: delete-only merge comparing CHAR columns stored with and without padding") {
     createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
     sql(s"CREATE TABLE $sourceNameAsString (c CHAR(3), dep STRING)")
