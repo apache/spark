@@ -8482,6 +8482,13 @@
     ],
     "sqlState" : "55019"
   },
+  "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE" : {
+    "message" : [
+      "Cannot restart the stream-stream join from this checkpoint. The checkpoint and this query order the state format version 4 state of the <side> input differently: one of them orders it by <column>. This happens with a checkpoint of an earlier version, or after a change of spark.sql.streaming.statefulOperator.allowMultiple.",
+      "Start the query with a new checkpoint."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."

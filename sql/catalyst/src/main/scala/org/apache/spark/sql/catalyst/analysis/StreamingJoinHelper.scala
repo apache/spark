@@ -118,6 +118,35 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Get the column that evicts the state of an input with its own watermark, with its state value
+   * watermark. That is the event time if the condition bounds it, then the first other TIMESTAMP
+   * column in input order that the condition bounds, and then the first cast of another column
+   * to TIMESTAMP, such as a DATE column, that the condition bounds. Each column is solved on its
+   * own, so the cutoff applies to the column that the condition bounds. A cast is returned as it
+   * is in the condition, so eviction evaluates it with the same time zone.
+   */
+  def getStateValueWatermarkColumn(
+      inputAttributes: Seq[Attribute],
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long]): Option[(Expression, Long)] = {
+    val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    val references = joinCondition.map(_.references).getOrElse(AttributeSet.empty)
+    val candidates = eventTime.toSeq ++ inputAttributes.filter { a =>
+      a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
+        references.contains(a)
+    }
+    val casts = joinCondition.toSeq.flatMap(_.collect {
+      case c @ Cast(a: Attribute, TimestampType, _, _)
+          if inputAttributes.exists(_.semanticEquals(a)) => c
+    })
+    (candidates ++ casts).iterator.flatMap { e =>
+      getStateValueWatermark(e.references, attributesWithEventWatermark, joinCondition,
+        eventWatermark).map(e -> _)
+    }.nextOption()
+  }
+
+  /**
    * Extract the state value watermark (milliseconds) from the condition
    * `LessThan(leftExpr, rightExpr)` where . For example: if we want to find the constraint for
    * leftTime using the watermark on the rightTime. Example:
@@ -197,6 +226,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +
