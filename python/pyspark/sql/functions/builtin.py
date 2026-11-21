@@ -6380,6 +6380,12 @@ def collect_union(col: "ColumnOrName") -> Column:
     ``array_distinct(flatten(collect_list(col)))``. The ``RESPECT NULLS`` clause is only
     available through SQL, e.g. ``expr("collect_union(col) RESPECT NULLS")``.
 
+    It can also be used as a window function, e.g.
+    ``collect_union(col).over(Window.partitionBy("k"))``. Like :func:`collect_set`, it cannot
+    remove rows from its aggregation buffer, so when the lower bound of the window frame moves
+    (e.g. ``rowsBetween(-1, 1)``), the set is rebuilt from all rows in the frame for every
+    output row.
+
     .. versionadded:: 4.3.0
 
     Parameters
@@ -6431,6 +6437,26 @@ def collect_union(col: "ColumnOrName") -> Column:
     |  a|[1, 2, 3]|
     |  b|      [4]|
     +---+---------+
+
+    Example 3: Running union over a window
+
+    >>> from pyspark.sql import Window, functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1, [1, 2]), ("a", 2, [2, 3]), ("a", 3, [1]), ("b", 1, [4])],
+    ...     ("k", "o", "value"))
+    >>> w = Window.partitionBy("k").orderBy("o").rowsBetween(
+    ...     Window.unboundedPreceding, Window.currentRow)
+    >>> df.select(
+    ...     "k", "o", sf.sort_array(sf.collect_union("value").over(w)).alias("u")
+    ... ).orderBy("k", "o").show()
+    +---+---+---------+
+    |  k|  o|        u|
+    +---+---+---------+
+    |  a|  1|   [1, 2]|
+    |  a|  2|[1, 2, 3]|
+    |  a|  3|[1, 2, 3]|
+    |  b|  1|      [4]|
+    +---+---+---------+
     """
     return _invoke_function_over_columns("collect_union", col)
 

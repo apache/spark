@@ -404,6 +404,7 @@ private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: 
  *                    the result array. When false (RESPECT NULLS), a single null element is
  *                    kept.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage =
     "_FUNC_(expr) - Collects and returns the distinct union of the elements of array `expr`.",
@@ -413,15 +414,28 @@ private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: 
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);
+      > SELECT sort_array(_FUNC_(col)) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);
        [1,2,3]
+      > SELECT k, o, sort_array(_FUNC_(col) OVER (PARTITION BY k ORDER BY o ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM VALUES (1, 1, array(1, 2)), (1, 2, array(2, 3)), (1, 3, array(1)), (2, 1, array(4)) AS tab(k, o, col) ORDER BY k, o;
+       1	1	[1,2]
+       1	2	[1,2,3]
+       1	3	[1,2,3]
+       2	1	[4]
   """,
   note = """
     The function is non-deterministic because the order of collected results depends
     on the order of the rows which may be non-deterministic after a shuffle.
+
+    collect_union can also be used as a window function, e.g.
+    `collect_union(expr) OVER (PARTITION BY ...)`. Like collect_set and collect_list, it cannot
+    remove rows from its aggregation buffer, so when the lower bound of the window frame moves
+    (for example `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING`), the set is rebuilt from all rows
+    in the frame for every output row. Frames that start at UNBOUNDED PRECEDING are updated
+    incrementally.
   """,
   group = "agg_funcs",
   since = "4.3.0")
+// scalastyle:on line.size.limit line.contains.tab
 case class CollectUnion(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
