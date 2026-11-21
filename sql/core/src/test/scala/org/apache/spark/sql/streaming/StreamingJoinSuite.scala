@@ -966,6 +966,73 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
+  test("SPARK-62042: restore a stream-stream join query with a non-deterministic nested field " +
+      "access from Spark 4.3") {
+    val left = MemoryStream[(Int, Seq[(Int, Int)])]
+    val right = MemoryStream[Int]
+    val query = left.toDF().toDF("id", "a")
+      .join(right.toDF().toDF("rid"), $"id" === $"rid")
+      .selectExpr("a[CAST(rand(0) * 10 AS INT)]._1 AS v")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.3.0-streaming-join-nested-field/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
+    left.addData((1, Seq.tabulate(10)(i => (i, i))))
+    right.addData(1, 1, 1)
+
+    testStream(query)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+      Note: The checkpoint was generated in Spark 4.3.0, with spark.sql.shuffle.partitions = 5,
+      using the following input:
+      AddData(left, (1, Seq.tabulate(10)(i => (i, i)))),
+      // batch 0: no joined rows
+      AddData(right, 1, 1, 1),
+      // batch 1: three joined rows
+      The state of the left side holds `id` and the result of the access, `_extract__1: int`.
+      */
+      AddData(right, 1, 1),
+      // batch 2: the two new right rows join the stored left row.
+      CheckAnswerRowsByFunc(rows => assert(rows.size == 2, rows), lastOnly = true),
+      Execute { query =>
+        // The left side of the join still outputs `id` and the result of the access, as in
+        // Spark 4.3, so the schema of its state does not change.
+        val joins = query.lastExecution.executedPlan.collect {
+          case j: StreamingSymmetricHashJoinExec => j
+        }
+        assert(joins.size == 1)
+        assert(joins.head.left.output.map(_.dataType) == Seq(IntegerType, IntegerType),
+          joins.head.left.output)
+      }
+    )
+  }
+
+  test("SPARK-62042: a non-deterministic nested field access above a stream-stream join is " +
+      "evaluated for each joined row") {
+    val left = MemoryStream[(Int, Seq[(Int, Int)])]
+    val right = MemoryStream[Int]
+    val query = left.toDF().toDF("id", "a")
+      .join(right.toDF().toDF("rid"), $"id" === $"rid")
+      .selectExpr("a[CAST(rand(0) * 1000 AS INT)]._1 AS v")
+    // Each joined row picks one of 1000 elements, so 100 joined rows have one value only if the
+    // access is evaluated once for the left row.
+    def checkValues(lastOnly: Boolean): StreamAction = CheckAnswerRowsByFunc(
+      rows => assert(rows.map(_.getInt(0)).distinct.size > 1, rows), lastOnly)
+
+    testStream(query)(
+      // One left row whose `a` holds 1000 elements with `_1` = 0..999.
+      AddData(left, (1, Seq.tabulate(1000)(i => (i, i)))),
+      CheckNewAnswer(),
+      AddData(right, Seq.fill(100)(1): _*),
+      checkValues(lastOnly = true),
+      // The new right rows join the left row stored in the state of the join.
+      AddData(right, Seq.fill(100)(1): _*),
+      checkValues(lastOnly = true)
+    )
+  }
+
   testWithAppendAndUpdate("joining non-nullable left join key with nullable right join key") {
     outputMode =>
     val input1 = MemoryStream[Int]
