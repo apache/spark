@@ -1629,6 +1629,9 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
 
+  private[sql] def collectInternalRows(): Array[InternalRow] =
+    withAction("collect", queryExecution)(_.executeCollect())
+
   /** @inheritdoc */
   def collectAsList(): java.util.List[T] = withAction("collectAsList", queryExecution) { plan =>
     val values = collectFromPlan(plan)
