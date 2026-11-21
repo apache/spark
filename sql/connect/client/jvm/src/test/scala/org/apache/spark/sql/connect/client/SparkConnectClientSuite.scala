@@ -32,9 +32,10 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkThrowable, SparkUpgradeException}
+import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -419,6 +420,17 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     classOf[UnsupportedOperationException],
     classOf[SparkUpgradeException]).map(_.getName)
 
+  // Entries whose exception type keeps the cause rebuilt from the server's error chain.
+  private val withCause = Set(
+    classOf[AnalysisException].getName,
+    classOf[TableAlreadyExistsException].getName,
+    classOf[TempTableAlreadyExistsException].getName,
+    classOf[NoSuchDatabaseException].getName,
+    classOf[NoSuchTableException].getName,
+    classOf[IllegalArgumentException].getName,
+    classOf[SparkRuntimeException].getName,
+    classOf[SparkUpgradeException].getName)
+
   test("Server errors the client cannot render keep the server's message") {
     val sqlContext = new QueryContext {
       override def contextType(): QueryContextType = QueryContextType.SQL
@@ -465,10 +477,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
             val serverMessage =
               s"[$errorClass] Server message. SQLSTATE: $expectedSqlState" +
                 queryContext.map("\n" + _.summary()).mkString
+            val serverCause = new RuntimeException("Server cause")
             val error = constructor(
               GrpcExceptionConverter.ErrorParams(
                 message = serverMessage,
-                cause = None,
+                cause = Some(serverCause),
                 errorClass = Some(errorClass),
                 messageParameters = messageParameters,
                 queryContext = queryContext,
@@ -481,6 +494,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
             val expectedContext =
               if (withoutQueryContext.contains(name)) Seq.empty else queryContext.toSeq
             assert(error.getQueryContext.toSeq == expectedContext)
+            val expectedCause = if (withCause.contains(name)) serverCause else null
+            assert(error.getCause eq expectedCause)
           }
       }
     }
