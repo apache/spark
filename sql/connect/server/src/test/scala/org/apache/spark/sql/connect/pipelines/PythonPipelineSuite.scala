@@ -31,7 +31,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ColumnConversions._
 import org.apache.spark.sql.connect.PythonTestDepsChecker
@@ -138,6 +138,16 @@ class PythonPipelineSuite
   }
 
   private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
+  /** Runs the pipeline for `unresolvedGraph` and asserts that every flow completed. */
+  private def runPipelineToCompletion(unresolvedGraph: DataflowGraph): Unit = {
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+    val notCompleted =
+      latestFlowStatuses(updateContext.eventBuffer).filter(_._2 != FlowStatus.COMPLETED)
+    assert(notCompleted.isEmpty, s"Flows did not complete: $notCompleted")
+  }
 
   test("basic") {
     val graph = buildGraph("""
@@ -828,6 +838,192 @@ class PythonPipelineSuite
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier)
         .toSet == Set(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  /**
+   * A read of the in-graph dataset `src` followed by an operator that Spark Connect analyzes
+   * eagerly when the flow is defined.
+   *
+   * @param name
+   *   Test name suffix.
+   * @param operator
+   *   Python code appended to `spark.read.table("src")`.
+   * @param definableOnCleanCatalog
+   *   Whether the flow can be defined before `src` exists. Operators that fall back to an
+   *   unresolved plan when eager analysis fails can; the others fail to define until `src` is
+   *   materialized.
+   * @param expectedRows
+   *   Rows `downstream` must hold after the second run.
+   */
+  private case class EagerlyAnalyzedRead(
+      name: String,
+      operator: String,
+      definableOnCleanCatalog: Boolean,
+      expectedRows: Set[Row]) {
+    override def toString: String = name
+  }
+
+  // Each case reads `src` after the second run, when it holds (3, 'east') and (4, NULL).
+  private val eagerlyAnalyzedReads = Seq(
+    EagerlyAnalyzedRead(
+      name = "select, not eagerly analyzed",
+      operator = """.select("id", "name")""",
+      definableOnCleanCatalog = true,
+      expectedRows = Set(Row(3, "east"), Row(4, null))),
+    EagerlyAnalyzedRead(
+      name = "withColumn",
+      operator = """.withColumn("upper", F.upper("name"))""",
+      definableOnCleanCatalog = true,
+      expectedRows = Set(Row(3, "east", "EAST"), Row(4, null, null))),
+    EagerlyAnalyzedRead(
+      name = "withColumnRenamed",
+      operator = """.withColumnRenamed("name", "label")""",
+      definableOnCleanCatalog = true,
+      expectedRows = Set(Row(3, "east"), Row(4, null))),
+    EagerlyAnalyzedRead(
+      name = "na.fill",
+      operator = """.na.fill("unknown")""",
+      definableOnCleanCatalog = false,
+      expectedRows = Set(Row(3, "east"), Row(4, "unknown"))),
+    EagerlyAnalyzedRead(
+      name = "na.drop",
+      operator = ".na.drop()",
+      definableOnCleanCatalog = false,
+      expectedRows = Set(Row(3, "east"))),
+    EagerlyAnalyzedRead(
+      name = "na.replace",
+      operator = """.na.replace("east", "EAST")""",
+      definableOnCleanCatalog = false,
+      expectedRows = Set(Row(3, "EAST"), Row(4, null))),
+    EagerlyAnalyzedRead(
+      name = "to",
+      operator = ".to(StructType([StructField('id', IntegerType()), " +
+        "StructField('name', StringType())]))",
+      definableOnCleanCatalog = false,
+      expectedRows = Set(Row(3, "east"), Row(4, null))))
+
+  gridTest("dependency on an in-graph dataset is kept when the graph is defined after a run")(
+    eagerlyAnalyzedReads) { read =>
+    sql(
+      "CREATE TABLE spark_catalog.default.ext AS " +
+        "SELECT * FROM VALUES (1, 'north'), (2, 'south') AS t(id, name)")
+    def pipeline(downstreamQuery: String): String =
+      s"""
+        |from pyspark.sql import functions as F
+        |from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+        |
+        |@dp.materialized_view
+        |def src():
+        |  return spark.read.table("ext")
+        |
+        |@dp.materialized_view
+        |def downstream():
+        |  return $downstreamQuery
+        |""".stripMargin
+    val query = s"""spark.read.table("src")${read.operator}"""
+
+    // The first run materializes `src` and `downstream`. An operator that cannot be defined on a
+    // clean catalog is introduced by the second definition instead, like editing a deployed
+    // pipeline.
+    val firstRunQuery = if (read.definableOnCleanCatalog) query else """spark.read.table("src")"""
+    runPipelineToCompletion(buildGraph(pipeline(firstRunQuery)))
+
+    // Change the upstream data, so that `downstream` only sees the new rows if it runs after
+    // `src` is refreshed.
+    sql("INSERT OVERWRITE TABLE spark_catalog.default.ext VALUES (3, 'east'), (4, NULL)")
+
+    // Define the graph again, now with `src` already materialized in the catalog.
+    val graph = buildGraph(pipeline(query))
+    assert(
+      graph
+        .resolve(sessionCaseSensitive)
+        .resolvedFlow(graphIdentifier("downstream"))
+        .inputs == Set(graphIdentifier("src")))
+
+    runPipelineToCompletion(graph)
+    assert(spark.table("spark_catalog.default.downstream").collect().toSet == read.expectedRows)
+  }
+
+  test(
+    "streaming dependency on an in-graph dataset is kept when the graph is defined " +
+      "after a run") {
+    def pipeline(downstreamQuery: String): String =
+      s"""
+        |from pyspark.sql import functions as F
+        |
+        |@dp.materialized_view
+        |def src():
+        |  return spark.range(3).withColumn("ts", F.current_timestamp())
+        |
+        |@dp.table
+        |def downstream():
+        |  return $downstreamQuery
+        |""".stripMargin
+    // `withWatermark` cannot be defined before `src` is materialized, so it is introduced by the
+    // second definition.
+    runPipelineToCompletion(buildGraph(pipeline("""spark.readStream.table("src")""")))
+
+    val graph =
+      buildGraph(pipeline("""spark.readStream.table("src").withWatermark("ts", "1 minute")"""))
+        .resolve(sessionCaseSensitive)
+    val downstream = graph.resolvedFlow(graphIdentifier("downstream"))
+    assert(downstream.inputs == Set(graphIdentifier("src")))
+    assert(downstream.df.isStreaming)
+  }
+
+  test(
+    "dependency on an in-graph dataset is kept when the graph is defined after a run, " +
+      "with nested nullability that differs from the catalog") {
+    // `src` is inferred with `items` as array<int> without nulls, while the materialized table
+    // reports array<int> with nulls.
+    val pythonText = """
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(2).withColumn("items", F.array(F.lit(1)))
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.table("src").withColumn("n", F.size("items"))
+      |""".stripMargin
+    runPipelineToCompletion(buildGraph(pythonText))
+
+    val graph = buildGraph(pythonText)
+    assert(
+      graph.resolve(sessionCaseSensitive).resolvedFlow(graphIdentifier("downstream")).inputs ==
+        Set(graphIdentifier("src")))
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").select("id", "n").collect().toSet ==
+        Set(Row(0L, 1), Row(1L, 1)))
+  }
+
+  test("external dataset read through an eagerly analyzed operator stays external on a rerun") {
+    sql(
+      "CREATE TABLE spark_catalog.default.ext AS " +
+        "SELECT * FROM VALUES (1, 'north') AS t(id, name)")
+    val pythonText = """
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.table("ext").withColumn("upper", F.upper("name"))
+      |""".stripMargin
+    runPipelineToCompletion(buildGraph(pythonText))
+    sql("INSERT OVERWRITE TABLE spark_catalog.default.ext VALUES (2, 'south')")
+
+    val graph = buildGraph(pythonText)
+    assert(
+      graph
+        .resolve(sessionCaseSensitive)
+        .resolvedFlow(graphIdentifier("downstream"))
+        .inputs
+        .isEmpty)
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").collect().toSet ==
+        Set(Row(2, "south", "SOUTH")))
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
