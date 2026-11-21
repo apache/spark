@@ -207,18 +207,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   def toScalaBigInt: BigInt = {
-    if (decimalVal.ne(null)) {
-      decimalVal.toBigInt
-    } else {
+    if (hasActualLongVal) {
       BigInt(actualLongVal)
+    } else {
+      toBigDecimal.toBigInt
     }
   }
 
   def toJavaBigInteger: java.math.BigInteger = {
-    if (decimalVal.ne(null)) {
-      decimalVal.underlying().toBigInteger()
-    } else {
+    if (hasActualLongVal) {
       java.math.BigInteger.valueOf(actualLongVal)
+    } else {
+      toJavaBigDecimal.toBigInteger()
     }
   }
 
@@ -248,11 +248,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   private def actualLongVal: Long = longVal / POW_10(_scale)
 
+  // A compact value with a negative scale, possible only with
+  // spark.sql.legacy.allowNegativeScaleOfDecimal, has no POW_10 entry to divide by, so it is
+  // converted the way a BigDecimal-backed value is.
+  private def hasActualLongVal: Boolean = decimalVal.eq(null) && _scale >= 0
+
   def toLong: Long = {
-    if (decimalVal.eq(null)) {
+    if (hasActualLongVal) {
       actualLongVal
     } else {
-      decimalVal.longValue
+      toBigDecimal.longValue
     }
   }
 
@@ -295,7 +300,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       integralType: IntegralType,
       maxValue: Int,
       minValue: Int)(f1: Long => T)(f2: Double => T): T = {
-    if (decimalVal.eq(null)) {
+    if (hasActualLongVal) {
       val numericVal = f1(actualLongVal)
       if (actualLongVal == numericVal) {
         numericVal
@@ -306,7 +311,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           integralType)
       }
     } else {
-      val doubleVal = decimalVal.toDouble
+      val doubleVal = toBigDecimal.toDouble
       if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
         f2(doubleVal)
       } else {
@@ -325,14 +330,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal too big to fit in Long type.
    */
   private[sql] def roundToLong(): Long = {
-    if (decimalVal.eq(null)) {
+    if (hasActualLongVal) {
       actualLongVal
     } else {
       try {
         // We cannot store Long.MAX_VALUE as a Double without losing precision.
         // Here we simply convert the decimal to `BigInteger` and use the method
         // `longValueExact` to make sure the range check is accurate.
-        decimalVal.bigDecimal.toBigInteger.longValueExact()
+        toJavaBigDecimal.toBigInteger.longValueExact()
       } catch {
         case _: ArithmeticException =>
           throw DataTypeErrors.castingCauseOverflowError(
