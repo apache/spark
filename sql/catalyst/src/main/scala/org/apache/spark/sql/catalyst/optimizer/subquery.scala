@@ -1144,8 +1144,11 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
       val alwaysInline = conf.getConf(SQLConf.ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY)
       CollapseProject(EliminateSubqueryAliases(plan), alwaysInline = alwaysInline) match {
         case p @ Project(_, _: OneRowRelation) => Some(p)
-        case g @ Generate(_, _, _, _, _, _: OneRowRelation) => Some(g)
-        case p @ Project(_, Generate(_, _, _, _, _, _: OneRowRelation)) => Some(p)
+        // GAP FILL works on all of its input rows together, so it cannot move onto the outer rows.
+        case g @ Generate(generator, _, _, _, _, _: OneRowRelation)
+            if !generator.isInstanceOf[GapFillGenerator] => Some(g)
+        case p @ Project(_, Generate(generator, _, _, _, _, _: OneRowRelation))
+            if !generator.isInstanceOf[GapFillGenerator] => Some(p)
         case _ => None
       }
     }

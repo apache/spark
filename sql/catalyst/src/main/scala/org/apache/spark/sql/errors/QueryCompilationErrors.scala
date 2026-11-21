@@ -359,6 +359,156 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def gapFillColumnsNotInInputError(clause: String, column: Attribute): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_COLUMNS_NOT_IN_INPUT",
+      messageParameters = Map(
+        "columnName" -> toSQLId(column.qualifier :+ column.name),
+        "clause" -> clause))
+  }
+
+  def gapFillRequiresTopLevelColumnError(column: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_REQUIRES_TOP_LEVEL_COLUMN",
+      messageParameters = Map("columnName" -> toSQLExpr(column)))
+  }
+
+  def gapFillTimeTypeMismatchError(columnName: String, columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_TIME_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def gapFillInvalidPartitionColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_INVALID_PARTITION_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def gapFillInvalidFillColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_INVALID_FILL_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def gapFillDuplicateFillColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_DUPLICATE_FILL_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def gapFillNonFoldableInputError(clause: String, expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expr),
+        "inputName" -> toSQLId(clause),
+        "inputType" -> toSQLType(expr.dataType),
+        "inputExpr" -> toSQLExpr(expr)))
+  }
+
+  def gapFillInvalidIntervalTypeError(clause: String, expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_INVALID_INTERVAL_TYPE",
+      messageParameters = Map("clause" -> clause, "inputType" -> toSQLType(expr.dataType)))
+  }
+
+  def gapFillArgumentTypeMismatchError(
+      clause: String,
+      argType: DataType,
+      timeType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_ARGUMENT_TYPE_MISMATCH",
+      messageParameters = Map(
+        "clause" -> clause,
+        "argType" -> toSQLType(argType),
+        "timeType" -> toSQLType(timeType)))
+  }
+
+  def gapFillValueOutOfRangeError(
+      clause: String,
+      expr: Expression,
+      micros: Long,
+      maxMicros: Long): Throwable = {
+    val intervalType = DayTimeIntervalType()
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expr),
+        "exprName" -> toSQLId(clause),
+        "valueRange" ->
+          s"(${toSQLValue(0L, intervalType)}, ${toSQLValue(maxMicros, intervalType)}]",
+        "currentValue" -> toSQLValue(micros, expr.dataType)))
+  }
+
+  def gapFillInvalidDateBinWidthError(micros: Long, dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_INVALID_DATE_BIN_WIDTH",
+      messageParameters = Map("binWidth" -> toSQLValue(micros, dataType)))
+  }
+
+  def gapFillConstantTypeMismatchError(
+      valueType: DataType,
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_CONSTANT_TYPE_MISMATCH",
+      messageParameters = Map(
+        "valueType" -> toSQLType(valueType),
+        "columnType" -> toSQLType(columnType),
+        "columnName" -> toSQLId(columnName)))
+  }
+
+  def gapFillInvalidRangeError(rangeStart: Any, rangeEnd: Any, timeType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_INVALID_RANGE",
+      messageParameters = Map(
+        "rangeStart" -> toSQLValue(rangeStart, timeType),
+        "rangeEnd" -> toSQLValue(rangeEnd, timeType)))
+  }
+
+  def gapFillLinearTypeMismatchError(columnName: String, columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "GAP_FILL_LINEAR_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def gapFillPartitionKeyTypeNotSupportedError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL_PARTITION_KEY_TYPE",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def gapFillTimestampNanosNotSupportedError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL_TIMESTAMP_NANOS",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def gapFillFillMethodTypeNotSupportedError(
+      fillMethod: String,
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL_FILL_METHOD_TYPE",
+      messageParameters = Map(
+        "fillMethod" -> fillMethod,
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
   def restrictedModeFeatureError(feature: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",
