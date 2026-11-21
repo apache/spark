@@ -893,6 +893,34 @@ class ArrowTestsMixin:
             ):
                 self.spark.createDataFrame(np.array(0))
 
+    def test_createDataFrame_with_empty_ndarray(self):
+        import numpy as np
+
+        for arr, expected in [
+            (np.empty((0, 2)), [("_1", "double"), ("_2", "double")]),
+            (np.empty((0, 1), dtype=np.float32), [("value", "float")]),
+            (np.array([], dtype=np.int32), [("value", "int")]),
+        ]:
+            with self.subTest(shape=arr.shape, dtype=arr.dtype):
+                df = self.spark.createDataFrame(arr)
+                self.assertEqual(df.dtypes, expected)
+                self.assertEqual(df.collect(), [])
+
+        df = self.spark.createDataFrame(np.empty((0, 2)), ["a", "b"])
+        self.assertEqual(df.dtypes, [("a", "double"), ("b", "double")])
+        self.assertEqual(df.collect(), [])
+
+    def test_createDataFrame_with_empty_arrow_table(self):
+        t = pa.table({"a": pa.array([], pa.int64()), "b": pa.array([], pa.string())})
+
+        df = self.spark.createDataFrame(t)
+        self.assertEqual(df.dtypes, [("a", "bigint"), ("b", "string")])
+        self.assertEqual(df.collect(), [])
+
+        df = self.spark.createDataFrame(t, ["x", "y"])
+        self.assertEqual(df.dtypes, [("x", "bigint"), ("y", "string")])
+        self.assertEqual(df.collect(), [])
+
     def test_createDataFrame_pandas_with_array_type(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
