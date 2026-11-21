@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow,
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -363,7 +364,8 @@ case class JsonObjectEvaluator(
 
 case class SchemaOfJsonEvaluator(options: Map[String, String]) {
   @transient
-  private lazy val jsonOptions = new JSONOptions(options, "UTC")
+  private lazy val jsonOptions =
+    new JSONOptions(options, "UTC", SQLConf.get.columnNameOfCorruptRecord)
 
   @transient
   private lazy val jsonFactory = jsonOptions.buildJsonFactory()
@@ -372,21 +374,29 @@ case class SchemaOfJsonEvaluator(options: Map[String, String]) {
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
 
   final def evaluate(json: UTF8String): Any = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-      parser.nextToken()
-      // To match with schema inference from JSON datasource.
-      jsonInferSchema.inferField(parser) match {
-        case st: StructType =>
-          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
-        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-          jsonInferSchema
-            .canonicalizeType(at.elementType, jsonOptions)
-            .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-        case other: DataType =>
-          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
-            StringType)
+    val dt = try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+        parser.nextToken()
+        // To match with schema inference from JSON datasource.
+        jsonInferSchema.inferField(parser) match {
+          case st: StructType =>
+            jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+          case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+            jsonInferSchema
+              .canonicalizeType(at.elementType, jsonOptions)
+              .map(ArrayType(_, containsNull = at.containsNull))
+              .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+          case other: DataType =>
+            jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(
+              StringType)
+        }
       }
+    } catch {
+      // Handle malformed input by the parse mode, as JSON datasource schema inference does.
+      case e: JsonProcessingException =>
+        jsonInferSchema.handleJsonErrorsByParseMode(
+          jsonOptions.parseMode, jsonOptions.columnNameOfCorruptRecord, e
+        ).getOrElse(StructType(Nil))
     }
 
     UTF8String.fromString(dt.sql)

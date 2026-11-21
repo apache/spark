@@ -70,7 +70,7 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
 
   override def hashCode(): Int = options.hashCode()
 
-  private def handleJsonErrorsByParseMode(parseMode: ParseMode,
+  private[catalyst] def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
     parseMode match {
       case PermissiveMode =>
