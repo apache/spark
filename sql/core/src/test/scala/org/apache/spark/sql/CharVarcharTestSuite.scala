@@ -662,7 +662,7 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: union of char columns of different lengths") {
-    withTable("t3", "t5", "s3", "s5", "m3", "m5") {
+    withTable("t3", "t5", "s3", "s5", "m3", "m5", "n3") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
       sql("INSERT INTO t3 VALUES (1, 'a')")
@@ -685,6 +685,14 @@ trait CharVarcharTestSuite extends QueryTest {
       val df = sql("SELECT s FROM s3 UNION ALL SELECT s FROM s5")
       checkAnswer(df, Seq(Row(Row("a" + " ".repeat(4))), Row(Row("a" + " ".repeat(4)))))
       checkColType(df.schema(0), new StructType().add("c", CharType(5)))
+
+      // Structs that differ in the nullability of a CHAR field as well are padded, not cast.
+      sql(s"CREATE TABLE n3(s STRUCT<c: CHAR(3) NOT NULL>) USING $format")
+      sql("INSERT INTO n3 SELECT named_struct('c', 'a')")
+      val nullability = sql("SELECT s FROM n3 UNION ALL SELECT s FROM s5")
+      checkAnswer(
+        nullability, Seq(Row(Row("a" + " ".repeat(4))), Row(Row("a" + " ".repeat(4)))))
+      checkColType(nullability.schema(0), new StructType().add("c", CharType(5)))
 
       // a struct with fields of other types
       sql(s"CREATE TABLE m3(s STRUCT<id: INT, c: CHAR(3)>) USING $format")
@@ -733,7 +741,7 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: set operations and IN subqueries of char columns of different lengths") {
-    withTable("t3", "t5", "t35", "tc") {
+    withTable("t3", "t5", "t35", "tc", "k3", "k5") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
       sql(s"CREATE TABLE t35(c3 CHAR(3), c5 CHAR(5)) USING $format")
@@ -794,6 +802,23 @@ trait CharVarcharTestSuite extends QueryTest {
         checkColType(sql(query).schema(0), CharType(5))
       }
 
+      // A repeated column of a UNION ALL keeps its own lengths when another column needs its
+      // type widened too, as the output is deduplicated before the padding.
+      val widened = sql("SELECT c, c, 1 FROM t3 UNION ALL SELECT c3, c5, 1L FROM t35")
+      checkAnswer(widened, Seq(Row("a  ", padded, 1L), Row("a  ", padded, 1L)))
+      checkColType(widened.schema(0), CharType(3))
+      checkColType(widened.schema(1), CharType(5))
+      // A nullable struct with a NOT NULL field keeps its nullability when it is padded: the
+      // union has the type of a scan of the struct.
+      sql(s"CREATE TABLE k3(s STRUCT<k: INT NOT NULL, c: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE k5(s STRUCT<k: INT NOT NULL, c: CHAR(5)>) USING $format")
+      sql("INSERT INTO k3 SELECT named_struct('k', 1, 'c', 'a')")
+      sql("INSERT INTO k3 SELECT NULL")
+      sql("INSERT INTO k5 SELECT named_struct('k', 2, 'c', 'a')")
+      val notNullField = sql("SELECT s FROM k3 UNION ALL SELECT s FROM k5")
+      checkAnswer(notNullField, Seq(Row(Row(1, padded)), Row(null), Row(Row(2, padded))))
+      assert(notNullField.schema(0).dataType == sql("SELECT s FROM k5").schema(0).dataType)
+
       // a union in the recursive term of a recursive CTE that reads the recursive reference
       // keeps the CHAR length of the reference, as the recursive CTE does
       checkAnswer(
@@ -813,6 +838,13 @@ trait CharVarcharTestSuite extends QueryTest {
                |   SELECT c, n + 1 FROM x UNION ALL SELECT c, 10 FROM t5 WHERE false))
                |SELECT n FROM r WHERE c = 'a'""".stripMargin),
         Seq(Row(0), Row(1), Row(2)))
+
+      // An optimizer rule can give the children different metadata again, such as one that
+      // pushes an alias with explicit metadata through the union.
+      val metadata = CharVarcharUtils.withRawType(Metadata.empty, CharType(10))
+      checkAnswer(
+        spark.table("t5").union(spark.table("t5")).select(functions.col("c").as("c", metadata)),
+        Seq(Row(padded), Row(padded)))
 
       // the default collation, implicit or explicit, is the same collation
       sql(s"CREATE TABLE tc(id INT, c CHAR(5) COLLATE UTF8_BINARY) USING $format")

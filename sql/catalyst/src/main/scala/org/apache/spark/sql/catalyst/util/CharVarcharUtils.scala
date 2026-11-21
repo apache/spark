@@ -287,11 +287,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       varcharFuncName = Some("varcharTypeWriteSideCheck"))
   }
 
+  /**
+   * Applies the given CHAR and VARCHAR functions to the strings of `expr` with the CHAR and VARCHAR
+   * types of `dt`, rebuilding the structs, arrays and maps around them. A rebuilt struct reads the
+   * fields of a nullable struct only where the struct is not null. With `keepFieldNullability`,
+   * it reads them through [[KnownNotNull]] there, so that fields that are not nullable stay so and
+   * the rebuilt value has the type of `expr`.
+   */
   private def processStringForCharVarchar(
       expr: Expression,
       dt: DataType,
       charFuncName: Option[String],
-      varcharFuncName: Option[String]): Expression = {
+      varcharFuncName: Option[String],
+      keepFieldNullability: Boolean = false): Expression = {
     dt match {
       case c: CharType if charFuncName.isDefined =>
         StaticInvoke(
@@ -318,9 +326,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           returnNullable = false)
 
       case StructType(fields) =>
+        val fieldsOf = if (keepFieldNullability && expr.nullable) KnownNotNull(expr) else expr
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name), processStringForCharVarchar(
-            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
+            GetStructField(fieldsOf, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName,
+            keepFieldNullability))
         }.toImmutableArraySeq)
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
@@ -330,15 +340,16 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
 
       case ArrayType(et, containsNull) =>
-        processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
+        processStringForCharVarcharInArray(
+          expr, et, containsNull, charFuncName, varcharFuncName, keepFieldNullability)
 
       case MapType(kt, vt, valueContainsNull) =>
         val keys = MapKeys(expr)
         val newKeys = processStringForCharVarcharInArray(
-          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+          keys, kt, containsNull = false, charFuncName, varcharFuncName, keepFieldNullability)
         val values = MapValues(expr)
         val newValues = processStringForCharVarcharInArray(
-          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+          values, vt, valueContainsNull, charFuncName, varcharFuncName, keepFieldNullability)
         if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
           // If map key/value does not need char/varchar processing, return the original expression.
           expr
@@ -368,9 +379,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       et: DataType,
       containsNull: Boolean,
       charFuncName: Option[String],
-      varcharFuncName: Option[String]): Expression = {
+      varcharFuncName: Option[String],
+      keepFieldNullability: Boolean): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+    val funcBody =
+      processStringForCharVarchar(param, et, charFuncName, varcharFuncName, keepFieldNullability)
     if (funcBody.fastEquals(param)) {
       // If array element does not need char/varchar processing, return the original expression.
       arr
@@ -500,8 +513,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       alwaysPad: Boolean = false): Option[(Expression, DataType)] = {
     getRawType(attr.metadata).flatMap { attrRawType =>
       widerCharType(attrRawType, rawType).filter(alwaysPad || _ != attrRawType).map { wider =>
-        val padded = processStringForCharVarchar(
-          attr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
+        val padded = processStringForCharVarchar(attr, wider,
+          charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None,
+          keepFieldNullability = true)
         (padded, wider)
       }
     }
@@ -569,25 +583,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       expr: Expression,
       fromType: DataType,
       toType: DataType): Option[Expression] = {
-    // A rebuilt struct reads its fields only where the struct is not null, so a field that is not
-    // nullable stays so, and the narrowed value has the nullability of the given one.
-    def keepNotNull(e: Expression): Expression = e match {
-      case _ if e eq expr => e
-      // The NULL of a struct rebuilt by nullSafeRebuiltStruct has the type of the rebuilt struct.
-      case CaseWhen(Seq((isNull: IsNull, Literal(null, _))), Some(struct)) =>
-        val newStruct = keepNotNull(struct)
-        CaseWhen(Seq((keepNotNull(isNull), Literal(null, newStruct.dataType))), Some(newStruct))
-      case g @ GetStructField(child, ordinal, _) =>
-        val field = g.withNewChildren(Seq(keepNotNull(child)))
-        child.dataType match {
-          case st: StructType if !st(ordinal).nullable && field.nullable => KnownNotNull(field)
-          case _ => field
-        }
-      case other => other.mapChildren(keepNotNull)
-    }
     narrowerCharType(fromType, toType).map { narrower =>
-      keepNotNull(processStringForCharVarchar(
-        expr, narrower, charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None))
+      processStringForCharVarchar(expr, narrower,
+        charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None,
+        keepFieldNullability = true)
     }.filterNot(_.fastEquals(expr))
   }
 

@@ -192,7 +192,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+            left.output.length == right.output.length && !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -206,7 +206,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
         case s @ Intersect(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+            left.output.length == right.output.length && !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -220,7 +220,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
         case s: Union
             if s.childrenResolved && !s.byName &&
-            s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+            s.children.forall(_.output.length == s.children.head.output.length) &&
+            !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(s.children)
           }

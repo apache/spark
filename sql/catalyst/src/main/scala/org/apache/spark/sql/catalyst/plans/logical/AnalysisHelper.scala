@@ -418,6 +418,9 @@ object AnalysisHelper {
     }
   }
 
+  /** Whether this is the analysis phase of query compilation, see [[markInAnalyzer]]. */
+  private[sql] def isInAnalyzer: Boolean = inAnalyzer.get > 0
+
   def markInAnalyzer[T](f: => T): T = {
     inAnalyzer.set(inAnalyzer.get + 1)
     try f finally {

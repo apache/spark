@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationRef, Except, Intersect, LogicalPlan, Project, Union, UnionLoop, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, CTERelationRef, Except, Intersect, LogicalPlan, Project, SetOperation, Union, UnionLoop, UnionLoopRef}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -34,20 +34,29 @@ import org.apache.spark.sql.types.DataType
  * them to the widest type. The output of the set operation, which comes from its first child,
  * then has the widest length. Like read-side padding, the padding does not truncate longer values.
  *
- * Until its children are padded, such a set operation is not resolved, see [[isAligned]], so that
- * nothing above it is resolved with the shorter length of its first child. The fixed-point
- * analyzer pads them in [[PadSetOperationCharLengths]], and the single-pass resolver in
- * `SetOperationLikeResolver`, both with [[padChildren]].
+ * During analysis, such a set operation is not resolved until its children are padded, see
+ * [[isAligned]], so that nothing above it is resolved with the shorter length of its first child.
+ * The children are padded once the set operation is resolved otherwise, after the widening of
+ * their types and the deduplication of their output: in [[PadSetOperationCharLengths]] by the
+ * fixed-point analyzer, and in `SetOperationLikeResolver` by the single-pass resolver, both with
+ * [[padChildren]].
  */
 object SetOperationCharPadding {
 
   /**
    * Whether the CHAR lengths of the children of a set operation are the same at each position, so
-   * that it needs no padding. True if its children are not resolved yet.
+   * that it needs no padding. Only analysis pads the children, so outside of it this is true, as
+   * an optimizer rule can make the metadata of the children differ again, such as one that pushes
+   * an alias with explicit metadata through a union. True if the children are not resolved yet.
    */
   def isAligned(children: Seq[LogicalPlan]): Boolean = {
-    !children.forall(_.resolved) ||
-      widerCharRawTypes(children, children.map(_.output)).forall(_.isEmpty)
+    !AnalysisHelper.isInAnalyzer || !needsPadding(children)
+  }
+
+  /** Whether the resolved children of a set operation have CHAR lengths to pad. */
+  def needsPadding(children: Seq[LogicalPlan]): Boolean = {
+    children.forall(_.resolved) &&
+      widerCharRawTypes(children, children.map(_.output)).exists(_.isDefined)
   }
 
   /**
@@ -127,9 +136,9 @@ object SetOperationCharPadding {
  */
 object PadSetOperationCharLengths extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUpWithNewOutput {
+    // Once the types are widened and the output is deduplicated, as in the single-pass resolver.
     case s @ (_: Union | _: Intersect | _: Except)
-        if s.childrenResolved && !s.resolved && !isByName(s) &&
-          s.children.forall(_.output.length == s.children.head.output.length) =>
+        if resolvedExceptCharLengths(s) && SetOperationCharPadding.needsPadding(s.children) =>
       val (newChildren, _) = SetOperationCharPadding.padChildren(
         s.children, s.children.map(_.output), SetOperationCharPadding.newAlias)
       if (newChildren == s.children) {
@@ -143,8 +152,9 @@ object PadSetOperationCharLengths extends Rule[LogicalPlan] {
       }
   }
 
-  private def isByName(plan: LogicalPlan): Boolean = plan match {
-    case u: Union => u.byName
+  private def resolvedExceptCharLengths(plan: LogicalPlan): Boolean = plan match {
+    case u: Union => u.resolvedExceptCharLengths
+    case s: SetOperation => s.resolvedExceptCharLengths
     case _ => false
   }
 }
