@@ -31,6 +31,21 @@ private[sql] object NoSuchItemExceptionHelper {
     else "[" + searchPath.map(quoteIdentifier).mkString(".") + "]"
 }
 
+object NoSuchDatabaseException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): NoSuchDatabaseException =
+    new NoSuchDatabaseException(message, cause, Some(errorClass), messageParameters, sqlState)
+}
+
 /**
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception as an
  * [[org.apache.spark.sql.AnalysisException]] with the correct position information.
@@ -39,12 +54,14 @@ class NoSuchDatabaseException private[analysis] (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(
       errorClass: String,
@@ -54,7 +71,8 @@ class NoSuchDatabaseException private[analysis] (
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause = cause,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(db: String) = {
@@ -65,24 +83,42 @@ class NoSuchDatabaseException private[analysis] (
   }
 }
 
+object NoSuchNamespaceException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): NoSuchNamespaceException =
+    new NoSuchNamespaceException(message, cause, Some(errorClass), messageParameters, sqlState)
+}
+
 // any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchNamespaceException private (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends NoSuchDatabaseException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(errorClass: String, messageParameters: Map[String, String]) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause = None,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(namespace: Seq[String]) = {
@@ -96,17 +132,34 @@ class NoSuchNamespaceException private (
   }
 }
 
+object NoSuchTableException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): NoSuchTableException =
+    new NoSuchTableException(message, cause, Some(errorClass), messageParameters, sqlState)
+}
+
 // any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchTableException private (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(
       errorClass: String,
@@ -116,7 +169,8 @@ class NoSuchTableException private (
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause = cause,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(db: String, table: String) = {
