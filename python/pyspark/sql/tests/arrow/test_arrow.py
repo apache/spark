@@ -25,6 +25,7 @@ from collections import namedtuple
 
 from pyspark import SparkConf
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import assert_true, lit, rand, udf
 from pyspark.sql.pandas.types import (
@@ -1643,6 +1644,32 @@ class ArrowTestsMixin:
         )
 
         assert_frame_equal(pdf, expected)
+
+    def test_toPandas_timestamp_out_of_ns_range(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_timestamp_out_of_ns_range(arrow_enabled)
+
+    def check_toPandas_timestamp_out_of_ns_range(self, arrow_enabled):
+        # SPARK-60499: toPandas should keep timestamps outside the datetime64[ns] range
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.skipTest("pandas < 3 coerces timestamps to datetime64[ns]")
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/Los_Angeles",
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            df = self.spark.sql(
+                "SELECT * FROM VALUES "
+                "(TIMESTAMP'9999-12-31 00:00:00', TIMESTAMP_NTZ'9999-12-31 00:00:00'), "
+                "(TIMESTAMP'1677-09-21 00:00:00', TIMESTAMP_NTZ'1677-09-21 00:00:00') "
+                "AS t(ts, ts_ntz)"
+            )
+            pdf = df.toPandas()
+
+        values = [datetime.datetime(9999, 12, 31), datetime.datetime(1677, 9, 21)]
+        assert_frame_equal(pdf, pd.DataFrame({"ts": values, "ts_ntz": values}))
 
     def test_toArrow_nested_timestamp(self):
         from pyspark.sql.pandas.types import to_arrow_schema

@@ -145,6 +145,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_timestmap_tzinfo(self):
         self.check_toPandas_timestmap_tzinfo(True)
 
+    def test_toPandas_timestamp_out_of_ns_range(self):
+        self.check_toPandas_timestamp_out_of_ns_range(True)
+
     def test_createDataFrame_udt(self):
         self.check_createDataFrame_udt(True)
 
