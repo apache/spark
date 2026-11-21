@@ -829,12 +829,10 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
             TimeMode.ProcessingTime(),
             OutputMode.Update())
         testStream(result2, OutputMode.Update())(
-          StartStream(
-            trigger = Trigger.ProcessingTime("1 second"),
-            checkpointLocation = checkpointDir.getCanonicalPath,
-            triggerClock = clock),
+          // Schema validation can fail as soon as the query restarts. Add the data first and
+          // avoid manual-clock synchronization before checking the expected failure.
           AddData(inputData, "a"),
-          AdvanceManualClock(1 * 1000),
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           ExpectFailure[StateStoreInvalidValueSchemaEvolution] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
