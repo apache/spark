@@ -20,6 +20,7 @@ import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.logging.log4j.Level
+import test.org.apache.spark.sql.connector.catalog.functions.JavaBucketNoImpl
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
@@ -2107,13 +2108,15 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-60522: a transform Spark cannot evaluate is not reduced onto or shuffled onto") {
     // With `UnboundBucketFunction`, the first join reduces `ident` onto `bucket(4, id)`, and the
-    // second shuffles `plain` onto it, both by evaluating `bucket`. A connector may bind `bucket`
-    // to a function that is not a `ScalarFunction`, or to one Spark finds nothing to call on, and
-    // Spark cannot evaluate either. Then both joins shuffle both sides.
+    // second shuffles `plain` onto it, both by evaluating `bucket`. So does a function that
+    // inherits `produceResult` (SPARK-60783). A connector may bind `bucket` to a function that is
+    // not a `ScalarFunction`, or to one Spark finds nothing to call on, and Spark cannot evaluate
+    // either. Then both joins shuffle both sides.
     Seq(
       UnboundBucketFunction -> (0, 1),
+      UnboundInheritedBucketFunction -> (0, 1),
       UnboundNonScalarBucketFunction -> (2, 2),
-      UnboundInheritedBucketFunction -> (2, 2)
+      new JavaBucketNoImpl -> (2, 2)
     ).foreach {
       case (fn, (reduceShuffles, oneSideShuffles)) =>
         withFunction(fn) {
@@ -2128,7 +2131,7 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-60522: a child Spark cannot evaluate leaves the other child as the shuffle target") {
-    // One side's `bucket` is `UnboundInheritedBucketFunction`, which Spark cannot evaluate, and
+    // One side's `bucket` is `JavaBucketNoImpl`, which Spark cannot evaluate, and
     // the other side's, in a second catalog, is `UnboundBucketFunction`. Picking the target,
     // `EnsureRequirements` asks every child whether it can serve as one, and the first must answer
     // no, not throw. `pickCoPartitionTarget` ranks the candidates by partition count, so only with
@@ -2138,22 +2141,22 @@ class KeyGroupedPartitioningSuite
     val catalog2 = spark.sessionState.catalogManager.catalog(catalogName)
       .asInstanceOf[InMemoryCatalog]
     try {
-      Seq((4, 8), (8, 4)).foreach { case (inheritedCount, scalarCount) =>
-        withFunction(UnboundInheritedBucketFunction) {
+      Seq((4, 8), (8, 4)).foreach { case (noImplCount, scalarCount) =>
+        withFunction(new JavaBucketNoImpl) {
           catalog2.createFunction(Identifier.of(Array.empty, "bucket"), UnboundBucketFunction)
-          createBucketedIdTable("inherited", inheritedCount, numIds = 8)
+          createBucketedIdTable("noimpl", noImplCount, numIds = 8)
           createTable("scalar", Array(Column.create("id", LongType)),
             Array(bucket(scalarCount, "id")), catalog = catalog2)
           sql(s"INSERT INTO $catalogName.ns.scalar VALUES " +
             (0 until 8).map(i => s"($i)").mkString(", "))
 
           withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-            Seq(s"testcat.ns.inherited a JOIN $catalogName.ns.scalar b",
-                s"$catalogName.ns.scalar b JOIN testcat.ns.inherited a").foreach { join =>
+            Seq(s"testcat.ns.noimpl a JOIN $catalogName.ns.scalar b",
+                s"$catalogName.ns.scalar b JOIN testcat.ns.noimpl a").foreach { join =>
               val df = sql(s"SELECT a.id FROM $join ON a.id = b.id")
               checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
               assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
-                s"bucket($inheritedCount) against bucket($scalarCount): $join")
+                s"bucket($noImplCount) against bucket($scalarCount): $join")
             }
           }
           catalog.clearTables()

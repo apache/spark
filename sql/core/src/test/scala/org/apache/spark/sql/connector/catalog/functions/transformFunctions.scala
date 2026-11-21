@@ -253,8 +253,8 @@ abstract class BucketFunctionBase extends ScalarFunction[Int] {
   }
 }
 
-// A `bucket` ScalarFunction that inherits `produceResult`, which Spark does not find when it
-// resolves the function, so Spark cannot evaluate it either.
+// A `bucket` ScalarFunction that inherits `produceResult`, which Spark finds when it resolves the
+// function (SPARK-60783), so Spark evaluates it as it does `BucketFunction`.
 object InheritedBucketFunction extends BucketFunctionBase {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType

@@ -460,6 +460,31 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     )
   }
 
+  test("SPARK-60783: scalar function inherits produceResult from a superclass") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenInheritedDefault))
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+  }
+
+  test("SPARK-60783: scalar function inherits produceResult or the magic method in Java") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    Seq[BoundFunction](
+      new JavaStrLenInheritedDefault,
+      new JavaStrLenInheritedMagic,
+      new JavaStrLenInheritedStaticMagic).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "strlen"), new JavaStrLen(fn))
+      checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-60783: scalar function does not use a non-public magic method of a superclass") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"),
+      new JavaStrLen(new JavaStrLenInheritedProtectedMagic))
+    // the protected magic method returns string length + 100, so 3 means produceResult was used
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+  }
+
   test("SPARK-35390: scalar function w/ bad input types") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadInputTypes))
@@ -852,6 +877,21 @@ case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
     val s = input.getString(0)
     s.length
   }
+}
+
+abstract class StrLenDefaultBase extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
+}
+
+// inherits produceResult from StrLenDefaultBase
+case object StrLenInheritedDefault extends StrLenDefaultBase {
+  override def name(): String = "strlen_inherited_default"
 }
 
 case object StrLenNoImpl extends ScalarFunction[Int] {
