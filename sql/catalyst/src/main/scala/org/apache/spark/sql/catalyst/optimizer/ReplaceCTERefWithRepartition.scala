@@ -42,7 +42,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   }
 
   private def canSkipExtraRepartition(p: LogicalPlan): Boolean = p match {
-    case _: RepartitionOperation => true
+    case r: RepartitionOperation => r.shuffle
     case _: RebalancePartitions => true
     case _ => false
   }
@@ -53,14 +53,22 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        val withRepartition =
-          if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-            // If the CTE definition plan itself is a repartition operation or if it hosts a merged
-            // scalar subquery, we do not need to add an extra repartition shuffle.
+        val withRepartition = inlined match {
+          case r: Repartition if !r.shuffle && !cteDef.underSubquery =>
+            // A coalesce (Repartition with shuffle = false) is planned as CoalesceExec, not as an
+            // exchange, so exchange reuse cannot share it and every reference would evaluate the
+            // CTE body again. Share a round-robin shuffle below it instead and keep the coalesce on
+            // top, so the CTE still has at most that many partitions (one for COALESCE(1)). A
+            // shuffling Repartition(1) would not do: its single-partition exchange can be rewritten
+            // per reference by EnsureRequirements.
+            r.copy(child = RepartitionByExpression(Seq.empty, r.child, None))
+          case _ if canSkipExtraRepartition(inlined) || cteDef.underSubquery =>
+            // If the CTE definition plan itself is a shuffling repartition operation or if it
+            // hosts a merged scalar subquery, we do not need to add an extra repartition shuffle.
             inlined
-          } else {
+          case _ =>
             RepartitionByExpression(Seq.empty, inlined, None)
-          }
+        }
         cteMap.put(cteDef.id, withRepartition)
       }
       replaceWithRepartition(child, cteMap)
