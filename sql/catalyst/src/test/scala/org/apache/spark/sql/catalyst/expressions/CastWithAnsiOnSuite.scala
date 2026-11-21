@@ -917,6 +917,14 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(input, StringType), "0.000000123")
   }
 
+  test("SPARK-60200: cast Decimal with a huge negative scale to string") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val input = Literal.create(
+        Decimal(new java.math.BigDecimal("1e1001")), DecimalType(1, -1001))
+      checkEvaluation(cast(input, StringType), "1E+1001")
+    }
+  }
+
   test("cast invalid string input to time") {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
