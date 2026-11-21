@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EventTimeWatermark, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, UnaryNode, Union, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EventTimeWatermark, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, RebalancePartitions, RepartitionOperation, Sample, Sort, UnaryNode, Union, Window}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -261,12 +261,20 @@ trait PredicateHelper extends AliasHelper with Logging {
    *  - [[Union]], by position: an output column is one when the column of some child at its
    *    position is.
    *  - [[Window]], [[EventTimeWatermark]] and the operators of
-   *    `PushPredicateThroughNonJoin.canPushThrough`, e.g. `Repartition` and `Generate`.
+   *    `PushPredicateThroughNonJoin.canPushThrough`, e.g. `Repartition` and `Generate`. A
+   *    watermark does not pass its event time through: it reads it on every row it gets, and no
+   *    condition over it is pushed below the watermark.
    * A union outside whole-stage codegen, these other operators and an aggregation, for a grouping
-   * key, may compute such a column on every row they get, but `PushPredicateThroughNonJoin`
-   * pushes a condition over it below them, and on through the projection that computes it with
-   * its expression substituted, e.g. into one side of a join there, where it is evaluated on the
-   * rows that the join drops.
+   * key, may compute such a column on every row they get, but `PushDownPredicates` pushes a
+   * condition over it below them, through the projection that computes it with its expression
+   * substituted, and on into one side of a join there, where it is evaluated on the rows that the
+   * join drops. Below a window, it pushes one over a partition key, and `ColumnPruning` removes a
+   * window whose results are not read, so its other columns count too.
+   *
+   * If `atJoin` is true, only the columns that a condition over more than one input of a join can
+   * fail on are returned. Such a condition is evaluated at the join, where a window, a watermark, a
+   * repartition and an aggregation, for a grouping key, have computed the column on every row they
+   * got, so none is returned through them.
    *
    * Other columns and operators do not count:
    *  - A non-deterministic column, computed for every row the operator outputs, and the
@@ -276,9 +284,11 @@ trait PredicateHelper extends AliasHelper with Logging {
    *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
    *    this run, and a `Tail` is only at the top of a plan.
    */
-  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+  protected def failableOutput(
+      plan: LogicalPlan,
+      atJoin: Boolean = false): AttributeSet = plan match {
     case Project(projectList, child) =>
-      val below = failableOutput(child)
+      val below = failableOutput(child, atJoin)
       AttributeSet(projectList.collect {
         case a: Alias if a.child.deterministic &&
             (!ExprUtils.canEvaluateUnconditionally(a.child) ||
@@ -286,7 +296,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         case a: Attribute if below.contains(a) => a
       })
     case agg: Aggregate =>
-      val below = failableOutput(agg.child)
+      val below = if (atJoin) AttributeSet.empty else failableOutput(agg.child)
       AttributeSet(agg.aggregateExpressions.flatMap {
         case a: Alias =>
           val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
@@ -299,19 +309,24 @@ trait PredicateHelper extends AliasHelper with Logging {
         case a: Attribute if below.contains(a) => Some(a)
         case _ => None
       })
-    case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
+    case j: Join => failableOutput(j.left, atJoin) ++ failableOutput(j.right, atJoin)
     case u: Union =>
-      val children = u.children.map(c => (c.output, failableOutput(c)))
-      AttributeSet(u.output.zipWithIndex.collect {
-        case (a, i) if children.exists { case (output, failable) =>
-          failable.contains(output(i))
-        } => a
-      })
-    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort |
-         _: Window | _: EventTimeWatermark =>
-      failableOutput(plan.children.head)
+      val positions = u.children.iterator.flatMap { c =>
+        val failable = failableOutput(c, atJoin)
+        c.output.iterator.zipWithIndex.collect { case (a, i) if failable.contains(a) => i }
+      }.toSet
+      AttributeSet(u.output.iterator.zipWithIndex.collect {
+        case (a, i) if positions.contains(i) => a
+      }.toSeq)
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
+      failableOutput(plan.children.head, atJoin)
+    case _: Window | _: EventTimeWatermark | _: RepartitionOperation | _: RebalancePartitions
+        if atJoin =>
+      AttributeSet.empty
+    case w: Window => failableOutput(w.child)
+    case w: EventTimeWatermark => failableOutput(w.child) - w.eventTime
     case u: UnaryNode if PushPredicateThroughNonJoin.canPushThrough(u) =>
-      failableOutput(u.child)
+      failableOutput(u.child, atJoin)
     case _ => AttributeSet.empty
   }
 
@@ -323,7 +338,9 @@ trait PredicateHelper extends AliasHelper with Logging {
    * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
-   * dropped. The conjuncts that may not move are returned in their written order.
+   * dropped. A conjunct over more than one of `plans` is only evaluated where they are joined, so
+   * it is checked against the columns that can fail there (see `atJoin` of `failableOutput`).
+   * The conjuncts that may not move are returned in their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
@@ -338,9 +355,16 @@ trait PredicateHelper extends AliasHelper with Logging {
     } else {
       conditions.span(cond => cond.deterministic && !cond.throwable)
     }
-    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
+    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput(_)))
+    lazy val failableAtJoin =
+      AttributeSet.fromAttributeSets(plans.map(failableOutput(_, atJoin = true)))
     val (cannotFail, stayUp) = following.partition { cond =>
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+      val columns = if (plans.count(p => cond.references.exists(p.outputSet.contains)) > 1) {
+        failableAtJoin
+      } else {
+        failable
+      }
+      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(columns.contains)
     }
     (leading ++ cannotFail, stayUp)
   }
