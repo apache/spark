@@ -3971,6 +3971,13 @@ class SubquerySuite extends SharedSparkSession
           sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM " +
             "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
           Row(0, 1000))
+        // A COUNT(*) over the MAX is 1 for every outer row, with matching rows or not (kk below
+        // 500 has none here), so that result is used for the rows that the domain joins miss too.
+        checkAnswer(
+          sql("SELECT c, COUNT(*) FROM (SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b " +
+            "WHERE b.k < o.kk - 500)) c FROM (SELECT spark60501_rk(id) kk FROM range(1000)) o) " +
+            "GROUP BY c"),
+          Row(1, 1000))
       }
     }
   }
@@ -4065,20 +4072,27 @@ class SubquerySuite extends SharedSparkSession
       }
       // A subquery that uses the result computed before decorrelation keeps the domain joins that
       // decorrelation adds anyway, here for a non-equality correlation and for a correlation below
-      // a UNION ALL, but they do not get the LIMIT: an outer row that they miss would get that
-      // result instead of its own.
-      val nestedNonEquality = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b WHERE b.k > o.k))"
-      val nestedUnionAll = "(SELECT COUNT(*) FROM (SELECT MAX(u.v) s FROM (SELECT b.v FROM b " +
-        "WHERE b.k = o.k UNION ALL SELECT c.v FROM b c WHERE c.k = o.k) u))"
-      Seq(nestedNonEquality, nestedUnionAll).foreach { s =>
-        val query = s"SELECT o.k, $s FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
-        val fixed = optimizedPlan(query, legacyNestedAggregate = false)
-        val legacy = optimizedPlan(query, legacyNestedAggregate = true)
-        withClue(query) {
-          assert(joins(fixed) === joins(legacy))
-          assert(limitsInLeftOuterRight(legacy) > 0)
-          assert(limitsInLeftOuterRight(fixed) === 0)
-        }
+      // a UNION ALL. Where that result can differ from the result of an outer row that they miss
+      // and from that of master, they do not get the LIMIT; otherwise, e.g. for COUNT(*) over the
+      // row of the MAX or SUM of the MAX, they do, as on master.
+      def overMax(top: String, correlated: String): String =
+        s"(SELECT $top FROM (SELECT MAX(x.v) s FROM $correlated x))"
+      val nonEqualityInput = "(SELECT b.v FROM b WHERE b.k > o.k)"
+      val unionAllInput = "(SELECT b.v FROM b WHERE b.k = o.k UNION ALL " +
+        "SELECT c.v FROM b c WHERE c.k = o.k)"
+      Seq(nonEqualityInput, unionAllInput).foreach { input =>
+        Seq("COUNT(*) FILTER (WHERE s IS NULL)" -> false, "COUNT(*)" -> true, "SUM(s)" -> true)
+          .foreach { case (top, pushed) =>
+            val query = s"SELECT o.k, ${overMax(top, input)} FROM o LEFT JOIN b c ON o.k = c.k " +
+              "LIMIT 10"
+            val fixed = optimizedPlan(query, legacyNestedAggregate = false)
+            val legacy = optimizedPlan(query, legacyNestedAggregate = true)
+            withClue(query) {
+              assert(joins(fixed) === joins(legacy))
+              assert(limitsInLeftOuterRight(legacy) > 0)
+              assert((limitsInLeftOuterRight(fixed) > 0) === pushed)
+            }
+          }
       }
       // Pins the default, under which a non-aggregated subquery becomes a left single join.
       withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {

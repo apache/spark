@@ -776,7 +776,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case p @ (_: Filter | _: Join) => !p.expressions.forall(_.deterministic)
       case _ => false
     }
-    lazy val unrepeatable = root.flatMap(_.expressions).flatMap(_.collect {
+    lazy val expressions = root.flatMap(_.expressions)
+    lazy val unrepeatable = expressions.flatMap(_.collect {
       case s: SubqueryExpression if !repeatableInput(s.plan, inSubquery = true) => s.exprId
     }).toSet
     // The attributes that a filter or join condition may reach: those it references, and those
@@ -785,6 +786,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // an EXCEPT ALL or INTERSECT ALL, which RewriteExceptAll and RewriteIntersectAll turn into a
     // Union of the children first.
     lazy val reached = {
+      // The attributes that a condition on an attribute may reach in one step, by its exprId.
+      val next = root.flatMap {
+        case u @ (_: Union | Except(_, _, true) | Intersect(_, _, true)) =>
+          u.output.indices.map(i => u.output(i).exprId -> u.children.map(_.output(i)))
+        case p => p.expressions.collect { case a: Alias => a.exprId -> a.references.toSeq }
+      }.groupMapReduce(_._1)(_._2)(_ ++ _)
       var acc = AttributeSet(root.flatMap {
         case f: Filter => Seq(f.condition)
         case j: Join => j.condition.toSeq
@@ -792,15 +799,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       }.flatMap(_.references))
       var more = acc
       while (more.nonEmpty) {
-        more = AttributeSet(root.flatMap {
-          case u @ (_: Union | Except(_, _, true) | Intersect(_, _, true)) =>
-            u.output.indices.filter(i => acc.contains(u.output(i)))
-              .flatMap(i => u.children.map(_.output(i)))
-          case p => p.expressions.flatMap {
-            case a: Alias if acc.contains(a.toAttribute) => a.references
-            case _ => Nil
-          }
-        }) -- acc
+        more = AttributeSet(more.toSeq.flatMap(a => next.getOrElse(a.exprId, Nil))) -- acc
         acc ++= more
       }
       acc
@@ -818,11 +817,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       }))
     }
     lazy val copied = if (unrepeatable.isEmpty) Set.empty[ExprId] else {
-      unrepeatable.intersect(subqueryIds(root.flatMap(_.expressions).collect {
+      unrepeatable.intersect(subqueryIds(expressions.collect {
         case a: Alias if reached.contains(a.toAttribute) => a
       }))
     }
-    lazy val rowsMayChange = root.flatMap(_.expressions).flatMap(_.collect {
+    lazy val rowsMayChange = expressions.flatMap(_.collect {
       case s: ScalarSubquery if s.outerAttrs.nonEmpty && unrepeatable(s.exprId) &&
           !guaranteedToReturnOneRow(s.plan) => s.exprId
     })
@@ -898,10 +897,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // subquery to it, may give other rows when computed again (see repeatableInput and
         // mayMoveIntoOuterInput), and for outer references that are not orderable, for which the
         // domain joins fail. So does a subquery with a scalar Python or external UDF in the
-        // aggregate expressions of a correlated Aggregate without grouping expressions, whose
-        // values over no rows DecorrelateInnerQuery computes in the count bug branch, when the
-        // conditional evaluation of SPARK-61482 is off, since the UDF would then run for every
-        // outer row.
+        // values over no rows of a correlated Aggregate without grouping expressions, which
+        // DecorrelateInnerQuery computes in the count bug branch, when the conditional evaluation
+        // of SPARK-61482 is off, since the UDF would then run for every outer row.
         val legacyNestedAggregate =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
@@ -912,7 +910,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
             sub.exists {
               case a: Aggregate => correlatedUngroupedAggregate(a) &&
-                a.aggregateExpressions.exists(EvalOnlyWhen.hasLiftedUDF)
+                RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(a).values
+                  .exists(EvalOnlyWhen.hasLiftedUDF)
               case _ => false
             })
         lazy val lowerAggs = sub match {
@@ -974,25 +973,52 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // countBugResult is the result for an outer row for which the decorrelated subquery
         // returns no row. Where decorrelation adds a domain join anyway, as on master, e.g. for a
         // non-equality correlation or a correlation below a UNION ALL, such a row is one without
-        // matching rows only if the domain has every outer row, which it may not where its domain
-        // joins are known not to work (see domainJoinsWork). A row missing there would get
-        // countBugResult, which can differ from its own result where master's result over no
-        // rows happens to be its result, e.g. COUNT(*) FILTER (WHERE s IS NULL) over s = MAX for
-        // a row with matching rows. So it is not used there, and the subquery keeps the result of
-        // master.
-        val countBugResultKept = if (countBugResult.isDefined && !domainJoinsWork &&
-            decorrelatedPlan.exists(_.isInstanceOf[DomainJoin])) {
-          None
-        } else {
-          countBugResult
+        // matching rows only if the domain has every outer row. It may miss rows with matching
+        // rows where its domain joins are known not to work (see domainJoinsWork), or where
+        // LimitPushDown pushes a LIMIT into the outer input that they compute again. Master gives
+        // such a row the result over no rows (see evalSubqueryOnZeroTups), and countBugResult
+        // would give it another wrong result where master's happens to be its result, e.g.
+        // COUNT(*) FILTER (WHERE s IS NULL) over s = MAX. That does not matter where countBugResult
+        // is the result of every outer row, as for COUNT(*) over a MAX, whose top Aggregate reads
+        // nothing of the one row below it, or the same as master's result. Otherwise the
+        // subquery does not use countBugResult where the domain joins are known not to work,
+        // which keeps the results of master, also the wrong ones for outer rows without matching
+        // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). This is
+        // decided the first time, as mayHaveCountBug.
+        lazy val countBugResultForEveryRow = sub match {
+          case agg: Aggregate =>
+            def oneRow(p: LogicalPlan): Boolean = p match {
+              case Project(_, child) => oneRow(child)
+              case SubqueryAlias(_, child) => oneRow(child)
+              case a: Aggregate => a.groupingExpressions.isEmpty
+              case _ => false
+            }
+            agg.groupingExpressions.isEmpty &&
+              agg.aggregateExpressions.forall(_.references.isEmpty) && oneRow(agg.child)
+          case _ => false
         }
+        lazy val countBugResultAsOnMaster = {
+          val onMaster = sub match {
+            case agg: Aggregate if agg.groupingExpressions.isEmpty =>
+              RewriteCorrelatedScalarSubquery.evalSubqueryOnZeroTups(decorrelatedPlan)
+            case _ => None
+          }
+          (countBugResult.get, onMaster) match {
+            case (Literal(null, _), None) => true
+            case (result, Some(l: Literal)) => result.semanticEquals(l)
+            case _ => false
+          }
+        }
+        val countBugResultForMissedRows = mayHaveCountBugOld.isEmpty &&
+          countBugResult.isDefined && decorrelatedPlan.exists(_.isInstanceOf[DomainJoin]) &&
+          !countBugResultForEveryRow && !countBugResultAsOnMaster
+        val countBugResultKept =
+          if (countBugResultForMissedRows && !domainJoinsWork) None else countBugResult
         // With handleCountBugInDecorrelate, noDefaultResultCountBugAgg says that the count bug is
         // handled in DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
-        // A subquery that uses countBugResult keeps the domain joins that decorrelation adds
-        // anyway, but needs them to have every outer row too (see above), which a LIMIT pushed
-        // into the outer input that they compute again could break.
+        // So does countBugResultForMissedRows for a subquery that uses countBugResult (see above).
         val newPlan = if ((handleCountBugInDecorrelate && noDefaultResultCountBugAgg) ||
-            countBugResultKept.isDefined) {
+            (countBugResultForMissedRows && countBugResultKept.isDefined)) {
           decorrelatedPlan.transform { case d: DomainJoin => d.copy(keepLimitAbove = true) }
         } else {
           decorrelatedPlan
@@ -1190,7 +1216,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
    * CheckAnalysis become less restrictive, this method will need to change.
    */
-  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Expression] = {
+  private[optimizer] def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Expression] = {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.

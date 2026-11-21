@@ -184,8 +184,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   }
 
   // DomainJoin.keepLimitAbove of each domain join of the scalar subquery `subPlan`.
-  private def keepLimitAbove(subPlan: LogicalPlan): Seq[Boolean] = {
-    val optimized = Optimize.execute(testRelation.select(ScalarSubquery(subPlan).as("sq")).analyze)
+  private def keepLimitAbove(
+      subPlan: LogicalPlan,
+      outer: LogicalPlan = testRelation): Seq[Boolean] = {
+    val optimized = Optimize.execute(outer.select(ScalarSubquery(subPlan).as("sq")).analyze)
     optimized.expressions.flatMap(_.collect { case s: ScalarSubquery => s })
       .flatMap(_.plan.collect { case d: DomainJoin => d.keepLimitAbove })
   }
@@ -236,19 +238,23 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // before, also when it is uncorrelated.
     assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
     // Only the domain joins of a subquery that is handled in decorrelation since SPARK-60501, or
-    // that uses countBugResult, keep a LIMIT above; the ones that decorrelation gave before do
-    // not: over a lower COUNT, and for a non-equality correlation, which gets a domain join also
-    // in a single aggregate, also when the legacy conf keeps constructLeftJoins.
+    // whose countBugResult can differ from the result of an outer row that they miss, keep a
+    // LIMIT above; the ones that decorrelation gave before do not: over a lower COUNT, and for a
+    // non-equality correlation, which gets a domain join also in a single aggregate, where
+    // countBugResult is the result of every outer row (COUNT(*) over the row of a MAX) or that of
+    // master (SUM of a MAX), and also when the legacy conf keeps constructLeftJoins.
     def countOver(lower: LogicalPlan): LogicalPlan = lower.groupBy()(count(Literal(1)).as("r"))
     val nonEquality = testRelation2.where($"a" > $"c").groupBy()(max($"d").as("s"))
     assert(keepLimitAbove(countOver(filtered(max($"d")))).toSet == Set(true))
     assert(keepLimitAbove(countOver(nonEquality.where($"s" > 0))).toSet == Set(true))
     assert(keepLimitAbove(countOver(correlated(max($"d")))).isEmpty)
-    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(true))
+    assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
+    val isNullCount = count(Literal(1), Some($"s".isNull))
+    assert(keepLimitAbove(nonEquality.groupBy()(isNullCount.as("r"))).toSet == Set(true))
     assert(keepLimitAbove(countOver(correlated(count($"d")))).toSet == Set(false))
     assert(keepLimitAbove(countOver(uncorrelated(count($"d")))).toSet == Set(false))
     assert(keepLimitAbove(nonEquality).toSet == Set(false))
-    assert(keepLimitAbove(nonEquality.groupBy()(sum($"s").as("r"))).toSet == Set(true))
+    assert(keepLimitAbove(nonEquality.groupBy()(sum($"s").as("r"))).toSet == Set(false))
     withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
       assert(countBugHandling(correlated(max($"d"))) == (Some(true), false))
       assert(countBugResult(correlated(max($"d"))).isEmpty)
@@ -256,7 +262,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(correlated(count($"d"))) == (Some(false), true))
       assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
       assert(keepLimitAbove(countOver(nonEquality.where($"s" > 0))).toSet == Set(false))
-      assert(keepLimitAbove(countOver(nonEquality)).toSet == Set(false))
+      assert(keepLimitAbove(nonEquality.groupBy()(isNullCount.as("r"))).toSet == Set(false))
     }
     // The rest of this test is about subqueries that need the domain joins of
     // DecorrelateInnerQuery, such as `filtered`. Those joins compute the outer input again, so
@@ -490,6 +496,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
           udfDeterministic = true)
         assert(countBugHandling(filtered(max($"d")).select(udfOnS.as("s"))) == inDecorrelation,
           enabled)
+        // Nor one in the argument of an aggregate function, whose result over no rows it is not.
+        assert(countBugHandling(filtered(max(udfOnD))) == inDecorrelation, enabled)
         // But one in the top aggregate, whose value over no rows has it.
         val udfOnSum = PythonUDF("udf", null, LongType, Seq(sum($"s")),
           PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
@@ -563,11 +571,32 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugResult(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) == Some("1"))
     // For a non-equality correlation, decorrelation adds the domain join that it adds on master,
-    // also in a single aggregate, which computes the outer input again. So the result is used
-    // only where the domain joins work, and the subquery keeps the handling of master otherwise.
+    // also in a single aggregate, which computes the outer input again, and may miss outer rows
+    // with matching rows where the domain joins are known not to work. That does not matter for
+    // a result of every outer row, such as COUNT(*) over the row of the MAX, but one that can
+    // differ from the result of such a row and from that of master is not used there: for a
+    // non-deterministic outer input, a non-deterministic filter above and a correlation below a
+    // UNION ALL. The subquery then keeps the handling of master, and no LIMIT above.
     assert(countBugResult(nonEquality) == Some("1"))
-    assert(countBugResult(nonEquality, outer = nonDeterministicOuter).isEmpty)
-    assert(countBugHandling(nonEquality, outer = nonDeterministicOuter) == inLegacy)
+    assert(countBugResult(nonEquality, outer = nonDeterministicOuter) == Some("1"))
+    assert(countBugResult(nonEquality, Seq(isNullCount)) == Some("1"))
+    assert(countBugResult(nonEquality, Seq(isNullCount), outer = nonDeterministicOuter).isEmpty)
+    assert(countBugHandling(nonEquality, Seq(isNullCount), outer = nonDeterministicOuter) ==
+      inLegacy)
+    assert(keepLimitAbove(nonEquality.groupBy()(isNullCount.as("r")),
+      outer = nonDeterministicOuter).toSet == Set(false))
+    assert(countBugResult(nonEquality, Seq(isNullCount), above = _.where(Rand(0) > 0.5)).isEmpty)
+    val belowUnion = testRelation2.where($"a" === $"c").select($"d")
+      .union(testRelation2.where($"a" === $"c").select($"d")).groupBy()(max($"d").as("s"))
+    assert(countBugResult(belowUnion, Seq(isNullCount)) == Some("1"))
+    assert(countBugResult(belowUnion, Seq(isNullCount), outer = nonDeterministicOuter).isEmpty)
+    // The choice is made the first time and kept when the rule runs again, as mayHaveCountBug,
+    // also over another outer input.
+    val firstRun = subqueryWithOutputR(testRelation.select(
+      ScalarSubquery(nonEquality.groupBy()(isNullCount.as("r"))).as("sq")))
+    val rerun = PullupCorrelatedPredicates(nonDeterministicOuter.select(firstRun.as("sq")))
+    assert(rerun.expressions.flatMap(_.collect { case s: ScalarSubquery => s.countBugResult })
+      .map(_.map(_.toString)) == Seq(Some("1")))
     assert(subqueryWithOutputR(nonDeterministicOuter.select(
       ScalarSubquery(countOver(nonEquality)).as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
     assert(countBugResult(correlated(max($"d")), above = _.where($"sq" > 0)) == Some("1"))
