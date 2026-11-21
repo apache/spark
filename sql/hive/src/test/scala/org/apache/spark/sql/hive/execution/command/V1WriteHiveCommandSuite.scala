@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SortOrder}
 import org.apache.spark.sql.execution.datasources.V1WriteCommandSuiteBase
 import org.apache.spark.sql.hive.HiveUtils._
@@ -123,6 +123,28 @@ class V1WriteHiveCommandSuite
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
             sql("INSERT INTO t PARTITION (k='0') SELECT i, j FROM t0 WHERE k = '0'")
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60324: insert into hive table with 0.0, -0.0 and NaN partition values") {
+    withConvertMetastore { _ =>
+      withPlannedWrite { _ =>
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t (i INT) STORED AS PARQUET
+              |PARTITIONED BY (k STRING, p DOUBLE)
+              |""".stripMargin)
+          sql(
+            """
+              |INSERT INTO t PARTITION (k = 'x', p)
+              |SELECT /*+ COALESCE(1) */ * FROM VALUES
+              |  (0, 0.0D), (1, -0.0D), (2, CAST('NaN' AS DOUBLE)), (3, 0.0D), (4, -0.0D) AS v(i, p)
+              |""".stripMargin)
+          checkAnswer(sql("SHOW PARTITIONS t"), Seq(Row("k=x/p=0.0"), Row("k=x/p=NaN")))
+          checkAnswer(spark.table("t").where("p = 0").select("i"), Seq(0, 1, 3, 4).map(Row(_)))
         }
       }
     }

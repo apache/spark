@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, KnownFloatingPointNormalized, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -92,6 +93,7 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
 
   override protected def strip(expr: Expression): Expression = expr match {
     case e: Empty2Null => strip(e.child)
+    case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) => strip(child)
     case _ => expr
   }
 
