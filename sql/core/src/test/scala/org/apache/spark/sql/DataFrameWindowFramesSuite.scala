@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
@@ -651,37 +650,31 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
         Row("b", 0, null, null)))
   }
 
-  test("SPARK-59859: range frame ordered by a date fails when an integer offset overflows") {
+  test("SPARK-59859: range frame ordered by a date has bounds past the ends of the DATE range") {
     withTempView("dates") {
-      Seq("2020-01-01", "2020-01-02", "2020-01-05").toDF("s")
-        .select($"s".cast("date").as("d"))
-        .createOrReplaceTempView("dates")
+      sql("SELECT * FROM VALUES (DATE'-5877641-06-23'), (DATE'2020-01-01'), (DATE'2020-01-02'), " +
+        "(DATE'+5881580-07-11'), (NULL) AS t(d)").createOrReplaceTempView("dates")
+      // The days since the epoch of the minimum and maximum DATE, and of 2020-01-01.
+      val (lo, hi, d1) = (Int.MinValue, Int.MaxValue, 18262)
+      def counts(frame: String): DataFrame =
+        sql(s"SELECT unix_date(d), count(*) OVER (ORDER BY $frame) FROM dates")
       Seq(true, false).foreach { ansiEnabled =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-          // The bound `d - 2147483647` fits in the range of dates.
+          // The upper bound of every row but the first is past the maximum DATE.
           checkAnswer(
-            sql("SELECT count(*) OVER (ORDER BY d " +
-              "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates"),
-            Row(1) :: Row(2) :: Row(3) :: Nil)
-          // The bound `d + 2147483647` overflows. The expression of the bound is built when the
-          // frame is evaluated, outside of the SQL text, so its query context is empty.
-          checkError(
-            exception = intercept[SparkArithmeticException] {
-              sql("SELECT count(*) OVER (ORDER BY d " +
-                "RANGE BETWEEN CURRENT ROW AND 2147483647 FOLLOWING) FROM dates").collect()
-            },
-            condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"),
-            context = ExpectedContext(fragment = "", start = -1, stop = -1))
-          // In descending order, the bound of a PRECEDING offset is `d + 2147483647`.
-          checkError(
-            exception = intercept[SparkArithmeticException] {
-              sql("SELECT count(*) OVER (ORDER BY d DESC " +
-                "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates").collect()
-            },
-            condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-05'"),
-            context = ExpectedContext(fragment = "", start = -1, stop = -1))
+            counts("d RANGE BETWEEN CURRENT ROW AND 2147483647 FOLLOWING"),
+            Seq(Row(lo, 1), Row(d1, 3), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
+          // The lower bound of the maximum DATE is past it, so its frame is empty.
+          checkAnswer(
+            counts("d RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING"),
+            Seq(Row(lo, 0), Row(d1, 1), Row(d1 + 1, 0), Row(hi, 0), Row(null, 1)))
+          // In descending order, the bound of a PRECEDING offset is later than the date.
+          checkAnswer(
+            counts("d DESC RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW"),
+            Seq(Row(lo, 1), Row(d1, 3), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
+          checkAnswer(
+            counts("d RANGE BETWEEN INTERVAL '1' DAY PRECEDING AND INTERVAL '1' DAY FOLLOWING"),
+            Seq(Row(lo, 1), Row(d1, 2), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
         }
       }
     }

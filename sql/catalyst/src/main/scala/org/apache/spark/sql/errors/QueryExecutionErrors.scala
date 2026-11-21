@@ -2940,7 +2940,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def dateAddDaysOverflowError(
       days: Int,
       numDays: Int,
-      context: QueryContext): ArithmeticException = {
+      context: QueryContext): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
@@ -2952,7 +2952,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def dateSubtractDaysOverflowError(
       days: Int,
       numDays: Int,
-      context: QueryContext): ArithmeticException = {
+      context: QueryContext): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(

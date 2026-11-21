@@ -529,7 +529,11 @@ trait DateArithmeticQueryContext extends SupportQueryContext {
  * Adds a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
+  usage = """_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.
+      If the result is earlier than the minimum DATE `-5877641-06-23` or later than the maximum
+      DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of
+      `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * start_date - The starting date.
@@ -577,7 +581,11 @@ case class DateAdd(startDate: Expression, days: Expression)
  * Subtracts a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
+  usage = """_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.
+      If the result is earlier than the minimum DATE `-5877641-06-23` or later than the maximum
+      DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of
+      `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * start_date - The starting date.
