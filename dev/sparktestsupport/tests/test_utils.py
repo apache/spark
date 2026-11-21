@@ -65,6 +65,24 @@ class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
     def test_unmatched_commit_selects_root_module(self):
         self.assertIn(modules.root, self.changed_modules("50a0496a43", "6765ef9"))
 
+    def test_diff_passes_no_renames_and_returns_both_paths(self):
+        patch_sha = "aaaaaaaa"
+        target_ref = "bbbbbbbb"
+        diff_output = "old.txt\nnew.txt\n"
+        with mock.patch(
+            "sparktestsupport.utils.subprocess.check_output", return_value=diff_output
+        ) as check_output:
+            changed_files = identify_changed_files_from_git_commits(
+                patch_sha, target_ref=target_ref
+            )
+
+        self.assertEqual(changed_files, ["old.txt", "new.txt"])
+        command = check_output.call_args.args[0]
+        self.assertIn("diff", command)
+        self.assertIn("--no-renames", command)
+        self.assertIn(patch_sha, command)
+        self.assertIn(target_ref, command)
+
 
 class DetermineModulesToTestTests(unittest.TestCase):
     def test_root_short_circuits_dependents(self):
