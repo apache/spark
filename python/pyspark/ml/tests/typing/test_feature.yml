@@ -53,3 +53,49 @@
     main:15: note: Possible overload variants:
     main:15: note:     def StringIndexer(self, *, inputCol: str | None = ..., outputCol: str | None = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
     main:15: note:     def StringIndexer(self, *, inputCols: list[str] | None = ..., outputCols: list[str] | None = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+
+
+# Vector result types.
+
+- case: mlVectorResultTypes
+  main: |
+    from typing import Union, assert_type
+    import numpy as np
+    from numpy.typing import NDArray
+    from pyspark.ml.linalg import DenseVector, SparseVector
+
+    def check(dense: DenseVector, sparse: SparseVector, array: np.ndarray) -> None:
+        assert_type(dense.array, NDArray[np.float64])
+        assert_type(dense.toArray(), NDArray[np.float64])
+        assert_type(dense.values, NDArray[np.float64])
+        assert_type(dense[1:], NDArray[np.float64])
+        assert_type(sparse.toArray(), NDArray[np.float64])
+        assert_type(dense.dot(sparse), np.float64)
+        assert_type(sparse.dot(dense), np.float64)
+        assert_type(dense.dot(array), Union[float, complex, np.generic, np.ndarray])
+        assert_type(sparse.dot(array), Union[float, complex, np.generic, np.ndarray])
+
+- case: mllibVectorResultTypes
+  main: |
+    from typing import Union, assert_type
+    import numpy as np
+    from numpy.typing import NDArray
+    from pyspark.ml import linalg as newlinalg
+    from pyspark.mllib.linalg import DenseVector, SparseVector, Vector, Vectors
+
+    def check(dense: DenseVector, sparse: SparseVector, array: np.ndarray) -> None:
+        assert_type(dense.array, NDArray[np.float64])
+        assert_type(dense.toArray(), NDArray[np.float64])
+        assert_type(dense.values, NDArray[np.float64])
+        assert_type(dense[1:], NDArray[np.float64])
+        assert_type(sparse.toArray(), NDArray[np.float64])
+        assert_type(dense.dot(sparse), np.float64)
+        assert_type(sparse.dot(dense), np.float64)
+        assert_type(dense.dot(array), Union[float, complex, np.generic, np.ndarray])
+        assert_type(sparse.dot(array), Union[float, complex, np.generic, np.ndarray])
+
+    assert_type(Vectors.fromML(newlinalg.DenseVector([1.0, 2.0])), DenseVector)
+    assert_type(Vectors.fromML(newlinalg.SparseVector(2, {0: 1.0})), SparseVector)
+
+    def check_conversion(vector: newlinalg.Vector) -> None:
+        assert_type(Vectors.fromML(vector), Vector)
