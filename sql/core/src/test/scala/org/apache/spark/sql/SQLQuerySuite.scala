@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -5399,6 +5399,24 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
         Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-57125: LIMIT and OFFSET succeed when ConstantFolding is in excludedRules") {
+    // LimitPushDown and EliminateOffsets merge limit and offset values. The planner only plans
+    // these operators with integer literals, so the merged values must be folded by those rules
+    // themselves; before the fix this failed with "No plan for LocalLimit (1 + 2)".
+    // A single partition keeps the rows that LIMIT and OFFSET return deterministic.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConstantFolding.ruleName) {
+      // Collected to the driver -> SpecialLimits -> CollectLimitExec path.
+      checkAnswer(sql("SELECT id FROM range(0, 10, 1, 1) LIMIT 1 OFFSET 2"), Row(2))
+      // Non-terminal LIMIT -> BasicOperators -> LocalLimitExec path.
+      checkAnswer(
+        sql("SELECT count(*) FROM (SELECT id FROM range(0, 10, 1, 1) LIMIT 2 OFFSET 2)"), Row(2))
+      // Stacked OFFSETs merged by EliminateOffsets.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT id FROM range(0, 10, 1, 1) OFFSET 1) LIMIT 3 OFFSET 2"),
+        Seq(Row(3), Row(4), Row(5)))
     }
   }
 }
