@@ -536,4 +536,110 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
+
+  Seq(LeftSemi, LeftAnti).foreach { jt =>
+    test(s"Project: $jt pushdown through multi-arg row-order-independent StaticInvoke") {
+      val multiArgRoi = objects.StaticInvoke(
+        StaticInvokeTestHelper.getClass,
+        IntegerType,
+        "combine",
+        Seq($"a", $"c"),
+        isDeterministic = false,
+        isRowOrderIndependent = true)
+
+      // Disjoint join condition pushes below Project despite multi-arg ROI expression.
+      val originalQuery = testRelation
+        .select(multiArgRoi.as("enc"), $"b".as("b1"))
+        .join(testRelation1, joinType = jt, condition = Some($"b1" === $"d"))
+        .analyze
+      val expected = testRelation
+        .join(testRelation1, joinType = jt, condition = Some($"b" === $"d"))
+        .select(multiArgRoi.as("enc"), $"b".as("b1"))
+        .analyze
+      comparePlans(Optimize.execute(originalQuery), expected)
+
+      // Negative: join condition referencing the ROI alias must NOT push down.
+      val refRoiQuery = testRelation
+        .select(multiArgRoi.as("enc"), $"b")
+        .join(testRelation1, joinType = jt, condition = Some($"enc" === $"d"))
+        .analyze
+      comparePlans(Optimize.execute(refRoiQuery), refRoiQuery)
+
+      // Negative: complex referenced deterministic alias still blocks pushdown.
+      val complexRefQuery = testRelation
+        .select(multiArgRoi.as("enc"), ($"b" + 1).as("b1"))
+        .join(testRelation1, joinType = jt, condition = Some($"b1" === $"d"))
+        .analyze
+      comparePlans(Optimize.execute(complexRefQuery), complexRefQuery)
+
+      // Negative: stateful Rand(1) projection blocks pushdown.
+      val randQuery = testRelation
+        .select(Rand(1).as("r"), $"b")
+        .join(testRelation1, joinType = jt, condition = Some($"b" === $"d"))
+        .analyze
+      comparePlans(Optimize.execute(randQuery), randQuery)
+
+      // Kill-switch: disabling config restores legacy barrier.
+      withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+
+    test(s"Aggregate: $jt pushdown through row-order-independent Aggregate") {
+      val roiOnKey = objects.StaticInvoke(
+        StaticInvokeTestHelper.getClass,
+        IntegerType,
+        "echo",
+        Seq($"b"),
+        isDeterministic = false,
+        isRowOrderIndependent = true)
+
+      val originalQuery = testRelation
+        .groupBy($"b")($"b", roiOnKey.as("enc_b"), sum($"c").as("s"))
+        .join(testRelation1, joinType = jt, condition = Some($"b" === $"d"))
+        .analyze
+      val expected = testRelation
+        .join(testRelation1, joinType = jt, condition = Some($"b" === $"d"))
+        .groupBy($"b")($"b", roiOnKey.as("enc_b"), sum($"c").as("s"))
+        .analyze
+      comparePlans(Optimize.execute(originalQuery), expected)
+
+      // Negative: join condition referencing ROI alias in Aggregate must NOT push down.
+      val refRoiAggQuery = testRelation
+        .groupBy($"b")($"b", roiOnKey.as("enc_b"), sum($"c").as("s"))
+        .join(testRelation1, joinType = jt, condition = Some($"enc_b" === $"d"))
+        .analyze
+      comparePlans(Optimize.execute(refRoiAggQuery), refRoiAggQuery)
+
+      // Kill-switch: disabling config restores legacy barrier.
+      withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+  }
+
+  test("Aggregate: LeftSemi pushdown preserves ANSI barrier for throwable predicate after ROI") {
+    val roiOnKey = objects.StaticInvoke(
+      StaticInvokeTestHelper.getClass,
+      IntegerType,
+      "echo",
+      Seq($"b"),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+    val ansiCtx = NumericEvalContext(EvalMode.ANSI)
+    val query = testRelation
+      .groupBy($"b")($"b", roiOnKey.as("enc_b"), sum($"c").as("s"))
+      .join(
+        testRelation1,
+        joinType = LeftSemi,
+        condition = Some($"enc_b".isNotNull && $"b" === $"d" &&
+          Divide(Literal(10), $"b", ansiCtx) > 1))
+      .analyze
+    val expected = testRelation
+      .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
+      .groupBy($"b")($"b", roiOnKey.as("enc_b"), sum($"c").as("s"))
+      .where($"enc_b".isNotNull && Divide(Literal(10), $"b", ansiCtx) > 1)
+      .analyze
+    comparePlans(Optimize.execute(query), expected)
+  }
 }

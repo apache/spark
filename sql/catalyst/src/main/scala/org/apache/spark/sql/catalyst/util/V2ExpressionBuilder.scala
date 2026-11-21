@@ -401,7 +401,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
-    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
+    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc), _) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
       if (argumentExpressions.length == arguments.length) {
         Some(new UserDefinedScalarFunc(

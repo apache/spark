@@ -1191,7 +1191,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedOffset = Some(offset)
       }
       isPushed
-    case Project(projectList, child) if projectList.forall(_.deterministic) =>
+    case Project(projectList, child)
+        if projectList.forall(_.deterministic) ||
+          (conf.rowOrderIndependentNondeterministicPushdownEnabled &&
+            projectList.forall(_.rowOrderIndependent)) =>
       pushDownOffset(child, offset)
     case _ => false
   }

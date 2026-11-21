@@ -20,10 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, Rand, RowOrderIndepTestExpr, ScalaUDF, StaticInvokeTestHelper}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -158,5 +161,58 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
       .localLimit(15).offset(5).globalLimit(10)
       .analyze
     comparePlans(optimized6, expected6)
+  }
+
+  test("keep row-order-independent nondeterministic Project above Limit and Offset") {
+    val testRelation = LocalRelation.fromExternalRows(
+      Seq("a".attr.int, "b".attr.int, "c".attr.int),
+      1.to(20).map(_ => Row(1, 2, 3)))
+    val cheapRoi = StaticInvoke(
+      StaticInvokeTestHelper.getClass,
+      IntegerType,
+      "echo",
+      Seq($"a"),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+    val roiTestExpr = RowOrderIndepTestExpr($"a")()
+    // Wrapping an expensive deterministic ScalaUDF makes the StaticInvoke expensive == true.
+    val expensiveDetUdf = ScalaUDF((x: Int) => x + 1, IntegerType, Seq($"a"))
+    val expensiveRoi = StaticInvoke(
+      StaticInvokeTestHelper.getClass,
+      IntegerType,
+      "echo",
+      Seq(expensiveDetUdf),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+    val randExpr = Rand(1)
+    assert(cheapRoi.rowOrderIndependent && !cheapRoi.expensive)
+    assert(roiTestExpr.rowOrderIndependent && !roiTestExpr.expensive)
+    assert(expensiveRoi.rowOrderIndependent && expensiveRoi.expensive)
+    assert(!randExpr.deterministic && !randExpr.rowOrderIndependent)
+
+    // PushProjectionThroughLimitAndOffset intentionally stays deterministic-only even when
+    // rowOrderIndependentNondeterministicPushdownEnabled is true, avoiding per-partition
+    // fan-out under LocalLimit and evaluation/errors on rows dropped by GlobalLimit or Offset.
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "true") {
+      Seq(cheapRoi, roiTestExpr, expensiveRoi, randExpr).foreach { expr =>
+        val globalLimitQuery = testRelation
+          .limit(10)
+          .select($"a", expr.as("enc"))
+          .analyze
+        comparePlans(Optimize.execute(globalLimitQuery), globalLimitQuery)
+
+        val localLimitQuery = testRelation
+          .localLimit(10)
+          .select($"a", expr.as("enc"))
+          .analyze
+        comparePlans(Optimize.execute(localLimitQuery), localLimitQuery)
+
+        val offsetQuery = testRelation
+          .offset(5)
+          .select($"a", expr.as("enc"))
+          .analyze
+        comparePlans(Optimize.execute(offsetQuery), offsetQuery)
+      }
+    }
   }
 }
