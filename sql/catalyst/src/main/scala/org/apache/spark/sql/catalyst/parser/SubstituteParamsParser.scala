@@ -34,20 +34,24 @@ object ParameterExpectation extends Enumeration {
 
 /**
  * A parameter substitution parser that replaces parameter markers in SQL text with their values.
- * This parser finds parameter markers and substitutes them with provided values to produce
- * a modified SQL string ready for execution.
+ * This parser finds parameter markers and substitutes them with provided values to produce a
+ * modified SQL string ready for execution.
  */
 class SubstituteParamsParser extends Logging {
 
   /**
-   * Substitute parameter markers in SQL text with provided values.
-   * Always uses compoundOrSingleStatement parsing which can handle all SQL constructs.
+   * Substitute parameter markers in SQL text with provided values. Always uses
+   * compoundOrSingleStatement parsing which can handle all SQL constructs.
    *
-   * @param sqlText          The original SQL text containing parameter markers
-   * @param namedParams      Map of named parameter values (paramName -> value)
-   * @param positionalParams List of positional parameter values in order
-   * @return A tuple of (modified SQL string with parameters substituted,
-   *                   number of consumed positional parameters)
+   * @param sqlText
+   *   The original SQL text containing parameter markers
+   * @param namedParams
+   *   Map of named parameter values (paramName -> value)
+   * @param positionalParams
+   *   List of positional parameter values in order
+   * @return
+   *   A tuple of (modified SQL string with parameters substituted, number of consumed positional
+   *   parameters)
    */
   def substitute(
       sqlText: String,
@@ -76,7 +80,9 @@ class SubstituteParamsParser extends Logging {
     val astBuilder = new SubstituteParmsAstBuilder()
 
     // Use shared two-stage parsing strategy for consistent error handling.
-    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
+    val ctx = AbstractParser.executeWithTwoStageStrategy(
+      parser,
+      tokenStream,
       _.compoundOrSingleStatement())
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
@@ -97,17 +103,20 @@ class SubstituteParamsParser extends Logging {
 
     // If SQL uses named parameters but not all USING params are named, validate
     if (hasNamed && !hasPositional && !allParametersAreNamed && originalArgs.nonEmpty) {
-      val unnamedExprs = originalParamNames.zip(originalArgs).collect {
-        case ("", arg) => Literal(arg) // Empty strings are unnamed.
-      }.toList
+      val unnamedExprs = originalParamNames
+        .zip(originalArgs)
+        .collect { case ("", arg) =>
+          Literal(arg) // Empty strings are unnamed.
+        }
+        .toList
       if (unnamedExprs.nonEmpty) {
         throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
       }
     }
 
     // Substitute parameters in the original text.
-    val (substitutedSql, appliedSubstitutions) = substituteAtLocations(sqlText, parameterLocations,
-      namedParams, positionalParams)
+    val (substitutedSql, appliedSubstitutions) =
+      substituteAtLocations(sqlText, parameterLocations, namedParams, positionalParams)
     val consumedPositionalParams = parameterLocations.positionalParameterLocations.length
 
     // Create position mapper for error context translation.
@@ -117,8 +126,8 @@ class SubstituteParamsParser extends Logging {
   }
 
   /**
-   * Apply substitutions to the original SQL text at specified locations.
-   * Returns both the substituted text and the list of substitutions applied.
+   * Apply substitutions to the original SQL text at specified locations. Returns both the
+   * substituted text and the list of substitutions applied.
    */
   private def substituteAtLocations(
       sqlText: String,
@@ -180,24 +189,27 @@ class SubstituteParamsParser extends Logging {
         substitutions += Substitution(location, value)
     }
 
-    val substitutedText = applySubstitutions(sqlText, substitutions.toList)
-    (substitutedText, substitutions.toList)
+    applySubstitutions(sqlText, substitutions.toList)
   }
 
   /**
-   * Apply a list of substitutions to the SQL text.
-   * Inserts a space separator when a parameter is immediately preceded by a quote
-   * to avoid back-to-back quotes after substitution.
+   * Apply a list of substitutions to the SQL text. Inserts a space separator when a parameter is
+   * immediately preceded by a quote to avoid back-to-back quotes after substitution.
    *
-   * ANTLR's CodePointCharStream reports token positions in Unicode code points, but
-   * Java/Scala String indices are in UTF-16 code units. Supplementary characters
-   * (e.g. emojis) occupy 1 code point but 2 code units, so we must convert.
+   * ANTLR's CodePointCharStream reports token positions in Unicode code points, but Java/Scala
+   * String indices are in UTF-16 code units. Supplementary characters (e.g. emojis) occupy 1 code
+   * point but 2 code units, so we must convert.
+   *
+   * When a separator space is inserted, the returned [[Substitution]] list records the emitted
+   * replacement (including that space) so [[PositionMapper]] offsets match the substituted text.
    */
-  private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
+  private def applySubstitutions(
+      sqlText: String,
+      substitutions: List[Substitution]): (String, List[Substitution]) = {
     val sortedSubstitutions = substitutions.sortBy(-_.start)
 
     var result = sqlText
-    sortedSubstitutions.foreach { substitution =>
+    val appliedSubstitutions = sortedSubstitutions.map { substitution =>
       val startCU = result.offsetByCodePoints(0, substitution.start)
       val endCU = result.offsetByCodePoints(0, substitution.end)
       val prefix = result.substring(0, startCU)
@@ -208,14 +220,17 @@ class SubstituteParamsParser extends Logging {
         (result.charAt(startCU - 1) == '\'' || result.charAt(startCU - 1) == '"') &&
         replacement.nonEmpty && !replacement.charAt(0).isWhitespace
 
-      val space = if (needsSpace) " " else ""
-      result = s"$prefix$space$replacement$suffix"
+      val emittedReplacement = if (needsSpace) s" $replacement" else replacement
+      result = s"$prefix$emittedReplacement$suffix"
+      substitution.copy(replacement = emittedReplacement)
     }
-    result
+    // appliedSubstitutions is reverse-sorted by start; restore ascending order for the mapper.
+    (result, appliedSubstitutions.sortBy(_.start))
   }
 }
 
 object SubstituteParamsParser {
+
   /** Singleton instance for convenience */
   private val instance = new SubstituteParamsParser()
 

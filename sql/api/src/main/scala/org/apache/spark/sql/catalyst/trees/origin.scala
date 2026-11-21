@@ -49,7 +49,7 @@ case class Origin(
         case Some(mapper) =>
           // Map substituted positions back to original SQL positions
           val mappedStart = startIndex.map(mapper.mapToOriginal)
-          val mappedStop = stopIndex.map(mapper.mapToOriginal)
+          val mappedStop = stopIndex.map(mapper.mapStopToOriginal)
           (mappedStart, mappedStop, Some(mapper.originalText))
         case None =>
           (startIndex, stopIndex, sqlText)
