@@ -2936,23 +2936,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     s"DATE '${formatter.format(days)}'"
   }
 
-  def dateAddDaysOverflowError(days: Int, numDays: Int): ArithmeticException = {
+  def dateAddDaysOverflowError(
+      days: Int,
+      numDays: Int,
+      context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
         "operation" -> s"add ${toSQLValue(numDays, IntegerType)} days to ${toSQLDate(days)}"),
-      context = Array.empty,
-      summary = "")
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
-  def dateSubtractDaysOverflowError(days: Int, numDays: Int): ArithmeticException = {
+  def dateSubtractDaysOverflowError(
+      days: Int,
+      numDays: Int,
+      context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
         "operation" ->
           s"subtract ${toSQLValue(numDays, IntegerType)} days from ${toSQLDate(days)}"),
-      context = Array.empty,
-      summary = "")
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {

@@ -243,12 +243,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Adds a number of days to a date represented as days since 1970-01-01.
    * @return a date value, expressed in days since 1970-01-01.
    */
-  def dateAddDays(days: Int, numDays: Int): Int = {
+  def dateAddDays(days: Int, numDays: Int, context: QueryContext): Int = {
     try {
       Math.addExact(days, numDays)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.dateAddDaysOverflowError(days, numDays)
+        throw QueryExecutionErrors.dateAddDaysOverflowError(days, numDays, context)
     }
   }
 
@@ -256,12 +256,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Subtracts a number of days from a date represented as days since 1970-01-01.
    * @return a date value, expressed in days since 1970-01-01.
    */
-  def dateSubtractDays(days: Int, numDays: Int): Int = {
+  def dateSubtractDays(days: Int, numDays: Int, context: QueryContext): Int = {
     try {
       Math.subtractExact(days, numDays)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.dateSubtractDaysOverflowError(days, numDays)
+        throw QueryExecutionErrors.dateSubtractDaysOverflowError(days, numDays, context)
     }
   }
 

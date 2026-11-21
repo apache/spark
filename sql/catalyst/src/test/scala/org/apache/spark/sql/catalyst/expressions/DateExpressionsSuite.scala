@@ -487,6 +487,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // The DATETIME_OVERFLOW error of an expression built in a test carries the empty query context
+  // of its origin, which `checkErrorInExpression` cannot match, so the whole message is checked.
+  private def checkDateTimeOverflow(
+      expr: Expression,
+      inputRow: InternalRow,
+      operation: String): Unit = {
+    checkExceptionInExpression[SparkArithmeticException](expr, inputRow,
+      s"[DATETIME_OVERFLOW] Datetime operation overflow: $operation. SQLSTATE: 22008")
+  }
+
+  private def checkDateTimeOverflow(expr: Expression, operation: String): Unit = {
+    checkDateTimeOverflow(expr, EmptyRow, operation)
+  }
+
   test("date_add") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toByte)),
@@ -517,14 +531,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-59859: date_add fails on overflow instead of wrapping around") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("1970-01-01")), Literal(Int.MaxValue)), Int.MaxValue)
-    checkErrorInExpression[SparkArithmeticException](
+    checkDateTimeOverflow(
       DateAdd(Literal(Date.valueOf("2020-01-01")), Literal(Int.MaxValue)),
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"))
-    checkErrorInExpression[SparkArithmeticException](
+      "add 2147483647 days to DATE '2020-01-01'")
+    checkDateTimeOverflow(
       DateAdd(Literal(Date.valueOf("1900-01-01")), Literal(Int.MinValue)),
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add -2147483648 days to DATE '1900-01-01'"))
+      "add -2147483648 days to DATE '1900-01-01'")
   }
 
   test("date add interval") {
@@ -591,14 +603,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-59859: date_sub fails on overflow instead of wrapping around") {
     checkEvaluation(
       DateSub(Literal(Date.valueOf("1969-12-31")), Literal(Int.MinValue)), Int.MaxValue)
-    checkErrorInExpression[SparkArithmeticException](
+    checkDateTimeOverflow(
       DateSub(Literal(Date.valueOf("2020-01-01")), Literal(Int.MinValue)),
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "subtract -2147483648 days from DATE '2020-01-01'"))
-    checkErrorInExpression[SparkArithmeticException](
+      "subtract -2147483648 days from DATE '2020-01-01'")
+    checkDateTimeOverflow(
       DateSub(Literal(Date.valueOf("1900-01-01")), Literal(Int.MaxValue)),
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "subtract 2147483647 days from DATE '1900-01-01'"))
+      "subtract 2147483647 days from DATE '1900-01-01'")
   }
 
   test("SPARK-59859: DATETIME_OVERFLOW of date_add and date_sub formats the date the same way " +
@@ -610,21 +620,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val days = BoundReference(1, IntegerType, nullable = false)
     Seq("legacy", "corrected", "exception").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
-        checkErrorInExpression[SparkArithmeticException](
+        checkDateTimeOverflow(
           DateAdd(start, days),
           InternalRow(Int.MinValue, -1),
-          condition = "DATETIME_OVERFLOW",
-          parameters = Map("operation" -> "add -1 days to DATE '-5877641-06-23'"))
-        checkErrorInExpression[SparkArithmeticException](
+          "add -1 days to DATE '-5877641-06-23'")
+        checkDateTimeOverflow(
           DateAdd(start, days),
           InternalRow(Int.MaxValue, 1),
-          condition = "DATETIME_OVERFLOW",
-          parameters = Map("operation" -> "add 1 days to DATE '+5881580-07-11'"))
-        checkErrorInExpression[SparkArithmeticException](
+          "add 1 days to DATE '+5881580-07-11'")
+        checkDateTimeOverflow(
           DateSub(start, days),
           InternalRow(Int.MinValue, 1),
-          condition = "DATETIME_OVERFLOW",
-          parameters = Map("operation" -> "subtract 1 days from DATE '-5877641-06-23'"))
+          "subtract 1 days from DATE '-5877641-06-23'")
       }
     }
   }

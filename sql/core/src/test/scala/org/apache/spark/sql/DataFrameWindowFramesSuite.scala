@@ -663,14 +663,16 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
             sql("SELECT count(*) OVER (ORDER BY d " +
               "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates"),
             Row(1) :: Row(2) :: Row(3) :: Nil)
-          // The bound `d + 2147483647` overflows.
+          // The bound `d + 2147483647` overflows. The expression of the bound is built when the
+          // frame is evaluated, outside of the SQL text, so its query context is empty.
           checkError(
             exception = intercept[SparkArithmeticException] {
               sql("SELECT count(*) OVER (ORDER BY d " +
                 "RANGE BETWEEN CURRENT ROW AND 2147483647 FOLLOWING) FROM dates").collect()
             },
             condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"))
+            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"),
+            context = ExpectedContext(fragment = "", start = -1, stop = -1))
           // In descending order, the bound of a PRECEDING offset is `d + 2147483647`.
           checkError(
             exception = intercept[SparkArithmeticException] {
@@ -678,7 +680,8 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
                 "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates").collect()
             },
             condition = "DATETIME_OVERFLOW",
-            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-05'"))
+            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-05'"),
+            context = ExpectedContext(fragment = "", start = -1, stop = -1))
         }
       }
     }
