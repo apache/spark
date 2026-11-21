@@ -568,7 +568,7 @@ By key: `id 1` was inserted as `alice`, then updated to `alicia` at version 2, a
 - The **target's format must support row-level operations.** Auto CDC maintains the target with MERGE, so the table must be backed by a connector implementing the DSv2 `SupportsRowLevelOperations` interface. A target that does not fails at startup with `AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE`. Spark's built-in file formats, including Parquet, do **not** qualify; see [Choosing a Target Format](#choosing-a-target-format).
 - The **target must have exactly one input flow.** An Auto CDC flow cannot share a target with other flows; a target fed by more than one flow, one of which is Auto CDC, fails with `AUTOCDC_MULTIPLE_FLOWS_TO_TARGET`. This rules out the fan-in pattern shown in "Using Multiple Flows to Write to a Single Target" above.
 - The **source must be a streaming source** (read with `spark.readStream` in Python or `STREAM(...)` in SQL). CDC is an incremental operation over newly arriving change events.
-- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. A pipeline runs against a Spark Connect server, and the server decides which catalog is in use: its default session catalog, with `spark.sql.catalogImplementation` set to `in-memory`, keeps metadata only while the server runs, so after a server restart the tables are forgotten while their folders remain, and the next `spark-pipelines run` fails with `LOCATION_ALREADY_EXISTS`. Start the server with `--conf spark.sql.catalogImplementation=hive`, or with a connector catalog, to keep tables across runs.
+- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. A pipeline runs against a Spark Connect server, and the server decides which catalog is in use: its default session catalog, with `spark.sql.catalogImplementation` set to `in-memory`, keeps metadata only while the server runs, so after a server restart the tables are forgotten while their folders remain, and the next `spark-pipelines run` fails with `LOCATION_ALREADY_EXISTS`. Start the server with `--conf spark.sql.catalogImplementation=hive`, or with a connector catalog, to keep tables across runs; [Choosing a Target Format](#choosing-a-target-format) shows the server settings for a connector catalog.
 - The flow must specify **keys** (one or more columns that identify a row) and a **sequencing expression** (used to order events per key).
 
 The sequencing expression may be any SQL expression over the source columns, not just a bare column reference; sequencing by a struct such as `(commit_ts, seq_no)`, or by a cast, is fine. It must satisfy three constraints:
@@ -681,21 +681,17 @@ Spark's built-in file-based formats do not. Pointing an Auto CDC flow at a plain
 operations. AutoCDC requires a target backed by a connector that supports MERGE.
 ```
 
-Auto CDC needs a table provider that implements row-level operations, configured as a catalog in the pipeline. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
+Auto CDC needs a table provider that implements row-level operations, configured as a catalog on the Spark Connect server the pipeline runs against. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
 
-The examples below use a catalog named `lakehouse` to stand in for such a connector. Edit the generated `spark-pipeline.yml` to select it, substituting the catalog name and connector class. Keep the `name`, `storage`, and `libraries` values `spark-pipelines init` wrote, add `catalog` and `database` as new top-level keys, and add a `configuration` mapping that holds the connector's `spark.sql.catalog.lakehouse` key. A spec has one `configuration` mapping: the spec loader keeps only the last of two top-level keys with the same name, so settings in a second mapping are dropped without an error. If the spec already has a `configuration` mapping, add the key to it. The edited spec looks like this:
+The examples below use a catalog named `lakehouse` to stand in for such a connector. The catalog belongs to the Spark Connect server, not to the pipeline, so the `spark-pipeline.yml` that `spark-pipelines init` writes, with its `name`, `storage`, and `libraries` values, needs no edit. Set `spark.sql.catalog.lakehouse=<your connector's catalog class>` on the server, either as a `--conf` on the `sbin/start-connect-server.sh` command or as a line in the server's `conf/spark-defaults.conf`:
 
-```yaml
-name: cdc_demo
-storage: file:///path/to/cdc_demo/pipeline-storage
-libraries:
-  - glob:
-      include: transformations/**
-configuration:
-  spark.sql.catalog.lakehouse: <your connector's catalog class>
-catalog: lakehouse
-database: cdc_demo
+```bash
+./sbin/start-connect-server.sh \
+  --conf "spark.sql.catalog.lakehouse=<your connector's catalog class>" \
+  --conf spark.sql.defaultCatalog=lakehouse
 ```
+
+The server's default table format should support row-level operations, such as Iceberg, because Auto CDC needs them. A pipeline whose spec names no catalog writes to the server's current catalog, so `spark.sql.defaultCatalog=lakehouse` puts the tables of the examples in the connector's catalog.
 
 ### End-to-End Example
 
@@ -710,7 +706,7 @@ spark-pipelines init --name cdc_demo
 cd cdc_demo
 ```
 
-`spark-pipelines init` seeds `transformations/` with `example_python_materialized_view.py` and `example_sql_materialized_view.sql`. Delete them so only the CDC datasets run, then edit `spark-pipeline.yml` to add the catalog as shown in [Choosing a Target Format](#choosing-a-target-format), and put the following in `transformations/customers_cdc.py`:
+`spark-pipelines init` seeds `transformations/` with `example_python_materialized_view.py` and `example_sql_materialized_view.sql`. Delete them so only the CDC datasets run, leave `spark-pipeline.yml` as generated, and put the following in `transformations/customers_cdc.py`:
 
 ```python
 from pyspark import pipelines as dp
@@ -757,10 +753,10 @@ cat > /tmp/cdc_demo/events/batch1.json <<'EOF'
 EOF
 ```
 
-Run the pipeline:
+Run the pipeline against the Spark Connect server from [Choosing a Target Format](#choosing-a-target-format), here on its default local address:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 `customers` now holds both rows, with the `op` column excluded:
@@ -784,7 +780,7 @@ EOF
 Run the pipeline again. Because `customers` is a streaming table, this run processes only the new file:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 | id | name   | version |
@@ -805,7 +801,7 @@ EOF
 Run once more:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 | id | name   | version |
