@@ -22,11 +22,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, DeclarativeAggregate, ListAgg, Percentile, StddevSamp, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, DeclarativeAggregate, ListAgg, Percentile, StddevSamp, Sum, V2Aggregator}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, Except, InsertAction, Intersect, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DoubleType, IntegerType, LongType, MapType, StringType, TestUDT}
 
@@ -532,6 +533,38 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     Seq(udt.groupBy($"a", $"v")($"a", $"v"), Distinct(udt.select($"a", $"v"))).foreach { outer =>
       assert(countBugHandling(filtered(max($"d")), outer = outer) == inLegacy, outer)
     }
+    // The domain joins keep one of the outer values that compare equal, e.g. 0.0 for -0.0 and
+    // 0.0, or 'a' for 'a' and 'A' in UTF8_LCASE, and give its result to the outer rows with the
+    // others, so a correlation that tells them apart, e.g. over a cast to a binary string, could
+    // get the result of another value. Outer references of such types keep the previous handling.
+    def filteredOn(cond: Expression): LogicalPlan =
+      testRelation2.where(cond).groupBy()(max($"d").as("s")).where($"s" > 0)
+    assert(countBugHandling(filteredOn($"b" === $"d")) == inLegacy)
+    assert(countBugHandling(filteredOn(Cast($"b", StringType) === Cast($"d", StringType))) ==
+      inLegacy)
+    assert(countBugHandling(filteredOn($"a" === $"c" && $"s" === "a"), outer = collated) ==
+      inLegacy)
+    assert(countBugHandling(filteredOn($"a" === $"c"), outer = collated) == inDecorrelation)
+    // A user-defined aggregate function without a default result in a lower aggregate can
+    // return a value other than NULL on empty input, so the subquery keeps the handling of
+    // before: a Python UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite.
+    val v2Sum = new V2AggregateFunction[java.lang.Long, java.lang.Long] {
+      override def newAggregationState(): java.lang.Long = 0L
+      override def update(state: java.lang.Long, input: InternalRow): java.lang.Long =
+        state + input.getLong(0)
+      override def merge(l: java.lang.Long, r: java.lang.Long): java.lang.Long = l + r
+      override def produceResult(state: java.lang.Long): java.lang.Long = state
+      override def name(): String = "v2_sum"
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = LongType
+    }
+    Seq(PythonUDAF("udaf", null, LongType, Seq($"c"), udfDeterministic = true),
+        V2Aggregator(v2Sum, Seq(Cast($"c", LongType)))).foreach { f =>
+      val udaf = f.toAggregateExpression()
+      assert(countBugHandling(correlated(udaf)) == inLegacy, f)
+      assert(countBugResult(correlated(udaf)).isEmpty, f)
+      assert(countBugHandling(filtered(udaf)) == inLegacy, f)
+    }
     Seq(collated.groupBy($"a")($"a", max($"a").as("m")),
         // A grouping key that is not in the output.
         collated.groupBy($"a", $"s")($"a"),
@@ -679,11 +712,15 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       Some("[[null]]"))
     // An outer reference between the aggregates, here in a Project, does not change the rows,
     // only values, which are not computed (see below), so it does not matter for a COUNT(*).
-    assert(countBugResult(lowerMax.select(($"s" + $"b").as("s"))) == Some("1"))
+    assert(countBugResult(lowerMax.select(($"s" + $"a").as("s"))) == Some("1"))
     // But a grouping key over it is not a literal, and is not taken.
-    assert(countBugResult(lowerMax.select(($"s" + $"b").as("s")), grouping = Seq($"s")).isEmpty)
-    assert(countBugHandling(lowerMax.select(($"s" + $"b").as("s")), grouping = Seq($"s")) ==
+    assert(countBugResult(lowerMax.select(($"s" + $"a").as("s")), grouping = Seq($"s")).isEmpty)
+    assert(countBugHandling(lowerMax.select(($"s" + $"a").as("s")), grouping = Seq($"s")) ==
       inDecorrelation)
+    // Over a DOUBLE outer reference, whose equal values may differ, it keeps the handling of
+    // before (see the previous test).
+    assert(countBugHandling(lowerMax.select(($"s" + $"b").as("s")), grouping = Seq($"s")) ==
+      (Some(false), false))
     // The string of the subquery shows the result.
     assert(subqueryWithOutputR(testRelation.select(
       ScalarSubquery(lowerMax.groupBy()(count(Literal(1)).as("r"))).as("sq")))
@@ -714,7 +751,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       udfDeterministic = true)
     assert(countBugResult(lowerMax.select(pyUdf.as("g")), grouping = Seq($"g")).isEmpty)
     Seq(lowerMax.where($"s".isNull) -> count(Literal(1)),
-        lowerMax.select(($"s" + $"b").as("s")) -> sum($"s"),
+        lowerMax.select(($"s" + $"a").as("s")) -> sum($"s"),
         lowerMax -> new Percentile($"s", Literal(0.5)).toAggregateExpression(),
         lowerMax -> sum($"s", Some(uncorrelatedFilter)),
         lowerMax -> sum($"s", Some(correlatedFilter)),

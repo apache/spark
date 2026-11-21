@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Phys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, USER_DEFINED_AGGREGATION}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -588,6 +588,18 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case _ => false
     })
 
+  // Whether `a` has a user-defined aggregate function without a default result. Such a function
+  // can return a value other than NULL on empty input, e.g. a Scala Aggregator with a zero that is
+  // not NULL, while the count bug handling takes NULL there (see
+  // RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups).
+  private def hasUserDefinedAggregate(a: Aggregate): Boolean =
+    a.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isEmpty &&
+        (ae.aggregateFunction.isInstanceOf[UserDefinedExpression] ||
+          ae.aggregateFunction.containsPattern(USER_DEFINED_AGGREGATION))
+      case _ => false
+    })
+
   /**
    * Returns true if the Aggregate without grouping expressions `agg` returns the same result
    * over the one row that the Aggregate without grouping expressions below it returns on empty
@@ -900,16 +912,29 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // and where the domain joins of DecorrelateInnerQuery are known not to work, so as not to
         // make such queries worse than before: where the outer input, or a join of another
         // subquery to it, may give other rows when computed again (see repeatableInput and
-        // mayMoveIntoOuterInput), and for outer references that are not orderable, for which the
-        // domain joins fail. So does a subquery with a scalar Python or external UDF in the
-        // values over no rows of a correlated lower Aggregate without grouping expressions, which
-        // DecorrelateInnerQuery computes in the count bug branch, when the conditional evaluation
-        // of SPARK-61482 is off, since the UDF would then run for every outer row. One in the top
-        // Aggregate runs for every outer row on master too (see constructLeftJoins).
+        // mayMoveIntoOuterInput), for outer references that are not orderable, for which the
+        // domain joins fail, and for outer references of a type whose equal values may differ
+        // (see sameWhenEqual), of which the domain joins keep one and give its result to the
+        // outer rows with the others. So does a subquery with a scalar Python or external UDF in
+        // the values over no rows of a correlated lower Aggregate without grouping expressions,
+        // which DecorrelateInnerQuery computes in the count bug branch, when the conditional
+        // evaluation of SPARK-61482 is off, since the UDF would then run for every outer row. One
+        // in the top Aggregate runs for every outer row on master too (see constructLeftJoins).
+        // So does a subquery with a user-defined aggregate function in a lower Aggregate without
+        // grouping expressions (see hasUserDefinedAggregate), whose value over no rows master does
+        // not use: it evaluates the top Aggregate over no rows, which is right for some of them,
+        // e.g. COUNT(*) FILTER (WHERE s IS NULL) over a Scala Aggregator with a zero of 0.
         val legacyNestedAggregate =
-          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
+          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
+            (sub match {
+              case agg: Aggregate => agg.child.exists {
+                case a: Aggregate => a.groupingExpressions.isEmpty && hasUserDefinedAggregate(a)
+                case _ => false
+              }
+              case _ => false
+            })
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
-          outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
+          outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType) && sameWhenEqual(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation = legacyNestedAggregate ||
           !domainJoinsWork ||
           (!conf.getConf(
@@ -986,12 +1011,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // nothing of the one row below it, or the same as master's result. Otherwise the
         // subquery does not use countBugResult where the domain joins are known not to work,
         // which keeps the results of master, also the wrong ones for outer rows without matching
-        // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). So does it
-        // for outer references of a type whose equal values may differ (see sameWhenEqual): the
+        // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). Among those
+        // are outer references of a type whose equal values may differ (see sameWhenEqual): the
         // domain joins keep one of them, e.g. 0.0 for -0.0 and 0.0, and give its result to the
         // outer rows with the others, which can be master's result over no rows for one where
         // countBugResult would be wrong. This is decided the first time, as mayHaveCountBug.
-        lazy val domainKeysStable = outerAttrs.forall(e => sameWhenEqual(e.dataType))
         // With countBugResult, the top Aggregate is over exactly one row for every outer row, that
         // of the Aggregates of the chain below it (see evalSubqueryOnEmptyCorrelatedInput).
         lazy val countBugResultForEveryRow = sub match {
@@ -1015,7 +1039,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           countBugResult.isDefined && decorrelatedPlan.exists(_.isInstanceOf[DomainJoin]) &&
           !countBugResultForEveryRow && !countBugResultAsOnMaster
         val countBugResultKept =
-          if (countBugResultForMissedRows && (!domainJoinsWork || !domainKeysStable)) {
+          if (countBugResultForMissedRows && !domainJoinsWork) {
             None
           } else {
             countBugResult
@@ -1341,10 +1365,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * PullupCorrelatedPredicates does not use the result where they are known not to and that
    * matters, see rewriteSubQueries). So for such an outer row the correlated input is taken as
    * empty, and the chain is evaluated over it as before decorrelation: an Aggregate without
-   * grouping expressions returns one row on empty input. An outer reference in the chain does not
-   * change which rows it returns; a value or grouping key that depends on one is not a literal, and
-   * is not taken (see below). A NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`,
-   * since None here means that the result cannot be computed.
+   * grouping expressions returns one row on empty input, of the default results of its aggregate
+   * functions or NULL (see evalAggregateOnZeroTups; PullupCorrelatedPredicates does not call this
+   * for a user-defined aggregate function there, which can return another value). An outer
+   * reference in the chain does not change which rows it returns; a value or grouping key that
+   * depends on one is not a literal, and is not taken (see below). A NULL result is a NULL
+   * Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that the result cannot be
+   * computed.
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
       plan: LogicalPlan): Option[Literal] = {

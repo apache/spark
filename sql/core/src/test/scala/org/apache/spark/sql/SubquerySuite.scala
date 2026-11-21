@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -4209,6 +4210,53 @@ class SubquerySuite extends SharedSparkSession
         sql(s"SELECT ${domainJoinCount("extract(day FROM o.i)")} " +
           "FROM (SELECT make_dt_interval(CAST(id AS INT)) i FROM range(4)) o"),
         Seq(Row(1), Row(1), Row(1), Row(1)))
+    }
+  }
+
+  test("SPARK-60501: outer values that compare equal but differ, and a user-defined aggregate " +
+      "function in the lower aggregate, keep the count bug handling of before") {
+    // The domain joins of decorrelation keep one of the outer values -0.0 and 0.0, or 'a' and
+    // 'A' in UTF8_LCASE, and give its result to the other, which a correlation over a binary
+    // string tells apart. These correlations are pulled up without domain joins as before.
+    withTempView("od", "oc", "bc") {
+      sql("CREATE TEMP VIEW od AS SELECT * FROM VALUES (CAST('-0.0' AS DOUBLE)), " +
+        "(CAST('0.0' AS DOUBLE)) AS od(d)")
+      Seq("0.0" -> Seq(Row("-0.0", 0), Row("0.0", 1)),
+          "-0.0" -> Seq(Row("-0.0", 1), Row("0.0", 0))).foreach { case (value, expected) =>
+        withTempView("b") {
+          sql(s"CREATE TEMP VIEW b AS SELECT * FROM VALUES ('$value', 1) AS b(s, v)")
+          checkAnswer(sql("SELECT CAST(od.d AS STRING), (SELECT COUNT(*) FROM (SELECT MAX(b.v) m " +
+            "FROM b WHERE b.s = CAST(od.d AS STRING)) WHERE m IS NOT NULL) FROM od"), expected)
+        }
+      }
+      sql("CREATE TEMP VIEW oc AS SELECT CAST(s AS STRING) COLLATE UTF8_LCASE s FROM " +
+        "VALUES ('a'), ('A') AS t(s)")
+      sql("CREATE TEMP VIEW bc AS SELECT * FROM VALUES ('a', 1) AS bc(t, v)")
+      checkAnswer(sql("SELECT CAST(oc.s AS STRING COLLATE UTF8_BINARY), (SELECT COUNT(*) FROM " +
+        "(SELECT MAX(bc.v) m FROM bc WHERE bc.t = CAST(oc.s AS STRING COLLATE UTF8_BINARY)) " +
+        "WHERE m IS NOT NULL) FROM oc"), Seq(Row("A", 0), Row("a", 1)))
+    }
+    // A Scala Aggregator with a zero of 0 returns 0, not NULL, on empty input. k = 2 has no
+    // matching rows.
+    withTempView("a", "b") {
+      withUserDefinedFunction("spark60501_sum0" -> true) {
+        spark.udf.register("spark60501_sum0", functions.udaf(new Aggregator[Long, Long, Long] {
+          def zero: Long = 0L
+          def reduce(b: Long, a: Long): Long = b + a
+          def merge(b1: Long, b2: Long): Long = b1 + b2
+          def finish(r: Long): Long = r
+          def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+          def outputEncoder: Encoder[Long] = Encoders.scalaLong
+        }))
+        sql("CREATE TEMP VIEW a AS SELECT * FROM VALUES (1), (2) AS a(k)")
+        sql("CREATE TEMP VIEW b AS SELECT * FROM VALUES (1, 100L), (1, 200L) AS b(k, v)")
+        Seq("(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM (SELECT spark60501_sum0(b.v) s " +
+            "FROM b WHERE b.k = a.k))",
+            "(SELECT COUNT(*) FROM (SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k) " +
+            "WHERE s IS NULL)").foreach { subquery =>
+          checkAnswer(sql(s"SELECT a.k, $subquery FROM a"), Seq(Row(1, 0), Row(2, 0)))
+        }
+      }
     }
   }
 

@@ -2617,8 +2617,9 @@ case class CollectMetrics(
  * It should be rewritten during the optimization phase.
  *
  * `keepLimitAbove` is set by PullupCorrelatedPredicates on the domain joins of a correlated scalar
- * subquery whose count bug it handles in DecorrelateInnerQuery only since SPARK-60501, or with
- * ScalarSubquery.countBugResult, which needs every outer row in the domain joins. The joins
+ * subquery whose count bug it handles in DecorrelateInnerQuery only since SPARK-60501, or whose
+ * ScalarSubquery.countBugResult can differ from the result of an outer row that the domain joins
+ * miss and from that of before, so that it needs every outer row in the domain joins. The joins
  * that RewriteCorrelatedScalarSubquery builds for a domain join compute the outer input again, so
  * LimitPushDown keeps a LIMIT above a Project with such a subquery instead of pushing it into
  * that input, where it could keep other rows the second time. The other domain joins keep the
