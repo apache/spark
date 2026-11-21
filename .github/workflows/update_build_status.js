@@ -82,7 +82,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
                           checkName: "${BUILD_CHECK_NAME}", checkType: LATEST
                         }) {
                       pageInfo { hasNextPage }
-                      nodes { databaseId status conclusion text }
+                      nodes { databaseId externalId text status conclusion }
                     }
                   }
                 }
@@ -182,9 +182,10 @@ module.exports = async ({github, context, core, env = process.env, log = console
       branch: node.headRef.name,
       buildChecks: [...checks.values()].map(cr => ({
         id: cr.databaseId,
+        externalId: cr.externalId,
+        text: cr.text,
         status: lower(cr.status),
-        conclusion: lower(cr.conclusion),
-        text: cr.text
+        conclusion: lower(cr.conclusion)
       })),
       forkRuns: new Map(runs.map(run => [String(run.id), run])),
       forkRunsTruncated: target.checkSuites.pageInfo.hasNextPage,
@@ -193,14 +194,39 @@ module.exports = async ({github, context, core, env = process.env, log = console
     }
   }
 
-  // The fork run ID a Build check points at, stored as JSON in its output text, or
-  // undefined if the text is not that JSON (e.g. a check from an older version or a
-  // manual run).
+  // New checks and updates use external IDs; output text is a temporary fallback for
+  // checks written by older versions. Bulk migration would exceed GitHub's write rate
+  // limits, so legacy checks gain an external ID only when their state changes.
+  // Remove the fallback once legacy-only checks no longer need support.
   const runIdOf = (cr) => {
+    if (cr.externalId) {
+      return cr.externalId
+    }
     try {
-      return JSON.parse(cr.text).run_id
+      const runId = JSON.parse(cr.text)?.run_id
+      return runId ? String(runId) : undefined
     } catch {
       return undefined
+    }
+  }
+  const isGuidance = (cr) => cr.conclusion == 'action_required' && !runIdOf(cr)
+
+  // The fields that link a Build check to a fork run. Every update sends them again,
+  // so the link does not depend on GitHub keeping fields an update omits.
+  const runLink = (pr, run) => {
+    const actions_url = 'https://github.com/' + pr.forkOwner + '/' + pr.forkRepo
+      + '/actions/runs/' + run.id
+    return {
+      external_id: String(run.id),
+      details_url: actions_url,
+      output: {
+        title: 'Test results',
+        summary: '[See test results](' + actions_url + ')\n\n'
+          + 'If the tests fail for reasons unrelated to this pull request, '
+          + 'please rerun the workflow in your forked repository.\n'
+          + 'If the failures are related to this pull request, '
+          + 'please investigate them and push follow-up changes.'
+      }
     }
   }
 
@@ -229,8 +255,50 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
   // The log lists only the Build checks a pass creates or updates, and errors, each
   // with its PR and head commit. Everything else is counted for a summary at the end.
-  const count = {prs: 0, skipped: 0, updated: 0, created: 0, unchanged: 0, notApplied: 0}
+  const count = {prs: 0, skipped: 0, updated: 0, notApplied: 0, created: 0, unchanged: 0}
   const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/`
+
+  // Create a Build check linked to a fork run, or action_required guidance if there is
+  // no run. The log shows the states of the PR's Build checks it replaces, or 'rerun'.
+  const createCheck = async (pr, ref, run, rerun = false) => {
+    const state = run ? checkState(run)
+      : {status: 'completed', conclusion: 'action_required'}
+    const check = {
+      ...context.repo, name: BUILD_CHECK_NAME, head_sha: pr.sha, ...state
+    }
+    if (run) {
+      Object.assign(check, runLink(pr, run))
+    } else {
+      // No usable run, or a fork-master PR: explain the required setup.
+      check.output = {
+        title: 'PR build setup requires attention',
+        summary: `
+  A supported Build check is not available for this PR head commit.
+
+  1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
+  2. For PR build status, use a branch other than \`master\` in your fork.`
+          + (pr.branch == 'master' ? '' : `
+
+  After fixing the cause, push a new commit to your PR branch to start the build.`),
+        images: [
+          {
+            alt: 'enabling workflows button',
+            image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+          }
+        ]
+      }
+    }
+    const from = rerun ? 'rerun' : pr.buildChecks.map(label).join(', ') || 'none'
+    const change = from + ' -> ' + label(state)
+    try {
+      await github.rest.checks.create(check)
+      log.log(ref + ': ' + change)
+      count.created++
+    } catch (error) {
+      log.error(ref + ': ' + change + ' failed: ' + error.message)
+      failedPRs.add(pr.number)
+    }
+  }
 
   log.log(fullSync ? 'Full sync: all open PRs'
     : 'Quick sync: open PRs updated in the last ' + QUICK_SYNC_LOOKBACK_DAYS + ' days')
@@ -251,34 +319,56 @@ module.exports = async ({github, context, core, env = process.env, log = console
         continue
       }
 
+      // New Build checks link only to the PR branch's latest build_main.yml run. Fork
+      // master is reserved for syncing upstream, so new PR builds must use other
+      // branches, even if an older workflow ran on master; a skipped run has no result.
+      const trackedRun = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
+        ? undefined : pr.buildRun
+
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
-      // An action_required guidance check is not linked to a run.
+      // An action_required guidance check is not linked to a run, but a fork run can
+      // also conclude with action_required.
       let syncableBuildCheck = false
+      let unlistedRun = false
+      let trackedRunShown = false
+      let trackedRunReran = false
       for (const cr of pr.buildChecks) {
-        if (cr.conclusion == 'action_required') {
+        if (isGuidance(cr)) {
           continue
         }
         const runId = runIdOf(cr)
-        const run = pr.forkRuns.get(String(runId))
+        const run = pr.forkRuns.get(runId)
         if (!run) {
           if (runId && pr.forkRunsTruncated) {
             // The run may be among the fork's check suites the page left out. Keep
-            // the backfill from replacing the check, and fail the PR to get noticed.
+            // the check below from replacing it, and fail the PR to get noticed.
             log.error(ref + ': fork run ' + runId + ' not in the first fork check '
               + 'suites; raise the limits in prPageQuery')
             failedPRs.add(pr.number)
             syncableBuildCheck = true
+            unlistedRun = true
           }
-          // Otherwise the check's output is unusable or its fork run was deleted, so
-          // it can never be synced; the backfill below replaces it.
+          // Otherwise the check is not linked to a run or its fork run was deleted, so
+          // it can never be synced. Below, it is replaced by a check for the tracked
+          // run, or by action_required guidance if there is no tracked run.
           continue
         }
         syncableBuildCheck = true
 
-        // Leave a check alone if it already shows the run's state, as nearly all do.
         const state = checkState(run)
+        const tracked = run.id == trackedRun?.id
+        // The run was rerun after its check completed. GitHub accepts an update that
+        // reopens a completed check but leaves it unchanged, so leave it alone. The
+        // tracked run gets a new check below unless another check already shows it.
+        if (cr.status == 'completed' && state.status != 'completed') {
+          trackedRunReran ||= tracked
+          count.unchanged++
+          continue
+        }
+        // Leave a check alone if it already shows the run's state, as nearly all do.
         if (sameState(cr, state)) {
+          trackedRunShown ||= tracked
           count.unchanged++
           continue
         }
@@ -287,105 +377,48 @@ module.exports = async ({github, context, core, env = process.env, log = console
           const {data: updated} = await github.rest.checks.update({
             ...context.repo,
             check_run_id: cr.id,
-            ...state
+            ...state,
+            ...runLink(pr, run)
           })
-          // A successful request can leave the state unchanged, notably when trying
-          // to reopen a completed check after a rerun.
-          if (sameState(cr, updated)) {
-            count.unchanged++
-          } else {
-            log.log(ref + ': ' + label(cr) + ' -> ' + label(updated))
+          if (sameState(updated, state)) {
+            trackedRunShown ||= tracked
+            log.log(ref + ': ' + change)
             count.updated++
-          }
-          if (!sameState(updated, state)) {
+          } else {
             count.notApplied++
+            core.warning(ref + ': GitHub did not apply ' + change
+              + '; the check is still ' + label(updated))
           }
         } catch (error) {
+          // A failed request has an unknown outcome; retry it on the next pass.
+          trackedRunShown ||= tracked
           log.error(ref + ': ' + change + ' failed: ' + error.message)
           failedPRs.add(pr.number)
         }
       }
 
-      // No syncable Build check: link one to the PR branch's build_main.yml run, or
-      // create action_required guidance if no run exists, it was skipped, or the PR
-      // is from fork master. Fork master is reserved for syncing upstream; new PR
-      // builds must use other branches, even if an older workflow ran on master.
-      // Existing run-linked checks are still synchronized above.
-      if (!syncableBuildCheck) {
-        const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
-          ? undefined : pr.buildRun
-        if (!run) {
-          // Already provided guidance, or still within the run-registration grace period.
-          if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
-              || Date.parse(pr.updatedAt) > runGraceSince) {
-            count.skipped++
-            continue
-          }
+      // Link a new check to the tracked run if no check shows its current state: the PR
+      // has none yet, its check completed before a rerun, an update was not applied, or
+      // its checks link to other runs (e.g. an older build of the same commit).
+      if (trackedRun && !trackedRunShown && !unlistedRun) {
+        await createCheck(pr, ref, trackedRun, trackedRunReran)
+      } else if (!trackedRun && !syncableBuildCheck) {
+        // No run exists, it was skipped, or the PR is from fork master: create
+        // action_required guidance, unless the PR already has it or is still within
+        // the run-registration grace period.
+        if (pr.buildChecks.some(isGuidance)
+            || Date.parse(pr.updatedAt) > runGraceSince) {
+          count.skipped++
+          continue
         }
-
-        const state = run ? checkState(run)
-          : {status: 'completed', conclusion: 'action_required'}
-        const check = {
-          ...context.repo, name: BUILD_CHECK_NAME, head_sha: pr.sha, ...state
-        }
-        const change = 'none -> ' + label(state)
-        try {
-          if (run) {
-            const actions_url = 'https://github.com/' + pr.forkOwner + '/' + pr.forkRepo
-              + '/actions/runs/' + run.id
-            check.output = {
-              title: 'Test results',
-              summary: '[See test results](' + actions_url + ')\n\n'
-                + 'If the tests fail for reasons unrelated to this pull request, '
-                + 'please rerun the workflow in your forked repository.\n'
-                + 'If the failures are related to this pull request, '
-                + 'please investigate them and push follow-up changes.',
-              text: JSON.stringify({
-                owner: pr.forkOwner,
-                repo: pr.forkRepo,
-                run_id: run.id
-              })
-            }
-            check.details_url = actions_url
-          } else {
-            // No usable run, or a fork-master PR: explain the required setup.
-            check.output = {
-              title: 'PR build setup requires attention',
-              summary: `
-  A supported Build check is not available for this PR head commit.
-
-  1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
-  2. For PR build status, use a branch other than \`master\` in your fork.`
-                + (pr.branch == 'master' ? '' : `
-
-  After fixing the cause, push a new commit to your PR branch to start the build.`),
-              images: [
-                {
-                  alt: 'enabling workflows button',
-                  image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
-                }
-              ]
-            }
-          }
-          await github.rest.checks.create(check)
-          log.log(ref + ': ' + change)
-          count.created++
-        } catch (error) {
-          log.error(ref + ': ' + change + ' failed: ' + error.message)
-          failedPRs.add(pr.number)
-        }
+        await createCheck(pr, ref, undefined)
       }
     }
   }
 
   log.log(count.prs + ' PRs checked, ' + count.skipped + ' skipped. '
-    + 'Build checks: ' + count.updated + ' updated, ' + count.created + ' created, '
-    + count.unchanged + ' unchanged.')
-
-  if (count.notApplied > 0) {
-    core.warning(count.notApplied + ' check update(s) did not reach the requested '
-      + 'state. GitHub cannot reopen completed checks.')
-  }
+    + 'Build checks: ' + count.updated + ' updated, ' + count.notApplied + ' not applied, '
+    + count.created + ' created, ' + count.unchanged + ' unchanged.')
 
   if (failedPRs.size > 0) {
     core.setFailed('Failed to sync ' + failedPRs.size + ' PR(s), will retry next pass: #'
