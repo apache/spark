@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.serde2.io.{DoubleWritable, HiveCharWritable, HiveVarcharWritable}
+import org.apache.hadoop.hive.serde2.io.{DateWritable, DoubleWritable, HiveCharWritable, HiveVarcharWritable}
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
@@ -31,7 +31,7 @@ import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -169,6 +169,24 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
     checkDataType(ois.map(inspectorToDataType), dataTypes)
     checkDataType(dataTypes.map(toWritableInspector).map(inspectorToDataType), dataTypes)
+  }
+
+  test("SPARK-61763: Hive map wrapping preserves distinct DATE keys") {
+    val expected = Map(
+      java.sql.Date.valueOf("2003-01-13") -> 6,
+      java.sql.Date.valueOf("2011-07-19") -> -4)
+    val dataType = MapType(DateType, IntegerType, valueContainsNull = false)
+    val inspector = toWritableInspector(dataType)
+    val wrapped = wrap(Literal.create(expected, dataType).eval(), inspector, dataType)
+      .asInstanceOf[util.Map[DateWritable, _]]
+    assert(wrapped.size() == expected.size)
+    val restored = unwrap(wrapped, inspector).asInstanceOf[MapData]
+    val entries = (0 until restored.numElements()).map { index =>
+      restored.keyArray().getInt(index) -> restored.valueArray().getInt(index)
+    }.toMap
+    assert(entries == expected.map { case (date, value) =>
+      DateTimeUtils.fromJavaDate(date) -> value
+    })
   }
 
   test("wrap / unwrap null, constant null and writables") {
