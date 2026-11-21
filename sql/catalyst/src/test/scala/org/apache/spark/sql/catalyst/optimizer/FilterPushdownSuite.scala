@@ -209,6 +209,18 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62069: a condition that can fail is not combined after a throwable one") {
+    // The inner filter drops a row on which its condition is NULL, but `NULL AND x` evaluates
+    // `x`, so a condition that can fail stays above a throwable one, while one that can not fail
+    // is combined.
+    val throwing = If($"a" > 0, $"b" > $"c", IsNull(RaiseError(Literal("boom"))))
+    val canFail = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
+    val originalQuery = testRelation.where(throwing).where(canFail && $"a" > 1)
+    val correctAnswer = testRelation.where(throwing && $"a" > 1).where(canFail).analyze
+
+    comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
