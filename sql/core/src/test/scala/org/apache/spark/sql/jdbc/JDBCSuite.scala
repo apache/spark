@@ -1492,6 +1492,18 @@ class JDBCSuite extends SharedSparkSession {
     assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
   }
 
+  test("escape [ in MsSqlServer LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {
+    // MsSqlServer reads `[...]` in a LIKE pattern as a character class, so `[` must be escaped to
+    // be matched literally. `]` alone is literal and stays as is.
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;db=foo")
+    def msSqlServerSQL(f: Filter): String =
+      msSqlServerDialect.compileExpression(f.toV2).getOrElse("")
+    assert(msSqlServerSQL(StringStartsWith("c", "[")) === """"c" LIKE '\[%' ESCAPE '\'""")
+    assert(msSqlServerSQL(StringEndsWith("c", "[b]")) === """"c" LIKE '%\[b]' ESCAPE '\'""")
+    assert(msSqlServerSQL(StringContains("c", "[a-c]_%\\")) ===
+      """"c" LIKE '%\[a-c]\_\%\\%' ESCAPE '\'""")
+  }
+
   test("SPARK-57446: escape single quotes in JDBC comment queries") {
     val defaultDialect = JdbcDialects.get("jdbc:")
     assert(defaultDialect.getTableCommentQuery("t", "a'b") ===
