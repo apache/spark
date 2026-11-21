@@ -64,7 +64,6 @@ import logging
 import opcode
 import pickle
 from pickle import _getattribute as _pickle_getattribute
-import platform
 import struct
 import sys
 import threading
@@ -95,7 +94,7 @@ _DYNAMIC_CLASS_TRACKER_BY_CLASS = weakref.WeakKeyDictionary()
 _DYNAMIC_CLASS_TRACKER_BY_ID = weakref.WeakValueDictionary()
 _DYNAMIC_CLASS_TRACKER_LOCK = threading.Lock()
 
-PYPY = platform.python_implementation() == "PyPy"
+PYPY = sys.implementation.name == "pypy"
 
 builtin_code_type = None
 if PYPY:
