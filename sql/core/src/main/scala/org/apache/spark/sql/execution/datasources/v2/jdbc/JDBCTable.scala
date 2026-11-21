@@ -73,8 +73,16 @@ case class JDBCTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(mergeOptions(options))
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics, databaseMetadata)
+    val scanDatabaseMetadata = databaseMetadata.filter(_ => opensSameConnection(mergedOptions))
+    JDBCScanBuilder(
+      SparkSession.active, schema, mergedOptions, additionalMetrics, scanDatabaseMetadata)
   }
+
+  private def opensSameConnection(other: JDBCOptions): Boolean =
+    other.url == jdbcOptions.url &&
+      other.driverClass == jdbcOptions.driverClass &&
+      other.connectionProviderName == jdbcOptions.connectionProviderName &&
+      other.asConnectionProperties == jdbcOptions.asConnectionProperties
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     val mergedOptions = new JdbcOptionsInWrite(mergeOptions(info.options))
