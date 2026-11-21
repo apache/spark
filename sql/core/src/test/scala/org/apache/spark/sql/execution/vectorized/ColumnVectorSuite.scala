@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.columnar.{ColumnAccessor, ColumnDictionary
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarArray
+import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -110,6 +110,15 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       assert(array.get(i, IntegerType) === i)
       assert(arrayCopy.get(i, IntegerType) === i)
     }
+  }
+
+  testVectors("ColumnarArray.get returns null for null elements", 1, IntegerType) { testVector =>
+    testVector.putInt(0, 42)
+    testVector.putNull(0)
+
+    val array = new ColumnarArray(testVector, 0, 1)
+    assert(array.isNullAt(0))
+    assert(array.get(0, IntegerType) == null)
   }
 
   testVectors("date", 10, DateType) { testVector =>
@@ -1136,6 +1145,27 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(row.get(1, DoubleType) === 3.45)
     assert(!row.isNullAt(2))
     assert(row.get(2, TimestampNTZType) === 1000L)
+  }
+
+  testVectors("ColumnarBatchRow.get handles null", 2, IntegerType) { testVector =>
+    testVector.putInts(0, 2, 42)
+    testVector.putNull(0)
+
+    val batch = new ColumnarBatch(Array[ColumnVector](testVector), 2)
+    val row = batch.getRow(1)
+    assert(!row.isNullAt(0))
+    assert(row.get(0, IntegerType) === 42)
+
+    val nullRow = batch.getRow(0)
+    assert(nullRow.isNullAt(0))
+    assert(nullRow.get(0, IntegerType) == null)
+  }
+
+  testVectors("ColumnarBatchRow.get handles NullType", 1, NullType) { testVector =>
+    val batch = new ColumnarBatch(Array[ColumnVector](testVector), 1)
+    val row = batch.getRow(0)
+    assert(row.isNullAt(0))
+    assert(row.get(0, NullType) == null)
   }
 
   testVectors("putBooleans(byte)", 96, BooleanType) { testVector =>
