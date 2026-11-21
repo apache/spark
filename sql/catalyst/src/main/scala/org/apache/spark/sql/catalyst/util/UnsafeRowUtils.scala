@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, RowOrdering, UnsafeRow}
 import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
@@ -235,6 +235,51 @@ object UnsafeRowUtils {
   def isBinaryStable(dataType: DataType): Boolean = !dataType.existsRecursively {
     case st: StringType =>
       !st.supportsBinaryEquality
+    case _ => false
+  }
+
+  /**
+   * Returns an equality checker for grouping keys (UnsafeRows) of the given data types.
+   * If every type is binary-stable, equality is a plain binary comparison. Otherwise (e.g.
+   * a STRING with a non-binary collation), values that are semantically equal can have
+   * different binary representations, so the checker falls back to an ordering-based
+   * comparison that applies to all fields.
+   *
+   * Keys holding a CALENDAR INTERVAL use the generated comparator, because the
+   * interpreted ordering cannot compare intervals (their physical ordering is
+   * unsupported); the generated comparator is the one the planner's sort applies to
+   * such keys.
+   *
+   * `checkBytesFirst` controls whether that fallback compares the key bytes before the
+   * ordering, and is only observable for non-binary-stable keys: byte-identical rows
+   * compare equal under every collation and SQL ordering, so a byte-first check answers
+   * same-spelling keys with one byte comparison, while every check whose bytes differ
+   * pays a failed byte comparison before the same ordering comparison. Both forms group
+   * keys the same way, so the choice only moves cost between checks of identically
+   * spelled keys and all other checks; each call site's comment says why it passes the
+   * value it does.
+   */
+  def rowEqualityChecker(
+      dataTypes: Seq[DataType],
+      checkBytesFirst: Boolean): (UnsafeRow, UnsafeRow) => Boolean = {
+    if (dataTypes.forall(isBinaryStable)) {
+      (key1, key2) => key1.equals(key2)
+    } else {
+      val ordering = if (dataTypes.exists(containsCalendarInterval)) {
+        RowOrdering.createNaturalAscendingOrdering(dataTypes)
+      } else {
+        InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
+      }
+      if (checkBytesFirst) {
+        (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
+      } else {
+        (key1, key2) => ordering.compare(key1, key2) == 0
+      }
+    }
+  }
+
+  private def containsCalendarInterval(dataType: DataType): Boolean = dataType.existsRecursively {
+    case CalendarIntervalType => true
     case _ => false
   }
 }

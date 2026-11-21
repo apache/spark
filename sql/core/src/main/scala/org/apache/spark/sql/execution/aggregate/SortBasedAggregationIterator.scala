@@ -107,14 +107,12 @@ class SortBasedAggregationIterator(
       sortedInputHasNewGroup = false
     }
 
+    // The checker skips the byte pre-check, whose trade-off here has not been measured:
+    // the pre-check would answer each check of a row spelled like its group's first row,
+    // but add a failed byte comparison to every other check, including the check that ends
+    // each group, so inputs with mostly single-row groups would pay more per check.
     groupKeyEqualityCheck =
-      if (groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
-        (key1: UnsafeRow, key2: UnsafeRow) => key1.equals(key2)
-      } else {
-        val types = groupingAttributes.map(_.dataType).toIndexedSeq
-        val ordering = InterpretedOrdering.forSchema(types)
-        (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
-      }
+      UnsafeRowUtils.rowEqualityChecker(groupingAttributes.map(_.dataType), checkBytesFirst = false)
   }
 
   initialize()

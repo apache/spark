@@ -28,6 +28,7 @@ import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -257,6 +258,11 @@ class ArrowWindowPythonEvaluatorFactory(
         }
       )
       val grouping = UnsafeProjection.create(partitionSpec, childOutput)
+      // The bytes are checked first, so a key spelled like its group's first row costs
+      // one byte comparison and only keys whose bytes differ pay the ordering comparison,
+      // which keeps the single byte comparison this loop made before it used the collation.
+      val groupKeyEqualityCheck = UnsafeRowUtils.rowEqualityChecker(
+        partitionSpec.map(_.dataType), checkBytesFirst = true)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -318,7 +324,7 @@ class ArrowWindowPythonEvaluatorFactory(
           // clear last partition
           buffer.clear()
 
-          while (nextRowAvailable && nextGroup == currentGroup) {
+          while (nextRowAvailable && groupKeyEqualityCheck(nextGroup, currentGroup)) {
             buffer.add(nextRow)
             fetchNextRow()
           }

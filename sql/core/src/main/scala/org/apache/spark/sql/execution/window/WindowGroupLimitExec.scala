@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.util.{UnsafeRowKeyOperations, UnsafeRowUtils}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 sealed trait WindowGroupLimitMode
 
@@ -205,12 +207,47 @@ class GroupedLimitIterator(
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
+  // A non-binary-stable key (e.g. a collated STRING) makes group membership a collation
+  // comparison. This operator compares collated keys with the key equality
+  // (UnsafeRowKeyOperations) rather than the shared checker's ordering fallback, to
+  // avoid the interpreted ordering's work at each group boundary. Float and double keys
+  // arrive already normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are
+  // canonical), so byte equality of their binary-stable fields matches the ordering and
+  // the groups are the ones WindowExec forms. Binary-stable keys, and keys whose types
+  // the key operations do not admit, keep the shared checker's single byte comparison.
+  private val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean = {
+    val keyTypes = partitionSpec.map(_.dataType)
+    if (!keyTypes.forall(UnsafeRowUtils.isBinaryStable) &&
+        keyTypes.forall(UnsafeRowKeyOperations.supportsDataType)) {
+      val keySchema = StructType(keyTypes.zipWithIndex.map { case (dataType, ordinal) =>
+        StructField(s"key_$ordinal", dataType)
+      })
+      val keyOperations = new UnsafeRowKeyOperations(keySchema)
+      (key1, key2) => key1.equals(key2) || keyOperations.areEqual(key1, key2)
+    } else {
+      UnsafeRowUtils.rowEqualityChecker(keyTypes, checkBytesFirst = true)
+    }
+  }
+
   // Manage the stream and the grouping.
   var nextRow: UnsafeRow = null
   var nextGroup: UnsafeRow = null
   var nextRowAvailable: Boolean = false
+
+  // Result of the group-equality check for the row currently held in nextRow/nextGroup,
+  // remembered so that the limit iterators' repeated hasNext calls evaluate the check at
+  // most once per fetched row and current group (a row that starts a new group is checked
+  // again after the switch); for collated keys each evaluation pays a comparison over
+  // all key fields. Whether the remembered answer is current is tracked with an explicit
+  // flag rather than row identity, because the input iterator and the grouping projection
+  // reuse their row objects. It is cleared whenever the input advances or the current
+  // group changes; an answer that outlives either would merge two groups and drop rows.
+  private var groupKeyEqualityKnown = false
+  private var groupKeyEqualityResult = false
+
   protected[this] def fetchNextRow(): Unit = {
     nextRowAvailable = input.hasNext
+    groupKeyEqualityKnown = false
     if (nextRowAvailable) {
       nextRow = input.next().asInstanceOf[UnsafeRow]
       nextGroup = grouping(nextRow)
@@ -243,7 +280,13 @@ class GroupedLimitIterator(
     // Before we start to fetch new input rows, make a copy of nextGroup.
     var currentGroup = nextGroup.copy()
 
-    def hasNext: Boolean = nextRowAvailable && nextGroup == currentGroup
+    def hasNext: Boolean = nextRowAvailable && {
+      if (!groupKeyEqualityKnown) {
+        groupKeyEqualityKnown = true
+        groupKeyEqualityResult = groupKeyEqualityCheck(nextGroup, currentGroup)
+      }
+      groupKeyEqualityResult
+    }
 
     def next(): InternalRow = {
       if (!hasNext) throw new NoSuchElementException
@@ -259,7 +302,11 @@ class GroupedLimitIterator(
       }
 
       // Switch to next group
-      if (nextRowAvailable) currentGroup = nextGroup.copy()
+      if (nextRowAvailable) {
+        currentGroup = nextGroup.copy()
+        // The remembered answer was computed against the previous group.
+        groupKeyEqualityKnown = false
+      }
     }
   }
 }
