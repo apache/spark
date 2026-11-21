@@ -47,7 +47,8 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{
-  sideBySide, CharsetProvider, CharVarcharUtils, DateTimeUtils, FailFastMode, IntervalUtils, MapData
+  sideBySide, CharsetProvider, CharVarcharUtils, DateFormatter, DateTimeUtils, DefaultDateFormatter,
+  FailFastMode, IntervalUtils, LegacyDateFormats, MapData
 }
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, CatalogPlugin, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -2926,12 +2927,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  // A DATE as a SQL literal in the proleptic Gregorian calendar of DATE values, whatever
+  // `spark.sql.legacy.timeParserPolicy` is. Under LEGACY, `toSQLValue(_, DateType)` formats with
+  // the legacy formatter, whose rebasing to the Julian calendar overflows for the dates within
+  // about 44,500 days of the minimum DATE, so building the error would throw instead.
+  private def toSQLDate(days: Int): String = {
+    val formatter = new DefaultDateFormatter(
+      DateFormatter.defaultLocale, LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT, isParsing = false)
+    s"DATE '${formatter.format(days)}'"
+  }
+
   def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"find the next $dayOfWeek after " +
-          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+        "operation" -> s"find the next $dayOfWeek after ${toSQLDate(days)}"),
       context = Array.empty,
       summary = "")
   }
@@ -2940,8 +2950,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"find the last day of the month of " +
-          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+        "operation" -> s"find the last day of the month of ${toSQLDate(days)}"),
       context = Array.empty,
       summary = "")
   }
@@ -2950,8 +2959,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"truncate ${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)} " +
-          s"to $unit")),
+        "operation" -> s"truncate ${toSQLDate(days)} to $unit"),
       context = Array.empty,
       summary = "")
   }
@@ -3038,6 +3046,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("operation" -> s"add $i to the time value $t"),
       context = Array.empty,
       summary = "")
+  }
+
+  def subtractDatesOverflowError(
+      endDay: Int,
+      startDay: Int,
+      context: QueryContext): ArithmeticException = {
+    val end = toSQLDate(endDay)
+    val start = toSQLDate(startDay)
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> s"subtract $start from $end"),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def invalidBucketFile(path: String): Throwable = {
