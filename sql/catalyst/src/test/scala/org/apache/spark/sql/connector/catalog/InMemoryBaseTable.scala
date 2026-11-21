@@ -358,6 +358,8 @@ abstract class InMemoryBaseTable(
             case (value: Long, _: TimestampNTZType) => value
             case (value: UTF8String, _: StringType) =>
               value.hashCode.toLong
+            case (value: Decimal, _: DecimalType) =>
+              value.toJavaBigDecimal.unscaledValue.hashCode.toLong
             case (value: Array[Byte], BinaryType) =>
               util.Arrays.hashCode(value).toLong
             case (v, t) =>

@@ -2663,13 +2663,13 @@ case class KeyedShuffleSpec(
     // then placed with the keyed side's rows of its value, but the cogroup pairs its groups by
     // comparing the two sides' key rows, so they do not pair, or the cogroup fails, and falling
     // back to a hash shuffle would pair them wrongly too. So such a child fails here, while
-    // planning, with
-    // an error that names the key and its type. A key stored as the column is goes by storage and
-    // is placed by the keyed side's bytes, see `storedKey`, unless the function cannot take it
-    // even so, e.g. a nested decimal of more precision than declared, which fails here too.
-    // This covers transform positions only. An identity position is rebuilt over the other key
-    // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
-    // before this check, and are left to SPARK-60782.
+    // planning, with an error that names the key and its type. A key stored as the column is goes
+    // by storage and is placed by the keyed side's bytes, see `storedKey`, unless the function
+    // cannot take it even so, e.g. a nested decimal of more precision than declared, which fails
+    // here too. This covers transform positions only. An identity position is rebuilt over the
+    // other key whatever its type, and a layout Spark cannot evaluate, e.g. one whose function
+    // declares a narrower decimal than its column (SPARK-61812), is not shuffled onto: the hash
+    // shuffle pairs a key stored otherwise wrongly there. Both are left to SPARK-60782.
     // The storage check comes first, since it needs no call: a key it refuses is named, and the
     // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
     // not evaluated.
