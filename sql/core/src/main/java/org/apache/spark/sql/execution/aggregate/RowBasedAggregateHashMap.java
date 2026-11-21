@@ -50,7 +50,8 @@ public abstract class RowBasedAggregateHashMap implements AutoCloseable {
   // `buckets`, `numBuckets`), so renaming one only fails when Janino compiles the generated
   // code at runtime, not at build time.
   protected final RowBasedKeyValueBatch batch;
-  protected final int[] buckets;
+  // Not final: close() drops it.
+  protected int[] buckets;
   protected final int capacity;
   protected final int numBuckets;
   protected final int maxSteps = 2;
@@ -121,5 +122,9 @@ public abstract class RowBasedAggregateHashMap implements AutoCloseable {
   @Override
   public final void close() {
     batch.close();
+    // The task-completion hook that closes this map keeps it reachable until the task ends, so a
+    // task that runs many partitions, each with its own map, would otherwise hold all of their
+    // buckets at once. No probe follows a close.
+    buckets = null;
   }
 }

@@ -867,10 +867,10 @@ private[sql] object GroupPartitionsExec {
  *
  * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
  * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations. When nothing in the parent's narrow lineage is
- * persisted, a group names a location if it has several partitions, shares none of them with
- * another group, and more of its partitions prefer one host than any other host. Every other
- * group leaves its location to the scheduler.
+ * required for storage-partitioned operations. V2 scan partition packing uses it for its groups
+ * too. When nothing in the parent's narrow lineage is persisted, a group names a location if it
+ * has several partitions, shares none of them with another group, and more of its partitions
+ * prefer one host than any other host. Every other group leaves its location to the scheduler.
  *
  * @param groupedPartitions Sequence where each element is a sequence of input partition
  *                         indices that should be grouped together. Only the driver reads it,
