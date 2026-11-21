@@ -653,7 +653,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * that is not inlined (which may be a non-deterministic one; a CTERelationRef does not tell) and
    * a streaming source (for which the domain joins fail). It also checks the plans of the
    * subqueries in `input`. A relation is taken to give the same rows again, as elsewhere in Spark,
-   * e.g. in a self-join; a LogicalRDD over an RDD that does not is not detected. Anything else,
+   * e.g. in a self-join, except a LogicalRDD or an ExternalRDD (in sql/core, so matched by name),
+   * whose RDD can give other rows when computed again, e.g. one of random values; a source
+   * outside Spark that gives other rows, e.g. over JDBC, is not detected. Anything else,
    * e.g. a LIMIT (other than over rows of constants), a window function, a sample or a FIRST,
    * keeps the previous handling.
    */
@@ -681,12 +683,15 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
               case _ => false
             })
         case _: CTERelationRef => false
-        case l: LeafNode => !l.isStreaming
+        case l: LeafNode => !l.isStreaming && !rddRelations.contains(l.nodeName)
         case _ => false
       }
       !known || !p.expressions.forall(_.deterministic) ||
         !p.subqueries.forall(repeatableInput(_, inSubquery = true))
     }
+
+  // The leaf nodes over an RDD (see repeatableInput).
+  private val rddRelations = Set("LogicalRDD", "ExternalRDD")
 
   // Whether every row of `plan` is the same row of constants, so that a LIMIT over it gives the
   // same rows whichever rows it keeps.

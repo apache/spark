@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class SubquerySuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -3979,6 +3979,32 @@ class SubquerySuite extends SharedSparkSession
             "GROUP BY c"),
           Row(1, 1000))
       }
+    }
+  }
+
+  test("SPARK-60501: an outer input over an RDD that gives other rows when computed again") {
+    withTempView("b", "o") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      val rdd = spark.sparkContext.parallelize(0 until 1000, 4)
+        .map(_ => Row(1 + scala.util.Random.nextInt(999)))
+      spark.createDataFrame(rdd, new StructType().add("kk", IntegerType))
+        .createOrReplaceTempView("o")
+      // As for a non-deterministic outer input (see above): every key has rows below it in b, so
+      // the result is 0 for the first subquery and 1 for the second, for every row, also where
+      // the domain join of the non-equality correlation computes the RDD again and misses keys.
+      Seq("(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
+          "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))" -> 0,
+          "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))" -> 1).foreach {
+        case (subquery, result) =>
+          checkAnswer(sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM o) GROUP BY c"),
+            Row(result, 1000))
+      }
+      // A subquery that needs the domain joins keeps the plan of before.
+      val needsDomainJoins = "SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b " +
+        "WHERE b.k = o.kk) WHERE s > 0) FROM o"
+      def joins(legacy: Boolean): Int =
+        optimizedPlan(needsDomainJoins, legacy).collect { case j: Join => j }.size
+      assert(joins(legacy = false) === joins(legacy = true))
     }
   }
 
