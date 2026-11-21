@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.{
   PipelinesCatalogUtils,
@@ -320,7 +321,7 @@ object DatasetManager extends Logging {
     val outputSchema = table.specifiedSchema.getOrElse(
       inferredSchemas(table.identifier).asNullable
     )
-    val mergedProperties = resolveTableProperties(table, identifier)
+    val mergedProperties = resolveTableProperties(table, identifier, catalog)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>
       ClusterByTransform(cols.map(col => Expressions.column(col)))
@@ -656,9 +657,9 @@ object DatasetManager extends Logging {
    *                                schema; for auxiliary tables, the derived schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
-   * @param properties              the declared table properties to (re)set on the table. Note
-   *                                that properties absent here are NOT removed from the table (see
-   *                                the TODO in the body).
+   * @param properties              the desired table properties; see
+   *                                [[PipelinesTableProperties.declaredPropertyKeys]] for which
+   *                                absent keys are removed.
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
@@ -694,18 +695,45 @@ object DatasetManager extends Logging {
 
     val existingProperties = existingTable.properties()
 
-    // TODO (SPARK-57670): Property removal is intentionally not handled here: a property dropped
-    // from the table definition between runs is left in place rather than actually removed from the
-    // corresponding catalog table entry. Removing it reliably is hard because we cannot distinguish
-    // a user-declared property the user dropped from a catalog/engine-managed property (e.g. the
-    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) that must never be
-    // removed, and there is no record of which keys the pipeline previously set.
+    // The removal rule is stated in PipelinesTableProperties.declaredPropertyKeys. Ownership
+    // follows declaration: a key the definition never declared may be catalog-managed, so it is
+    // never removed, and a table with no record has nothing removed.
+    val recordKey = PipelinesTableProperties.declaredPropertyKeys
+    val existingRecord = Option(existingProperties.get(recordKey))
+    val parsedRecord = existingRecord.flatMap(JsonStringArrayCodec.parse)
+    if (existingRecord.isDefined && parsedRecord.isEmpty) {
+      logWarning(
+        log"The ${MDC(LogKeys.PROPERTY_NAME, recordKey)} table property of table " +
+        log"${MDC(LogKeys.TABLE_NAME, tableIdentifier)} is not a JSON string array. The keys " +
+        log"it lists are not removed, and this run replaces the record, or removes it if the " +
+        log"definition declares no removable table property.")
+    }
+    val previouslyDeclaredKeys = parsedRecord
+      .getOrElse(Seq.empty)
+      .filterNot(nonRemovableReservedProperties.contains)
+      .filterNot(_ == recordKey)
+    val userPropertiesToRemove = previouslyDeclaredKeys.distinct.collect {
+      case k if !properties.contains(k) && existingProperties.containsKey(k) => k
+    }
+    if (userPropertiesToRemove.nonEmpty) {
+      logInfo(
+        log"Removing table properties dropped from the definition of table " +
+        log"${MDC(LogKeys.TABLE_NAME, tableIdentifier)}: " +
+        log"${MDC(LogKeys.PROPERTY_NAME, userPropertiesToRemove.sorted.mkString(", "))}.")
+    }
+    // The record lists only the removable keys the definition declares. Once none are left it
+    // would describe nothing, so it is removed too; while one remains, the set below replaces it.
+    val recordToRemove =
+      Seq(recordKey).filter(k => !properties.contains(k) && existingProperties.containsKey(k))
+    val propertiesToRemove =
+      (userPropertiesToRemove ++ recordToRemove).map(TableChange.removeProperty)
+
     val propertiesToSet = properties.collect {
       case (k, v) if !Option(existingProperties.get(k)).contains(v) =>
         TableChange.setProperty(k, v)
     }
 
-    val allTableChanges = columnChanges ++ propertiesToSet
+    val allTableChanges = columnChanges ++ propertiesToRemove ++ propertiesToSet
 
     // If there are no table changes to evolve with, avoid the no-op round-trip alter altogether.
     if (allTableChanges.nonEmpty) {
@@ -714,11 +742,34 @@ object DatasetManager extends Logging {
   }
 
   /**
+   * Reserved catalog properties that [[resolveTableProperties]] leaves out of the declared-keys
+   * record and that [[evolveTable]] never removes, even if a hand-edited record lists them: the SQL
+   * parser rejects them in TBLPROPERTIES, and they describe the table itself (provider, location,
+   * owner, ...). `comment` is deliberately not among them: it is accepted in TBLPROPERTIES, and
+   * passed through from Python `table_properties`, so a declaration owns it like any other key.
+   */
+  private val nonRemovableReservedProperties: Set[String] =
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.toSet - TableCatalog.PROP_COMMENT
+
+  /**
    * Some fields on the [[Table]] object are represented as reserved table properties by the catalog
    * APIs. This method creates a table properties map that merges the user-provided table properties
-   * with these reserved properties.
+   * with these reserved properties, plus the [[PipelinesTableProperties.declaredPropertyKeys]]
+   * record that lets [[evolveTable]] remove the properties a later definition drops; that Scaladoc
+   * states when the record is written and which keys are removed.
+   *
+   * The record is left out for a [[JDBCTableCatalog]] (see
+   * [[PipelinesTableProperties.declaredPropertyKeys]]) because that catalog appends every property
+   * other than the reserved ones to the `CREATE TABLE` statement as a DDL option, and the record
+   * would make the statement invalid. Re-runs of such a table are not supported either way: a JDBC
+   * table with any table property fails on its second run, with or without the record, because
+   * `JDBCTable` reports no properties and the JDBC dialect rejects `SetProperty`. Re-runs of JDBC
+   * tables with table properties are tracked in SPARK-62024.
    */
-  private def resolveTableProperties(table: Table, identifier: Identifier): Map[String, String] = {
+  private def resolveTableProperties(
+      table: Table,
+      identifier: Identifier,
+      catalog: TableCatalog): Map[String, String] = {
     val validatedAndCanonicalizedProps =
       PipelinesTableProperties.validateAndCanonicalize(
         table.properties,
@@ -742,7 +793,19 @@ object DatasetManager extends Logging {
       }
       .collect { case (key, Some(value)) => key -> value }
 
-    validatedAndCanonicalizedProps ++ specialProps
+    val recordedKeys = validatedAndCanonicalizedProps.keys
+      .filterNot(nonRemovableReservedProperties.contains)
+      .toSeq
+      .sorted
+    val declaredPropertyKeys =
+      if (recordedKeys.nonEmpty && !catalog.isInstanceOf[JDBCTableCatalog]) {
+        Map(PipelinesTableProperties.declaredPropertyKeys ->
+          JsonStringArrayCodec.serialize(recordedKeys))
+      } else {
+        Map.empty[String, String]
+      }
+
+    validatedAndCanonicalizedProps ++ specialProps ++ declaredPropertyKeys
   }
 
   /**
