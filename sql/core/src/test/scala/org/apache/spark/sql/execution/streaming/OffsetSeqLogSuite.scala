@@ -26,8 +26,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.{
-  CommitLog, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata,
-  OffsetSeqMetadataV2}
+  CheckpointVersionManager, CommitLog, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog,
+  OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{
   LongOffset, MemoryStream, SerializedOffset, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
@@ -798,6 +798,85 @@ class OffsetSeqLogSuite extends SharedSparkSession {
             parameters = Map("existingVersion" -> "1"))
         }
       }
+    }
+  }
+
+  gridTest("restart keeps positional source tracking and reports a config override")(
+      Seq(false, true)) { sessionEnforcement =>
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val inputData = MemoryStream[Int]
+
+        withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+          val query1 = inputData.toDF()
+            .writeStream
+            .format("parquet")
+            .option("path", outputDir.getAbsolutePath)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start()
+          inputData.addData(1, 2)
+          query1.processAllAvailable()
+          query1.stop()
+        }
+
+        // A memory stream has no NamedStreamingRelation, so the config alone passes analysis.
+        val logAppender = new LogAppender("source tracking override")
+        withLogAppender(logAppender) {
+          withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key ->
+              sessionEnforcement.toString) {
+            val query2 = inputData.toDF()
+              .writeStream
+              .format("parquet")
+              .option("path", outputDir.getAbsolutePath)
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .start()
+            try {
+              inputData.addData(3, 4)
+              query2.processAllAvailable()
+              val querySession =
+                query2.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+              assert(!querySession.sessionState.conf.enableStreamingSourceEvolution)
+              assert(spark.sessionState.conf.enableStreamingSourceEvolution == sessionEnforcement)
+            } finally {
+              query2.stop()
+            }
+          }
+        }
+        val overrides = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .filter(message => message.contains("Updating the value of conf") &&
+            message.contains(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key))
+        if (sessionEnforcement) {
+          assert(overrides.size == 1)
+          assert(overrides.head.contains("from 'true' to 'false'"))
+        } else {
+          assert(overrides.isEmpty)
+        }
+
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+        val (latestBatchId, latestOffsets) = offsetLog.getLatest().get
+        assert(latestBatchId === 1)
+        assert(latestOffsets.version === 2)
+        assert(latestOffsets.metadataOpt.get.conf(
+          SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) === "false")
+      }
+    }
+  }
+
+  test("new query offset log version follows the caller's source evolution decision") {
+    withSQLConf(
+        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false",
+        SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "1") {
+      assert(CheckpointVersionManager.resolveOffsetLogVersion(
+        spark, latestStartedBatch = None, sourceEvolutionEnabled = true) === 2)
+    }
+  }
+
+  test("new query offset log version ignores the source evolution config") {
+    withSQLConf(
+        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true",
+        SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "1") {
+      assert(CheckpointVersionManager.resolveOffsetLogVersion(
+        spark, latestStartedBatch = None, sourceEvolutionEnabled = false) === 1)
     }
   }
 
