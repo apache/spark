@@ -23,33 +23,70 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, IntegerType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
 
 /**
- * The identity of a partition transform function. It holds the two values
- * [[TransformExpression]] compares in `isSameFunction`, and it carries no exprIds, so an
- * expression can hold one in a plain field and expression equality still answers the same after
- * canonicalization.
+ * The identity of a partition transform: what [[TransformExpression.isSameFunction]] compares, and
+ * what [[TransformExpression.reducedWith]] stores to name the key space a reduce produced. Both
+ * questions are answered by this one value, so "same function" and "same reduced key space" cannot
+ * disagree about which transforms are the same.
+ *
+ * It carries no exprIds (a column argument is [[TransformFunctionId.ArgumentShape.ColumnRef]], not
+ * the attribute, and an expression argument is normalized), so an expression can hold one in a
+ * plain field and expression equality still answers the same after canonicalization.
  *
  * @param canonicalName the transform function's canonical name
- * @param numBucketsOpt the number of buckets if the transform is `bucket`. Unset otherwise.
+ * @param argumentShapes one entry per argument, in order. Positions are part of the identity, so
+ *                       `truncate(id, 2)` and `truncate(2, store_id)` are different transforms, and
+ *                       a nested transform is compared recursively, so `bucket(4, years(c))` and
+ *                       `bucket(4, days(c))` are too.
  */
-case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int])
+case class TransformFunctionId(
+    canonicalName: String,
+    argumentShapes: Seq[TransformFunctionId.ArgumentShape])
+
+object TransformFunctionId {
+  /** The shape of one argument of a partition transform, as its identity sees it. */
+  sealed trait ArgumentShape
+
+  object ArgumentShape {
+    /** A literal parameter, e.g. the bucket count of `bucket` or the width of `truncate`. */
+    case class Param(value: Literal) extends ArgumentShape
+
+    /** A nested transform, compared by its own identity, recursively. */
+    case class Nested(id: TransformFunctionId) extends ArgumentShape
+
+    /**
+     * A bare column, an [[Attribute]]. Which column is not part of the identity -- the two sides
+     * of a join reference different columns by construction, and `KeyedShuffleSpec.keyPositions`
+     * reconciles them separately.
+     */
+    case object ColumnRef extends ArgumentShape
+
+    /**
+     * Any other argument over one column, such as `c + 1` or a struct field `s.a`, with that column
+     * replaced by a placeholder. Two such arguments match when they are the same function of their
+     * columns, which is the shape `KeyedShuffleSpec` pairs on.
+     */
+    case class Expr(normalized: Expression) extends ArgumentShape
+  }
+}
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
  *
  * @param function the transform function itself. Spark will use it to decide whether two
  *                 partition transform expressions are compatible.
- * @param numBucketsOpt the number of buckets if the transform is `bucket`. Unset otherwise.
  * @param reducedWith the transform this one's partition keys were reduced together with, if they
  *                    were. A storage-partitioned join can reduce both sides' keys onto a common
  *                    key space, and when both sides reduce that space is a third one that neither
@@ -58,6 +95,19 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
  *                    exactly that, and names the other half of the pairing that produced the space,
  *                    which is the only thing that tells two such key spaces apart. See
  *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
+ * @param fromBucketTransform whether this was resolved from a V2 `bucket(numBuckets, col)`
+ *                            transform. Only a pair of such transforms is offered the deprecated
+ *                            `ReducibleFunction.reducer(int, ReducibleFunction, int)`, which is
+ *                            documented for the bucket function. Nothing else tells a bucket
+ *                            apart: a `truncate(width, col)` has the same layout, and the bound
+ *                            function may report any name. Not part of the transform's identity
+ *                            (`functionId`), nor of its plan string, but part of case-class
+ *                            equality, since a marked and an unmarked transform are offered
+ *                            different reducers. It also gives [[numBucketsOpt]], which the
+ *                            per-partition runtime bloom filter reads to refuse a bucket side
+ *                            with too few partition keys. Every production transform is resolved
+ *                            by `V2ExpressionUtils`, which sets it, and rebuilt with `copy`, which
+ *                            keeps it.
  * @param storedKey whether this transform was rebuilt over a cogroup's key of another type than
  *                  the layout's column, stored as it is (`TransformExpression.keysStoredAlike`), by
  *                  `KeyedShuffleSpec.createPartitioning`. The cogroup pairs its groups by those
@@ -69,29 +119,96 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
-    numBucketsOpt: Option[Int] = None,
     reducedWith: Option[TransformFunctionId] = None,
+    fromBucketTransform: Boolean = false,
     storedKey: Boolean = false) extends Expression {
 
   override def nullable: Boolean = true
 
   /**
-   * Prints `reducedWith` and `storedKey` only when they are set, so the ordinary form is
-   * unchanged, while two transforms that resolve their call or compare differently print
-   * differently.
+   * The function and the children, then `reducedWith` and `storedKey` only when they are set, so
+   * the ordinary form is unchanged, while two transforms that resolve their call or compare
+   * differently print differently. `fromBucketTransform` is not printed: it decides which reducer
+   * overload Spark asks and gives [[numBucketsOpt]], neither of which the plan string shows.
    */
   override protected def stringArgs: Iterator[Any] =
-    Iterator(function, children, numBucketsOpt) ++ Iterator(reducedWith).filter(_.isDefined) ++
+    Iterator(function, children) ++ Iterator(reducedWith).filter(_.isDefined) ++
       Iterator("storedKey").filter(_ => storedKey)
 
-  /** The identity of this expression's transform function. */
-  lazy val functionId: TransformFunctionId =
-    TransformFunctionId(function.canonicalName(), numBucketsOpt)
+  /**
+   * Extract literal children (constant parameters) from this transform. These are constant
+   * arguments like the bucket count in `bucket(n, col)` or the width in `truncate(col, width)`.
+   * Positions are dropped, so this is for handing parameters to a connector reducer or naming
+   * them in a message, NOT for identity -- see [[functionId]] and
+   * [[TransformFunctionId.argumentShapes]].
+   */
+  private[sql] lazy val literalChildren: Seq[Literal] =
+    children.collect { case l: Literal => l }
 
   /**
-   * Whether this [[TransformExpression]] has the same semantics as `other`.
-   * For instance, `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or
-   * `year(c)`.
+   * The bucket count of a transform resolved from a V2 `bucket(numBuckets, col)`
+   * ([[fromBucketTransform]]); `None` for any other transform. Such a transform's count is always
+   * its first child, since `V2ExpressionUtils` marks only that shape and a rebuild replaces only
+   * the column argument.
+   */
+  def numBucketsOpt: Option[Int] =
+    if (fromBucketTransform) {
+      children.headOption.collect { case Literal(n: Int, IntegerType) => n }
+    } else {
+      None
+    }
+
+  /**
+   * Rewrites this transform's column arguments with `rewriteColumn`, leaving its literal parameters
+   * untouched.
+   *
+   * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
+   * in a field of their own, any path that rewrites a transform's children has to skip them. A
+   * parameter is not an aliasable value: substituting it changes what the transform computes, and
+   * gives the transform a second reference, so `KeyedShuffleSpec.keyPositions` maps it to no
+   * cluster key and SPJ is silently lost. Use it for any retargeting of a partition transform.
+   *
+   * Callers: `KeyedShuffleSpec.rebuiltOver`, which rebuilds a transform over the other side's key,
+   * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument. It
+   * goes through `withNewChildren`, so a reduced transform's partner follows the new argument's
+   * shape, as for any other rewrite.
+   */
+  def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
+    withNewChildren(children.map {
+      case l: Literal => l
+      case c => rewriteColumn(c) match {
+        // A literal would read as a parameter from then on, so the transform would lose its column.
+        case l: Literal => throw SparkException.internalError(
+          s"Cannot rebuild $this over the literal $l: its column arguments must stay columns")
+        case rewritten => rewritten
+      }
+    }).asInstanceOf[TransformExpression]
+
+  /** The non-literal arguments. */
+  lazy val columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
+
+  /**
+   * This transform's identity, or None if some argument references more than one column or is not
+   * deterministic (e.g. `b + c`); such a transform is not the same as any other.
+   */
+  lazy val functionId: Option[TransformFunctionId] = {
+    import TransformFunctionId.ArgumentShape
+    val shapes = children.map {
+      case l: Literal => Some(ArgumentShape.Param(l))
+      case t: TransformExpression => t.functionId.map(ArgumentShape.Nested(_))
+      case e => TransformExpression.columnShape(e)
+    }
+    if (shapes.forall(_.isDefined)) {
+      Some(TransformFunctionId(function.canonicalName(), shapes.flatten))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Whether this [[TransformExpression]] has the same semantics as `other`. For instance,
+   * `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or `year(c)`.
+   * Similarly, `truncate(c, 2)` is equal to `truncate(d, 2)`, but not to `truncate(c, 4)`.
    *
    * This will be used, for instance, by Spark to determine whether storage-partitioned join can
    * be triggered, by comparing partition transforms from both sides of the join and checking
@@ -100,64 +217,210 @@ case class TransformExpression(
    * It compares the transforms only. A caller that compares partition keys has to consult
    * `reducedWith` as well, since a reduced key space is not the one its transform names.
    *
+   * Two transforms are the same when they have the same function name, the same arity, and each
+   * pair of corresponding children matches:
+   *   - literal arguments must be equal (e.g. numBuckets for bucket, width for truncate), so that
+   *     `bucket(32, c)` is not the same as `bucket(16, c)`;
+   *   - nested transform arguments must recursively be the same function, so that
+   *     `bucket(4, years(c))` is not the same as `bucket(4, days(c))`;
+   *   - a bare column must face a bare column. Which column is intentionally ignored (it is
+   *     reconciled separately, via `keyPositions`);
+   *   - any other argument must be the same expression of its one column, so that
+   *     `bucket(4, c + 1)` is the same as `bucket(4, d + 1)` but not as `bucket(4, c + 2)` or
+   *     `bucket(4, c)`. An argument over several columns, or a non-deterministic one, leaves a
+   *     transform with no identity, so it is not the same as anything.
+   *
+   * The comparison is of [[functionId]], which is per position rather than a set of literal
+   * values. Comparing only the values would make `truncate(id, 2)` and `truncate(2, store_id)` the
+   * same function; `isCompatible` short-circuits on this method, so `sameArgumentLayout` -- which
+   * guards exactly that, but only inside `reducerOutcome` -- would never run, and the pair would be
+   * paired as-is with no reduce. `hasSameReducedKeys` compares the same identity, so the two never
+   * disagree about which transforms are the same.
+   *
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
-  def isSameFunction(other: TransformExpression): Boolean = functionId == other.functionId
+  def isSameFunction(other: TransformExpression): Boolean =
+    functionId.isDefined && functionId == other.functionId
 
   /**
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
    * [[TransformExpression]]'s function.
    *
-   * This is true if both are instances of [[ReducibleFunction]] and there exists a [[Reducer]] r(x)
-   * such that r(t1(x)) = t2(x), or r(t2(x)) = t1(x), for all input x.
+   * This is true if both are the same function, or if [[pairReducers]] finds a reducer in either
+   * direction: both are instances of [[ReducibleFunction]], their arguments line up, both sides
+   * have an identity, and a reducer in one direction comes with an answer from the other. So it is
+   * false for a pair the connector could reduce but Spark does not trust. An exception from the
+   * connector other than `UnsupportedOperationException` fails the query.
    *
    * @param other the transform expression to compare to
    * @return true if compatible, false if not
    */
-  def isCompatible(other: TransformExpression): Boolean = {
-    if (isSameFunction(other)) {
-      true
-    } else {
-      (function, other.function) match {
-        case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
-          val thisReducer = reducer(f, numBucketsOpt, o, other.numBucketsOpt)
-          val otherReducer = reducer(o, other.numBucketsOpt, f, numBucketsOpt)
-          thisReducer.isDefined || otherReducer.isDefined
-        case _ => false
-      }
+  def isCompatible(other: TransformExpression): Boolean =
+    isSameFunction(other) || {
+      val (r1, r2) = pairReducers(other)
+      r1.isDefined || r2.isDefined
+    }
+
+  /**
+   * Extract all literal parameters of this transform as V2 [[V2Literal]]s, preserving each value's
+   * internal representation and its `DataType`, with no coercion. The generalized reducer is asked
+   * only when they match the declared input types ([[literalParamsMatchInputTypes]]); the
+   * deprecated one reads a single `IntegerType` parameter as an `Int`. Memoized.
+   *
+   * Examples:
+   *   bucket(4, col)        => [Literal(4, IntegerType)]
+   *   truncate(col, 3)      => [Literal(3, IntegerType)]
+   *   days(col)             => []  (no literals)
+   */
+  private lazy val extractParameters: Array[V2Literal[_]] =
+    literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
+
+  /**
+   * Whether every literal parameter has the type the bound function declares at its position in
+   * `inputTypes()`. Asked before the generalized reducer, which gets the literals' values without
+   * Analyzer type coercion: a literal of another type (a legal implicit cast under
+   * [[BoundFunction]]) would be handed to a connector that reads it as the declared type. Then the
+   * generalized overload counts as not implemented, and the other overloads, which read no literal
+   * by type, may still be asked. A literal past the declared arity has no declared type to compare
+   * against, e.g. for an arity-flexible function. Column arguments are not checked, since they are
+   * not passed to the connector; where Spark evaluates a transform, [[evaluableFunction]] checks
+   * every argument. A transform with no literal parameter has nothing to check, so the connector's
+   * `inputTypes()` is not called for it, as master never called it on this path.
+   */
+  lazy val literalParamsMatchInputTypes: Boolean = literalChildren.isEmpty || {
+    val declaredTypes = function.inputTypes()
+    children.zipWithIndex.forall {
+      case (l: Literal, i) => i >= declaredTypes.length || l.dataType == declaredTypes(i)
+      case _ => true
     }
   }
 
   /**
-   * Return a [[Reducer]] for this transform expression on another
-   * on the transform expression.
-   * <p>
-   * A [[Reducer]] exists for a transform expression function if it is
-   * 'reducible' on the other expression function.
-   * <p>
-   * @return reducer function or None if not reducible on the other transform expression
+   * Whether each position holds a literal on both sides, a bare column on both sides, the same
+   * nested transform on both sides, or the same expression of one column on both sides (e.g.
+   * `b + 1` and `c + 1`, or `s.a` and `t.a`). These are the shapes [[functionId]] tells apart, and
+   * a nested transform is compared as it does, by identity, so two instances of one function bound
+   * for two scans line up. A pair this admits differs at most in literal values and arity, which
+   * the connector reducer decides.
    */
-  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
-    (function, other.function) match {
-      case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
-        reducer(e1, numBucketsOpt, e2, other.numBucketsOpt)
-      case _ => None
+  private def sameArgumentLayout(other: TransformExpression): Boolean =
+    children.zip(other.children).forall {
+      case (_: Literal, _: Literal) => true
+      case (_: Attribute, _: Attribute) => true
+      case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
+      case (c1, c2) => TransformExpression.sameShape(c1, c2)
+    }
+
+  /**
+   * Whether no literal parameter is null or has an array, map, struct or UDT type; those are not
+   * passed to a connector reducer. Other scalars, such as intervals, are.
+   */
+  private def literalParamsPassable: Boolean =
+    literalChildren.forall(l => l.value != null && (l.dataType match {
+      case _: ArrayType | _: MapType | _: StructType | _: UserDefinedType[_] => false
+      case _ => true
+    }))
+
+  /**
+   * Return a [[Reducer]] that maps this transform's partition keys onto `other`'s, or None if there
+   * is none: when either function is not a [[ReducibleFunction]], when the argument layouts or
+   * literal parameters rule a reducer out, or when the connector reports it is not reducible.
+   * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
+   *
+   * This answers one direction only, so it must not decide a pair: a reducer here reads as a
+   * one-side reduce only if the other direction answered. Use [[pairReducers]].
+   */
+  private[sql] def reducers(other: TransformExpression): Option[Reducer[_, _]] =
+    TransformExpression.reducerOf(reducerOutcome(other))
+
+  /**
+   * Both directions' reducers, `reducers(other)` and `other.reducers(this)`. A reducer in one
+   * direction counts only if the other direction answered, by returning a reducer or `null`: a
+   * one-side reduce is right only for a reducer that satisfies `r(f1(x)) = f2(x)`, and a two-sided
+   * one such as a gcd of bucket counts, read as one-sided, would pair keys from two different
+   * spaces. A direction that implements no reducer, or was not asked because its literal types
+   * differ, says nothing about whether the other is one-sided, so the pair is `(None, None)`.
+   *
+   * Also `(None, None)` when either side has no identity, since a reduce could be neither recorded
+   * (`reducedTogetherWith`) nor reported for it. `sameArgumentLayout` already refuses every such
+   * pair; deciding it here keeps `isCompatible` and `reducersBothWays` from disagreeing on one.
+   *
+   * The planner asks for a pair more than once, so a connector must answer it the same way each
+   * time. An exception other than `UnsupportedOperationException` fails the query.
+   */
+  def pairReducers(other: TransformExpression)
+      : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
+    import TransformExpression._
+    if (functionId.isEmpty || other.functionId.isEmpty) return (None, None)
+    (reducerOutcome(other), other.reducerOutcome(this)) match {
+      case (Reducible(_), Unimplemented | LiteralTypesDiffer) |
+           (Unimplemented | LiteralTypesDiffer, Reducible(_)) => (None, None)
+      case (o1, o2) => (reducerOf(o1), reducerOf(o2))
     }
   }
 
-  // Return a Reducer for a reducible function on another reducible function
-  private def reducer(
-      thisFunction: ReducibleFunction[_, _],
-      thisNumBucketsOpt: Option[Int],
-      otherFunction: ReducibleFunction[_, _],
-      otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
-    val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
-      case (Some(numBuckets), Some(otherNumBuckets)) =>
-        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
-      case _ => thisFunction.reducer(otherFunction)
+  /** What probing the connector for a reducer onto `other` gave, logged when it failed. */
+  private def reducerOutcome(other: TransformExpression): TransformExpression.Outcome = {
+    import TransformExpression._
+    val thisFunction: ReducibleFunction[_, _] = function match {
+      case f: ReducibleFunction[_, _] => f
+      case _ => return NotReducible
     }
-    Option(res)
+    val otherFunction: ReducibleFunction[_, _] = other.function match {
+      case o: ReducibleFunction[_, _] => o
+      case _ => return NotReducible
+    }
+    if (!sameArgumentLayout(other) || !literalParamsPassable || !other.literalParamsPassable) {
+      return NotReducible
+    }
+
+    val thisParams = extractParameters
+    val otherParams = other.extractParameters
+
+    // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below. An
+    // `UnsupportedOperationException` means the overload is not implemented; any other exception
+    // fails the query.
+    def probe(call: => Reducer[_, _]): Outcome =
+      try Option(call).fold[Outcome](NotReducible)(Reducible(_)) catch {
+        case _: UnsupportedOperationException => Unimplemented
+      }
+
+    // Prefer the generalized overload. It reads its literal parameters by type, so it is asked only
+    // when they have their declared types; otherwise it counts as not implemented. Use another
+    // overload only if the generalized one is not implemented; any other outcome is final.
+    val outcome =
+      (if (literalParamsMatchInputTypes && other.literalParamsMatchInputTypes) {
+        // A copy of the memoized arrays per call, so a connector cannot change them.
+        probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
+      } else {
+        LiteralTypesDiffer
+      }) match {
+        // A parameterless pair falls back to the parameterless overload.
+        case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
+          probe(thisFunction.reducer(otherFunction))
+        // The deprecated overload is documented for bucket against bucket, and master offered it
+        // a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`. If that finds
+        // nothing either, the outcome stays why the generalized one was not asked.
+        case skipped @ (Unimplemented | LiteralTypesDiffer)
+            if numBucketsOpt.isDefined && other.numBucketsOpt.isDefined =>
+          val deprecated = probe(
+            thisFunction.reducer(numBucketsOpt.get, otherFunction, other.numBucketsOpt.get))
+          if (deprecated == Unimplemented) skipped else deprecated
+        case outcome => outcome
+      }
+
+    // A pair of the same function needs no reducer and pairs as it stands, so nothing its probe
+    // reports is logged.
+    outcome match {
+      case Unimplemented if !isSameFunction(other) => logNoReducer(function)
+      case LiteralTypesDiffer if !isSameFunction(other) =>
+        // Name the side whose literal parameters do not have its declared types. That is this
+        // side unless its own check passed; the other side's check ran only if it did.
+        logLiteralTypesDiffer(if (literalParamsMatchInputTypes) other.function else function)
+      case _ =>
+    }
+    outcome
   }
 
   /**
@@ -166,7 +429,7 @@ case class TransformExpression(
    * carry the same pair.
    */
   private def reducedKeySpace: Option[Set[TransformFunctionId]] =
-    reducedWith.map(partner => Set(functionId, partner))
+    for (self <- functionId; partner <- reducedWith) yield Set(self, partner)
 
   /**
    * Whether this and `other` describe the same reduced key space, i.e. whether the same pair of
@@ -178,16 +441,44 @@ case class TransformExpression(
    * onto, so the pairing is all there is to compare.
    */
   def hasSameReducedKeys(other: TransformExpression): Boolean =
-    reducedWith.isDefined && reducedKeySpace == other.reducedKeySpace
+    reducedKeySpace.isDefined && reducedKeySpace == other.reducedKeySpace
 
-  /** Records that this expression's keys were reduced together with `other`'s. */
+  /**
+   * Records that this expression's keys were reduced together with `other`'s. Both need an
+   * identity; this fails rather than leave reduced keys looking raw. Unreachable, since
+   * `pairReducers` returns no reducer for a pair where either side has none. A planner-built
+   * transform can lack one, e.g. `bucket(4, b + c)` from `createPartitioning` or a broadcast
+   * join's expansion, so that guard, not the scan's `supportsExpressions`, is what keeps this from
+   * failing.
+   */
   def reducedTogetherWith(other: TransformExpression): TransformExpression =
-    copy(reducedWith = Some(other.functionId))
+    (functionId, other.functionId) match {
+      case (Some(_), Some(partner)) => copy(reducedWith = Some(partner))
+      case _ =>
+        throw SparkException.internalError(
+          s"Cannot record a reduce of $this with $other: a transform without an identity " +
+            "cannot be reduced, and pairReducers returns no reducer for one.")
+    }
 
   override def dataType: DataType = function.resultType()
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
+  /**
+   * The same transform over `newChildren`. A reduced transform also carries its partner's
+   * argument shape in `reducedWith`, which has to follow its own, or the two sides of one reduce
+   * stop sharing a key space: a broadcast join's key expansion turns `bucket(12, id)` into
+   * `bucket(12, x + 1)`, and its partner must become an expression over one column too. The
+   * partner that pairs with this one on the other side has the same argument shape, since
+   * `argumentShape` admits no other.
+   */
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    val rebuilt = copy(children = newChildren)
+    rebuilt.columnSlots match {
+      case Seq(slot) if reducedWith.isDefined =>
+        rebuilt.copy(reducedWith = reducedWith.map(TransformExpression.withColumnShape(_, slot)))
+      case _ => rebuilt
+    }
+  }
 
   /**
    * The bound function, when Spark could call it for this transform: a [[ScalarFunction]], over
@@ -198,12 +489,9 @@ case class TransformExpression(
     case _ => None
   }
 
-  /** The arguments of the call: the bucket count, if any, as a literal, then the children. */
-  private def callArguments: Seq[Expression] =
-    numBucketsOpt.fold(children)(n => Literal(n) +: children)
-
   /**
-   * The scalar function call this transform stands for, over its arguments as they are. `None`
+   * The scalar function call this transform stands for, over its arguments as they are, the
+   * literal parameters included. `None`
    * when the bound function is not a [[ScalarFunction]], and also when a join reduced this
    * expression's keys, since then the call no longer computes them. Evaluating it to place a row
    * would send the row to a partition it does not belong to. That second arm is a local gate. No
@@ -213,7 +501,7 @@ case class TransformExpression(
    * [[evaluableFunction]] instead.
    */
   lazy val resolvedFunction: Option[Expression] =
-    scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, callArguments))
+    scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, children))
 
   /**
    * The call `eval` runs: [[resolvedFunction]], with each argument at the type the function
@@ -250,7 +538,7 @@ case class TransformExpression(
       if (!function.isInstanceOf[ScalarFunction[_]]) TransformExpression.logNotScalar(function)
       None
     case Some(scalarFunc) =>
-      val arguments = callArguments
+      val arguments = children
       val declaredTypes = scalarFunc.inputTypes().toSeq
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
         TransformExpression.atDeclaredType(argument, declaredType, storedKey)
@@ -300,7 +588,8 @@ object TransformExpression extends Logging {
    * `mismatch:functionClass:argumentTypes:declaredTypes` and its `unreachable:` counterpart for a
    * method that cannot be invoked, since one class can declare other input types per instance,
    * e.g. one per column type, and `failure:functionClass:failureClass`, so that a function class
-   * that fails in another way is warned about again.
+   * that fails in another way is warned about again. The reducer dispatch adds
+   * `literalTypes:functionClass` and `noReducer:functionClass`.
    */
   private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
@@ -420,6 +709,69 @@ object TransformExpression extends Logging {
   }
 
   /**
+   * Logs that `function` declares other types for its literal parameters than the transform's
+   * literals have, so Spark does not ask its generalized reducer: at WARN once per function class,
+   * and at DEBUG.
+   */
+  private def logLiteralTypesDiffer(function: BoundFunction): Unit = {
+    def line: MessageWithContext = log"The " + transformLabel(function) + log" declares other " +
+      log"input types than the transform's literal parameters have, so Spark does not offer them " +
+      log"to reducer(Literal[], ReducibleFunction, Literal[]); treating as not reducible."
+    logOnce(s"literalTypes:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
+    logDebug(line)
+  }
+
+  /** Logs that `function` implements no reducer: at WARN once per function class, and at DEBUG. */
+  private def logNoReducer(function: BoundFunction): Unit = {
+    def line: MessageWithContext = log"The " + transformLabel(function) + log" implements no " +
+      log"reducer; treating as not reducible. Override " +
+      log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ."
+    logOnce(s"noReducer:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
+    logDebug(line)
+  }
+
+  /**
+   * `e` with its one column replaced by a placeholder, so that `x + 1` and `y + 1` compare equal;
+   * None when `e` is unresolved, references other than one column, or is not deterministic.
+   */
+  private[sql] def expressionShape(e: Expression): Option[Expression] =
+    if (e.resolved && e.deterministic && e.references.size == 1) {
+      Some(QueryPlan.normalizeExpressions(e, e.references.toSeq))
+    } else {
+      None
+    }
+
+  /**
+   * The shape an identity gives a column argument: `ColumnRef` for a bare column, otherwise its
+   * [[expressionShape]], or `None` when it has none. `functionId` and `withColumnShape` both use
+   * it, so a rebuilt member's identity and its partner's stay comparable.
+   */
+  private[sql] def columnShape(e: Expression): Option[TransformFunctionId.ArgumentShape] =
+    e match {
+      case _: Attribute => Some(TransformFunctionId.ArgumentShape.ColumnRef)
+      case _ => expressionShape(e).map(TransformFunctionId.ArgumentShape.Expr(_))
+    }
+
+  /**
+   * `id` with each column argument's shape replaced by `argument`'s, see [[columnShape]].
+   * Unchanged when `argument` has no shape.
+   */
+  private[sql] def withColumnShape(id: TransformFunctionId, argument: Expression)
+      : TransformFunctionId = {
+    import TransformFunctionId.ArgumentShape
+    columnShape(argument).fold(id) { s =>
+      id.copy(argumentShapes = id.argumentShapes.map {
+        case ArgumentShape.ColumnRef | ArgumentShape.Expr(_) => s
+        case other => other
+      })
+    }
+  }
+
+  /** Whether `a` and `b` are the same expression of one column each, see [[expressionShape]]. */
+  private[sql] def sameShape(a: Expression, b: Expression): Boolean =
+    expressionShape(a).exists(expressionShape(b).contains)
+
+  /**
    * Whether `e` is a partition expression whose keys a join reduced onto a key space that no
    * transform describes, so that `e` no longer computes them. False after a one-side reduce, where
    * the expression reported is the target transform and describes the reduced keys exactly. False
@@ -429,6 +781,20 @@ object TransformExpression extends Logging {
   def hasReducedKeys(e: Expression): Boolean = e match {
     case t: TransformExpression => t.reducedWith.isDefined
     case _ => false
+  }
+
+  /** The result of probing one reducer overload, for the dispatch in [[TransformExpression]]. */
+  private sealed trait Outcome
+  private case class Reducible(reducer: Reducer[_, _]) extends Outcome
+  private case object NotReducible extends Outcome
+  private case object Unimplemented extends Outcome
+  /** The generalized overload was not asked, since a literal parameter's type is not declared. */
+  private case object LiteralTypesDiffer extends Outcome
+
+  /** The reducer an [[Outcome]] found, if it found one. */
+  private def reducerOf(o: Outcome): Option[Reducer[_, _]] = o match {
+    case Reducible(r) => Some(r)
+    case _ => None
   }
 
   /**

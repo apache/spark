@@ -366,10 +366,16 @@ abstract class InMemoryBaseTable(
           acc + valueHash
         }
         Math.floorMod(hash, numBuckets)
+      // the result should be consistent with TruncateFunction and IntegerTruncateFunction defined
+      // at transformFunctions.scala
       case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (null, _) => null
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
+          case (v: Int, IntegerType) =>
+            val width = length.value.asInstanceOf[Int]
+            v - (((v % width) + width) % width)
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }

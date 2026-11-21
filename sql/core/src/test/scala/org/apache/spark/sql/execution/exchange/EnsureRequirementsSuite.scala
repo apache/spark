@@ -1378,11 +1378,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
-    TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
+    TransformExpression(BucketFunction, Seq(Literal(numBuckets), expr))
   }
 
   def buckets(numBuckets: Int, expr: Seq[Expression]): TransformExpression = {
-    TransformExpression(BucketFunction, expr, Some(numBuckets))
+    TransformExpression(BucketFunction, Seq(Literal(numBuckets)) ++ expr)
   }
 
   test("ShufflePartitionIdPassThrough - avoid unnecessary shuffle when children are compatible") {
@@ -1746,9 +1746,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val idR = AttributeReference("idR", LongType)()
     val keys = Seq(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(3))
     val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys))
+      Seq(TransformExpression(nonScalar, Seq(Literal(4), idL))), keys))
     val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+      Seq(TransformExpression(nonScalar, Seq(Literal(4), idR))), keys))
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
       Seq.empty,
@@ -1782,7 +1782,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val idL = AttributeReference("idL", LongType)()
     val idR = AttributeReference("idR", LongType)()
     val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), (0 until 4).map(InternalRow(_))))
+      Seq(TransformExpression(nonScalar, Seq(Literal(4), idL))), (0 until 4).map(InternalRow(_))))
     val right = ShuffleExchangeExec(HashPartitioning(Seq(idR), 5), DummySparkPlan())
     val join = SortMergeJoinExec(Seq(idL), Seq(idR), Inner, None, left, right)
     withSQLConf(
@@ -1814,7 +1814,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val cL = AttributeReference("cL", DecimalType(10, 2))()
     val cR = AttributeReference("cR", DecimalType(12, 2))()
     val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(decimalBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
+      Seq(TransformExpression(decimalBucket, Seq(Literal(4), cL))),
+      (0 until 4).map(InternalRow(_))))
     val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
@@ -1831,7 +1832,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
       Seq("123.45", "0.07", "-9.99").foreach { v =>
         val stored = TransformExpression(decimalBucket,
-          Seq(Literal(Decimal(BigDecimal(v), 10, 2), DecimalType(10, 2))), Some(4))
+          Seq(Literal(4), Literal(Decimal(BigDecimal(v), 10, 2), DecimalType(10, 2))))
         assert(placed.eval(InternalRow(Decimal(BigDecimal(v), 12, 2))) ==
           stored.eval(InternalRow.empty), v)
       }
@@ -1889,7 +1890,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           (if (keyedLeft) "left" else "right")
         val cL = AttributeReference("cL", columnType)()
         val cR = AttributeReference("cR", keyType)()
-        val layout = TransformExpression(function, Seq(cL), Some(4))
+        val layout = TransformExpression(function, Seq(Literal(4), cL), fromBucketTransform = true)
         val keyedPlan = DummySparkPlan(outputPartitioning =
           KeyedPartitioning(Seq(layout), (0 until 4).map(InternalRow(_))))
         val plainPlan = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
@@ -1974,7 +1975,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()
       val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-        Seq(TransformExpression(bucket(columnType), Seq(cL), Some(4))),
+        Seq(TransformExpression(bucket(columnType), Seq(Literal(4), cL))),
         (0 until 4).map(InternalRow(_))))
       val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
       val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
@@ -2015,7 +2016,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", LongType)()
     val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(intBucket, Seq(c), Some(4))), (0 until 4).map(InternalRow(_))))
+      Seq(TransformExpression(intBucket, Seq(Literal(4), c))), (0 until 4).map(InternalRow(_))))
     val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
@@ -2037,6 +2038,39 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-50593: the key type error names the cogroup key, not a literal parameter") {
+    // The key is stored like the column, so the storage check passes, but the transform rebuilt
+    // over it cannot be evaluated: a nested decimal of more precision than the declared one. The
+    // error must name that key, though the transform's first child is its bucket count.
+    val narrow = ArrayType(DecimalType(10, 2))
+    val wide = ArrayType(DecimalType(12, 2))
+    val arrayBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, narrow)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val c = AttributeReference("c", narrow)()
+    val x = AttributeReference("x", wide)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(arrayBucket, Seq(Literal(4), c))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(c), Seq(x), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val e = intercept[SparkException](EnsureRequirements.apply(cogroup))
+      assert(e.getCondition == "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH", e)
+      assert(e.getMessageParameters.get("key") == "\"x\"", e.getMessageParameters)
+      assert(e.getMessageParameters.get("transform") == "bucket(4)", e.getMessageParameters)
+    }
+  }
+
   test("SPARK-60522: a cogroup picks among a child's layouts by what Spark can evaluate") {
     // The left child offers two layouts: a `bucket` Spark cannot evaluate, listed first so that
     // ranking alone would pick it, and its own column. A child that pairs with the first as it
@@ -2048,7 +2082,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val idR = AttributeReference("idR", IntegerType)()
     val keys = (0 until 4).map(InternalRow(_))
     val left = DummySparkPlan(outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
-      KeyedPartitioning(Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys),
+      KeyedPartitioning(Seq(TransformExpression(nonScalar, Seq(Literal(4), idL))), keys),
       KeyedPartitioning(Seq(idL), keys))))
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
@@ -2061,7 +2095,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       val sameBucket = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-        Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+        Seq(TransformExpression(nonScalar, Seq(Literal(4), idR))), keys))
       assert(EnsureRequirements.apply(cogroup(sameBucket)).collect {
         case s: ShuffleExchangeExec => s
       }.isEmpty, "paired with the layout Spark cannot evaluate as it stands")

@@ -4163,7 +4163,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val Seq(id, ts) = base.output
     Seq(
       TransformExpression(YearsFunction, Seq(ts)) -> true,
-      TransformExpression(BucketFunction, Seq(id), Some(4)) -> false
+      TransformExpression(BucketFunction, Seq(Literal(4), id), fromBucketTransform = true) -> false
     ).foreach { case (transform, wholeStage) =>
       val df = classic.Dataset.ofRows(spark, Project(Seq(Alias(transform, "key")()), base))
       val inWholeStage = df.queryExecution.executedPlan.collect {
