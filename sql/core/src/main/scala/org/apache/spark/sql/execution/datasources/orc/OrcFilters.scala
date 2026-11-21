@@ -288,7 +288,23 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+    // ORC takes a DATE as java.sql.Date, so a date that the hybrid Julian/Gregorian calendar
+    // skips (1582-10-05 to 1582-10-14) would be pushed down as 1582-10-15.
+    def isDateInCalendarGap(value: Any): Boolean = value match {
+      case d: LocalDate =>
+        d.isAfter(LocalDate.of(1582, 10, 4)) && d.isBefore(LocalDate.of(1582, 10, 15))
+      case _ => false
+    }
+
     expression match {
+      case EqualTo(_, v) if isDateInCalendarGap(v) => None
+      case EqualNullSafe(_, v) if isDateInCalendarGap(v) => None
+      case LessThan(_, v) if isDateInCalendarGap(v) => None
+      case LessThanOrEqual(_, v) if isDateInCalendarGap(v) => None
+      case GreaterThan(_, v) if isDateInCalendarGap(v) => None
+      case GreaterThanOrEqual(_, v) if isDateInCalendarGap(v) => None
+      case In(_, values) if values.exists(isDateInCalendarGap) => None
+
       case EqualTo(name, value) if isTimestamp(name) =>
         val (lower, upper) = timestampRange(value)
         Some(builder.startAnd()
