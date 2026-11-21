@@ -3014,6 +3014,26 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62191: a filter condition that can fail is not split off from a projection " +
+    "ahead of a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val notX = udf((e: String) => e != "x")
+      val length = udf((e: String) => e.length)
+      // `rand(10) * 10 > 100` is false on every row, so the first conjunct is false on 'x' only,
+      // and the `AND` short-circuit keeps the cast of 'x' from being evaluated. Each query is
+      // built inside the config loop, so it is planned under that config.
+      def df: DataFrame = spark.range(0, 10, 1, 1)
+        .selectExpr("IF(id = 3, 'x', CAST(id AS STRING)) AS e")
+        .select($"e", notX($"e") as "f", length($"e") as "n")
+        .where((rand(10) * 10 > 100 || $"f") && $"e".cast("int") + $"n" > 0)
+      Seq(true, false).foreach { codegen =>
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          checkAnswer(df, (0 until 10).filter(_ != 3).map(i => Row(i.toString, true, 1)))
+        }
+      }
+    }
+  }
+
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
     "its order") {
     def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
