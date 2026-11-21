@@ -360,8 +360,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
 
     def resolve(e: Expression): Expression = {
-      e.transformUpWithPruning(
-        _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE)) {
+      e.transformUpWithPruning({
+        // Input columns in an unbound lambda must be resolved before lateral aliases.
+        case f: LambdaFunction if !f.bound => false
+        case node => node.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE)
+      }) {
         case w: WindowExpression if w.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
           w.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
             case lcaRef: LateralColumnAliasReference =>
