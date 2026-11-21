@@ -51,6 +51,13 @@ import org.apache.spark.util.ArrayImplicits._
  *  - I8: If `rowArray` already spilled to disk, `spill` returns 0 (rebuild
  *        would O(blockStart)-scan the spill file).
  *
+ * A block root or an internal node covers rows that no frame may cover together, so an error
+ * of its aggregate is not an error of the query. For example, under ANSI the SUM of a block
+ * can overflow while the sum of every frame is in range. A node whose aggregate fails with an
+ * arithmetic error is therefore kept as null, and a query that covers it merges its children
+ * instead, down to the rows. An error that a frame has to raise is still raised when the
+ * values of its rows are merged.
+ *
  * @note Instances are not thread-safe.
  */
 private[window] class WindowSegmentTree(
@@ -105,7 +112,8 @@ private[window] class WindowSegmentTree(
 
   /**
    * Always-resident per-block root aggregates: `blockAggregates(i)` =
-   *  merged buffer over all rows in block i.
+   *  merged buffer over all rows in block i, or null if computing it failed
+   *  with an arithmetic error (see the class doc).
    */
   private var blockAggregates: Array[InternalRow] = Array.empty
 
@@ -294,7 +302,13 @@ private[window] class WindowSegmentTree(
       // full blocks
       var b = blo + 1
       while (b < bhi) {
-        mergeInto(outBuffer, blockAggregates(b))
+        val blockAggregate = blockAggregates(b)
+        if (blockAggregate != null) {
+          mergeInto(outBuffer, blockAggregate)
+        } else {
+          // Only the last block can be shorter than `blockSize`, and `b` is before it.
+          mergeBlockRange(b, 0, blockSize, outBuffer)
+        }
         b += 1
       }
       // right partial
@@ -352,15 +366,22 @@ private[window] class WindowSegmentTree(
       val start = b * blockSize
       val end = math.min(start + blockSize, n)
       var i = start
+      var failed = false
       while (i < end) {
         if (!iter.hasNext) {
           throw SparkException.internalError("rowArray iterator exhausted unexpectedly")
         }
         val row = iter.next()
-        updateProj.target(buf)(joinedRow(buf, row))
+        if (!failed) {
+          try {
+            updateProj.target(buf)(joinedRow(buf, row))
+          } catch {
+            case _: ArithmeticException => failed = true
+          }
+        }
         i += 1
       }
-      result(b) = buf
+      result(b) = if (failed) null else buf
       b += 1
     }
     result
@@ -402,8 +423,13 @@ private[window] class WindowSegmentTree(
     val nodeHi = math.min(nodeLo + span, blockRows)
     if (queryLo >= nodeHi || queryHi <= nodeLo) return
     if (queryLo <= nodeLo && nodeHi <= queryHi) {
-      mergeInto(out, levels(level)(idx))
-      return
+      val node = levels(level)(idx)
+      if (node != null) {
+        mergeInto(out, node)
+        return
+      }
+      // The aggregate of this node is not available. Merge its children instead. A leaf is
+      // never null, so the descent ends at level 0 at the latest.
     }
     val childLevel = level - 1
     val childLevelSize = levels(childLevel).length
@@ -478,13 +504,22 @@ private[window] class WindowSegmentTree(
       val parents = new Array[InternalRow](parentCount)
       var p = 0
       while (p < parentCount) {
-        val buf = newBuffer()
+        var buf = newBuffer()
         initProj.target(buf)(InternalRow.empty)
         val childStart = p * fanout
         val childEnd = math.min(childStart + fanout, prev.length)
         var c = childStart
-        while (c < childEnd) {
-          mergeInto(buf, prev(c))
+        // The parent is not available if a child is not, or if merging the children fails.
+        while (c < childEnd && buf != null) {
+          if (prev(c) == null) {
+            buf = null
+          } else {
+            try {
+              mergeInto(buf, prev(c))
+            } catch {
+              case _: ArithmeticException => buf = null
+            }
+          }
           c += 1
         }
         parents(p) = buf
