@@ -187,7 +187,7 @@ def _convert_exception(
     message = truncated_message
     stacktrace = truncated_stacktrace
     message_parameters = truncated_message_parameters
-    contexts = None
+    contexts: Optional[List[BaseQueryContext]] = None
     breaking_change_info = None
 
     if root_error_idx is not None and errors is not None:
@@ -250,7 +250,7 @@ def _convert_exception(
                 sql_state=sql_state,
                 server_stacktrace=stacktrace,
                 display_server_stacktrace=display_server_stacktrace,
-                contexts=contexts,  # type: ignore[arg-type]
+                contexts=contexts,
                 grpc_status_code=grpc_status_code,
                 breaking_change_info=breaking_change_info,
             )
@@ -264,7 +264,7 @@ def _convert_exception(
         sql_state=sql_state,
         server_stacktrace=stacktrace,
         display_server_stacktrace=display_server_stacktrace,
-        contexts=contexts,  # type: ignore[arg-type]
+        contexts=contexts,
         grpc_status_code=grpc_status_code,
         breaking_change_info=breaking_change_info,
     )
