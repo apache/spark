@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.connector.read.SupportsPushDownAggregates
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
-import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.{FileScanBuilder, V2ColumnUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -76,6 +77,22 @@ case class OrcScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.orcAggregatePushDown) {
+      return false
+    }
+    // For a column that a file does not have, the reader returns the existence default of the
+    // column, if it has one (see `OrcDeserializer`), which the footer does not know about.
+    // `extractV2Column` gives the name of the resolved column, as it appears in the table
+    // schema, so match it exactly.
+    def hasExistenceDefault(column: Expression): Boolean =
+      V2ColumnUtils.extractV2Column(column)
+        .flatMap(name => schema.fields.find(_.name == name))
+        .exists(_.hasExistenceDefaultValue)
+    if (aggregation.aggregateExpressions.exists {
+      case max: Max => hasExistenceDefault(max.column)
+      case min: Min => hasExistenceDefault(min.column)
+      case count: Count => hasExistenceDefault(count.column)
+      case _ => false
+    }) {
       return false
     }
 
