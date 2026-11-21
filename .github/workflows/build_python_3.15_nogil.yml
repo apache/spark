@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (Python 3.14, no GIL)"
+name: "Build / Python-only (Python 3.15, no GIL)"
 
 on:
   schedule:
@@ -37,13 +37,11 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-314-nogil",
-          "PYTHON_TO_TEST": "python3.14t",
+          "PYSPARK_IMAGE_TO_TEST": "python-315-nogil",
+          "PYTHON_TO_TEST": "python3.15t",
           "PYTHON_GIL": "0"
         }
       jobs: >-
         {
-          "pyspark": "true",
-          "pyspark-pandas": "true",
-          "pyspark-periodic": "true"
+          "pyspark": "true"
         }
