@@ -1538,8 +1538,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "BUCKET x OUT OF y ON colname"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET x OUT OF y ON column"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 16,
@@ -1560,8 +1561,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment3 = "TABLESAMPLE(300M)"
     checkError(
       exception = parseException(sql3),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "byteLengthLiteral"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BYTES"),
       context = ExpectedContext(
         fragment = fragment3,
         start = 25,
@@ -1571,12 +1573,24 @@ class PlanParserSuite extends AnalysisTest {
     val fragment4 = "TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand())"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "BUCKET x OUT OF y ON function"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET x OUT OF y ON function()"),
       context = ExpectedContext(
         fragment = fragment4,
         start = 25,
         stop = 65))
+
+    val sql5 = "SELECT * FROM t TABLESAMPLE(CAST(1 AS INT))"
+    checkError(
+      exception = parseException(sql5),
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+      sqlState = "42000",
+      parameters = Map("sampleMethod" -> "CAST(1 AS INT)"),
+      context = ExpectedContext(
+        fragment = "TABLESAMPLE(CAST(1 AS INT))",
+        start = 16,
+        stop = 42))
   }
 
   test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI - basic parsing") {
@@ -2779,12 +2793,25 @@ class PlanParserSuite extends AnalysisTest {
     val fragment = "TIMESTAMP AS OF col"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0056",
-      parameters = Map("reason" -> "timestamp expression cannot refer to any columns"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col\""),
       context = ExpectedContext(
         fragment = fragment,
         start = 20,
         stop = 38))
+
+    val sql2 = "SELECT * FROM a.b.c TIMESTAMP AS OF col + INTERVAL 1 DAY"
+    val fragment2 = "TIMESTAMP AS OF col + INTERVAL 1 DAY"
+    checkError(
+      exception = parseException(sql2),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col + INTERVAL 1 DAY\""),
+      context = ExpectedContext(
+        fragment = fragment2,
+        start = 20,
+        stop = 55))
   }
 
   test("at syntax time travel") {
@@ -3115,10 +3142,27 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - error: column reference in timestamp") {
-    val e = intercept[ParseException] {
-      parsePlan("SELECT * FROM t CHANGES FROM TIMESTAMP col_name")
-    }
-    assert(e.getMessage.contains("timestamp expression cannot refer to any columns"))
+    val sql = "SELECT * FROM t CHANGES FROM TIMESTAMP col_name"
+    checkError(
+      exception = parseException(sql),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "t CHANGES FROM TIMESTAMP col_name",
+        start = 14,
+        stop = 46))
+
+    val sqlEnd = "SELECT * FROM t CHANGES FROM TIMESTAMP '2026-01-01' TO TIMESTAMP col_name"
+    checkError(
+      exception = parseException(sqlEnd),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "t CHANGES FROM TIMESTAMP '2026-01-01' TO TIMESTAMP col_name",
+        start = 14,
+        stop = 72))
   }
 
   test("CHANGES clause - error: subquery in starting timestamp") {
@@ -3945,7 +3989,10 @@ class PlanParserSuite extends AnalysisTest {
           "SELECT * FROM (SELECT INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR) s",
           "SELECT extract(DAY FROM INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR)"
         ).foreach { query =>
-          assert(parseException(query).getCondition == "_LEGACY_ERROR_TEMP_0024", query)
+          assert(
+            parseException(query).getCondition ==
+              "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+            query)
         }
       }
     }
