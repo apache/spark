@@ -301,8 +301,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
-   * Truncates toward zero exactly, or throws the overflow error if the result does not fit in
-   * a Long.
+   * Truncates toward zero exactly, or throws the overflow error if the result does not fit in a
+   * Long.
    */
   private def truncatedLong(integralType: IntegralType): Long = {
     if (decimalVal.eq(null)) {
