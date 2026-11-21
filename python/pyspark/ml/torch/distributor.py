@@ -29,6 +29,7 @@ import textwrap
 import time
 from contextlib import contextmanager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -49,6 +50,9 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.taskcontext import BarrierTaskContext
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -695,7 +699,7 @@ class TorchDistributor(Distributor):
             schema_json = None
 
         # Spark task program
-        def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
+        def wrapped_train_fn(iterator: Iterator["pa.RecordBatch"]) -> Iterator["pa.RecordBatch"]:
             import os
             import secrets
 
@@ -910,7 +914,7 @@ class TorchDistributor(Distributor):
     @staticmethod
     @contextmanager
     def _setup_spark_partition_data(
-        partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
+        partition_data_iterator: Iterator[Any], input_schema_json: Optional[Dict[str, Any]]
     ) -> Iterator[Any]:
         import json
 
