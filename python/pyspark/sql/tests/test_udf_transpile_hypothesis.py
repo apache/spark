@@ -399,6 +399,17 @@ def str_endswith(s, p):
     return s.endswith(p)
 
 
+def str_contains(s, p):
+    # Exercises ``p in s`` (SPARK-62076) with a column needle, so a NULL on
+    # either side runs through the raise guard.
+    return p in s
+
+
+def str_not_contains(s, p):
+    # Sister of ``str_contains`` for ``not in``.
+    return p not in s
+
+
 # A lambda captured at module scope so ``inspect.getsource`` can read
 # its definition. Exercises the ``ast.Lambda`` branch in
 # ``_get_function_from_ast``.
@@ -751,6 +762,22 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([pair], "a string, b string")
             transpiled, interpreted = self._run(str_endswith, BooleanType(), df, "a", "b")
             self.assertEqual(transpiled, interpreted, f"str_endswith mismatch on {pair!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_contains_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_contains, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_contains mismatch on {pair!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_not_contains_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_not_contains, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_not_contains mismatch on {pair!r}")
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
