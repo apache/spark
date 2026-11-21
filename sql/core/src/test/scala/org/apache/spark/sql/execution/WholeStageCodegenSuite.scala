@@ -4111,7 +4111,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
       mergeRows(spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s"))
     def df: DataFrame = merged.selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
     withSplitAlways {
-      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+      // ANSI overflow checks make the generated code large enough to force a nested class.
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         val code = genCode(df)
         code.foreach(CodeGenerator.compile)
         val qualifiedCall = "\\w*nestedClassInstance_\\d+\\.\\w*mergeProcessRow_\\d+\\(".r
