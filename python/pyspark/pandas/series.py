@@ -7127,9 +7127,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2018-04-11 00:40:00    3
         dtype: int64
         """
-        return first_series(
-            self.to_frame().between_time(start_time, end_time, inclusive, axis)
-        ).rename(self.name)
+        if validate_axis(axis) != 0:
+            raise ValueError("No axis named %s for object type Series" % axis)
+        return first_series(self.to_frame().between_time(start_time, end_time, inclusive)).rename(
+            self.name
+        )
 
     def at_time(
         self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
@@ -7173,7 +7175,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2018-04-10 12:00:00    4
         dtype: int64
         """
-        return first_series(self.to_frame().at_time(time, asof, axis)).rename(self.name)
+        if validate_axis(axis) != 0:
+            raise ValueError("No axis named %s for object type Series" % axis)
+        return first_series(self.to_frame().at_time(time, asof)).rename(self.name)
 
     def _cum(
         self,
