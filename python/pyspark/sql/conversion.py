@@ -2028,7 +2028,17 @@ class ArrowToPandasConversion:
             "coerce_temporal_nanoseconds": True,
             "integer_object_nulls": True,
         }
-        ser = arr.to_pandas(**pandas_options)
+        if pa.types.is_duration(arr.type) and arr.type.unit != "ns":
+            import pyarrow.compute as pc
+
+            # coerce_temporal_nanoseconds does not check a duration for overflow, so a
+            # DayTimeIntervalType value beyond +-106751 days, the range of timedelta64[ns],
+            # would silently wrap around. Arrow's cast checks it and fails instead, as the
+            # cast of a timestamp outside the range of datetime64[ns] does. The cast drops the
+            # array's name, which the Series would otherwise take.
+            ser = pc.cast(arr, pa.duration("ns")).to_pandas(**pandas_options).rename(arr._name)
+        else:
+            ser = arr.to_pandas(**pandas_options)
 
         converter = _create_converter_to_pandas(
             data_type=spark_type,

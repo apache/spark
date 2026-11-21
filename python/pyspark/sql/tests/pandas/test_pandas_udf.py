@@ -435,6 +435,35 @@ class PandasUDFTestsMixin:
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
+    def test_pandas_udf_day_time_interval_outside_timedelta64_ns_range(self):
+        # SPARK-60827: an interval beyond +-106751 days, the range of timedelta64[ns], must
+        # fail rather than silently wrap around when it is passed to pandas.
+        import pandas as pd
+
+        @pandas_udf("long")
+        def days(s: pd.Series) -> pd.Series:
+            return s.dt.days
+
+        def py_days(it):
+            for pdf in it:
+                yield pd.DataFrame({"d": [x.days for x in pdf["iv"]]})
+
+        df = self.spark.sql(
+            "SELECT make_dt_interval(d) AS iv FROM VALUES (106751), (-106751) AS t(d)"
+        )
+        expected = [-106751, 106751]
+        self.assertEqual(sorted(r[0] for r in df.select(days("iv")).collect()), expected)
+        self.assertEqual(
+            sorted(r[0] for r in df.mapInPandas(py_days, "d long").collect()), expected
+        )
+
+        for d in [106752, 200000, -200000]:
+            df = self.spark.sql(f"SELECT make_dt_interval({d}) AS iv")
+            with self.assertRaisesRegex(Exception, "out of bounds"):
+                df.select(days("iv")).collect()
+            with self.assertRaisesRegex(Exception, "out of bounds"):
+                df.mapInPandas(py_days, "d long").collect()
+
     def test_pandas_udf_return_type_error(self):
         import pandas as pd
 
