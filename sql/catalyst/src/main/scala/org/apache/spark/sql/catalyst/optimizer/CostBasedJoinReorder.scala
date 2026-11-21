@@ -66,36 +66,64 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         plan
       }
-    // Set consecutive join nodes ordered.
-    replaceWithOrderedJoin(result)
+    // Set consecutive join nodes ordered, also below the filter that `JoinReorderDP.search` may
+    // put above them.
+    result match {
+      case p @ Project(_, f @ Filter(_, j: Join)) =>
+        p.copy(child = f.copy(child = replaceWithOrderedJoin(j)))
+      case f @ Filter(_, j: Join) =>
+        f.copy(child = replaceWithOrderedJoin(j))
+      case _ =>
+        replaceWithOrderedJoin(result)
+    }
   }
 
   /**
    * Extracts items of consecutive inner joins and join conditions.
    * This method works for bushy trees and left/right deep trees.
+   * A join below the top one whose condition has a conjunct that may not move (see
+   * `splitMovable`) is an item, with its condition. It removes a row on which its condition is
+   * NULL, so no condition above it is evaluated on the row, but `NULL AND x` evaluates `x`.
    */
-  private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], ExpressionSet) = {
+  private def extractInnerJoins(
+      plan: LogicalPlan,
+      isTop: Boolean = true): (Seq[LogicalPlan], ExpressionSet) = {
     plan match {
+      case j: Join if !isTop && hasImmovableCondition(j) =>
+        (Seq(plan), ExpressionSet())
       case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
-        val (leftPlans, leftConditions) = extractInnerJoins(left)
-        val (rightPlans, rightConditions) = extractInnerJoins(right)
+        val (leftPlans, leftConditions) = extractInnerJoins(left, isTop = false)
+        val (rightPlans, rightConditions) = extractInnerJoins(right, isTop = false)
         (leftPlans ++ rightPlans, leftConditions ++ rightConditions ++
           splitConjunctivePredicates(cond))
       case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
         if projectList.forall(_.isInstanceOf[Attribute]) =>
-        extractInnerJoins(j)
+        extractInnerJoins(j, isTop)
       case _ =>
         (Seq(plan), ExpressionSet())
     }
   }
 
-  private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
+  /** Whether `join` is an inner join whose condition has a conjunct that may not move. */
+  private def hasImmovableCondition(join: Join): Boolean = join match {
+    case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
+      splitMovable(splitConjunctivePredicates(cond), Seq(left, right))._2.nonEmpty
+    case _ =>
+      false
+  }
+
+  private def replaceWithOrderedJoin(
+      plan: LogicalPlan,
+      isTop: Boolean = true): LogicalPlan = plan match {
+    // A join that is an item (see `extractInnerJoins`) is reordered by itself later.
+    case j: Join if !isTop && hasImmovableCondition(j) =>
+      plan
     case j @ Join(left, right, jt: InnerLike, Some(cond), JoinHint.NONE) =>
-      val replacedLeft = replaceWithOrderedJoin(left)
-      val replacedRight = replaceWithOrderedJoin(right)
+      val replacedLeft = replaceWithOrderedJoin(left, isTop = false)
+      val replacedRight = replaceWithOrderedJoin(right, isTop = false)
       OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
     case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)) =>
-      p.copy(child = replaceWithOrderedJoin(j))
+      p.copy(child = replaceWithOrderedJoin(j, isTop))
     case _ =>
       plan
   }
@@ -166,45 +194,48 @@ object JoinReorderDP extends PredicateHelper with Logging {
     // Build filters from the join graph to be used by the search algorithm.
     val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, conditions, itemIndex)
 
-    // Only the conditions that may be evaluated ahead of the others (see `splitMovable`) are used
-    // to join two plans. The others, e.g. a throwable condition and a condition that can fail
-    // after it, are left to the top join (see below), so that they are not evaluated on rows that
-    // a condition before them would remove.
-    val movableConds = ExpressionSet(splitMovable(conditions.toSeq, items)._1)
+    // Only the conditions that may be evaluated ahead of the others (see `splitMovable`) join two
+    // plans. The others, e.g. a throwable condition and a condition that can fail after it, go
+    // into a filter above the joins (see below), so the joins keep the columns that they read.
+    val (movableConds, otherConds) = splitMovable(conditions.toSeq, items)
+    val joinConds = ExpressionSet(movableConds)
 
     // Build plans for next levels until the last level has only one plan. This plan contains
     // all items that can be joined, so there's no need to continue.
-    val topOutputSet = AttributeSet(output)
+    val topOutputSet = AttributeSet(output ++ otherConds.flatMap(_.references))
     while (foundPlans.size < items.length) {
       // Build plans for the next level.
-      foundPlans +=
-        searchLevel(foundPlans.toSeq, conf, conditions, movableConds, topOutputSet, filters)
+      foundPlans += searchLevel(foundPlans.toSeq, conf, joinConds, topOutputSet, filters)
     }
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
     logDebug(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
       s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
 
-    // The last level has at most one plan, for all items. It has none if the join conditions
-    // used by `buildJoin` do not connect all items, e.g. when the only condition of a join may
-    // not move or is over one side of it. Keep the original order then.
+    // The last level has at most one plan, for all items. It has none if the conditions that may
+    // join two plans do not connect all items, e.g. when the only condition of a join may not
+    // move or is over one side of it. Keep the original order then.
     assert(foundPlans.size == items.length && foundPlans.last.size <= 1)
     if (foundPlans.last.isEmpty) return None
 
-    // Put the conditions that no join took (the ones that may not move, and the ones over one
-    // item or no item) into the top join, after its own conditions, in their written order.
+    // The conditions that no join took, the ones that may not move and the ones over one item or
+    // no item, go into a filter above the joins, in their written order. So they are evaluated
+    // after all the join conditions, and none of them is a join key. The project that prunes the
+    // output of the top join, if any, is replaced with the one above the filter.
     val finalJoinPlan = foundPlans.last.head._2
-    val remainingConds = (conditions -- finalJoinPlan.joinConds).toSeq
-    def addRemainingConds(plan: LogicalPlan): LogicalPlan = plan match {
-      case p @ Project(_, j: Join) => p.copy(child = addRemainingConds(j))
-      case j: Join => j.copy(condition = (j.condition.toSeq ++ remainingConds).reduceOption(And))
+    val topPlan = (conditions -- finalJoinPlan.joinConds).toSeq.reduceOption(And) match {
+      case Some(remainingCond) =>
+        val topJoin = finalJoinPlan.plan match {
+          case Project(_, j: Join) => j
+          case plan => plan
+        }
+        Filter(remainingCond, topJoin)
+      case None =>
+        finalJoinPlan.plan
     }
-    val topPlan =
-      if (remainingConds.isEmpty) finalJoinPlan.plan else addRemainingConds(finalJoinPlan.plan)
     val result = topPlan match {
       case p @ Project(projectList, j: Join) if projectList != output =>
-        // The project also keeps the references of the remaining conditions.
-        assert(topOutputSet.subsetOf(p.outputSet))
+        assert(topOutputSet == p.outputSet)
         // Keep the same order of final output attributes.
         p.copy(projectList = output)
       case finalPlan if !sameOutput(finalPlan, output) =>
@@ -227,7 +258,6 @@ object JoinReorderDP extends PredicateHelper with Logging {
       existingLevels: Seq[JoinPlanMap],
       conf: SQLConf,
       conditions: ExpressionSet,
-      movableConds: ExpressionSet,
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): JoinPlanMap = {
 
@@ -250,8 +280,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
         }
 
         otherSideCandidates.foreach { otherSidePlan =>
-          buildJoin(oneSidePlan, otherSidePlan, conf, conditions, movableConds, topOutput,
-              filters) match {
+          buildJoin(oneSidePlan, otherSidePlan, conf, conditions, topOutput, filters) match {
             case Some(newJoinPlan) =>
               // Check if it's the first plan for the item set, or it's a better plan than
               // the existing one due to lower cost.
@@ -271,7 +300,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
   /**
    * Builds a new JoinPlan if the following conditions hold:
    * - the sets of items contained in left and right sides do not overlap.
-   * - there exists at least one movable join condition involving references from both sides.
+   * - there exists at least one join condition involving references from both sides.
    * - if star-join filter is enabled, allow the following combinations:
    *         1) (oneJoinPlan U otherJoinPlan) is a subset of star-join
    *         2) star-join is a subset of (oneJoinPlan U otherJoinPlan)
@@ -281,7 +310,6 @@ object JoinReorderDP extends PredicateHelper with Logging {
    * @param otherJoinPlan The other side JoinPlan for building a new join node.
    * @param conf SQLConf for statistics computation.
    * @param conditions The overall set of join conditions.
-   * @param movableConds The join conditions that may be used to join two plans.
    * @param topOutput The output attributes of the final plan.
    * @param filters Join graph info to be used as filters by the search algorithm.
    * @return Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
@@ -291,7 +319,6 @@ object JoinReorderDP extends PredicateHelper with Logging {
       otherJoinPlan: JoinPlan,
       conf: SQLConf,
       conditions: ExpressionSet,
-      movableConds: ExpressionSet,
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): Option[JoinPlan] = {
 
@@ -315,7 +342,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
     val onePlan = oneJoinPlan.plan
     val otherPlan = otherJoinPlan.plan
-    val joinConds = movableConds
+    val joinConds = conditions
       .filterNot(l => canEvaluate(l, onePlan))
       .filterNot(r => canEvaluate(r, otherPlan))
       .filter(e => e.references.subsetOf(onePlan.outputSet ++ otherPlan.outputSet))
