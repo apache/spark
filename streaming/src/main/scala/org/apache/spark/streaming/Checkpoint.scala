@@ -30,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{BACKUP_FILE, CHECKPOINT_FILE, CHECKPOINT_TIME, NUM_RETRY, PATH, TEMP_FILE}
+import org.apache.spark.internal.config.CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
@@ -68,8 +69,14 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.yarn.principal",
       "spark.kerberos.keytab",
       "spark.kerberos.principal",
-      UI_FILTERS.key)
+      UI_FILTERS.key,
+      // An operator who hits CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH on recovery is told to
+      // restart with this flag off; it must be read from the new environment for that to work.
+      CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED.key)
 
+    // The saved value of CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED is dropped as well, so that the
+    // flag comes from the current launch only. Every later checkpoint saves the recovered conf, so
+    // a false set for one recovery would otherwise be inherited by every restart after it.
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.bindAddress")
@@ -78,6 +85,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       .remove("spark.blockManager.port")
       .remove("spark.kubernetes.driver.pod.name")
       .remove("spark.kubernetes.executor.podNamePrefix")
+      .remove(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED.key)
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>
