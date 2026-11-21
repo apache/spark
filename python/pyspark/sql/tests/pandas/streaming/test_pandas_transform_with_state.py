@@ -24,6 +24,7 @@ from abc import abstractmethod
 from typing import cast
 
 from pyspark import SparkConf
+from pyspark.sql import is_remote
 from pyspark.sql.functions import split
 from pyspark.sql.streaming import StatefulProcessor
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
@@ -722,10 +723,22 @@ class TransformWithStateTestsMixin:
                 timeMode="None",
             )
 
-        assert set(batch_result.sort("id").collect()) == {
-            Row(id="0", countAsString="2"),
-            Row(id="1", countAsString="2"),
-        }
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            result = batch_result.sort("id")
+            assert set(result.collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+            if not is_remote():
+                plan = result._jdf.queryExecution().executedPlan()
+                while not plan.metrics().contains("pythonDataSent"):
+                    self.assertEqual(plan.children().size(), 1)
+                    plan = plan.children().apply(0)
+                metrics = plan.metrics()
+                self.assertTrue(metrics.contains("numTotalStateRows"))
+                self.assertGreater(metrics.apply("pythonDataSent").value(), 0)
+                self.assertTrue(metrics.contains("pythonDataReadTime"))
+                self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
 
     def test_transform_with_state_batch_query_initial_state(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]

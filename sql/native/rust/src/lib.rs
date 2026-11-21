@@ -45,6 +45,7 @@ use serde::Serialize;
 mod abi;
 mod bridge;
 mod capabilities;
+mod domain;
 mod export;
 mod host;
 mod task;
@@ -69,6 +70,7 @@ pub use arrow_array;
 /// same version of Arrow as the SDK.
 pub use arrow_schema;
 pub use capabilities::Capabilities;
+pub use domain::{Domain, Value, ValueRange};
 pub use host::HostInfo;
 /// The `log` crate, whose macros write to the log of the Spark driver or executor, with
 /// the path of the library, once Spark initializes the library.
@@ -271,8 +273,9 @@ impl ScanInfo {
 
 /// Negotiates pushdown on the driver, then plans the scan.
 ///
-/// Spark calls [`push_limit`](Self::push_limit) and [`prune_columns`](Self::prune_columns),
-/// each at most once and in this order, then [`plan`](Self::plan), and drops the builder.
+/// Spark calls [`push_domains`](Self::push_domains), [`push_limit`](Self::push_limit) and
+/// [`prune_columns`](Self::prune_columns), each at most once and in this order, then
+/// [`plan`](Self::plan), and drops the builder.
 /// After a call fails, it makes no other call. It drops a builder without planning it when it
 /// does not read the scan, for example to only explain a query, once the scan is no longer
 /// referenced, which may be late and on another thread, so a builder must not hold a resource
@@ -284,6 +287,28 @@ pub trait ScanBuilder: Send + Sized + 'static {
     /// False only for [`Unsupported`], from which the SDK derives the capabilities.
     #[doc(hidden)]
     const SUPPORTED: bool = true;
+
+    /// Pushes the domains of the columns that the filters of the query constrain down to the
+    /// scan, so that it can skip data: see [`Domain`]. Spark derives them from the filters that
+    /// compare a column with literals, with `=`, `<>`, `<=>`, `<`, `<=`, `>`, `>=`, `IN`,
+    /// `IS NULL`, `IS NOT NULL` and `STARTS_WITH`, combined with `AND`, `OR` and `NOT`, for the
+    /// columns and the fields of structs of the types that a [`Value`] holds, except strings with
+    /// a non-binary collation. It calls this only with at least one domain, and at most one for
+    /// each column. A domain has all the values that its column has in the rows for which the
+    /// filters are true, and may have others: a column that only one side of an `OR` constrains
+    /// gets no domain from it, and filters such as `id + 1 > 5` constrain no column. Spark
+    /// evaluates all the filters after reading anyway.
+    ///
+    /// Return whether the scan uses each domain, in order: Spark shows a filter as pushed, in the
+    /// formatted plan of the query (`EXPLAIN FORMATTED`) and in the SQL tab of the Spark UI, when
+    /// the scan uses the domains of all the columns that the filter constrains. The default uses
+    /// none. Spark pushes the domains to every builder, also to one that keeps the default: for a
+    /// query whose filters give a domain, it creates the source and the builder of the scan, with
+    /// [`DataSource::new`] and [`DataSource::new_scan`], while it optimizes the query, as it does
+    /// for a LIMIT that it pushes, rather than when it plans the partitions.
+    fn push_domains(&mut self, domains: &[Domain]) -> Result<Vec<bool>> {
+        Ok(vec![false; domains.len()])
+    }
 
     /// Pushes a LIMIT of `limit` rows down to the scan. Return [`LimitSupport::Global`] only
     /// if the whole scan then returns at most `limit` rows. Spark pushes a limit only when the
