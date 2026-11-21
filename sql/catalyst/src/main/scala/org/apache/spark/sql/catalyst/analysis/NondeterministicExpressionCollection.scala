@@ -32,18 +32,68 @@ object NondeterministicExpressionCollection {
           case nondeterministicExpr: Nondeterministic => nondeterministicExpr
           case udf: UserDefinedExpression if !udf.deterministic => udf
           case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
+          // AesEncrypt draws an IV without extending Nondeterministic. That
+          // trait would also mark ECB and an explicit IV nondeterministic.
+          case aes: AesEncrypt if !aes.deterministic => aes
         }
 
         for (nondeterministicExpr <- leafNondeterministic.distinct) {
-          val namedExpression = nondeterministicExpr match {
-            case namedExpression: NamedExpression => namedExpression
-            case _ => Alias(nondeterministicExpr, "_nondeterministic")()
+          expressionToPull(expr, nondeterministicExpr).foreach { toPull =>
+            val key = toPull.canonicalized
+            if (!nonDeterministicToAttributes.containsKey(key)) {
+              val namedExpression = toPull match {
+                case namedExpression: NamedExpression => namedExpression
+                case _ => Alias(toPull, "_nondeterministic")()
+              }
+              nonDeterministicToAttributes.put(key, namedExpression)
+            }
           }
-          nonDeterministicToAttributes.put(nondeterministicExpr.canonicalized, namedExpression)
         }
       }
     }
 
     nonDeterministicToAttributes
+  }
+
+  // A collected call that reads a lambda variable is bound only inside that
+  // lambda. Projecting the call below the operator leaves the variable
+  // unbound. Project the smallest ancestor that still binds it, such as the
+  // transform(...) around aes_encrypt(x, key). A call that does not read the
+  // variable is projected itself.
+  private def expressionToPull(root: Expression, leaf: Expression): Option[Expression] = {
+    val hidden = leaf.references -- root.references
+    if (hidden.isEmpty) {
+      Some(leaf)
+    } else {
+      smallestEvaluableHost(root, leaf, hidden)
+    }
+  }
+
+  private def smallestEvaluableHost(
+      root: Expression,
+      leaf: Expression,
+      hidden: AttributeSet): Option[Expression] = {
+    def search(e: Expression): Option[Expression] = {
+      if (!containsNode(e, leaf)) {
+        None
+      } else {
+        val childHost = e.children.iterator.map(search).collectFirst { case Some(host) => host }
+        childHost.orElse {
+          if (canHost(e, leaf, hidden)) Some(e) else None
+        }
+      }
+    }
+    search(root)
+  }
+
+  private def canHost(e: Expression, leaf: Expression, hidden: AttributeSet): Boolean = {
+    (e ne leaf) &&
+      !e.isInstanceOf[LambdaFunction] &&
+      !e.isInstanceOf[Unevaluable] &&
+      e.references.intersect(hidden).isEmpty
+  }
+
+  private def containsNode(root: Expression, target: Expression): Boolean = {
+    (root eq target) || root.children.exists(containsNode(_, target))
   }
 }
