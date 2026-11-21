@@ -24,7 +24,10 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_arrow_dtypes_available,
+    extension_object_dtypes_available,
+)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 if extension_object_dtypes_available:
@@ -236,6 +239,90 @@ class StringOpsTestsMixin:
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
+
+    @unittest.skipIf(
+        not extension_arrow_dtypes_available, "PyArrow-backed dtypes are not available"
+    )
+    def test_pyarrow_backed_string_ops(self):
+        import pyarrow as pa
+        from pandas import ArrowDtype
+
+        # 1. Comparison with missing values and equality/inequality
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series(["a", None, "c"], dtype=ArrowDtype(pa.string())),
+                "b": pd.Series(["a", "b", "c"], dtype=ArrowDtype(pa.string())),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(pdf["a"] == pdf["b"], psdf["a"] == psdf["b"])
+        self.assert_eq(pdf["a"] != pdf["b"], psdf["a"] != psdf["b"])
+        self.assert_eq(pdf[pdf["a"] == "a"], psdf[psdf["a"] == "a"])
+
+        # 2. Scalar comparisons against string and number
+        self.assert_eq(pdf["a"] == "a", psdf["a"] == "a")
+        self.assert_eq(pdf["a"] != "a", psdf["a"] != "a")
+        self.assert_eq(pdf["a"] == 1, psdf["a"] == 1)
+        self.assert_eq(pdf["a"] != 1, psdf["a"] != 1)
+
+        # 3. Mixed operands (ArrowDtype with object/str Series in both orders)
+        s_obj = pd.Series(["a", "b", "c"])
+        ps_obj = ps.from_pandas(s_obj)
+        self.assert_eq(pdf["b"] == s_obj, psdf["b"] == ps_obj)
+        self.assert_eq(s_obj == pdf["b"], ps_obj == psdf["b"])
+
+        # 4. Logical boolean mask operations (&, |, ^)
+        mask1 = psdf["a"] == "a"
+        mask2 = psdf["b"] == "b"
+        p_mask1 = pdf["a"] == "a"
+        p_mask2 = pdf["b"] == "b"
+        self.assert_eq(p_mask1 & p_mask2, mask1 & mask2)
+        self.assert_eq(p_mask1 | p_mask2, mask1 | mask2)
+        self.assert_eq(p_mask1 ^ p_mask2, mask1 ^ mask2)
+
+        # 5. Loc assignment preserving ArrowDtype
+        pdf_loc = pdf.copy()
+        psdf_loc = psdf.copy()
+        pdf_loc.loc[pdf_loc["b"] == "b", "a"] = "z"
+        psdf_loc.loc[psdf_loc["b"] == "b", "a"] = "z"
+        self.assert_eq(pdf_loc, psdf_loc)
+        self.assertEqual(psdf_loc["a"].dtype, ArrowDtype(pa.string()))
+
+        # 6. Operations across DataFrames
+        with option_context("compute.ops_on_diff_frames", True):
+            psdf_other = ps.from_pandas(pdf)
+            self.assert_eq(pdf["a"] == pdf["b"], psdf["a"] == psdf_other["b"])
+
+        # 7. to_pandas preservation of ArrowDtype for numeric and boolean
+        pdf_num = pd.DataFrame(
+            {
+                "i": pd.Series([1, None], dtype=ArrowDtype(pa.int64())),
+                "b": pd.Series([True, None], dtype=ArrowDtype(pa.bool_())),
+            }
+        )
+        psdf_num = ps.from_pandas(pdf_num)
+        self.assert_eq(pdf_num, psdf_num.to_pandas())
+        self.assertEqual(psdf_num.to_pandas()["i"].dtype, ArrowDtype(pa.int64()))
+        self.assertEqual(psdf_num.to_pandas()["b"].dtype, ArrowDtype(pa.bool_()))
+
+        # 8. Timestamp timezone conversion under non-UTC session timeZone
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            pdf_ts = pd.DataFrame(
+                {
+                    "ts_naive": pd.Series(
+                        [pd.Timestamp("2024-01-01 10:00:00")],
+                        dtype=ArrowDtype(pa.timestamp("us")),
+                    ),
+                    "ts_zoned": pd.Series(
+                        [pd.Timestamp("2024-01-01 10:00:00", tz="America/New_York")],
+                        dtype=ArrowDtype(pa.timestamp("us", tz="America/New_York")),
+                    ),
+                }
+            )
+            psdf_ts = ps.from_pandas(pdf_ts)
+            self.assert_eq(pdf_ts["ts_naive"].dt.hour, psdf_ts["ts_naive"].dt.hour)
+            self.assert_eq(pdf_ts, psdf_ts.to_pandas())
 
 
 class StringOpsTests(
