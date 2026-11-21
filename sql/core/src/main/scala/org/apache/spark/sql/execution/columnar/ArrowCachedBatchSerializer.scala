@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -823,9 +822,12 @@ private object ArrowCachedBatchSerializer {
           min = value
           max = value
           hasValue = true
+        } else if (value.isNaN) {
+          max = value
         } else {
-          if (SQLOrderingUtil.compareFloats(value, min) < 0) min = value
-          if (SQLOrderingUtil.compareFloats(value, max) > 0) max = value
+          if (value > max) max = value
+          // Also replace a NaN lower bound when the batch starts with NaN.
+          if (!(value >= min)) min = value
         }
       }
     }
@@ -848,9 +850,12 @@ private object ArrowCachedBatchSerializer {
           min = value
           max = value
           hasValue = true
+        } else if (value.isNaN) {
+          max = value
         } else {
-          if (SQLOrderingUtil.compareDoubles(value, min) < 0) min = value
-          if (SQLOrderingUtil.compareDoubles(value, max) > 0) max = value
+          if (value > max) max = value
+          // Also replace a NaN lower bound when the batch starts with NaN.
+          if (!(value >= min)) min = value
         }
       }
     }
