@@ -76,10 +76,10 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private var recoveryLocalDir: File = _
   protected var tempDir: File = _
-  // The NM local dir set as yarn.nodemanager.local-dirs. ExternalShuffleBlockResolver only
-  // accepts executor localDirs that canonicalize to a path contained under this root and that
-  // contain the registering appId as a path segment (see validateLocalDirs). Tests build such
-  // paths via appLocalDir below.
+  // The NM local dir set as yarn.nodemanager.local-dirs. ExternalBlockHandler only accepts
+  // executor localDirs that canonicalize to a path contained under this root and that are
+  // scoped to the registering appId (see LocalDirValidator for the accepted layouts). Tests
+  // build such paths via appLocalDir below.
   protected var nmLocalDir: File = _
 
   protected def shuffleDBBackend(): DBBackend
@@ -87,7 +87,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   // Build an executor/merge local dir under the NM local dir (nmLocalDir) scoped to the given
   // application, mirroring the real YARN layout <nm-local-dir>/usercache/<user>/appcache/<appId>.
   // This satisfies the local-dir validation done at the RPC boundary (LocalDirValidator): the path
-  // is contained under the configured NM local dir and contains the appId as a path segment.
+  // is contained under the configured NM local dir and lies below appcache/<appId>.
   protected def appLocalDir(appId: String, suffix: String): String =
     new File(nmLocalDir, s"usercache/u/appcache/$appId/$suffix").getAbsolutePath
 
