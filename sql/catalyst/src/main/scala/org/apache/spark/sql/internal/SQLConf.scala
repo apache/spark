@@ -9063,6 +9063,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_UNIFORM_INTEGRAL_TRUNCATE =
+    buildConf("spark.sql.legacy.uniformIntegralTruncate")
+      .internal()
+      .doc("When set to true, uniform(min, max) with integral bounds truncates a double drawn " +
+        "from [min, max) toward zero. This never returns max (or a negative min) and returns " +
+        "zero twice as often as other values when the range spans zero. When false, each " +
+        "integer in the closed range [min, max] is equally likely.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_EVAL_CURRENT_TIME = buildConf("spark.sql.legacy.earlyEvalCurrentTime")
     .internal()
     .doc("When set to true, evaluation and constant folding will happen for now() and " +

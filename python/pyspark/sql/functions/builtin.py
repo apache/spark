@@ -18423,7 +18423,8 @@ def uniform(
     specified range of numbers. The random seed is optional. The provided numbers specifying the
     minimum and maximum values of the range must be constant. If both of these numbers are integers,
     then the result will also be an integer. Otherwise if one or both of these are floating-point
-    numbers, then the result will also be a floating-point number.
+    numbers, then the result will also be a floating-point number. Integer results are drawn from
+    the closed range [min, max], while floating-point results are drawn from [min, max).
 
     .. versionadded:: 4.0.0
 
@@ -18458,15 +18459,15 @@ def uniform(
     |uniform(5, 105, 3)|
     +------------------+
     |                30|
-    |                71|
-    |                99|
-    |                77|
+    |                72|
+    |               100|
+    |                78|
     |                16|
     |                25|
-    |                89|
-    |                80|
+    |                90|
+    |                81|
     |                51|
-    |                83|
+    |                84|
     +------------------+
     """
     min = _enum_to_value(min)

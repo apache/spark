@@ -7376,7 +7376,8 @@ object functions {
    * specified range of numbers. The provided numbers specifying the minimum and maximum values of
    * the range must be constant. If both of these numbers are integers, then the result will also
    * be an integer. Otherwise if one or both of these are floating-point numbers, then the result
-   * will also be a floating-point number.
+   * will also be a floating-point number. Integer results are drawn from the closed range [min,
+   * max], while floating-point results are drawn from [min, max).
    *
    * @param min
    *   Minimum value in the range. A column that evaluates to a numeric. Must be a constant.
@@ -7395,7 +7396,9 @@ object functions {
    * specified range of numbers, with the chosen random seed. The provided numbers specifying the
    * minimum and maximum values of the range must be constant. If both of these numbers are
    * integers, then the result will also be an integer. Otherwise if one or both of these are
-   * floating-point numbers, then the result will also be a floating-point number.
+   * floating-point numbers, then the result will also be a floating-point number. Integer results
+   * are drawn from the closed range [min, max], while floating-point results are drawn from [min,
+   * max).
    *
    * @param min
    *   Minimum value in the range. A column that evaluates to a numeric. Must be a constant.

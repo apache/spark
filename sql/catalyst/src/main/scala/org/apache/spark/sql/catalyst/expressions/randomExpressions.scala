@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -211,9 +212,10 @@ object Randn {
     _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
       distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
       The provided numbers specifying the minimum and maximum values of the range must be constant.
-      If both of these numbers are integers, then the result will also be an integer. Otherwise if
-      one or both of these are floating-point numbers, then the result will also be a floating-point
-      number.
+      If both of these numbers are integers, then the result will also be an integer drawn from
+      the closed range [min, max], with each integer equally likely. Otherwise if one or both of
+      these are floating-point numbers, then the result will also be a floating-point number in
+      the half-open range [min, max).
   """,
   arguments = """
     Arguments:
@@ -317,15 +319,44 @@ case class Uniform(
       def cast(e: Expression, to: DataType): Expression = {
         if (e.dataType == to) e else Cast(e, to, timeZoneId)
       }
-      cast(Add(
-        cast(min, DoubleType),
-        Multiply(
-          Subtract(
-            cast(max, DoubleType),
-            cast(min, DoubleType)),
-          Rand(seed))),
-        dataType)
+      dataType match {
+        case _: IntegralType if !SQLConf.get.getConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE) =>
+          integralReplacement(cast)
+        case _ =>
+          cast(Add(
+            cast(min, DoubleType),
+            Multiply(
+              Subtract(
+                cast(max, DoubleType),
+                cast(min, DoubleType)),
+              Rand(seed))),
+            dataType)
+      }
     }
+  }
+
+  /**
+   * Draws each integer in the closed range [min, max] with equal probability. Truncating a double
+   * drawn from [min, max) toward zero would never return `max` (or a negative `min`) and would
+   * return zero twice as often as any other value when the range spans it.
+   */
+  private def integralReplacement(cast: (Expression, DataType) => Expression): Expression = {
+    val lo = Least(Seq(cast(min, LongType), cast(max, LongType)))
+    val hi = Greatest(Seq(cast(min, LongType), cast(max, LongType)))
+    // floor(lo + (hi - lo + 1) * rand) lies in [lo, hi] except for double rounding error near
+    // the ends of very wide ranges, so clamp it back into the range. Floor saturates instead of
+    // failing on overflow so that the clamp also covers ranges touching the BIGINT limits.
+    val draw = Floor(
+      Add(
+        cast(lo, DoubleType),
+        Multiply(
+          Add(Subtract(cast(hi, DoubleType), cast(lo, DoubleType)), Literal(1.0d)),
+          Rand(seed))),
+      failOnError = false)
+    // Least and Greatest skip NULLs, so check the bounds explicitly to keep a NULL bound NULL.
+    If(Or(IsNull(min), IsNull(max)),
+      Literal(null, dataType),
+      cast(Least(Seq(Greatest(Seq(draw, lo)), hi)), dataType))
   }
 
   /** Returns a copy of this expression with the specified timeZoneId. */

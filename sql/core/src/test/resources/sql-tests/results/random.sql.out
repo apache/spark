@@ -120,7 +120,7 @@ SELECT uniform(0, 1, 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-0
+1
 
 
 -- !query
@@ -128,7 +128,7 @@ SELECT uniform(0, 10, 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-7
+8
 
 
 -- !query
@@ -136,7 +136,7 @@ SELECT uniform(0L, 10L, 0) AS result
 -- !query schema
 struct<result:bigint>
 -- !query output
-7
+8
 
 
 -- !query
@@ -144,7 +144,7 @@ SELECT uniform(0, 10L, 0) AS result
 -- !query schema
 struct<result:bigint>
 -- !query output
-7
+8
 
 
 -- !query
@@ -152,7 +152,7 @@ SELECT uniform(0, cast(10 as tinyint), 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-7
+8
 
 
 -- !query
@@ -160,7 +160,7 @@ SELECT uniform(0, cast(10 as smallint), 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-7
+8
 
 
 -- !query
@@ -168,7 +168,7 @@ SELECT uniform(0, 10S, 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-7
+8
 
 
 -- !query
@@ -176,7 +176,7 @@ SELECT uniform(10, 20, 0) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-17
+18
 
 
 -- !query
@@ -240,9 +240,9 @@ SELECT uniform(10, 20, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query schema
 struct<result:int>
 -- !query output
-15
 16
 17
+18
 
 
 -- !query
@@ -274,7 +274,82 @@ SELECT uniform(-20L, -10L, -10) AS result
 -- !query schema
 struct<result:bigint>
 -- !query output
--17
+-18
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(1, 6, 0) AS x FROM range(1000))
+-- !query schema
+struct<min(x):int,max(x):int,count(DISTINCT x):bigint>
+-- !query output
+1	6	6
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(0, 1, 0) AS x FROM range(1000))
+-- !query schema
+struct<min(x):int,max(x):int,count(DISTINCT x):bigint>
+-- !query output
+0	1	2
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000))
+-- !query schema
+struct<min(x):int,max(x):int,count(DISTINCT x):bigint>
+-- !query output
+-1	1	3
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(6, 1, 0) AS x FROM range(1000))
+-- !query schema
+struct<min(x):int,max(x):int,count(DISTINCT x):bigint>
+-- !query output
+1	6	6
+
+
+-- !query
+SELECT x, count(*) BETWEEN 250 AND 420 AS balanced
+  FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000)) GROUP BY x ORDER BY x
+-- !query schema
+struct<x:int,balanced:boolean>
+-- !query output
+-1	true
+0	true
+1	true
+
+
+-- !query
+SELECT uniform(5, 5, 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+5
+
+
+-- !query
+SELECT uniform(CAST(-128 AS TINYINT), CAST(127 AS TINYINT), 0) AS result
+-- !query schema
+struct<result:tinyint>
+-- !query output
+66
+
+
+-- !query
+SELECT uniform(-9223372036854775808L, 9223372036854775807L, 0) IS NOT NULL AS result
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT uniform(9223372036854775806L, 9223372036854775807L, 0) >= 9223372036854775806L AS result
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
 
 
 -- !query
@@ -330,7 +405,7 @@ SELECT uniform(0, 1, NULL) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-0
+1
 
 
 -- !query
@@ -354,7 +429,7 @@ SELECT uniform(0, 1, cast(NULL as int)) AS result
 -- !query schema
 struct<result:int>
 -- !query output
-0
+1
 
 
 -- !query

@@ -216,6 +216,61 @@ SELECT uniform(-20L, -10L, -10) AS result
 
 
 -- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(1, 6, 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(0, 1, 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(6, 1, 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT x, count(*) BETWEEN 250 AND 420 AS balanced
+  FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000)) GROUP BY x ORDER BY x
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(5, 5, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(CAST(-128 AS TINYINT), CAST(127 AS TINYINT), 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(-9223372036854775808L, 9223372036854775807L, 0) IS NOT NULL AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(9223372036854775806L, 9223372036854775807L, 0) >= 9223372036854775806L AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT uniform(NULL, 1, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]

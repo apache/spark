@@ -38,6 +38,17 @@ SELECT uniform(10, 20.0F) IS NOT NULL AS result;
 SELECT uniform(-10L, 10L, 0) AS result;
 SELECT uniform(-20L, -10L, 0) AS result;
 SELECT uniform(-20L, -10L, -10) AS result;
+-- Integral bounds are inclusive on both ends and every integer in the range is equally likely.
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(1, 6, 0) AS x FROM range(1000));
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(0, 1, 0) AS x FROM range(1000));
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000));
+SELECT min(x), max(x), count(DISTINCT x) FROM (SELECT uniform(6, 1, 0) AS x FROM range(1000));
+SELECT x, count(*) BETWEEN 250 AND 420 AS balanced
+  FROM (SELECT uniform(-1, 1, 0) AS x FROM range(1000)) GROUP BY x ORDER BY x;
+SELECT uniform(5, 5, 0) AS result;
+SELECT uniform(CAST(-128 AS TINYINT), CAST(127 AS TINYINT), 0) AS result;
+SELECT uniform(-9223372036854775808L, 9223372036854775807L, 0) IS NOT NULL AS result;
+SELECT uniform(9223372036854775806L, 9223372036854775807L, 0) >= 9223372036854775806L AS result;
 SELECT uniform(NULL, 1, 0) AS result;
 SELECT uniform(cast(NULL AS int), 1, 0) AS result;
 SELECT uniform(cast(NULL AS float), 1, 0) AS result;
