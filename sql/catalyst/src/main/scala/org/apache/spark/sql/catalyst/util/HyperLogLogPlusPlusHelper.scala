@@ -21,7 +21,7 @@ import java.lang.{Long => JLong}
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.XxHash64Function
+import org.apache.spark.sql.catalyst.expressions.{InterpretedHashFunction, XXH64, XxHash64Function}
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers.{DOUBLE_NORMALIZER, FLOAT_NORMALIZER}
 import org.apache.spark.sql.types._
 
@@ -96,7 +96,11 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
       case _ => _value
     }
     // Create the hashed value 'x'.
-    val x = XxHash64Function.hash(
+    val hashFunction = value match {
+      case _: ArrayData | _: MapData | _: InternalRow => ComplexValueHash
+      case _ => XxHash64Function
+    }
+    val x = hashFunction.hash(
       value,
       dataType,
       42L,
@@ -270,6 +274,33 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
  */
 // scalastyle:on
 object HyperLogLogPlusPlusHelper {
+
+  private object ComplexValueHash extends InterpretedHashFunction {
+    override protected def hashInt(value: Int, seed: Long): Long = XXH64.hashInt(value, seed)
+
+    override protected def hashLong(value: Long, seed: Long): Long = XXH64.hashLong(value, seed)
+
+    override protected def hashUnsafeBytes(
+        base: AnyRef, offset: Long, length: Int, seed: Long): Long = {
+      XXH64.hashUnsafeBytes(base, offset, length, seed)
+    }
+
+    override def hash(
+        value: Any,
+        dataType: DataType,
+        seed: Long,
+        isCollationAware: Boolean,
+        legacyCollationAwareHashing: Boolean): Long = {
+      // Null positions and collection boundaries are part of the distinct value.
+      val presenceHash = hashInt(if (value == null) 0 else 1, seed)
+      val structureHash = value match {
+        case array: ArrayData => hashInt(array.numElements(), presenceHash)
+        case map: MapData => hashInt(map.numElements(), presenceHash)
+        case _ => presenceHash
+      }
+      super.hash(value, dataType, structureHash, isCollationAware, legacyCollationAwareHashing)
+    }
+  }
 
   /**
    * The size of a word used for storing registers: 64 Bits.
