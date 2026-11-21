@@ -17,6 +17,7 @@
 
 import os
 import unittest
+from argparse import ArgumentTypeError
 from unittest import mock
 
 from sparktestsupport import modules
@@ -26,6 +27,7 @@ from sparktestsupport.utils import (
     determine_modules_to_test,
     determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
+    parse_test_modules,
 )
 
 
@@ -155,6 +157,30 @@ class DetermineModulesToTestTests(unittest.TestCase):
         }
         result = determine_modules_to_test([modules.sql, modules.core], deduplicated=False)
         self.assertCountEqual([module.name for module in result], expected)
+
+
+class ParseTestModulesTests(unittest.TestCase):
+    def test_resolves_known_names_in_all_modules_order(self):
+        self.assertEqual(
+            parse_test_modules("graphx,core,graphx"),
+            [modules.core, modules.graphx],
+        )
+
+    def test_unknown_names_keep_input_order(self):
+        with self.assertRaises(ArgumentTypeError) as error:
+            parse_test_modules("core,does-not-exist,also-missing,does-not-exist")
+        message = str(error.exception)
+        self.assertIn("unrecognized module(s): 'does-not-exist', 'also-missing'", message)
+        supported = message.split("Supported modules: ", 1)[1]
+        self.assertEqual(
+            supported.split(", "),
+            sorted(module.name for module in modules.all_modules),
+        )
+
+    def test_blank_value_fails(self):
+        with self.assertRaises(ArgumentTypeError) as error:
+            parse_test_modules(" , ")
+        self.assertEqual(str(error.exception), "no module names were provided")
 
 
 class DetermineShellScriptTestGoalsTests(unittest.TestCase):
