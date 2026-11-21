@@ -2390,6 +2390,11 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         filter
       }
 
+    // TODO: A filter inferred here over a column that can fail (see `failableOutput`), from a
+    //  condition written in the ON clause or moved into it after a non-deterministic or throwable
+    //  one, can still be pushed below a window, a watermark, a repartition or an aggregation and
+    //  through the projection that computes the column, where it is evaluated on the rows that a
+    //  join below drops.
     case join @ Join(left, right, joinType, conditionOpt, _) =>
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
