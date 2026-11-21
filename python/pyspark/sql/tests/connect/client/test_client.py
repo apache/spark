@@ -275,7 +275,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         command_response.pipeline_command_result.SetInParent()
         metadata_response = proto.ExecutePlanResponse()
         metadata_response.metrics.metrics.add(name="metric", plan_id=1)
-        metadata_response.observed_metrics.add(name="observation")
+        observed_metrics = metadata_response.observed_metrics.add(name="observation")
+        observed_metrics.keys.extend(["min_id", "row_count"])
+        observed_metrics.values.add(long=4)
+        observed_metrics.values.add(long=10)
 
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._stub = MockService(
@@ -289,6 +292,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(list(results[0]), ["pipeline_command_result"])
         self.assertIsInstance(results[1], PlanMetrics)
         self.assertIsInstance(results[2], PlanObservedMetrics)
+        self.assertEqual(
+            results[2].pairs,
+            {"min_id": 4, "row_count": 10},
+        )
 
     def test_command_iterator_yields_extension(self):
         response = proto.ExecutePlanResponse()
@@ -473,6 +480,32 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         client.interrupt_all()
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
+
+    def test_interrupt_tag(self):
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        client.interrupt_tag("test_tag")
+
+        self.assertEqual(
+            mock.req.interrupt_type,
+            proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG,
+        )
+        self.assertEqual(mock.req.operation_tag, "test_tag")
+
+    def test_interrupt_operation(self):
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        client.interrupt_operation("operation_id")
+
+        self.assertEqual(
+            mock.req.interrupt_type,
+            proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID,
+        )
+        self.assertEqual(mock.req.operation_id, "operation_id")
 
     def test_is_closed(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
