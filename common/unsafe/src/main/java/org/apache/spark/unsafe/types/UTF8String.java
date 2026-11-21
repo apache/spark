@@ -22,7 +22,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.function.Function;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
@@ -799,18 +798,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Method for ASCII character conversion using a functional interface for chars.
-   */
-
-  private UTF8String convertAscii(Function<Character, Character> charConverter) {
-    byte[] bytes = new byte[numBytes];
-    for (int i = 0; i < numBytes; i++) {
-        bytes[i] = (byte) charConverter.apply((char) getByte(i)).charValue();
-    }
-    return fromBytes(bytes);
-  }
-
-  /**
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
@@ -821,8 +808,36 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlow();
   }
 
+  /**
+   * Returns the upper case of this ASCII string. The caller must ensure the string is full
+   * ASCII; the normal entry points reach this only after {@link #isFullAscii()} returns true.
+   *
+   * The result array is allocated lazily, only once a byte actually changes case: a string
+   * that is already upper case returns {@code this} with no allocation. Because upper-casing
+   * ASCII stays ASCII, the result is tagged full ASCII so later operations can skip re-scanning.
+   */
   public UTF8String toUpperCaseAscii() {
-    return convertAscii(Character::toUpperCase);
+    assert isFullAscii();
+    byte[] bytes = null;
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      byte upper = (b >= 'a' && b <= 'z') ? (byte) (b - 32) : b;
+      if (upper != b && bytes == null) {
+        // First byte to change case: allocate the result and copy the clean prefix [0, i).
+        bytes = new byte[numBytes];
+        copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, i);
+      }
+      if (bytes != null) {
+        bytes[i] = upper;
+      }
+    }
+    if (bytes == null) {
+      // Already upper case: no allocation, and `this` already carries the FULL_ASCII flag.
+      return this;
+    }
+    UTF8String result = fromBytes(bytes);
+    result.isFullAscii = IsFullAscii.FULL_ASCII;
+    return result;
   }
 
   private UTF8String toUpperCaseSlow() {
@@ -860,8 +875,36 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(toString().toLowerCase());
   }
 
+  /**
+   * Returns the lower case of this ASCII string. The caller must ensure the string is full
+   * ASCII; the normal entry points reach this only after {@link #isFullAscii()} returns true.
+   *
+   * The result array is allocated lazily, only once a byte actually changes case: a string
+   * that is already lower case returns {@code this} with no allocation. Because lower-casing
+   * ASCII stays ASCII, the result is tagged full ASCII so later operations can skip re-scanning.
+   */
   public UTF8String toLowerCaseAscii() {
-    return convertAscii(Character::toLowerCase);
+    assert isFullAscii();
+    byte[] bytes = null;
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      byte lower = (b >= 'A' && b <= 'Z') ? (byte) (b + 32) : b;
+      if (lower != b && bytes == null) {
+        // First byte to change case: allocate the result and copy the clean prefix [0, i).
+        bytes = new byte[numBytes];
+        copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, i);
+      }
+      if (bytes != null) {
+        bytes[i] = lower;
+      }
+    }
+    if (bytes == null) {
+      // Already lower case: no allocation, and `this` already carries the FULL_ASCII flag.
+      return this;
+    }
+    UTF8String result = fromBytes(bytes);
+    result.isFullAscii = IsFullAscii.FULL_ASCII;
+    return result;
   }
 
   /**
