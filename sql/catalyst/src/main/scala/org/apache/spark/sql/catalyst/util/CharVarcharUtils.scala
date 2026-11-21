@@ -426,7 +426,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   private[sql] object ReadSidePadding {
     def unapply(e: Expression): Option[(Expression, Int)] = e match {
       case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
-          None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+          None, _) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
         Some((child, n))
       case _ => None
     }

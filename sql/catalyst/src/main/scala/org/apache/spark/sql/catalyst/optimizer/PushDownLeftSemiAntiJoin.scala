@@ -39,17 +39,29 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
     case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if pList.forall(_.deterministic) &&
+        if (pList.forall(_.deterministic) ||
+          PushPredicateThroughNonJoin.allowRowOrderIndependent(pList)) &&
         !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
+      val allDeterministic = pList.forall(_.deterministic)
       if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
+      } else if (!allDeterministic && (!joinCond.get.deterministic ||
+          joinCond.get.references.intersect(
+            AttributeSet(pList.filterNot(_.deterministic).map(_.toAttribute))).nonEmpty)) {
+        j
       } else {
         val aliasMap = getAliasMap(p)
-        // Do not push complex join condition
-        if (aliasMap.forall(_._2.child.children.isEmpty)) {
-          val newJoinCond = if (aliasMap.nonEmpty) {
+        // Do not push complex join condition; for row-order-independent projections, scope the
+        // check to referenced aliases so unreferenced multi-arg aliases do not block pushdown.
+        val aliasesToCheck = if (allDeterministic) {
+          aliasMap
+        } else {
+          aliasMap.filter { case (a, _) => joinCond.get.references.contains(a) }
+        }
+        if (aliasesToCheck.forall(_._2.child.children.isEmpty)) {
+          val newJoinCond = if (aliasesToCheck.nonEmpty) {
             Option(replaceAlias(joinCond.get, aliasMap))
           } else {
             joinCond
@@ -62,20 +74,28 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
+        if (agg.aggregateExpressions.forall(_.deterministic) ||
+          (PushPredicateThroughNonJoin.allowRowOrderIndependent(agg.aggregateExpressions) &&
+            PushPredicateThroughNonJoin.allowRowOrderIndependent(agg.groupingExpressions))) &&
+          agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>
+      val allDeterministic = agg.aggregateExpressions.forall(_.deterministic)
       val aliasMap = getAliasMap(agg)
+      lazy val nondetAliases =
+        AttributeSet(agg.aggregateExpressions.filterNot(_.deterministic).map(_.toAttribute))
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
-        predicate.references.nonEmpty &&
+        (allDeterministic ||
+          (predicate.deterministic && predicate.references.intersect(nondetAliases).isEmpty)) &&
+          predicate.references.nonEmpty &&
           replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {
         replaceAlias(predicates.reduce(And), aliasMap)
       }
-      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
+      pushDownJoin(join, canPushDownPredicate, makeJoinCondition, !allDeterministic)
 
     // LeftSemi/LeftAnti over Window
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
@@ -107,7 +127,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
-      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+      val canPushDownPredicate = (predicate: Expression) => {
+        predicate.references.subsetOf(validAttrs)
+      }
+      pushDownJoin(join, canPushDownPredicate, _.reduce(And))
   }
 
   /**
@@ -133,14 +156,24 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   private def pushDownJoin(
       join: Join,
       canPushDownPredicate: Expression => Boolean,
-      makeJoinCondition: Seq[Expression] => Expression): LogicalPlan = {
+      makeJoinCondition: Seq[Expression] => Expression,
+      isRowOrderIndependent: Boolean = false): LogicalPlan = {
     assert(join.left.children.length == 1)
 
     if (join.condition.isEmpty) {
       join.left.withNewChildren(Seq(join.copy(left = join.left.children.head)))
     } else {
-      val (pushDown, stayUp) = splitConjunctivePredicates(join.condition.get)
-        .partition(canPushDownPredicate)
+      val predicates = splitConjunctivePredicates(join.condition.get)
+      val (pushDown, stayUp) = if (isRowOrderIndependent) {
+        lazy val failable = failableOutput(join.left.children.head) ++ failableOutput(join.right)
+        PushPredicateThroughNonJoin.splitPushable(predicates)(
+          canPush = canPushDownPredicate,
+          throwable = p =>
+            PushPredicateThroughNonJoin.isRowOrderIndependentBarrier(
+              makeJoinCondition(Seq(p)), failable))
+      } else {
+        predicates.partition(canPushDownPredicate)
+      }
 
       // Check if the remaining predicates do not contain columns from the right hand side of the
       // join. Since the remaining predicates will be kept as a filter over the operator under join,

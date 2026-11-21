@@ -659,6 +659,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.optimizer.rowOrderIndependentNondeterministicPushdown.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, allows safe optimizer pushdowns (e.g., disjoint deterministic filters " +
+        "and single-reference project collapse) across row-order-independent nondeterministic " +
+        "expressions.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
     buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -11007,6 +11018,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
+
+  def rowOrderIndependentNondeterministicPushdownEnabled: Boolean =
+    getConf(ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED)
 
   def splitProjectionForExpensiveFilters: Boolean =
     getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
