@@ -8439,8 +8439,8 @@ class AstBuilder extends DataTypeAstBuilder
         }.get
       val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
       Project(projectList, left)
-    }.getOrElse(Option(ctx.SET).map { _ =>
-      visitOperatorPipeSet(ctx, left)
+    }.getOrElse(Option(ctx.SET).orElse(Option(ctx.EVAL)).map { _ =>
+      visitOperatorPipeSetOrEval(ctx, left, appendMissingColumns = ctx.EVAL != null)
     }.getOrElse(Option(ctx.DROP).map { _ =>
       val ids: Seq[Seq[String]] = ctx.multipartIdentifierList().multipartIdentifier.asScala
         .toSeq.map(visitMultipartIdentifier)
@@ -8483,27 +8483,40 @@ class AstBuilder extends DataTypeAstBuilder
     ))))))))))))))
   }
 
-  private def visitOperatorPipeSet(
-      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+  /**
+   * Builds the pipe operator SET, or EVAL if `appendMissingColumns`. Both replace an assigned
+   * column that exists in place. EVAL appends a column that does not exist, as EXTEND would, where
+   * SET fails.
+   */
+  private def visitOperatorPipeSetOrEval(
+      ctx: OperatorPipeRightSideContext,
+      left: LogicalPlan,
+      appendMissingColumns: Boolean): LogicalPlan = {
+    val clause = if (appendMissingColumns) PipeOperators.evalClause else PipeOperators.setClause
+    val assignments = ctx.operatorPipeSetAssignmentSeq()
+    withOrigin(assignments) {
+      if (!assignments.DOT.isEmpty) {
+        operationNotAllowed(
+          s"SQL pipe syntax |> $clause operator with multi-part assignment key " +
+            s"(only single-part keys are allowed)", assignments)
+      }
+    }
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
-      visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+      visitOperatorPipeSetAssignmentSeq(assignments)
     var plan = left
     setIdentifiers.zip(setTargets).foreach {
-      case (_, _: Alias) =>
-        operationNotAllowed(
-          "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
       case (ident, target) =>
-        // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
-        // and add the new SET expression to the projection list.
-        // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
-        val replacement =
-          Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
+        // Add an UnresolvedStarExceptOrReplace to exclude the assigned column from the relation
+        // and add the new expression to the projection list.
+        // Use a PipeExpression to make sure it does not contain any aggregate functions.
+        val replacement = Alias(PipeExpression(target, isAggregate = false, clause), ident)()
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
-            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
-        // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
-        // expression. We do this once per SET assignment to allow for multiple SET assignments with
-        // optional lateral references to previous ones.
+            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement)),
+            appendMissingReplacements = appendMissingColumns))
+        // Add a projection using the UnresolvedStarExceptOrReplace expression. We do this once per
+        // assignment to allow for multiple assignments with optional lateral references to
+        // previous ones.
         plan = Project(projectList, plan)
     }
     plan
@@ -8512,12 +8525,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitOperatorPipeSetAssignmentSeq(
       ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
     withOrigin(ctx) {
-      if (!ctx.DOT.isEmpty) {
-        operationNotAllowed(
-          s"SQL pipe syntax |> SET operator with multi-part assignment key " +
-            s"(only single-part keys are allowed)", ctx)
-      }
-      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setIdentifiers: Seq[String] =
+        ctx.errorCapturingIdentifier().asScala.map(getIdentifierText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)
     }

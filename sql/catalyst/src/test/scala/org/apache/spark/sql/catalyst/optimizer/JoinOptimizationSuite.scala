@@ -177,4 +177,42 @@ class JoinOptimizationSuite extends PlanTest {
     comparePlans(reordered, answer.analyze)
     assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
   }
+
+  test("SPARK-62069: reorder inner joins with a lower join or filter that has a condition that " +
+    "may not move as one of the joined plans") {
+    // A lower join or filter removes a row on which its condition is NULL, so no condition above
+    // it is evaluated on the row. It is joined as one plan, with its condition. Only ReorderJoin
+    // runs.
+    val z = LocalRelation($"e".int, $"f".int)
+    val w = LocalRelation($"g".int, $"h".int)
+    val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
+    Seq(
+      testRelation.join(testRelation1, condition = Some($"a" === $"d" && throwing)),
+      testRelation.join(testRelation1, condition = Some($"a" === $"d")).where(Rand(0) > 0.5)
+    ).foreach { lower =>
+      val query = lower.join(w).join(z).where($"e" === $"c" && $"g" === $"e")
+      val answer = lower.join(z, condition = Some($"e" === $"c"))
+        .join(w, condition = Some($"g" === $"e"))
+        .select($"a", $"b", $"c", $"d", $"g", $"h", $"e", $"f")
+      comparePlans(ReorderJoin(query.analyze), answer.analyze)
+      // It is an `Inner` plan also under a cross join, so that StarSchemaDetection, which only
+      // reorders `Inner` base tables, does not join it after them.
+      assert(ExtractFiltersAndInnerJoins.unapply(lower.join(w, Cross).join(z)).map(_._1.map(_._2))
+        === Some(Seq(Inner, Cross, Inner)))
+    }
+  }
+
+  test("SPARK-62069: reorder inner joins with a condition of the top join that may not move in " +
+    "a filter above them") {
+    // The filter takes the place of the top join. Only ReorderJoin runs.
+    val z = LocalRelation($"e".int, $"f".int)
+    val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
+    val query = testRelation.join(testRelation1)
+      .join(z, condition = Some($"e" === $"a" && $"f" === $"d" && throwing))
+    val answer = testRelation.join(z, condition = Some($"e" === $"a"))
+      .join(testRelation1, condition = Some($"f" === $"d"))
+      .where(throwing)
+      .select($"a", $"b", $"c", $"d", $"e", $"f")
+    comparePlans(ReorderJoin(query.analyze), answer.analyze)
+  }
 }

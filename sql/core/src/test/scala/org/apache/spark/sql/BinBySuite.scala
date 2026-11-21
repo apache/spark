@@ -161,6 +161,38 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY scales every copy of a DISTRIBUTE column") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = spark.sql(
+        """SELECT * FROM (SELECT *, value, value AS raw_value FROM VALUES
+          |  (1, TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D),
+          |  (2, CAST(NULL AS TIMESTAMP), TIMESTAMP '2024-01-01 00:10:00', 10.0D)
+          |  AS metrics(id, ts_start, ts_end, value))
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      val plan = df.queryExecution.executedPlan
+      // A projection above BIN BY would read both copies from the first one.
+      assert(plan.collectFirst {
+        case p: ProjectExec if p.exists(_.isInstanceOf[BinByExec]) => p
+      }.isEmpty, plan)
+      val codegen = spark.sessionState.conf.getConf(SQLConf.ENABLE_BIN_BY_CODEGEN)
+      assert(binByCodegenStage(plan).isDefined == codegen, plan)
+      // Read the rows by position, because `collect` reads both copies from the first one.
+      val rows = plan.executeCollectPublic().toSeq
+        .map(row => Seq(row.get(0), row.get(3), row.get(4), row.get(5)))
+        .sortBy(_.head.asInstanceOf[Int])
+      // Both copies of `value` are scaled, or NULL for a NULL range. `raw_value` is not scaled.
+      assert(rows == Seq(
+        Seq[Any](1, 50.0, 50.0, 100.0),
+        Seq[Any](1, 50.0, 50.0, 100.0),
+        Seq[Any](2, null, null, 10.0)))
+    }
+  }
+
   test("BIN BY passes a single-bin range through with ratio 1.0") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",

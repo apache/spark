@@ -126,6 +126,7 @@ object PipeOperators {
   val aggregateClause = "AGGREGATE"
   val clusterByClause = "CLUSTER BY"
   val distributeByClause = "DISTRIBUTE BY"
+  val evalClause = "EVAL"
   val extendClause = "EXTEND"
   val limitClause = "LIMIT"
   val offsetClause = "OFFSET"

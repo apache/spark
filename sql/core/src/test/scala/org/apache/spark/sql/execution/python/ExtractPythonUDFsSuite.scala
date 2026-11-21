@@ -19,14 +19,14 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EvalOnlyWhen, Expression, If, Literal, PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, BatchEvalPython, Limit, LocalLimit, LocalRelation, Project}
 import org.apache.spark.sql.execution.{FileSourceScanExec, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.functions.{col, count}
+import org.apache.spark.sql.functions.{col, count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, LongType, StringType, StructType}
@@ -266,6 +266,29 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
     val pythonEvalNodes5 = collectBatchExec(df5.queryExecution.executedPlan)
     assert(pythonEvalNodes5.size == 1)
     assert(pythonEvalNodes5.head.udfs.size == 2)
+  }
+
+  test("SPARK-62106: A nondeterministic UDF call that is selected twice is evaluated once") {
+    val call = batchedNondeterministicPythonUDF(col("a"))
+    val df = Seq("Hello").toDF("a").select(call.as("c"), call.as("d"))
+    val pythonEvalNodes = collectBatchExec(df.queryExecution.executedPlan)
+    assert(pythonEvalNodes.size == 1)
+    assert(pythonEvalNodes.head.udfs.size == 1)
+  }
+
+  test("SPARK-62106: Equal UDF calls over an aggregate function are evaluated once") {
+    val df = Seq(("Hello", 4)).toDF("a", "b")
+    // The numbers of aggregate expressions and of evaluated UDF calls in the optimized plan.
+    def sizes(agg: () => Column): Seq[Int] = {
+      val plan = df.agg(batchedPythonUDF(agg()).as("c"), batchedPythonUDF(agg()).as("d"))
+        .queryExecution.optimizedPlan
+      plan.collect { case a: Aggregate => a.aggregateExpressions.size } ++
+        plan.collect { case b: BatchEvalPython => b.udfs.size }
+    }
+    assert(sizes(() => sum(col("b"))) == Seq(1, 1))
+    // Calls of a nondeterministic aggregate function are kept apart.
+    val nondeterministic = new MyDummyGroupedAggPandasUDF().copy(udfDeterministic = false)
+    assert(sizes(() => nondeterministic(col("b"))) == Seq(2, 2))
   }
 
   test("Infers LocalLimit for Python evaluator") {
