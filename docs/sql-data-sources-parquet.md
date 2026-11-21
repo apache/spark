@@ -525,8 +525,11 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
   <td>
     If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX
     and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date
-    type. For COUNT, support all data types. If statistics is missing from any Parquet file
-    footer, exception would be thrown.
+    type. For COUNT, support all data types except struct, array, map and variant. Aggregates
+    are not pushed down when <code>spark.sql.parquet.fieldId.read.enabled</code> is true and
+    the read schema has field IDs, or when an aggregated column has a default value for files
+    without it, e.g. after <code>ALTER TABLE ... ADD COLUMN ... DEFAULT</code>. If statistics
+    is missing from any Parquet file footer, exception would be thrown.
   </td>
   <td>3.3.0</td>
 </tr>
