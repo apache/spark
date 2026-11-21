@@ -66,6 +66,11 @@ class ArtifactManager(
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
   private[this] val stubState = stub.stubState
 
+  // The server-side session id that this client has observed, if any. Sending it lets the server
+  // reject a request from a client whose session was closed instead of creating a new session.
+  private def observedServerSideSessionId: Option[String] =
+    stubState.responseValidator.getServerSideSessionId
+
   private sealed trait ArtifactEntry {
     def size: Long
   }
@@ -224,8 +229,8 @@ class ArtifactManager(
       .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
       .addAllNames(Arrays.asList(artifactName))
-      .build()
-    val response = bstub.artifactStatus(request)
+    observedServerSideSessionId.foreach(request.setClientObservedServerSideSessionId)
+    val response = bstub.artifactStatus(request.build())
     if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
       response.getSessionId != sessionId) {
       // In older versions of the Spark cluster, the session ID is not set in the response.
@@ -255,9 +260,9 @@ class ArtifactManager(
       .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
       .addAllNames(artifactNames.asJava)
-      .build()
+    observedServerSideSessionId.foreach(request.setClientObservedServerSideSessionId)
 
-    val response = bstub.artifactStatus(request)
+    val response = bstub.artifactStatus(request.build())
     if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
       response.getSessionId != sessionId) {
       throw new IllegalStateException(
@@ -443,6 +448,7 @@ class ArtifactManager(
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
+    observedServerSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
     entries.foreach {
       case UploadedArtifact(artifact) =>
         val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
@@ -511,6 +517,7 @@ class ArtifactManager(
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
+    observedServerSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
 
     val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
     try {
