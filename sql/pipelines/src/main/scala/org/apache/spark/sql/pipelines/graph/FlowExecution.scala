@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.UUID
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -28,6 +29,7 @@ import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.pipelines.PipelineExecutionMetadata.withFlowExecutionMetadata
 import org.apache.spark.sql.pipelines.autocdc.{
   Scd1BatchProcessor,
   Scd1ForeachBatchHandler,
@@ -37,7 +39,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SparkSessionUtils
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A flow's execution may complete for two reasons:
@@ -55,6 +57,9 @@ object ExecutionResult {
 
 /** A `FlowExecution` specifies how to execute a flow and manages its execution. */
 trait FlowExecution {
+
+  /** Unique identifier for this flow execution attempt. */
+  final val executionId: String = UUID.randomUUID().toString
 
   /** Identifier of this physical flow */
   def identifier: TableIdentifier
@@ -77,6 +82,14 @@ trait FlowExecution {
    * pipeline's spark session.
    */
   protected def spark: SparkSession = updateContext.spark
+
+  /** Runs a block with this flow execution's attribution metadata. */
+  protected final def withExecutionMetadata[T](body: => T): T = {
+    withFlowExecutionMetadata(
+      spark.sparkContext,
+      identifier.quotedString,
+      executionId)(body)
+  }
 
   /**
    * Origin to use when recording events for this flow.
@@ -215,7 +228,9 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
       log"Starting ${MDC(LogKeys.TABLE_NAME, identifier)} with " +
       log"checkpoint location ${MDC(LogKeys.CHECKPOINT_PATH, checkpointPath)}"
     )
-    val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*)(startStream())
+    val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
+      withExecutionMetadata(startStream())
+    }
     _streamingQuery = Option(streamingQuery)
     Future(streamingQuery.awaitTermination())
   }
@@ -265,23 +280,32 @@ class BatchTableWrite(
     SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
       updateContext.flowProgressEventLogger.recordRunning(flow = flow)
       val data = graph.reanalyzeFlow(flow, sessionCaseSensitive).df
+      val localProperties = Utils.cloneProperties(spark.sparkContext.getLocalProperties)
       Future {
-        val dataFrameWriter = data.write
-        destination.format.foreach(dataFrameWriter.format)
+        val previousLocalProperties = spark.sparkContext.getLocalProperties
+        spark.sparkContext.setLocalProperties(localProperties)
+        try {
+          withExecutionMetadata {
+            val dataFrameWriter = data.write
+            destination.format.foreach(dataFrameWriter.format)
 
-        // In "append" mode with saveAsTable, partition/cluster columns must be specified in query
-        // because the format and options of the existing table is used, and the table could
-        // have been created with partition columns.
-        destination.clusterCols.foreach { clusterCols =>
-          dataFrameWriter.clusterBy(clusterCols.head, clusterCols.tail: _*)
-        }
-        destination.partitionCols.foreach { partitionCols =>
-          dataFrameWriter.partitionBy(partitionCols: _*)
-        }
+            // In "append" mode with saveAsTable, partition/cluster columns must be specified in
+            // query because the format and options of the existing table is used, and the table
+            // could have been created with partition columns.
+            destination.clusterCols.foreach { clusterCols =>
+              dataFrameWriter.clusterBy(clusterCols.head, clusterCols.tail: _*)
+            }
+            destination.partitionCols.foreach { partitionCols =>
+              dataFrameWriter.partitionBy(partitionCols: _*)
+            }
 
-        dataFrameWriter
-          .mode("append")
-          .saveAsTable(destination.identifier.unquotedString)
+            dataFrameWriter
+              .mode("append")
+              .saveAsTable(destination.identifier.unquotedString)
+          }
+        } finally {
+          spark.sparkContext.setLocalProperties(previousLocalProperties)
+        }
       }
     }
   }

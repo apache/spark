@@ -17,16 +17,89 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.pipelines.PipelineExecutionMetadata._
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
+
+  test("streaming flow execution attribution is exposed on Spark jobs") {
+    val session = spark
+    import session.implicits._
+
+    val jobStarts = new ConcurrentLinkedQueue[SparkListenerJobStart]()
+    val sqlExecutionStarts = new ConcurrentLinkedQueue[SparkListenerSQLExecutionStart]()
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = jobStarts.add(jobStart)
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case start: SparkListenerSQLExecutionStart => sqlExecutionStarts.add(start)
+        case _ =>
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    try {
+      val ints = MemoryStream[Int]
+      ints.addData(1, 2, 3, 4)
+      val graph = createDataflowGraph(
+        ints.toDF(),
+        "attributed_sink",
+        "flow_to_attributed_sink",
+        "memory")
+      val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
+
+      updateContext.pipelineExecution.startPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+
+      val flowIdentifier = updateContext.pipelineExecution.graphExecution.get
+        .flowExecutions.keys
+        .find(_.table == "flow_to_attributed_sink")
+        .get
+        .quotedString
+      val attributedJobs = jobStarts.asScala.filter { event =>
+        event.properties.getProperty(FLOW_IDENTIFIER_PROPERTY) == flowIdentifier
+      }.toSeq
+      assert(attributedJobs.nonEmpty)
+
+      val executionIds = attributedJobs.map(
+        _.properties.getProperty(FLOW_EXECUTION_ID_PROPERTY)).toSet
+      assert(executionIds.size == 1)
+      val executionId = executionIds.head
+      UUID.fromString(executionId)
+
+      attributedJobs.foreach { event =>
+        val tags = event.properties
+          .getProperty(SparkContext.SPARK_JOB_TAGS)
+          .split(SparkContext.SPARK_JOB_TAGS_SEP)
+          .toSet
+        assert(tags.contains(flowExecutionIdTag(executionId)))
+        val sqlExecutionId = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY).toLong
+        val sqlExecutionStart = sqlExecutionStarts.asScala.find(
+          _.executionId == sqlExecutionId).get
+        assert(sqlExecutionStart.jobTags.contains(flowExecutionIdTag(executionId)))
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
   def createDataflowGraph(
       inputs: DataFrame,
       sinkName: String,
