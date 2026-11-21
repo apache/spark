@@ -981,6 +981,33 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     assertJobs(statusStore.execution(executionId), running = Seq(0))
   }
+
+  test("SPARK-60756: onJobStart should not force a kvstore write during history replay") {
+    val store = new ElementTrackingStore(new InMemoryStore, sparkContext.conf)
+    val replayListener = new SQLAppStatusListener(sparkContext.conf, store, live = false)
+    val executionId = 1L
+    val df = createTestDataFrame
+    replayListener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis(),
+      Map.empty))
+
+    replayListener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+
+    intercept[NoSuchElementException] {
+      store.read(classOf[SQLExecutionUIData], executionId)
+    }
+    store.close()
+  }
 }
 
 class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {
