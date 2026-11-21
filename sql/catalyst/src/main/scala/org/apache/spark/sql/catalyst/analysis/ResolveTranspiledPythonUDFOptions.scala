@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, DataType, DecimalType, FractionalType,
-  IntegralType, NumericType, StringType}
+  AnyTimestampNanoType, ArrayType, BinaryType, BooleanType, DataType, DecimalType,
+  FractionalType, IntegralType, MapType, NumericType, StringType, StructType, TimestampNTZType,
+  TimestampType, UserDefinedType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -41,7 +43,8 @@ import org.apache.spark.sql.types.{
  * for string columns). We deliberately do not lean on implicit type coercion, which would, e.g.,
  * make a numeric `Add` "valid" over a string column and silently diverge from Python's
  * `TypeError`. When no option matches, the list is emptied and `ConvertToCatalyst` falls back to
- * the original Python UDF.
+ * the original Python UDF. When that fallback is down to a `timestamp` option meeting a
+ * TIMESTAMP (local time zone) argument, the reason is logged: see `optionMatchesTypes`.
  */
 object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -66,6 +69,12 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
                 val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
                   case (option, categories) if optionMatchesTypes(categories, argTypes) => option
                 }
+                if (kept.isEmpty) {
+                  timeZoneMismatch(t.optionInputCategories, argTypes).foreach { reason =>
+                    logWarning(log"Not transpiling Python UDF " +
+                      log"${MDC(LogKeys.FUNCTION_NAME, t.name)}: ${MDC(LogKeys.REASON, reason)}")
+                  }
+                }
                 t.copy(transpiledOptions = kept, optionInputCategories = Nil)
               }
               // Type each `_udf_param_N` reference from the argument it stands for. The options are
@@ -82,12 +91,15 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // Empty categories means "no restriction" and the option is kept.
   //
   // Category -> Spark type mapping:
-  //   "integer" -> IntegralType (byte/short/int/long; NaN impossible)
-  //   "float"   -> FractionalType minus DecimalType (float/double; NaN possible)
-  //   "numeric" -> any NumericType minus DecimalType (legacy catch-all)
-  //   "string"  -> StringType with UTF8_BINARY collation only
-  //   "bool"    -> BooleanType
-  //   "binary"  -> BinaryType
+  //   "integer"   -> IntegralType (byte/short/int/long; NaN impossible)
+  //   "float"     -> FractionalType minus DecimalType (float/double; NaN possible)
+  //   "numeric"   -> any NumericType minus DecimalType (legacy catch-all)
+  //   "string"    -> StringType with UTF8_BINARY collation only
+  //   "bool"      -> BooleanType
+  //   "binary"    -> BinaryType
+  //   "timestamp" -> TimestampNTZType only
+  //   "map"       -> MapType
+  //   "array"     -> ArrayType
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
@@ -98,6 +110,21 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
   //   true where Python returns False.
+  // - "timestamp" does not match TimestampType (TIMESTAMP, local time zone) or DateType.
+  //   Batched Python UDFs rebuild a TIMESTAMP value as a naive datetime in the worker's
+  //   local zone, while Catalyst's datetime functions use spark.sql.session.timeZone, so
+  //   e.g. `hour(ts)` would return the session-zone hour where Python returns the
+  //   executor's. TIMESTAMP_NTZ is the one type whose Python and Catalyst views agree.
+  //   A UDF that falls back only for this reason logs it (`timeZoneMismatch`).
+  // "map" and "array" match any element/key type: the category names the container,
+  //   not its contents, and a variety that reports "map"/"array" is responsible
+  //   for the per-element lowering (an out-of-tree transpiler verifies its
+  //   rewrite before serving it, so a wrong shape does not ship).
+  //   The transpiler itself refuses to lower any comparison or conditional branch over
+  //   them (SPARK-55219), so no built-in option observes an element type or its collation.
+  //   One exception: a container holding a map keyed by a nanosecond timestamp matches
+  //   neither. Python refuses to receive such a map (TIMESTAMP_NANOS_PYTHON_MAP_KEY), so an
+  //   option over it would return a value where the Python UDF raises.
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true
@@ -112,8 +139,64 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
+        case ("timestamp", dt) => dt.isInstanceOf[TimestampNTZType]
+        case ("map", dt: MapType) => !hasTimestampNanosMapKey(dt)
+        case ("array", dt: ArrayType) => !hasTimestampNanosMapKey(dt)
         case _ => false
       }
+    }
+  }
+
+  // True when `dt` holds, at any depth, a map whose key type carries a nanosecond timestamp: the
+  // shape `EvaluatePython.toJava` refuses to hand to a Python UDF.
+  private def hasTimestampNanosMapKey(dt: DataType): Boolean = dt match {
+    case MapType(keyType, valueType, _) =>
+      carriesTimestampNanos(keyType) || hasTimestampNanosMapKey(valueType)
+    case ArrayType(elementType, _) => hasTimestampNanosMapKey(elementType)
+    case StructType(fields) => fields.exists(f => hasTimestampNanosMapKey(f.dataType))
+    case udt: UserDefinedType[_] => hasTimestampNanosMapKey(udt.sqlType)
+    case _ => false
+  }
+
+  private def carriesTimestampNanos(dt: DataType): Boolean = dt match {
+    case _: AnyTimestampNanoType => true
+    case ArrayType(elementType, _) => carriesTimestampNanos(elementType)
+    case MapType(keyType, valueType, _) =>
+      carriesTimestampNanos(keyType) || carriesTimestampNanos(valueType)
+    case StructType(fields) => fields.exists(f => carriesTimestampNanos(f.dataType))
+    case udt: UserDefinedType[_] => carriesTimestampNanos(udt.sqlType)
+    case _ => false
+  }
+
+  // Why no option survived, when the answer is the time-zone gate on "timestamp": some option
+  // would have matched had its TimestampType arguments been TIMESTAMP_NTZ. Other mismatches
+  // are an ordinary category miss and say nothing new, so they report nothing.
+  private def timeZoneMismatch(
+      optionCategories: Seq[Seq[String]],
+      argTypes: Seq[DataType]): Option[String] = {
+    val asNtz = argTypes.map {
+      case _: TimestampType => TimestampNTZType
+      case other => other
+    }
+    val ltzParams = optionCategories.flatMap { categories =>
+      if (categories.length == argTypes.length && optionMatchesTypes(categories, asNtz)) {
+        categories.indices.filter { i =>
+          categories(i) == "timestamp" && argTypes(i).isInstanceOf[TimestampType]
+        }
+      } else {
+        Nil
+      }
+    }.distinct.sorted
+    if (ltzParams.isEmpty) {
+      None
+    } else {
+      Some(s"argument(s) ${ltzParams.mkString(", ")} are TIMESTAMP (local time zone), but the " +
+        "`timestamp` input category matches TIMESTAMP_NTZ only. A Python worker sees a TIMESTAMP " +
+        "in its own local time zone while Catalyst uses spark.sql.session.timeZone, so the " +
+        "transpiled option could disagree with Python; running the Python UDF instead. Casting " +
+        "the argument to TIMESTAMP_NTZ allows transpilation, but it also changes what the UDF " +
+        "receives to the wall-clock time in spark.sql.session.timeZone; do so only if that is " +
+        "the intended input.")
     }
   }
 }
