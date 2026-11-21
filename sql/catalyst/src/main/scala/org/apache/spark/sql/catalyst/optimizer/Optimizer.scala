@@ -2871,10 +2871,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // split orders conditions by cost, and cost is no way to decide how many rows a
         // non-deterministic expression sees. Throwable conditions, or conditions over throwable
         // aliases, stay there too: ordering by cost could evaluate them (or compute the aliases
-        // in a lower projection) ahead of the conditions written before them.
+        // in a lower projection) ahead of the conditions written before them. So do all the
+        // conditions written after the first of these: each reads an expensive alias, e.g. a UDF
+        // or a regex whose pattern comes from the data, which can fail, so a lower layer must
+        // not evaluate it on the rows that condition filters out.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
-            val (splittable, notSplittable) = expensiveWithUsed.partition {
+            val (splittable, notSplittable) = expensiveWithUsed.span {
               case (cond, _, replaced) => cond.deterministic && !replaced.throwable
             }
             val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
@@ -3208,7 +3211,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    *
    * Callers must pass deterministic, non-throwable conditions only -- the grouping below orders
    * conditions by cost, and cost is no way to decide how many rows a non-deterministic
-   * expression sees, nor may it evaluate a throwable one ahead of the conditions before it.
+   * expression sees, nor may it evaluate a throwable one ahead of the conditions before it. Nor
+   * may it evaluate one that can fail ahead of a non-deterministic or throwable condition written
+   * before it, so callers pass none written after such a condition.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form).

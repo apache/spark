@@ -749,7 +749,7 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
         expensiveRLike("third") as "j")
-      .where((Rand(10) > 0.5 || $"j") && ($"f" || $"g"))
+      .where(($"f" || $"g") && (Rand(10) > 0.5 || $"j"))
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
@@ -796,24 +796,22 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("SPARK-60602: a throwable condition does not keep later conditions from being split off") {
+  test("SPARK-62191: a condition is not split off ahead of a non-deterministic or throwable " +
+    "condition before it") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
-    val originalQuery = testStringRelation
-      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
-      .where(($"g" || raiseError) && $"f")
-      .analyze
+    Seq(Rand(10) > 0.5 || $"g", $"g" || ($"a" > 5 && raiseError)).foreach { barrier =>
+      val originalQuery = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
+        .where(barrier && $"f")
+        .analyze
 
-    val optimized = Optimize.execute(originalQuery)
+      val optimized = Optimize.execute(originalQuery)
 
-    // Filtering on f first only leaves the throwable condition fewer rows to raise on.
-    val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
-      .where($"f")
-      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
-      .where($"g" || raiseError)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+      // A lower layer filtering on f would run its regex, whose pattern comes from the data and
+      // can be invalid, on rows the condition before it filters out. f stays behind it instead,
+      // which leaves nothing worth splitting.
+      comparePlans(optimized, originalQuery)
+    }
   }
 
   test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
