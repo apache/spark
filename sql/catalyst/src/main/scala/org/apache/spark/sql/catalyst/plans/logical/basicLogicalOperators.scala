@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedException, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, SetOperationCharPadding, TypeCoercion, TypeCoercionBase, UnresolvedException, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -403,12 +403,18 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     })
   }
 
-  override lazy val resolved: Boolean =
+  /** Whether this is resolved but for the CHAR lengths of its children, see [[resolved]]. */
+  lazy val resolvedExceptCharLengths: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
         DataTypeUtils.sameType(l.dataType, r.dataType)
       } && duplicateResolved
+
+  // During analysis, the children are padded to the same CHAR lengths first, see
+  // SetOperationCharPadding.
+  override lazy val resolved: Boolean =
+    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(children)
 }
 
 object SetOperation {
@@ -707,13 +713,19 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  override lazy val resolved: Boolean = {
+  /** Whether this is resolved but for the CHAR lengths of its children, see [[resolved]]. */
+  lazy val resolvedExceptCharLengths: Boolean = {
     children.length > 1 &&
     !(byName || allowMissingCol) &&
     childrenResolved &&
     allChildrenCompatible &&
     (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
+
+  // During analysis, the children are padded to the same CHAR lengths first, see
+  // SetOperationCharPadding.
+  override lazy val resolved: Boolean =
+    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(children)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)

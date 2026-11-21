@@ -546,7 +546,8 @@ class Analyzer(
     }
   }
 
-  override def execute(plan: LogicalPlan): LogicalPlan = {
+  // Every run of the analyzer is part of the analysis phase, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
     AnalysisContext.withNewAnalysisContext {
       executeSameContext(plan)
     }
@@ -804,6 +805,9 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        // After WidenSetOperationTypes, and not part of the type coercion rules, which also run on
+        // optimized plans.
+        PadSetOperationCharLengths,
         ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,

@@ -51,6 +51,12 @@ import org.apache.spark.util.Utils
 abstract class Optimizer(catalogManager: CatalogManager)
   extends RuleExecutor[LogicalPlan] with SQLConfHelper {
 
+  // The optimizer is not part of the analysis phase, also when a rule of the analyzer runs it on
+  // another query, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan =
+    AnalysisHelper.markOutsideAnalyzer(super.execute(plan))
+
+
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Option[String] = {

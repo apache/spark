@@ -43,6 +43,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private[sql] val VARCHAR_TYPE_READ_SIDE_CHECK = "varcharTypeReadSideCheck"
 
+  /** JVM method name used by [[narrowCharToLength]]. */
+  private[sql] val CHAR_TYPE_NARROWING = "charTypeNarrowing"
+
   /**
    * V2 function name for CHAR read-side padding. Distinct from SQL `RPAD` so connectors that
    * already allowlist `RPAD` for explicit `rpad()` do not inherit CHAR-scan rewrite. Emitted
@@ -73,6 +76,12 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    */
   private[sql] def createStringRPad(str: Expression, len: Expression): StringRPad = {
     StringRPad(str, len, Literal.create(" ", str.dataType))
+  }
+
+  /** Pads the given CHAR value to the length of `charType` as read-side padding does. */
+  private[sql] def createReadSidePadding(str: Expression, charType: CharType): Expression = {
+    processStringForCharVarchar(
+      str, charType, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
   }
 
   /**
@@ -306,11 +315,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       varcharFuncName = Some("varcharTypeWriteSideCheck"))
   }
 
+  /**
+   * Applies the given CHAR and VARCHAR functions to the strings of `expr` with the CHAR and VARCHAR
+   * types of `dt`, rebuilding the structs, arrays and maps around them. A rebuilt struct reads the
+   * fields of a nullable struct only where the struct is not null. With `keepFieldNullability`,
+   * it reads them through [[KnownNotNull]] there, so that fields that are not nullable stay so and
+   * the rebuilt value has the type of `expr`.
+   */
   private def processStringForCharVarchar(
       expr: Expression,
       dt: DataType,
       charFuncName: Option[String],
-      varcharFuncName: Option[String]): Expression = {
+      varcharFuncName: Option[String],
+      keepFieldNullability: Boolean = false): Expression = {
     dt match {
       case c: CharType if charFuncName.isDefined =>
         StaticInvoke(
@@ -337,9 +354,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           returnNullable = false)
 
       case StructType(fields) =>
+        val fieldsOf = if (keepFieldNullability && expr.nullable) KnownNotNull(expr) else expr
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name), processStringForCharVarchar(
-            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
+            GetStructField(fieldsOf, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName,
+            keepFieldNullability))
         }.toImmutableArraySeq)
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
@@ -349,15 +368,16 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
 
       case ArrayType(et, containsNull) =>
-        processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
+        processStringForCharVarcharInArray(
+          expr, et, containsNull, charFuncName, varcharFuncName, keepFieldNullability)
 
       case MapType(kt, vt, valueContainsNull) =>
         val keys = MapKeys(expr)
         val newKeys = processStringForCharVarcharInArray(
-          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+          keys, kt, containsNull = false, charFuncName, varcharFuncName, keepFieldNullability)
         val values = MapValues(expr)
         val newValues = processStringForCharVarcharInArray(
-          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+          values, vt, valueContainsNull, charFuncName, varcharFuncName, keepFieldNullability)
         if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
           // If map key/value does not need char/varchar processing, return the original expression.
           expr
@@ -387,9 +407,16 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       et: DataType,
       containsNull: Boolean,
       charFuncName: Option[String],
-      varcharFuncName: Option[String]): Expression = {
-    val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+      varcharFuncName: Option[String],
+      keepFieldNullability: Boolean): Expression = {
+    // A raw type doesn't record the nullability of its elements and fields, which the array does.
+    val param = arr.dataType match {
+      case ArrayType(elementType, elementContainsNull) if keepFieldNullability =>
+        NamedLambdaVariable("x", elementType, elementContainsNull)
+      case _ => NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
+    }
+    val funcBody =
+      processStringForCharVarchar(param, et, charFuncName, varcharFuncName, keepFieldNullability)
     if (funcBody.fastEquals(param)) {
       // If array element does not need char/varchar processing, return the original expression.
       arr
@@ -421,13 +448,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
-   * standard semantics are off) and extracts the padded expression and the CHAR length.
+   * standard semantics are off) and extracts the padded expression and the CHAR length. A padding
+   * over another one to a length that is not longer matches as one padding of its value.
    */
   private[sql] object ReadSidePadding {
     def unapply(e: Expression): Option[(Expression, Int)] = e match {
       case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
           None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
-        Some((child, n))
+        child match {
+          // The padding of a set operation over the padding of a scan, to a length that is at
+          // least as long, is the padding of the scan to that length.
+          case ReadSidePadding(grandChild, m) if m <= n => Some((grandChild, n))
+          case _ => Some((child, n))
+        }
       case _ => None
     }
   }
@@ -437,20 +470,307 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.
    */
-  def addPaddingInStringComparison(attrs: Seq[Attribute], alwaysPad: Boolean): Seq[Expression] = {
-    val rawTypes = attrs.map(attr => getRawType(attr.metadata))
+  def addPaddingInStringComparison(attrs: Seq[Attribute], alwaysPad: Boolean): Seq[Expression] =
+    addPaddingInStringComparison(attrs, attrs.map(attr => getRawType(attr.metadata)), alwaysPad)
+
+  /**
+   * Like the method above, for expressions with the given raw types, such as a scalar subquery or
+   * a column of an IN subquery, whose raw type is the one of their column. With `truncate = false`,
+   * it pads like read-side padding, which keeps longer values instead of truncating them.
+   */
+  def addPaddingInStringComparison(
+      exprs: Seq[Expression],
+      rawTypes: Seq[Option[DataType]],
+      alwaysPad: Boolean,
+      truncate: Boolean = true): Seq[Expression] = {
     if (rawTypes.exists(_.isEmpty)) {
-      attrs
-    } else if (attrs.exists(attr => !RowOrdering.isOrderable(attr.dataType))) {
+      exprs
+    } else if (exprs.exists(expr => !RowOrdering.isOrderable(expr.dataType))) {
       // Comparing a non-orderable type, such as a struct holding a MAP, is rejected later by
       // CheckAnalysis. Leave it alone so the error names the attribute the user wrote rather
       // than the rewritten struct.
-      attrs
+      exprs
     } else {
       val typeWithTargetCharLength = rawTypes.map(_.get).reduce(typeWithWiderCharLength)
-      attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
-        padCharToTargetLength(attr, rawType, typeWithTargetCharLength, alwaysPad).getOrElse(attr)
+      exprs.zip(rawTypes.map(_.get)).map { case (expr, rawType) =>
+        padCharToTargetLength(expr, rawType, typeWithTargetCharLength, alwaysPad, truncate)
+          .getOrElse(expr)
       }
+    }
+  }
+
+  /**
+   * The raw type of the output of a UNION at one position, given the outputs of its children
+   * there, if they are CHAR types, or structs and arrays of them, with different lengths at the
+   * same places: the widest lengths, as the SQL standard gives the union of CHAR(n) and CHAR(m)
+   * the length max(n, m). Keeps the names of the first attribute's fields. Returns None if the
+   * raw types are the same, or not all CHAR types of the same shape.
+   */
+  def widerCharRawType(attrs: Seq[Attribute]): Option[DataType] = {
+    val rawTypeStrings = attrs.map(attr => getRawTypeString(attr.metadata))
+    if (rawTypeStrings.exists(_.isEmpty) || rawTypeStrings.distinct.length == 1) {
+      None
+    } else {
+      val rawTypes = rawTypeStrings.map(s => CatalystSqlParser.parseDataType(s.get))
+      // Raw types can differ only in how they print, such as with the default collation given
+      // explicitly or with other names of struct fields. They have the same lengths already.
+      if (rawTypes.map(normalizeCharType).distinct.length == 1) {
+        None
+      } else {
+        rawTypes.map(Option(_)).reduce {
+          (left, right) => for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+        }
+      }
+    }
+  }
+
+  // The type with the collation of each CHAR type given explicitly, and without field names.
+  private def normalizeCharType(dt: DataType): DataType = dt match {
+    case c: CharType => CharType(c.length, Some(c.collationId))
+    case StructType(fields) =>
+      StructType(fields.map(f => StructField("", normalizeCharType(f.dataType))))
+    case ArrayType(et, _) => ArrayType(normalizeCharType(et))
+    case other => other
+  }
+
+  /**
+   * Pads the CHAR columns and fields of the given attribute that are shorter than those at the
+   * same places of the given raw type, see [[widerCharRawType]]. Like read-side padding, it does
+   * not truncate longer values. Returns the padded value and its raw type, which keeps the names
+   * of the attribute's fields, or None if the attribute is already as long, unless `alwaysPad`,
+   * for values that the scan does not pad.
+   */
+  def padCharToWiderLength(
+      attr: Attribute,
+      rawType: DataType,
+      alwaysPad: Boolean = false): Option[(Expression, DataType)] = {
+    getRawType(attr.metadata).flatMap { attrRawType =>
+      widerCharType(attrRawType, rawType).filter(alwaysPad || _ != attrRawType).map { wider =>
+        val padded = processStringForCharVarchar(attr, wider,
+          charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None,
+          keepFieldNullability = true)
+        (padded, wider)
+      }
+    }
+  }
+
+
+  /**
+   * The raw type of a value with the given metadata and data type. The raw type of a column is in
+   * its metadata, and the raw types of fields of a struct built from columns, such as by
+   * `named_struct`, are in the metadata of the fields. None if neither has a CHAR or VARCHAR type.
+   */
+  def getRawType(metadata: Metadata, dataType: DataType): Option[DataType] = {
+    def nested(dt: DataType): Option[DataType] = dt match {
+      case StructType(fields) =>
+        val rawFields = fields.map(f => getRawType(f.metadata).orElse(nested(f.dataType)))
+        if (rawFields.forall(_.isEmpty)) {
+          None
+        } else {
+          Some(StructType(fields.zip(rawFields).map { case (f, raw) =>
+            f.copy(dataType = raw.getOrElse(f.dataType), metadata = cleanMetadata(f.metadata))
+          }))
+        }
+      case ArrayType(et, containsNull) => nested(et).map(ArrayType(_, containsNull))
+      case _ => None
+    }
+    getRawType(metadata).orElse(nested(dataType))
+  }
+
+  /**
+   * [[widerCharRawType]] for each position of the outputs of the children of a set operation. A
+   * child can output a column at more than one position, and a reference to the column can't tell
+   * them apart, so the positions that share a column in any child get one raw type: the widest of
+   * all of them. If they can't, a position gets its own if it doesn't pad the shared column.
+   * Returns None for every position if the outputs have different lengths.
+   */
+  def widerCharRawTypes(childOutputs: Seq[Seq[Attribute]]): Seq[Option[DataType]] = {
+    val width = childOutputs.head.length
+    if (childOutputs.exists(_.length != width)) {
+      Seq.fill(width)(None)
+    } else {
+      val columns = childOutputs.transpose
+      // The first position of each group of positions that share a column.
+      val group = Array.tabulate(width)(identity)
+      def find(i: Int): Int = if (group(i) == i) i else find(group(i))
+      childOutputs.foreach { output =>
+        output.indices.groupBy(i => output(i).exprId).values.foreach { positions =>
+          positions.tail.foreach(i => group(find(i)) = find(positions.head))
+        }
+      }
+      val groupRawTypes = columns.indices.groupBy(find).map { case (first, positions) =>
+        first -> widerCharRawType(positions.flatMap(columns))
+      }
+      // The columns that a child outputs at more than one position.
+      val sharedColumns = childOutputs.map { output =>
+        output.groupBy(_.exprId).collect { case (exprId, attrs) if attrs.length > 1 => exprId }
+          .toSet
+      }
+      val alwaysPad = !SQLConf.get.readSideCharPadding
+      // Whether the raw type at a position pads a column that other positions share.
+      def padsSharedColumn(position: Int, rawType: DataType): Boolean = {
+        columns(position).zip(sharedColumns).exists { case (attr, shared) =>
+          shared.contains(attr.exprId) && getRawType(attr.metadata).exists { attrRawType =>
+            alwaysPad || !widerCharType(attrRawType, rawType).contains(attrRawType)
+          }
+        }
+      }
+      columns.indices.map { i =>
+        // Without one raw type for the positions that share a column, such as when another of
+        // them has a child without a raw type, a position still gets its own if that doesn't pad
+        // the column that they share.
+        groupRawTypes(find(i)).orElse {
+          widerCharRawType(columns(i)).filterNot(padsSharedColumn(i, _))
+        }
+      }
+    }
+  }
+
+  /**
+   * Narrows the CHAR columns and fields of the given expression, whose raw type is `fromType`, that
+   * are longer than those at the same places of `toType`, by removing the trailing spaces past the
+   * length of `toType`. Values with other characters past that length are kept, as read-side
+   * padding keeps them. A view stores the CHAR type of its columns, which can be shorter than the
+   * CHAR type of the same column of its query, such as for a view of a UNION created before the
+   * union had the widest length of its children. Returns None if no column or field is longer.
+   */
+  def narrowCharToLength(
+      expr: Expression,
+      fromType: DataType,
+      toType: DataType): Option[Expression] = {
+    narrowerCharType(fromType, toType).map { narrower =>
+      processStringForCharVarchar(expr, narrower,
+        charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None,
+        keepFieldNullability = true)
+    }.filterNot(_.fastEquals(expr))
+  }
+
+  /** Whether the expression narrows a value with [[narrowCharToLength]]. */
+  def isNarrowing(e: Expression): Boolean = e.exists {
+    case s: StaticInvoke =>
+      s.functionName == CHAR_TYPE_NARROWING && s.staticObject == classOf[CharVarcharCodegenUtils]
+    case _ => false
+  }
+
+  // The CHAR types of toType where fromType is longer, and STRING elsewhere, with the field names
+  // of toType. None if they are not both CHAR types, or structs and arrays of them, of one shape.
+  // Fields of other types must be the same.
+  private def narrowerCharType(fromType: DataType, toType: DataType): Option[DataType] = {
+    (fromType, toType) match {
+      case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>
+        Some(if (c1.length > c2.length) c2 else c2.toStringType)
+      case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+        val narrowerFields = fields1.zip(fields2).map { case (from, to) =>
+          narrowerCharType(from.dataType, to.dataType).map(dt => to.copy(dataType = dt))
+        }
+        if (narrowerFields.forall(_.isDefined)) {
+          Some(StructType(narrowerFields.map(_.get)))
+        } else {
+          None
+        }
+      // The value narrowed is of fromType, so its elements are as nullable as there.
+      case (ArrayType(et1, containsNull), ArrayType(et2, _)) =>
+        narrowerCharType(et1, et2).map(ArrayType(_, containsNull))
+      // other fields of a struct, such as an INT next to a CHAR
+      case _ if fromType == toType && !hasChar(toType) => Some(toType)
+      case _ => None
+    }
+  }
+
+  /**
+   * The raw type of a value of the given raw type cast to `dataType`: the CHAR and VARCHAR types
+   * of the raw type where the cast keeps a string of the same collation, and the types of
+   * `dataType` elsewhere, with its field names. None if the types don't have the same shape.
+   */
+  def rawTypeOfCast(rawType: DataType, dataType: DataType): Option[DataType] = {
+    (rawType, dataType) match {
+      // A CHAR or VARCHAR type of its own, under first-class CHAR and VARCHAR types, is the type.
+      case (_, t: CharType) => Some(t)
+      case (_, t: VarcharType) => Some(t)
+      case (c: CharType, s: StringType) if c.collationId == s.collationId => Some(c)
+      case (v: VarcharType, s: StringType) if v.collationId == s.collationId => Some(v)
+      case (StructType(rawFields), StructType(fields)) if rawFields.length == fields.length =>
+        val castFields = rawFields.zip(fields).map { case (rawField, field) =>
+          rawTypeOfCast(rawField.dataType, field.dataType).map(dt => field.copy(dataType = dt))
+        }
+        if (castFields.forall(_.isDefined)) Some(StructType(castFields.map(_.get))) else None
+      case (ArrayType(rawElementType, _), ArrayType(elementType, containsNull)) =>
+        rawTypeOfCast(rawElementType, elementType).map(ArrayType(_, containsNull))
+      case (MapType(rawKeyType, rawValueType, _), MapType(keyType, valueType, valueContainsNull)) =>
+        for {
+          k <- rawTypeOfCast(rawKeyType, keyType)
+          v <- rawTypeOfCast(rawValueType, valueType)
+        } yield MapType(k, v, valueContainsNull)
+      case (_: StructType | _: ArrayType | _: MapType, _) => None
+      case (_, other) => Some(other)
+    }
+  }
+
+  /**
+   * The metadata of the alias of a value with the given metadata cast to `dataType`, such as a
+   * widening cast of a child of a set operation, which an alias of a cast would otherwise lose: the
+   * raw type of the cast value, see [[rawTypeOfCast]]. None if the cast keeps no CHAR or VARCHAR
+   * type.
+   */
+  def metadataOfCast(metadata: Metadata, dataType: DataType): Option[Metadata] = {
+    getRawType(metadata).flatMap(rawTypeOfCast(_, dataType)).filter(hasCharVarchar)
+      .map(withRawType(Metadata.empty, _))
+  }
+
+  /**
+   * For each position of the outputs of the children of a set operation cast to the given types
+   * (None for no cast), whether a cast keeps the CHAR and VARCHAR types of the value, see
+   * [[metadataOfCast]]. Only where each child has a raw type, and the raw types after the casts are
+   * the same or can be widened to one, so that the set operation pads the children to the same
+   * lengths; and only if `enabled`, as the set operation pads them, see SetOperationCharPadding.
+   * Elsewhere, the output would keep the raw type of the first child for values that don't have it.
+   */
+  def keepsCharTypesInCast(
+      childOutputs: Seq[Seq[Attribute]],
+      targetTypes: Seq[Option[DataType]],
+      enabled: Boolean): Seq[Boolean] = {
+    childOutputs.transpose.zip(targetTypes).map { case (attrs, targetType) =>
+      val castTypes = attrs.map { attr =>
+        getRawType(attr.metadata).flatMap(rawTypeOfCast(_, targetType.getOrElse(attr.dataType)))
+      }
+      enabled && castTypes.forall(_.isDefined) &&
+        castTypes.flatten.exists(hasCharVarchar) &&
+        // The same raw types need no padding; others need padding to the same lengths.
+        (castTypes.flatten.map(normalizeCharType).distinct.length == 1 ||
+          castTypes.flatten.map(Option(_)).reduce { (left, right) =>
+            for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+          }.isDefined)
+    }
+  }
+
+  /** The metadata with the given raw type, for a value padded to the CHAR lengths of that type. */
+  def withRawType(metadata: Metadata, rawType: DataType): Metadata = {
+    new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType.catalogString)
+      .build()
+  }
+
+  private def hasChar(dt: DataType): Boolean = dt.existsRecursively(_.isInstanceOf[CharType])
+
+  // Like typeWithWiderCharLength, but keeps the field names of type1, and None for types that are
+  // not both CHAR types, or structs and arrays of them, with the same shape. Fields of other types
+  // must be the same.
+  private[sql] def widerCharType(type1: DataType, type2: DataType): Option[DataType] = {
+    (type1, type2) match {
+      // collation is None for the default collation, and collationId compares the effective one
+      case (c1: CharType, c2: CharType) if c1.collationId == c2.collationId =>
+        Some(CharType(math.max(c1.length, c2.length), c1.collation))
+      case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
+        val widerFields = fields1.zip(fields2).map { case (left, right) =>
+          widerCharType(left.dataType, right.dataType).map(dt => left.copy(dataType = dt))
+        }
+        if (widerFields.forall(_.isDefined)) Some(StructType(widerFields.map(_.get))) else None
+      case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+        widerCharType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+      // other fields of a struct, such as an INT next to a CHAR
+      case _ if type1 == type2 && !hasChar(type1) => Some(type1)
+      case _ => None
     }
   }
 
@@ -473,10 +793,15 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       expr: Expression,
       rawType: DataType,
       typeWithTargetCharLength: DataType,
-      alwaysPad: Boolean): Option[Expression] = {
+      alwaysPad: Boolean,
+      truncate: Boolean = true): Option[Expression] = {
     (rawType, typeWithTargetCharLength) match {
       case (c: CharType, t: CharType) if alwaysPad || t.length > c.length =>
-        Some(createStringRPad(expr, Literal(t.length)))
+        Some(if (truncate) {
+          createStringRPad(expr, Literal(t.length))
+        } else {
+          createReadSidePadding(expr, CharType(t.length, c.collation))
+        })
 
       case (StructType(fields), StructType(targets)) =>
         assert(fields.length == targets.length)
@@ -487,7 +812,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           val field = fields(i)
           val fieldExpr = GetStructField(expr, i, Some(field.name))
           val padded = padCharToTargetLength(
-            fieldExpr, field.dataType, targets(i).dataType, alwaysPad)
+            fieldExpr, field.dataType, targets(i).dataType, alwaysPad, truncate)
           // Accumulate: any single field needing padding means the struct must be rebuilt,
           // otherwise the padding computed for earlier fields would be discarded.
           needPadding |= padded.isDefined
@@ -508,7 +833,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-        padCharToTargetLength(param, et, target, alwaysPad).map { padded =>
+        padCharToTargetLength(param, et, target, alwaysPad, truncate).map { padded =>
           val func = LambdaFunction(padded, Seq(param))
           ArrayTransform(expr, func)
         }

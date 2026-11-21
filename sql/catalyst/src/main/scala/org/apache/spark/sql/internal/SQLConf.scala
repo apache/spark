@@ -8473,6 +8473,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS =
+    buildConf("spark.sql.legacy.noCharWideningInSetOperations")
+      .internal()
+      .doc("When true, the output of a UNION, INTERSECT or EXCEPT of CHAR columns of different " +
+        "lengths has the CHAR length of its first child, and the values of its other children " +
+        "keep their own lengths, as before Spark 5.0. The values of views and recursive CTEs are " +
+        "then not narrowed to the CHAR lengths they store either. When false, the output has the " +
+        "widest CHAR length, and the values of the shorter children are padded to it.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION =
     buildConf("spark.sql.legacy.noCharPaddingInOverwriteCondition")
       .internal()

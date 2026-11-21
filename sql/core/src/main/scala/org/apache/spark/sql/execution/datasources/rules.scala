@@ -27,11 +27,11 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.FileTypeColumnUsage
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, FileTypeColumnUsage}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -630,7 +630,22 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           viewSchemaMode == SchemaEvolution && viewFields.length != viewQueryFields.length
         val fieldNames = viewQuery.schema.fieldNames
 
-        val redo = redoSignature || viewFields.zipWithIndex.exists { case (field, index) =>
+        // A column that ApplyCharTypePadding narrowed to the CHAR type the view stores, as the
+        // CHAR type of its query is now wider, evolves to the CHAR type of the query.
+        val evolvedRawTypes: Map[Int, DataType] = (viewSchemaMode, viewQuery) match {
+          case (SchemaTypeEvolution, Project(projectList, _)) =>
+            projectList.zipWithIndex.flatMap {
+              case (a: Alias, index) if CharVarcharUtils.isNarrowing(a.child) =>
+                a.child.references.toSeq match {
+                  case Seq(attr) => CharVarcharUtils.getRawType(attr.metadata).map(index -> _)
+                  case _ => None
+                }
+              case _ => None
+            }.toMap
+          case _ => Map.empty
+        }
+
+        val schemaChanged = redoSignature || viewFields.zipWithIndex.exists { case (field, index) =>
           val planField = viewQueryFields(index)
           (field.dataType != planField.dataType ||
             field.nullable != planField.nullable ||
@@ -639,12 +654,14 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
               field.name != planField.name)))
         }
 
-        if (redo) {
+        if (schemaChanged || evolvedRawTypes.nonEmpty) {
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
-            val newFields = viewQuery.schema.map {
-              case StructField(name, dataType, nullable, _) =>
-                StructField(name, dataType, nullable,
-                  viewFields.find(_.name == name).get.metadata)
+            val newFields = viewQuery.schema.zipWithIndex.map {
+              case (StructField(name, dataType, nullable, _), index) =>
+                val metadata = viewFields.find(_.name == name).get.metadata
+                StructField(name, dataType, nullable, evolvedRawTypes.get(index)
+                  .map(CharVarcharUtils.withRawType(metadata, _))
+                  .getOrElse(metadata))
             }
             StructType(newFields)
           } else {
@@ -656,6 +673,9 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           try {
             session.sessionState.catalog.alterTable(updatedViewMeta)
           } catch {
+            // The narrowing keeps the values of the query as the stored CHAR types say, so a view
+            // whose only change is the CHAR types it evolves to is still read correctly.
+            case NonFatal(_) if !schemaChanged =>
             case NonFatal(e) =>
               throw new SparkException(
                 errorClass = "FAILED_UPDATE_VIEW_SCHEMA",
