@@ -48,12 +48,18 @@ import time
 import traceback
 from typing import Iterator, List, Optional, Union
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 # Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
 # Importable because Python puts this script's own directory first on sys.path.
+from spark_merge_footer import (
+    backport_pr_trailer,
+    has_merge_footer,
+    merge_footer_pr,
+    merge_footer_trailer,
+)
 from spark_merge_footer import branches_with_merge_footer as _branches_with_merge_footer
-from spark_merge_footer import has_merge_footer
 
 try:
     import jira.client
@@ -68,6 +74,18 @@ SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
+# Remote name which points to your GitHub fork, used by the backport-PR path so a cherry-pick
+# can land on a fork branch and open a PR against the maintenance branch instead of pushing
+# straight to the Apache remote (lets CI run before the backport merges).
+FORK_REMOTE_NAME = os.environ.get("FORK_REMOTE_NAME", "origin")
+# GitHub owner of that fork (the `user` in git@github.com:user/spark.git). Derived from the
+# fork remote URL when unset; set it when that URL uses an SSH host alias.
+FORK_OWNER = os.environ.get("FORK_OWNER", "")
+# Set by --prompt-for-branches-during-backport (see build_arg_parser). Off by default: a finished
+# pick then only asks whether to push it to PUSH_REMOTE_NAME, and the fork is never touched.
+# On, the landing prompt also offers [p], which pushes the pick to the fork and opens a
+# backport PR, and earlier runs' open backport PRs on the fork count as pending.
+PROMPT_FOR_BRANCHES_DURING_BACKPORT = False
 # ASF JIRA username
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
@@ -96,8 +114,9 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 # validation, and the local squash-merge and cherry-picks on the throwaway PR_TOOL_* branches so
 # conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
 # through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
-# instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
-# JIRA writes (component and fixVersion updates, assignment, and resolve/reopen transitions).
+# instead of executing it: the git pushes (to PUSH_REMOTE_NAME and to the fork for a backport
+# PR), the GitHub PR close/comment/backport-PR creation, and all JIRA writes (component and
+# fixVersion updates, assignment, and resolve/reopen transitions).
 DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
@@ -830,10 +849,31 @@ def merge_commit_candidates(pr_events):
     >>> merge_commit_candidates([{"event": "referenced", "commit_id": "c", "created_at": "t2"},
     ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
     ([], ['b', 'c'])
+
+    Fork references retain the original footer but are not Apache merges:
+
+    >>> merge_commit_candidates([
+    ...     {"event": "referenced", "commit_id": "fork", "created_at": "t3",
+    ...      "commit_url": "https://api.github.com/repos/me/spark/commits/fork"},
+    ...     {"event": "referenced", "commit_id": "apache", "created_at": "t2",
+    ...      "commit_url": GITHUB_API_BASE + "/commits/apache"},
+    ...     {"event": "closed", "commit_id": "closed", "created_at": "t1"},
+    ... ])
+    (['closed'], ['apache'])
     """
 
     def commits_of(event_name):
-        matched = [e for e in pr_events if e["event"] == event_name and e["commit_id"] is not None]
+        matched = [
+            e
+            for e in pr_events
+            if e["event"] == event_name
+            and e["commit_id"] is not None
+            and (
+                event_name != "referenced"
+                or not e.get("commit_url")
+                or e["commit_url"].startswith(GITHUB_API_BASE + "/commits/")
+            )
+        ]
         return [e["commit_id"] for e in sorted(matched, key=lambda x: x["created_at"])]
 
     return commits_of("closed"), commits_of("referenced")
@@ -884,7 +924,8 @@ def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional
 
     That is the title that was committed, and a backport run reads it for the JIRA update
     instead of the current PR title, which may have been edited since the merge. It is
-    used only when the merge footer of ``message`` closes ``pr_num``; otherwise this
+    used only when ``message`` merges ``pr_num`` (see :func:`has_merge_footer`): its footer
+    closes it, or its final ``Backport-PR`` trailer names it as a merged backport PR; otherwise this
     returns None, and the PR title is used as before, e.g. for a commit of another PR that
     :func:`find_merge_commit` takes from the PR's ``closed`` event. A commit made with the
     GitHub squash button, whose subject ends with ``(#N)``, does not get here: GitHub links
@@ -912,21 +953,17 @@ def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional
 class GitHub:
     """GitHub REST writes used by the merge script -- the single seam for PR mutations.
 
-    Reads go through the module-level get_json() and get_json_pages(); only the two mutations
-    (closing the PR and posting a comment) live here, so DryRunGitHub can override them without
-    touching any read path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    Reads go through get_json() and get_json_pages(), except open_pr: a best-effort lookup for
+    create_pr that returns None on any error rather than exiting. The mutations (closing the
+    PR, posting a comment, and create_pr's open-or-update of a backport PR) live here,
+    so DryRunGitHub can override them without touching any read path. main() constructs
+    GitHub() normally and DryRunGitHub() for a dry run.
     """
 
     def close_pr(self, pr_num):
-        url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
-        data = json.dumps({"state": "closed"}).encode("utf-8")
-        request = Request(url, data=data, method="PATCH")
-        request.add_header("Content-Type", "application/json")
-        request.add_header("Accept", "application/vnd.github+json")
-        if GITHUB_OAUTH_KEY:
-            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
         try:
-            return json.load(urlopen(request))
+            url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+            return self._api(url, "PATCH", {"state": "closed"})
         except HTTPError as e:
             print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
             return None
@@ -936,21 +973,98 @@ class GitHub:
         if not GITHUB_OAUTH_KEY:
             print_error("GITHUB_OAUTH_KEY is not set; skipping the comment.")
             return None
-        url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
-        data = json.dumps({"body": body}).encode("utf-8")
-        request = Request(url, data=data, method="POST")
-        request.add_header("Content-Type", "application/json")
-        request.add_header("Accept", "application/vnd.github+json")
-        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
         try:
-            return json.load(urlopen(request))
+            return self._api(
+                "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num), "POST", {"body": body}
+            )
         except HTTPError as e:
             print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
             return None
 
+    def _api(self, url, method="GET", payload=None):
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = Request(url, data=data, method=method)
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/vnd.github+json")
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        return json.load(urlopen(request))
+
+    def open_pr(self, base, head):
+        """The open PR from `head` against `base`, or None -- also when the lookup fails.
+
+        >>> from contextlib import redirect_stdout
+        >>> from io import StringIO
+        >>> from unittest.mock import patch
+        >>> gh = GitHub()
+        >>> with patch.object(gh, "_api", return_value=[{"n": 1}, {"n": 2}]) as api:
+        ...     gh.open_pr("branch-4.2", "me:b")
+        {'n': 1}
+        >>> api.call_args.args[0].split("?")[1]
+        'state=open&base=branch-4.2&head=me%3Ab'
+        >>> with patch.object(gh, "_api", side_effect=OSError("down")), redirect_stdout(StringIO()):
+        ...     found = gh.open_pr("branch-4.2", "me:b")
+        >>> found is None
+        True
+        """
+        query = urlencode({"state": "open", "base": base, "head": head})
+        try:
+            found = self._api("%s/pulls?%s" % (GITHUB_API_BASE, query))
+        except Exception as e:
+            print_error("Could not look up open PRs from %s: %s" % (head, e))
+            return None
+        return found[0] if found else None
+
+    def create_pr(self, base, head, title, body):
+        """Open a PR from `head`, or refresh the open one; None on failure or no token.
+
+        Not a draft: main() refuses to merge a draft, and the PR is meant to be merged as is.
+
+        >>> from contextlib import redirect_stdout
+        >>> from io import StringIO
+        >>> from unittest.mock import patch
+        >>> def create(found, fails=False, token="t"):
+        ...     calls = []
+        ...     def api(url, method="GET", payload=None):
+        ...         calls.append((url.split("/")[-1], method, payload))
+        ...         if fails and method != "GET":
+        ...             raise OSError("HTTP 422")
+        ...         return found if method == "GET" else {"html_url": "pr"}
+        ...     gh = GitHub()
+        ...     with (
+        ...         patch.object(gh, "_api", side_effect=api),
+        ...         patch.dict(GitHub.create_pr.__globals__, GITHUB_OAUTH_KEY=token),
+        ...         redirect_stdout(StringIO()),
+        ...     ):
+        ...         return gh.create_pr("branch-4.2", "me:b", "T", "B"), calls
+        >>> url, method, payload = create([])[1][1]
+        >>> url, method, payload.get("draft"), payload["head"], payload["base"]
+        ('pulls', 'POST', None, 'me:b', 'branch-4.2')
+        >>> create([{"url": "u/pulls/5", "html_url": "h"}])[1][1]
+        ('5', 'PATCH', {'title': 'T', 'body': 'B'})
+        >>> create([], fails=True)[0], create([], token="")
+        (None, (None, []))
+        """
+        # Opening a PR is a write and needs auth; without a token, skip rather than 401.
+        if not GITHUB_OAUTH_KEY:
+            print_error("GITHUB_OAUTH_KEY is not set; skipping the backport PR.")
+            return None
+        existing = self.open_pr(base, head)
+        try:
+            if existing:
+                # A retry force-pushed the branch. Refresh the PR too: merge_pr turns its body
+                # into the commit message.
+                print("Updating the open backport PR %s." % existing["html_url"])
+                return self._api(existing["url"], "PATCH", {"title": title, "body": body})
+            payload = {"title": title, "head": head, "base": base, "body": body}
+            return self._api("%s/pulls" % GITHUB_API_BASE, "POST", payload)
+        except Exception as e:  # network, HTTP or JSON: the caller records a fork-only outcome
+            print_error("Backport PR create failed (%s): %s" % (base, e))
+            return None
+
 
 class DryRunGitHub(GitHub):
-    """Logs the intended PR close/comment instead of calling the GitHub API."""
+    """Logs the intended PR close/comment/create instead of calling the GitHub API."""
 
     def close_pr(self, pr_num):
         print("DRY-RUN: would close PR #%s via the GitHub API." % pr_num)
@@ -960,26 +1074,69 @@ class DryRunGitHub(GitHub):
         print("DRY-RUN: would post the following comment on PR #%s:\n%s" % (pr_num, body))
         return None
 
+    def create_pr(self, base, head, title, body):
+        # Return a fake PR so the 'p' path takes its success branch in a dry run (and the
+        # merge comment logs a backport-PR line rather than the "PR not opened" fallback).
+        fake_url = "https://github.com/apache/spark/pull/DRY-RUN"
+        print(
+            "DRY-RUN: would open a backport PR against %s from %s:\n  title: %s\n  body: %s"
+            % (base, head, title, body)
+        )
+        return {"html_url": fake_url, "number": 0}
+
 
 # Set in main(): GitHub() normally, DryRunGitHub() for a dry run. Module-level default so the
 # top-level except handler and any early failure path have a usable client.
 github = GitHub()
 
 
-def post_merge_comment(pr_num, merged_commits):
-    """Post a comment on the PR recording every branch the change landed on and a
-    link to the resulting commit, so the merge is traceable from the PR page.
+def post_merge_comment(pr_num, merged_commits, via=None):
+    """Post a comment on the PR recording every branch the change landed on (with a
+    commit link) or has a pending backport for, so the merge is traceable from the PR page.
 
-    ``merged_commits`` is an ordered list of (branch, commit_hash) pairs, the merge
-    sink first followed by each cherry-pick target.
+    ``merged_commits`` is an ordered list of (branch, marker) pairs, the merge sink
+    first followed by each cherry-pick target, markers as in _do_cherry_pick: a pushed
+    commit hash, a backport PR URL, or a `fork:<owner>:<branch>` marker. ``via`` is the
+    backport PR these landed through, when posting on the original PR it backports.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def posted(merged, via=None):
+    ...     calls = []
+    ...     with (
+    ...         patch.object(github, "comment", side_effect=lambda *a: calls.append(a)),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         post_merge_comment(42, merged, via=via)
+    ...     return [(num, body.splitlines()[:-2]) for num, body in calls]
+    >>> pr = "https://github.com/apache/spark/pull/99"
+    >>> for line in posted([("master", "abc"), ("branch-4.2", pr),
+    ...                     ("branch-4.1", "fork:me:backport-pr42-branch-4.1")])[0][1]:
+    ...     print(line)
+    **Merge Summary:**
+    - merged into master https://github.com/apache/spark/commit/abc
+    - backport PR against branch-4.2 https://github.com/apache/spark/pull/99
+    - backport pushed to branch-4.1 me:backport-pr42-branch-4.1 (PR not opened)
+    >>> posted([("branch-4.2", "def")], via=99)[0][1][0]
+    '**Merge Summary (via backport PR #99):**'
+    >>> posted([])
+    []
     """
     if not merged_commits:
         return
-    lines = [
-        "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
-        for ref, commit_hash in merged_commits
-    ]
-    summary = "**Merge Summary:**\n" + "\n".join(lines)
+    lines = []
+    for ref, marker in merged_commits:
+        if marker.startswith("https://"):
+            lines.append("- backport PR against %s %s" % (ref, marker))
+        elif marker.startswith("fork:"):
+            # Cherry-pick pushed to the fork but the backport PR was not opened; the marker
+            # is `fork:<owner>:<branch>`.
+            lines.append("- backport pushed to %s %s (PR not opened)" % (ref, marker[5:]))
+        else:
+            lines.append("- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, marker))
+    header = "Merge Summary" if via is None else "Merge Summary (via backport PR #%s)" % via
+    summary = "**%s:**\n" % header + "\n".join(lines)
     attribution = "*Posted by `merge_spark_pr.py`*"
     body = "%s\n\n%s" % (summary, attribution)
     print(
@@ -1003,9 +1160,10 @@ class Git:
     and local commands (fetch, checkout, merge, commit, cherry-pick, rev-parse, config, branch
     bookkeeping); those are safe even in a dry run because the merge and cherry-picks happen on
     the throwaway PR_TOOL_* branches that clean_up removes. ``push`` is the only command that
-    mutates the shared repo at PUSH_REMOTE_NAME, so it is the one method DryRunGit overrides;
-    everything else it inherits and runs for real, keeping conflict detection and the computed
-    merge hash realistic. main() constructs Git() normally and DryRunGit() for a dry run.
+    writes to a remote (PUSH_REMOTE_NAME, or the fork for a backport PR), so it is the one method
+    DryRunGit overrides; everything else it inherits and runs for real, keeping conflict
+    detection and the computed merge hash realistic. main() constructs Git() normally and
+    DryRunGit() for a dry run.
     """
 
     def run(self, cmd):
@@ -1015,15 +1173,26 @@ class Git:
         else:
             return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
-    def push(self, remote, local_ref, remote_ref):
-        return self.run("git push %s %s:%s" % (remote, local_ref, remote_ref))
+    def push(self, remote, local_ref, remote_ref, force=False):
+        """Only a forced push sends a "+" refspec.
+
+        >>> from unittest.mock import patch
+        >>> with patch.object(Git, "run") as run:
+        ...     _ = Git().push("apache", "PICK", "branch-4.2")
+        ...     _ = Git().push("origin", "PICK", "backport-pr1-branch-4.2", force=True)
+        >>> [c.args[0] for c in run.call_args_list]
+        ['git push apache PICK:branch-4.2', 'git push origin +PICK:backport-pr1-branch-4.2']
+        """
+        plus = "+" if force else ""
+        return self.run("git push %s %s%s:%s" % (remote, plus, local_ref, remote_ref))
 
 
 class DryRunGit(Git):
     """Logs the intended push instead of updating the remote; all other git runs for real."""
 
-    def push(self, remote, local_ref, remote_ref):
-        print("DRY-RUN: would push %s to %s:%s" % (local_ref, remote, remote_ref))
+    def push(self, remote, local_ref, remote_ref, force=False):
+        forced = " (forced)" if force else ""
+        print("DRY-RUN: would push %s to %s:%s%s" % (local_ref, remote, remote_ref, forced))
         return ""
 
 
@@ -1038,7 +1207,8 @@ preserve_local_state = False
 
 
 class SkipCherryPick(Exception):
-    """Signals that the committer skipped this branch: declined a conflict or a pre-push check.
+    """Signals that the committer skipped this branch: declined a conflict or a pre-push check,
+    or answered [s] at the landing prompt.
 
     A backport conflict is routine, and by the time one is hit the merge into the target
     branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
@@ -1573,6 +1743,47 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
     continue_maybe("Push to %s anyway? (experts only!)" % ref, True)
 
 
+# First line of a backport PR body opened by _land_via_fork; the rest is the pick's message.
+_BACKPORT_MARKER_RE = re.compile(r"^Backport-of: #(\d+)\n\n")
+# An @ that starts a GitHub mention, not one inside an e-mail address; see _pick_message.
+_MENTION_RE = re.compile(r"(?<![\w.+-])@")
+
+
+def _backport_of(body, head_ref, target_ref):
+    """(original PR, original message, primary author) if this is a backport PR, else None.
+
+    Needs the marker, a merge footer for that same PR, and the script's own head branch for
+    this target, so a body that merely quotes a footer, or pastes one into a PR against
+    master, is not taken for a backport. The message is read with _pick_message, the same
+    reading merge_pr's soft check applies to the branch's commits, so the two compare equal.
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
+    >>> message = "Fix it.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
+    >>> crlf = "Backport-of: #7\\r\\n\\r\\n" + message.replace("\\n", "\\r\\n")
+    >>> _backport_of(crlf, "backport-pr7-branch-4.2", "branch-4.2")[::2]
+    (7, 'A <a@e.org>')
+    >>> _backport_of("Backport-of: #7\\n\\nHi @bob.\\n\\n" + message, "backport-pr7-branch-4.2",
+    ...              "branch-4.2")[1].splitlines()[0]
+    'Hi bob.'
+    >>> [_backport_of(b, h, "branch-4.2") for b, h in (
+    ...     ("Backport-of: #8\\n\\n" + message, "backport-pr8-branch-4.2"),  # footer is #7's
+    ...     ("Backport-of: #7\\n\\n" + message, "my-feature"),  # not the script's branch
+    ...     (message, "backport-pr7-branch-4.2"),
+    ...     (None, "backport-pr7-branch-4.2"),
+    ... )]
+    [None, None, None, None]
+    """
+    body = (body or "").replace("\r\n", "\n")
+    m = _BACKPORT_MARKER_RE.match(body)
+    if not m or head_ref != _backport_pr_branch(m.group(1), target_ref):
+        return None
+    message = _pick_message(body[m.end() :])
+    if merge_footer_pr(message) != int(m.group(1)):
+        return None
+    authors = re.findall(r"^(?:Lead-authored-by|Authored-by): (.+)$", message, re.MULTILINE)
+    return int(m.group(1)), message, authors[-1]
+
+
 def should_skip_post_merge_ci(target_ref, pr_num):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
@@ -1635,6 +1846,16 @@ def remove_inherited_post_merge_ci_skip(message):
     >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
     >>> remove_inherited_post_merge_ci_skip(distant) == distant
     True
+
+    A pick of a sampled backport-PR merge keeps its provenance in a paragraph of its own, which
+    `backport_pr` still reads past:
+
+    >>> from spark_merge_footer import backport_pr
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nBackport-PR: #9\\n\\n"
+    >>> pick = "skip-checks: true\\n(cherry picked from commit abc)\\nSigned-off-by: X <x@e.org>"
+    >>> picked = "Fix\\n\\n" + footer + pick
+    >>> backport_pr(remove_inherited_post_merge_ci_skip(picked + "\\n"))
+    9
     """
     tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
     marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
@@ -1657,6 +1878,7 @@ def amend_commit_message(message):
             "git",
             "commit",
             "--amend",
+            "--only",
             "--allow-empty",
             "--cleanup=verbatim",
             "-m",
@@ -1667,6 +1889,89 @@ def amend_commit_message(message):
 
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
+    """Merge the requested PR and return the merge hash.
+
+    A backport PR keeps the original's message and author, in one trailer block:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nCo-authored-by: B <b@e.org>"
+    >>> pick = "Fix.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
+    >>> config = {"git config --get user.name": "M", "git config --get user.email": "m@e.org"}
+    >>> two_fixups = ("F <f@e.org>", "B <b@e.org>")
+    >>> def merge(pick=pick, on_branch=pick, conflicts=False, fixups=two_fixups):
+    ...     def git_run(cmd):
+    ...         if cmd[:2] == ["git", "log"]:  # the commits on the PR branch
+    ...             return on_branch + "\\0"
+    ...         if conflicts and cmd[:2] == ["git", "merge"]:
+    ...             raise subprocess.CalledProcessError(1, "git merge")
+    ...         return config.get(str(cmd), "abc") + "\\n"
+    ...     ask = Mock()
+    ...     with (
+    ...         patch.object(git, "run", side_effect=git_run) as run,
+    ...         patch.object(git, "push") as push,
+    ...         patch.multiple(sys.modules[__name__], continue_maybe=ask, clean_up=Mock()),
+    ...         patch("builtins.input", side_effect=AssertionError("no author prompt")),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         body = "Backport-of: #7\\n\\n" + pick
+    ...         merge_pr(9, "branch-4.2", "[SPARK-1][4.2][SQL] Fix", body,
+    ...                  "me/backport-pr7-branch-4.2", "O <o@e.org>", list(fixups))
+    ...     push.assert_called_once_with(
+    ...         PUSH_REMOTE_NAME, "PR_TOOL_MERGE_PR_9_BRANCH-4.2", "branch-4.2")
+    ...     commit = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["git", "commit"]]
+    ...     prompts = [c.args[0].split(",")[0] for c in ask.call_args_list]
+    ...     asked = [p for p in prompts if "Backport-of" in p]
+    ...     return commit[0][3], "\\n\\n".join(commit[0][5::2]), asked
+    >>> author, message, asked = merge()
+    >>> author, asked
+    ('--author="A <a@e.org>"', [])
+    >>> print(message.split("\\n\\n")[-1])
+    Authored-by: A <a@e.org>
+    Co-authored-by: B <b@e.org>
+    (cherry picked from commit abc)
+    Backport-PR: #9
+    Co-authored-by: F <f@e.org>
+    Signed-off-by: M <m@e.org>
+    >>> merge_footer_pr(message), has_merge_footer(message, 9), "Closes #9" in message
+    (7, True, False)
+
+    A body that matches none of the branch's commits asks before merging:
+
+    >>> merge(on_branch="Something else.")[2]
+    ['The Backport-of message in the PR body matches none of its commits']
+
+    A conflicts note goes before the original message, so the trailers still end it:
+
+    >>> from spark_merge_footer import backport_pr
+    >>> _, message, _ = merge(conflicts=True)
+    >>> message.index("had conflicts") < message.index("Fix."), backport_pr(message)
+    (True, 9)
+
+    The author comes from the last footer: a Lead-authored-by one, after a quoted footer:
+
+    >>> quoted = "Reverts:\\n\\nCloses #3 from c/d.\\n\\nAuthored-by: Q <q@e.org>\\n\\n"
+    >>> lead = quoted + pick.replace("Authored-by: A", "Lead-authored-by: L")
+    >>> merge(lead, lead)[0]
+    '--author="L <a@e.org>"'
+
+    A fixup author mentioned in prose or a sign-off still gets authorship credit:
+
+    >>> signed = "Discuss F <f@e.org>.\\n\\n" + pick + "\\nSigned-off-by: F <f@e.org>"
+    >>> merge(signed, signed)[1].count("Co-authored-by: F <f@e.org>")
+    1
+    >>> credited = pick + "\\nCo-authored-by: F <f@e.org>"
+    >>> merge(credited, credited)[1].count("Co-authored-by: F <f@e.org>")
+    1
+    >>> split = pick.replace("\\n(cherry", "\\n\\n(cherry") + "\\nSigned-off-by: P <p@e.org>"
+    >>> merge(split, split, fixups=["A <a@e.org>"])[1].count("Co-authored-by: A <a@e.org>")
+    0
+    >>> quoted_fixup = "Co-authored-by: F <f@e.org>\\n\\n" + pick
+    >>> merge(quoted_fixup, quoted_fixup)[1].rsplit("\\n\\n", 1)[-1].count(
+    ...     "Co-authored-by: F <f@e.org>")
+    1
+    """
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -1684,41 +1989,77 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         continue_maybe(msg)
         had_conflicts = True
 
-    # Use PR author as the primary author for proper GitHub attribution
-    primary_author = bold_input(
-        'Enter primary author in the format of "name <email>" [%s]: ' % pr_author
-    )
-    if primary_author == "":
-        primary_author = pr_author
-
-    merge_message_flags = []
-
-    merge_message_flags += ["-m", title]
-    if body is not None:
-        # We remove @ symbols from the body to avoid triggering e-mails
-        # to people every time someone creates a public fork of Spark.
-        merge_message_flags += ["-m", body.replace("@", "")]
+    backport = _backport_of(body, pr_repo_desc.split("/", 1)[-1], target_ref)
+    if backport:
+        # The footer already names the author; a different --author would contradict it.
+        print("Backport of #%s: keeping its commit message and author." % backport[0])
+        # Soft check: the marker and footer are plain PR text, so confirm they are some
+        # commit's message on the branch, as _land_via_fork leaves them.
+        commits = git.run(["git", "log", "--format=%b%x00", "HEAD..%s" % pr_branch_name])
+        if backport[1] not in [_pick_message(c) for c in commits.split("\0")]:
+            continue_maybe(
+                "The Backport-of message in the PR body matches none of its commits, so the "
+                "author and footer below are only as good as that text. Merge it anyway?"
+            )
+        primary_author = backport[2]
+    else:
+        # Use PR author as the primary author for proper GitHub attribution
+        primary_author = bold_input(
+            'Enter primary author in the format of "name <email>" [%s]: ' % pr_author
+        )
+        if primary_author == "":
+            primary_author = pr_author
 
     committer_name = git.run("git config --get user.name").strip()
     committer_email = git.run("git config --get user.email").strip()
+    signoff = "Signed-off-by: %s <%s>" % (committer_name, committer_email)
+    conflicts = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
+        committer_name,
+        committer_email,
+    )
 
-    if had_conflicts:
-        message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
-            committer_name,
-            committer_email,
+    merge_message_flags = ["-m", title]
+    if backport:
+        # The original message already ends with #N's footer and authors (its @s were stripped
+        # at the original merge). No "Closes #<this PR>": that would become the last footer and
+        # hide the branch from #N's merge status. main() closes this PR through the API.
+        # git reads trailers from the last paragraph only, so the conflicts note goes first
+        # and ours join the original's.
+        if had_conflicts:
+            merge_message_flags += ["-m", conflicts]
+        # Deduplicate original authors by email; sign-offs do not credit fixup authors.
+        # From the last footer on: a sampled original's trailer removal can leave the pick's
+        # own lines as a paragraph of their own after it.
+        footer = backport[1][backport[1].rfind(merge_footer_trailer(backport[0])) :]
+        credited = re.findall(
+            r"^(?:Lead-authored-by|Authored-by|Co-authored-by): (.+)$", footer, re.MULTILINE
         )
-        merge_message_flags += ["-m", message]
+        credited_emails = {"<" + a.split("<")[-1] for a in credited}
+        trailers = [backport_pr_trailer(pr_num)]
+        trailers += [
+            "Co-authored-by: %s" % a
+            for a in co_authors
+            if "<" + a.split("<")[-1] not in credited_emails
+        ]
+        merge_message_flags += ["-m", "\n".join([backport[1]] + trailers + [signoff])]
+    else:
+        if body is not None:
+            # We remove @ symbols from the body to avoid triggering e-mails
+            # to people every time someone creates a public fork of Spark.
+            merge_message_flags += ["-m", body.replace("@", "")]
+        if had_conflicts:
+            merge_message_flags += ["-m", conflicts]
 
-    # The string "Closes #%s" string is required for GitHub to correctly close the PR
-    merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
+        # The string "Closes #%s" string is required for GitHub to correctly close the PR
+        merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
 
-    authors = "Authored-by:" if len(co_authors) == 0 else "Lead-authored-by:"
-    authors += " %s" % primary_author
-    if len(co_authors) > 0:
-        authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in co_authors])
-    authors += "\n" + "Signed-off-by: %s <%s>" % (committer_name, committer_email)
+        authors = "Authored-by:" if len(co_authors) == 0 else "Lead-authored-by:"
+        authors += " %s" % primary_author
+        if len(co_authors) > 0:
+            authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in co_authors])
+        authors += "\n" + signoff
 
-    merge_message_flags += ["-m", authors]
+        merge_message_flags += ["-m", authors]
 
     if skip_post_merge_ci:
         # A leading newline plus git's paragraph separator leaves the two empty lines which
@@ -1747,67 +2088,614 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref, record=None):
-    """Cherry-pick `merge_hash` onto `pick_ref` and push.
+def _set_skip_trailer(skip):
+    """Amend HEAD so it carries the skip trailer exactly when `skip`; leave it be otherwise,
+    so a retried push sends the same commit. Reads HEAD afresh, keeping any amend made since.
+    """
+    current = git.run(["git", "log", "-1", "--format=%B"])
+    wanted = remove_inherited_post_merge_ci_skip(current)
+    if skip:
+        wanted = append_post_merge_ci_skip(wanted)
+    # %B ends in one more newline than the helpers return.
+    if wanted.rstrip("\n") != current.rstrip("\n"):
+        amend_commit_message(wanted)
 
-    Returns the (pushed ref, pushed commit hash) pair, which `record` also gets, right after
-    the push and before the cleanup that can raise. Raises `SkipCherryPick` when the
-    committer declines to resolve a conflict, after aborting the pick, or declines a pre-push
-    check. The pick is committed by then, so nothing is aborted: it and its temporary branch
-    are discarded, and uncommitted edits must be stashed first (see continue_maybe).
 
-    Both pre-push checks run once, in order, before the push prompt; the binding-policy one
-    gets the target branch and its tip from before the pick. A declined check pushes nothing:
+def _pick_message(commit_body):
+    """A backport's message as both _backport_of (from the PR body) and merge_pr's soft check
+    (from the branch's commits) read it: LF line ends, no skip-checks, no mentions, no edge
+    whitespace. Mentions are stripped as merge_pr does for any body, keeping the @ inside
+    e-mail addresses.
+
+    >>> _pick_message("Fix @bob\\r\\nA <a@e.org>\\n\\n\\nskip-checks: true\\n")
+    'Fix bob\\nA <a@e.org>'
+    """
+    body = remove_inherited_post_merge_ci_skip(commit_body.replace("\r\n", "\n").strip() + "\n")
+    return _MENTION_RE.sub("", body).strip()
+
+
+def _backport_pr_branch(pr_num, pick_ref):
+    """Fork branch name for a backport PR: stable, PR-traceable, branch-suffixed.
+
+    >>> _backport_pr_branch(123, "branch-4.2")
+    'backport-pr123-branch-4.2'
+    >>> _backport_pr_branch(9, "branch-3.5")
+    'backport-pr9-branch-3.5'
+    """
+    return "backport-pr%s-%s" % (pr_num, pick_ref)
+
+
+def _backport_pr_title(pick_ref, title):
+    """PR title for a backport PR: the merged title with its version tag set to the target.
+
+    The tag goes where Title.parse expects one, so the script can still merge the result.
+    Revert/Reapply and other unparseable titles stay verbatim.
+
+    >>> _backport_pr_title("branch-4.2", "[SPARK-1234][SQL] Fix a thing")
+    '[SPARK-1234][4.2][SQL] Fix a thing'
+    >>> _backport_pr_title("branch-4.x", "[SPARK-1234][4.X][SQL] Fix a thing")
+    '[SPARK-1234][4.X][SQL] Fix a thing'
+    >>> _backport_pr_title("branch-4.2", "[SPARK-1234][4.X][SQL] Fix a thing")
+    '[SPARK-1234][4.2][SQL] Fix a thing'
+    >>> _backport_pr_title("branch-4.2", "[MINOR] Fix typo")
+    '[MINOR][4.2] Fix typo'
+    >>> _backport_pr_title("branch-4.2-preview", "[MINOR] Fix typo")
+    '[MINOR] Fix typo'
+    >>> _backport_pr_title("branch-4.2", 'Revert "[SPARK-1234][SQL] Fix"')
+    'Revert "[SPARK-1234][SQL] Fix"'
+    >>> all(
+    ...     Title.parse(_backport_pr_title("branch-4.2", t))
+    ...     for t in ("[SPARK-1234][SQL] Fix", "[MINOR] Fix typo")
+    ... )
+    True
+    """
+    try:
+        parsed = Title.parse(title)
+    except ValueError:
+        return title
+    version = pick_ref[len("branch-") :].upper()
+    if not _VERSION_TAG_RE.match(version):
+        return title
+    others = [c for c in parsed.components if not _VERSION_TAG_RE.match(c)]
+    return str(Title(parsed.leading, [version] + others, parsed.text))
+
+
+def _remote_repo(url):
+    """`owner/repo` named by a git remote URL, or None.
+
+    >>> _remote_repo("git@github.com:me/spark.git")
+    'me/spark'
+    >>> _remote_repo("https://github.com/apache/spark.git")
+    'apache/spark'
+    >>> _remote_repo("ssh://git@ssh.github.com:443/me/spark.git")
+    'me/spark'
+    >>> _remote_repo("git@github-work:me/spark")
+    'me/spark'
+    >>> _remote_repo("https://gitbox.apache.org/repos/asf/spark.git")
+    'asf/spark'
+    >>> _remote_repo("") is None
+    True
+    """
+    m = re.search(r"[:/]([^/:]+)/([^/:]+?)(?:\.git)?/?$", url)
+    return "%s/%s" % m.groups() if m else None
+
+
+def _remote_url(name):
+    try:
+        return git.run(["git", "remote", "get-url", name]).strip()
+    except Exception:
+        return ""
+
+
+def _remote_push_urls(name):
+    # Where `git push <name>` really goes: pushurl and pushInsteadOf apply.
+    try:
+        return git.run(["git", "remote", "get-url", "--push", "--all", name]).split()
+    except Exception:
+        return []
+
+
+def _fork_owner(pushing=True):
+    """GitHub owner of the fork remote, for a backport PR's `head`. ValueError if unusable.
+
+    The fork is checked by the repository its URL names, not the remote name: an `origin` that
+    was never repointed off apache/spark would otherwise get the backport branch and the PR.
+    A read-only caller passes pushing=False to skip the push-URL check.
+
+    The env knobs are pinned so a committer's own settings cannot fail these at startup:
+
+    >>> from unittest.mock import patch
+    >>> def remotes(fork, owner=""):
+    ...     urls = {"apache": "https://gitbox.apache.org/repos/asf/spark.git",
+    ...             "apache-github": "https://github.com/apache/spark.git", "origin": fork}
+    ...     return patch.multiple(sys.modules[__name__], _remote_url=urls.get, FORK_OWNER=owner,
+    ...                           FORK_REMOTE_NAME="origin", PUSH_REMOTE_NAME="apache",
+    ...                           PR_REMOTE_NAME="apache-github")
+    >>> def owner_of(fork, owner="", push=None):
+    ...     pushes = patch.object(sys.modules[__name__], "_remote_push_urls",
+    ...                           lambda name: [fork] if push is None else push)
+    ...     with remotes(fork, owner), pushes:
+    ...         try:
+    ...             return _fork_owner()
+    ...         except ValueError as e:
+    ...             return "refused" if "is the Apache repo" in str(e) else str(e)
+    >>> owner_of("ssh://git@ssh.github.com:443/me/spark.git")
+    'me'
+    >>> [owner_of(f, owner="me") for f in (
+    ...     "git@github.com:apache/spark.git",
+    ...     "https://gitbox.apache.org/repos/asf/spark.git",
+    ...     "git@gh:Apache/Spark",
+    ... )]
+    ['refused', 'refused', 'refused']
+
+    The branch goes to the push URLs, so they must name the fork too:
+
+    >>> apache = "git@github.com:apache/spark.git"
+    >>> "pushes to " + apache in owner_of("git@github.com:me/spark.git", push=[apache])
+    True
+    >>> owner_of("git@github.com:me/spark.git", push=["https://github.com/Me/spark.git"])
+    'me'
+
+    A github.com URL names its owner; FORK_OWNER only fills in for a host alias:
+
+    >>> owner_of("git@github.com:me/spark.git", owner="someone-else")
+    'me'
+    >>> owner_of("git@gh-alias:me/spark.git", owner="Me")
+    'Me'
+    >>> owner_of("git@gh-alias:me/spark.git").startswith("Cannot tell the GitHub owner")
+    True
+    """
+    url = _remote_url(FORK_REMOTE_NAME)
+    repo = _remote_repo(url)
+    if repo is None:
+        raise ValueError(
+            "No usable %s remote (%r). Set FORK_REMOTE_NAME to your fork's remote."
+            % (FORK_REMOTE_NAME, url)
+        )
+    apache = {"apache/spark"} | {
+        (_remote_repo(_remote_url(r)) or "").lower() for r in (PUSH_REMOTE_NAME, PR_REMOTE_NAME)
+    }
+    if repo.lower() in apache:
+        raise ValueError(
+            "%s remote (%s) is the Apache repo, not a fork. Set FORK_REMOTE_NAME to your "
+            "fork's remote." % (FORK_REMOTE_NAME, url)
+        )
+    for push_url in _remote_push_urls(FORK_REMOTE_NAME) if pushing else []:
+        if (_remote_repo(push_url) or "").lower() != repo.lower():
+            raise ValueError(
+                "%s remote fetches from %s but pushes to %s. Point both at your fork."
+                % (FORK_REMOTE_NAME, url, push_url)
+            )
+    if "github.com" in url:
+        return repo.split("/")[0]
+    if FORK_OWNER:
+        return FORK_OWNER
+    raise ValueError(
+        "Cannot tell the GitHub owner of %s remote (%s); set FORK_OWNER to your GitHub login."
+        % (FORK_REMOTE_NAME, url)
+    )
+
+
+def _landing_choice(pick_branch_name, pick_ref):
+    """Ask how a finished pick lands: [d]irect push, [p] fork + PR, or [s]kip (default).
+
+    Only asked with --prompt-for-branches-during-backport; without it _do_cherry_pick keeps the
+    plain continue_maybe push prompt.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def choose(answer):
+    ...     with patch("builtins.input", return_value=answer), redirect_stdout(StringIO()):
+    ...         return _landing_choice("PR_TOOL_PICK_PR_1_BRANCH-4.2", "branch-4.2")
+    >>> choose(""), choose("p"), choose("d")
+    ('s', 'p', 'd')
+    """
+    return get_input(
+        "Pick complete (local ref %s). How should it land?\n"
+        "  [d] Push directly to %s/%s\n"
+        "  [p] Push to your fork (%s) and open a backport PR against %s (for CI)\n"
+        "  [s] Skip this branch (default)\n"
+        "Choose [d/p/s]: "
+        % (pick_branch_name, PUSH_REMOTE_NAME, pick_ref, FORK_REMOTE_NAME, pick_ref),
+        {"d": ["d", "direct"], "p": ["p", "pr"], "s": ["s", "skip", ""]},
+    )
+
+
+def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
+    """Push the pick to the fork and open a backport PR against `pick_ref`.
+
+    Returns the PR URL, or a `fork:<owner>:<branch>` marker if the push worked but the PR did
+    not open. Either failure offers _manual_backport_pr, whose pasted URL wins. Returns None,
+    having pushed nothing, when the fork is unusable or the push fails and no URL was pasted,
+    so the caller can retry, push directly, or skip. The fork branch is script-owned and
+    force-pushed (only after _fork_owner vetted the destination), so a retry updates it. When a
+    backport PR is already open from it, commits may have been added there (fixups), so the
+    committer is asked first; declining keeps that PR untouched and returns its URL.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> def land(owner, created, push_error=None, pasted="", pr=7, body="body\\n", found=None):
+    ...     with (
+    ...         patch("builtins.input", return_value=pasted),
+    ...         patch.multiple(
+    ...             sys.modules[__name__], _fork_owner=Mock(side_effect=[owner]),
+    ...             FORK_REMOTE_NAME="origin",
+    ...         ),
+    ...         patch.object(git, "push", side_effect=push_error) as push,
+    ...         patch.object(git, "run", return_value=body),
+    ...         patch.object(github, "open_pr", return_value=found),
+    ...         patch.object(github, "create_pr", return_value=created) as create,
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         marker = _land_via_fork(pr, "branch-4.2", "PICK", "[SPARK-1][SQL] Fix")
+    ...     return marker, push.call_args_list, create.call_args_list
+    >>> marker, pushes, creates = land("me", {"html_url": "https://github.com/apache/spark/pull/9"})
+    >>> marker
+    'https://github.com/apache/spark/pull/9'
+    >>> pushes
+    [call('origin', 'PICK', 'backport-pr7-branch-4.2', force=True)]
+    >>> creates[0].args[:3]
+    ('branch-4.2', 'me:backport-pr7-branch-4.2', '[SPARK-1][4.2][SQL] Fix')
+    >>> creates[0].args[3]
+    'Backport-of: #7\\n\\nbody'
+    >>> land("me", None)[0]
+    'fork:me:backport-pr7-branch-4.2'
+    >>> land("me", None, push_error=OSError("rejected"))
+    (None, [call('origin', 'PICK', 'backport-pr7-branch-4.2', force=True)], [])
+    >>> land(ValueError("origin is the Apache repo"), None)
+    (None, [], [])
+    >>> land("me", None, pasted="https://github.com/apache/spark/pull/10")[0]
+    'https://github.com/apache/spark/pull/10'
+
+    An open backport PR from that branch is only force-pushed over once the committer agrees:
+
+    >>> found = {"html_url": "https://github.com/apache/spark/pull/8"}
+    >>> land("me", None, pasted="n", found=found)
+    ('https://github.com/apache/spark/pull/8', [], [])
+    >>> marker, pushes, creates = land("me", found, pasted="y", found=found)
+    >>> marker, len(pushes), len(creates)
+    ('https://github.com/apache/spark/pull/8', 1, 1)
+
+    From a run on #9, itself a merged backport of #7, the new PR still names #7:
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nBackport-PR: #9\\n"
+    >>> _, pushes, creates = land("me", None, pr=9, body=footer)
+    >>> pushes[0].args[2], creates[0].args[3].splitlines()[0]
+    ('backport-pr7-branch-4.2', 'Backport-of: #7')
+    >>> _backport_of(creates[0].args[3], "backport-pr7-branch-4.2", "branch-4.2")[::2]
+    (7, 'A <a@e.org>')
+
+    The pick's skip-checks trailer is not carried into the PR body:
+
+    >>> land("me", None, body="body\\n\\n\\nskip-checks: true\\n")[2][0].args[3]
+    'Backport-of: #7\\n\\nbody'
+
+    The dry-run seam fakes both effects, so a dry run takes the success branch:
+
+    >>> with redirect_stdout(StringIO()) as out:
+    ...     DryRunGit().push("origin", "PICK", "backport-pr7-branch-4.2", force=True)
+    ...     created = DryRunGitHub().create_pr("branch-4.2", "me:b", "t", "b")
+    >>> created["html_url"]
+    'https://github.com/apache/spark/pull/DRY-RUN'
+    >>> "would push PICK to origin:backport-pr7-branch-4.2 (forced)" in out.getvalue()
+    True
+    """
+    # The pick's own message is what GitHub would prefill for a single-commit branch. Its @s
+    # were stripped when the merge commit was built, so it fires no mention mails. The marker
+    # lets merge_pr keep the original message, footer and author when this PR is merged.
+    # merge_pr adds the skip trailer afresh, per the commit count when the PR merges.
+    pr_body = remove_inherited_post_merge_ci_skip(
+        git.run(["git", "log", "-1", "--format=%b", pick_branch_name])
+    ).strip()
+    # A run on a merged backport PR picks a commit whose footer names the original PR, and
+    # _backport_of only accepts a marker naming that one.
+    pr_num = merge_footer_pr(pr_body) or pr_num
+    pr_body = "Backport-of: #%s\n\n%s" % (pr_num, pr_body)
+    backport_branch = _backport_pr_branch(pr_num, pick_ref)
+    pr_title = _backport_pr_title(pick_ref, title)
+    push = "git push <your fork> %s:%s" % (pick_branch_name, backport_branch)
+    try:
+        owner = _fork_owner()
+    except Exception as e:
+        print_error("Could not push the pick to your fork: %s" % e)
+        return _manual_backport_pr(pick_ref, pr_title, pr_body, push=push)
+    head = "%s:%s" % (owner, backport_branch)
+    existing = github.open_pr(pick_ref, head)
+    if existing:
+        prompt = (
+            "Backport PR %s is already open from %s. Force-push this pick over it? Commits "
+            "added to it since it was opened, such as fixups, are lost."
+            % (existing["html_url"], head)
+        )
+        if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
+            print("Keeping %s as it is." % existing["html_url"])
+            return existing["html_url"]
+    try:
+        git.push(FORK_REMOTE_NAME, pick_branch_name, backport_branch, force=True)
+    except Exception as e:
+        print_error("Could not push the pick to your fork: %s" % e)
+        return _manual_backport_pr(pick_ref, pr_title, pr_body, push=push)
+    created = github.create_pr(pick_ref, head, pr_title, pr_body)
+    if created and created.get("html_url"):
+        print("Backport PR for #%s against %s: %s" % (pr_num, pick_ref, created["html_url"]))
+        return created["html_url"]
+    print_error("Backport PR was not opened (see above); the pick is on %s." % head)
+    return _manual_backport_pr(pick_ref, pr_title, pr_body, head=head) or "fork:%s" % head
+
+
+def _manual_backport_pr(pick_ref, title, body, push=None, head=None):
+    """Walk the committer through opening the backport PR by hand; the URL pasted, or None.
+
+    `push` is the command still needed to get the pick onto the fork; `head` is the fork
+    branch when it is already there.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> with (
+    ...     patch("builtins.input", return_value="https://github.com/apache/spark/pull/9"),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     url = _manual_backport_pr("branch-4.2", "T", "Backport-of: #7", head="me:b")
+    >>> url
+    'https://github.com/apache/spark/pull/9'
+    >>> "compare/branch-4.2...me:b?expand=1" in out.getvalue()
+    True
+    >>> with patch("builtins.input", return_value=""), redirect_stdout(StringIO()) as out:
+    ...     url = _manual_backport_pr("branch-4.2", "T", "B", push="git push <your fork> P:b")
+    >>> url is None, "git push <your fork> P:b" in out.getvalue()
+    (True, True)
+    """
+    print("To open the backport PR by hand, against %s:" % pick_ref)
+    if push:
+        print("  %s  (before you skip: the local ref goes away with it)" % push)
+        print("  then open a PR from that branch")
+    if head:
+        print("  https://github.com/apache/spark/compare/%s...%s?expand=1" % (pick_ref, head))
+    print(
+        "Title:\n%s\nBody (keep the Backport-of line; merging with this script uses it to "
+        "keep the original author):\n%s" % (title, body)
+    )
+    url = get_input(
+        "Paste the backport PR URL once it is open (Enter to skip): ",
+        r"^(https://github\.com/apache/spark/pull/\d+)?$",
+        ignore_case=False,
+    )
+    return url or None
+
+
+def _landed(marker):
+    """Whether a pick's marker means it landed on the Apache branch.
+
+    A direct push returns a bare commit hash (landed); the backport-PR paths return a PR URL
+    (`https://`) or a `fork:` marker (PR not opened), both pending.
+
+    >>> [_landed(m) for m in ("deadbeef", "https://x/pull/9", "fork:o:backport-pr1-branch-4.2")]
+    [True, False, False]
+    """
+    return not marker.startswith(("https://", "fork:"))
+
+
+class _PickLedger:
+    """Where the change is during a run, for main()'s two pick loops.
+
+    `landed` (the merge sink, footer branches, direct pushes) drives Upstream-First and JIRA
+    fix versions, so neither treats an open backport PR as having the change. `pending` maps
+    branches with only a backport PR, from this run or an earlier one, to their markers.
+    `seen()` is both, kept out of the prompt default. `commits` is this run's picks.
+
+    >>> picks = _PickLedger(["master"], pending={"branch-4.1": "https://x/pull/8"})
+    >>> picks.record([("branch-4.x", "abc"), ("branch-4.3", "https://x/pull/9")])
+    >>> picks.record([("branch-4.2", "fork:me:backport-pr7-branch-4.2")])
+    >>> picks.landed, sorted(picks.pending)
+    (['master', 'branch-4.x'], ['branch-4.1', 'branch-4.2', 'branch-4.3'])
+    >>> sorted(picks.seen())
+    ['branch-4.1', 'branch-4.2', 'branch-4.3', 'branch-4.x', 'master']
+    >>> [ref for ref, _ in picks.commits]
+    ['branch-4.x', 'branch-4.3', 'branch-4.2']
+    >>> picks.record([("branch-4.1", "def")])
+    >>> picks.landed[-1], "branch-4.1" in picks.pending
+    ('branch-4.1', False)
+    """
+
+    def __init__(self, landed, pending=None):
+        self.landed = list(landed)
+        self.pending = dict(pending or {})
+        self.commits = []
+
+    def seen(self):
+        return tuple(self.landed) + tuple(self.pending)
+
+    def record(self, picked):
+        for ref, marker in picked:
+            if _landed(marker):
+                self.landed.append(ref)
+                self.pending.pop(ref, None)
+            else:
+                self.pending[ref] = marker
+        self.commits += picked
+
+
+def _finish_landed(record, pair):
+    """Record a landed pick, then leave its branch. Both can fail or stop the run ([a]bort),
+    so the pick is recorded first."""
+    if record:
+        record(pair)
+    _restore_original_head()
+    clean_up()
+
+
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None, record=None):
+    """Cherry-pick `merge_hash` onto `pick_ref` and land it.
+
+    Returns (pick_ref, marker), where the marker says how it landed (see _landed):
+    a commit hash for a direct push (landed), a PR URL for a backport PR, or
+    `fork:<owner>:<branch>` when the fork push worked but the PR did not open (both pending).
+    `record` gets that pair as soon as it lands, before the checkout and cleanup that follow.
+    `pending_sibling` is the (branch-M.x, marker) whose backport is only pending; a direct push
+    then needs an explicit maintenance-only confirmation. Raises `SkipCherryPick` when the
+    committer declines to resolve a conflict (after aborting the pick), declines the
+    binding-policy or compile-check prompt, or answers [s]kip at the landing prompt. Past the
+    conflict nothing is aborted: the committed pick and its temporary branch are discarded,
+    and uncommitted edits must be stashed first (see continue_maybe). A failed fork landing
+    or direct push returns to the landing prompt with the pick kept.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import Mock, call, patch
-    >>> last_policy_call = last_record_call = None
-    >>> def pick(**effects):
-    ...     steps = Mock()
-    ...     steps.prompt.return_value = "y"
-    ...     for name, effect in effects.items():
-    ...         getattr(steps, name).side_effect = effect
+    >>> policy, compile_check = Mock(), Mock()
+    >>> def land(answers, via_fork=(), push_error=None):
     ...     tip = ["pre\\n"]
     ...     def run(cmd):
     ...         if "cherry-pick" in cmd:
-    ...             tip[0] = "post\\n"
+    ...             tip[0] = "head\\n"
     ...         return tip[0]
     ...     with (
-    ...         patch("builtins.input", steps.prompt),
+    ...         patch("builtins.input", side_effect=answers),
     ...         patch.object(git, "run", side_effect=run),
-    ...         patch.object(git, "push", steps.push),
-    ...         patch.multiple(sys.modules[__name__], clean_up=steps.clean_up,
-    ...                        should_skip_post_merge_ci=Mock(return_value=False),
-    ...                        maybe_compile_check=steps.compile,
-    ...                        maybe_binding_policy_warning=steps.policy),
+    ...         patch.object(
+    ...             sys.modules[__name__], "should_skip_post_merge_ci", return_value=False
+    ...         ),
+    ...         patch.object(git, "push", side_effect=push_error) as push,
+    ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=policy,
+    ...                        maybe_compile_check=compile_check, clean_up=Mock(),
+    ...                        _land_via_fork=Mock(side_effect=via_fork),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         try:
-    ...             result = _do_cherry_pick(1, "feed", "branch-4.2", steps.record)
+    ...             return _do_cherry_pick(1, "feed", "branch-4.2"), push.call_args_list
     ...         except SkipCherryPick:
-    ...             result = "skipped"
-    ...         except (SystemExit, subprocess.CalledProcessError) as e:
-    ...             result = type(e).__name__
-    ...     global last_policy_call, last_record_call
-    ...     last_policy_call, last_record_call = steps.policy.call_args, steps.record.call_args
-    ...     return result, [name for name, _, _ in steps.mock_calls]
-    >>> pick()
-    (('branch-4.2', 'post'), ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
-    >>> last_record_call
-    call(('branch-4.2', 'post'))
-    >>> pick(compile=SkipCherryPick())
-    ('skipped', ['policy', 'compile'])
-    >>> last_policy_call
-    call('branch-4.2', 'pre')
+    ...             return "skipped", push.call_args_list
+    >>> land(["p"], via_fork=["https://x/pull/9"])
+    (('branch-4.2', 'https://x/pull/9'), [])
+    >>> land(["p", "s"], via_fork=[None])
+    ('skipped', [])
+    >>> result, pushes = land(["d"])
+    >>> result, pushes == [call(PUSH_REMOTE_NAME, "PR_TOOL_PICK_PR_1_BRANCH-4.2", "branch-4.2")]
+    (('branch-4.2', 'head'), True)
+    >>> land(["d", "s"], push_error=OSError("rejected"))[0]
+    'skipped'
 
-    A push that lands is recorded before the cleanup after it, so a cleanup that raises loses
-    nothing; a push that fails is not recorded:
+    Each pre-push check ran once per pick, the binding-policy one against the pre-pick head:
 
-    >>> pick(clean_up=subprocess.CalledProcessError(1, "git checkout"))
-    ('CalledProcessError', ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
-    >>> pick(push=OSError("no route"))
-    ('SystemExit', ['policy', 'compile', 'prompt', 'push', 'clean_up'])
+    >>> policy.call_args_list == [call("branch-4.2", "pre")] * 4
+    True
+    >>> compile_check.call_args_list == [call(pushes[0].args[1])] * 4
+    True
+
+    Every exit restores the original checkout, waiting out local edits, before cleaning up. A
+    landing is recorded before both, so a refused checkout or an [a]bort there loses nothing;
+    a skip, and a landing that fails, record nothing:
+
+    >>> def leaves(answers, via_fork=("https://x/pull/9",), **effects):
+    ...     steps = Mock()
+    ...     steps.fork.side_effect = via_fork
+    ...     for name, effect in effects.items():
+    ...         getattr(steps, name).side_effect = effect
+    ...     with (
+    ...         patch("builtins.input", side_effect=answers),
+    ...         patch.object(git, "run", return_value="abc\\n"),
+    ...         patch.object(git, "push", steps.push),
+    ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
+    ...                        maybe_compile_check=Mock(), clean_up=steps.clean_up,
+    ...                        _restore_original_head=steps.restore, _land_via_fork=steps.fork,
+    ...                        should_skip_post_merge_ci=Mock(return_value=False),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             _do_cherry_pick(1, "feed", "branch-4.2", record=steps.record)
+    ...         except (SkipCherryPick, SystemExit):
+    ...             pass
+    ...     return [name for name, _, _ in steps.mock_calls], [
+    ...         c.args[0] for c in steps.record.call_args_list]
+    >>> leaves(["s"])
+    (['restore', 'clean_up'], [])
+    >>> leaves(["p"])
+    (['fork', 'record', 'restore', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
+    >>> leaves(["d"])
+    (['push', 'record', 'restore', 'clean_up'], [('branch-4.2', 'abc')])
+    >>> leaves(["p", "s"], via_fork=[None])
+    (['fork', 'restore', 'clean_up'], [])
+    >>> leaves(["d", "s"], push=OSError("rejected"))
+    (['push', 'restore', 'clean_up'], [])
+    >>> leaves(["d"], restore=SystemExit(-1))
+    (['push', 'record', 'restore'], [('branch-4.2', 'abc')])
+    >>> leaves(["p"], restore=SystemExit(-1))
+    (['fork', 'record', 'restore'], [('branch-4.2', 'https://x/pull/9')])
+
+    A sampled pick carries the skip trailer only when pushed to apache, so [p] always sends
+    the fork a head without it. Both keep an amend the committer made during the checks.
+
+    >>> amends = []
+    >>> def sampled(answers, push_error=None):
+    ...     amends.clear()
+    ...     head = {"message": "Fix\\n\\nCloses #1 from a/b.\\n"}
+    ...     def committer_amends(*args):  # e.g. after the dirty-tree warning
+    ...         head["message"] = "Fixed\\n\\nCloses #1 from a/b.\\n"
+    ...     def run(cmd):
+    ...         if cmd[:3] == ["git", "commit", "--amend"]:
+    ...             assert "--only" in cmd, cmd  # staged edits stay out of the push
+    ...             amends.append(cmd)
+    ...             head["message"] = cmd[-1]
+    ...         return head["message"] + "\\n" if "--format=%B" in cmd else "head\\n"
+    ...     pushed = []
+    ...     def push(remote, *args, force=False):
+    ...         where = "apache" if remote == PUSH_REMOTE_NAME and not force else remote
+    ...         message = head["message"]
+    ...         pushed.append((where, message.count(POST_MERGE_CI_SKIP_TRAILER), message[:5]))
+    ...         if push_error and len(pushed) == 1:
+    ...             raise push_error
+    ...     def fork(*args):
+    ...         push("fork")
+    ...         return "https://x/pull/9"
+    ...     with (
+    ...         patch("builtins.input", side_effect=answers),
+    ...         patch.object(git, "run", side_effect=run),
+    ...         patch.object(git, "push", side_effect=push),
+    ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
+    ...                        maybe_compile_check=committer_amends, clean_up=Mock(),
+    ...                        should_skip_post_merge_ci=Mock(return_value=True),
+    ...                        _land_via_fork=fork, PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         _do_cherry_pick(1, "feed", "branch-4.x")
+    ...     return pushed
+    >>> sampled(["p"]), len(amends)
+    ([('fork', 0, 'Fixed')], 0)
+    >>> sampled(["d"]), len(amends)
+    ([('apache', 1, 'Fixed')], 1)
+
+    A retried [d] pushes the same commit, in case the failed push did land:
+
+    >>> sampled(["d", "d"], push_error=OSError("rejected")), len(amends)
+    ([('apache', 1, 'Fixed'), ('apache', 1, 'Fixed')], 1)
+    >>> sampled(["d", "p"], push_error=OSError("rejected"))
+    [('apache', 1, 'Fixed'), ('fork', 0, 'Fixed')]
+
+    Without --prompt-for-branches-during-backport the push prompt is the plain y/N one: N
+    skips the branch, and a failed push ends the run instead of asking again:
+
+    >>> def plain(answer, push_error=None):
+    ...     with (
+    ...         patch("builtins.input", return_value=answer),
+    ...         patch.object(git, "run", return_value="abc\\n"),
+    ...         patch.object(git, "push", side_effect=push_error) as push,
+    ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
+    ...                        maybe_compile_check=Mock(), clean_up=Mock(),
+    ...                        _restore_original_head=Mock(), _land_via_fork=Mock(),
+    ...                        should_skip_post_merge_ci=Mock(return_value=False)),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             return _do_cherry_pick(1, "feed", "branch-4.2"), push.call_count
+    ...         except (SkipCherryPick, SystemExit) as e:
+    ...             return type(e).__name__, push.call_count
+    >>> plain("y"), plain("n"), plain("y", push_error=OSError("rejected"))
+    ((('branch-4.2', 'abc'), 1), ('SkipCherryPick', 0), ('SystemExit', 1))
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -1856,30 +2744,70 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, record=None):
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
-    raw_message = git.run(["git", "log", "-1", "--format=%B"])
-    updated_message = remove_inherited_post_merge_ci_skip(raw_message)
-    if skip_post_merge_ci:
-        updated_message = append_post_merge_ci_skip(updated_message)
-    if updated_message != raw_message:
-        amend_commit_message(updated_message)
+    _set_skip_trailer(False)
 
     maybe_binding_policy_warning(pick_ref, pick_head)
     maybe_compile_check(pick_branch_name)
 
-    continue_maybe(
-        "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
-    )
+    if not PROMPT_FOR_BRANCHES_DURING_BACKPORT:
+        # The fork is never used: N skips this branch and a failed push ends the run, as
+        # before the backport-PR path existed.
+        continue_maybe(
+            "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME),
+            True,
+        )
+        _set_skip_trailer(skip_post_merge_ci)
+        pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
+        try:
+            git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
+        except Exception as e:
+            fail("Exception while pushing: %s" % e)
+        _finish_landed(record, (pick_ref, pick_hash))
+        print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
+        print("Pick hash: %s" % pick_hash)
+        return pick_ref, pick_hash
 
-    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
-    try:
-        git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
-    except Exception as e:
-        fail("Exception while pushing: %s" % e)
+    while True:
+        choice = _landing_choice(pick_branch_name, pick_ref)
+        if choice == "s":
+            # Restore the original checkout and drop the temp PICK_PR_* branches, as the
+            # continue_maybe decline path does; otherwise a later pick of the same ref fails
+            # when `git fetch` tries to update the checked-out branch.
+            print("Skipping this branch; the merge continues.")
+            _restore_original_head()
+            clean_up()
+            raise SkipCherryPick()
+        if choice == "p":
+            _set_skip_trailer(False)
+            marker = _land_via_fork(pr_num, pick_ref, pick_branch_name, title)
+            if marker:
+                _finish_landed(record, (pick_ref, marker))
+                return pick_ref, marker
+            # Nothing was pushed and the pick is intact: retry, push directly, or skip.
+            continue
+        if pending_sibling:
+            sibling, marker = pending_sibling
+            prompt = (
+                "Upstream-First: %s has only a pending backport (%s). Push %s directly as a "
+                "%s-only maintenance fix?" % (sibling, marker, pick_ref, pick_ref)
+            )
+            if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                continue
+        # Only a direct push gets the skip trailer: on a fork head it would skip the PR's CI.
+        _set_skip_trailer(skip_post_merge_ci)
+        pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
+        try:
+            git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
+            break
+        except Exception as e:
+            # Likely a race with another push during the compile. The pick is stale then, so
+            # only [p] (which keeps it, on the fork) or [s] (which discards it) can get out.
+            print_error(
+                "Exception while pushing: %s\nIf %s moved, pushing fails again; use [p] or [s]."
+                % (e, pick_ref)
+            )
 
-    # Before clean_up(), which can raise: the push has landed either way.
-    if record:
-        record((pick_ref, pick_hash))
-    clean_up()
+    _finish_landed(record, (pick_ref, pick_hash))
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
@@ -1906,13 +2834,113 @@ def branches_with_merge_footer(pr_num, branch_names):
     return [b for b in branch_names if b in landed]
 
 
+def pending_fork_backports(pr_num, branch_names):
+    """{branch: PR URL} for release branches with an open backport PR from an earlier run.
+
+    That PR leaves no merge footer, only its backport-pr<N>-<branch> branch on the fork, so look
+    there first and then confirm the PR is still open: a closed one's branch often lingers.
+    Best-effort like branches_with_merge_footer: an unusable fork or a failure reports nothing.
+    Without --prompt-for-branches-during-backport the fork is not looked at, so nothing is found.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> heads = "abc\\trefs/heads/backport-pr7-branch-4.x\\n"
+    >>> heads += "abc\\trefs/heads/backport-pr7-branch-4.1\\n"
+    >>> def open_pr(base, head):
+    ...     return {"html_url": "https://x/pull/9"} if base == "branch-4.x" else None
+    >>> m = sys.modules[__name__]
+    >>> with (
+    ...     patch.multiple(m, FORK_REMOTE_NAME="origin", _fork_owner=lambda pushing=True: "me",
+    ...                    PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
+    ...     patch.object(git, "run", return_value=heads) as run,
+    ...     patch.object(github, "open_pr", side_effect=open_pr) as gh,
+    ... ):
+    ...     pending_fork_backports(7, ["branch-4.x", "branch-4.2", "branch-4.1"])
+    {'branch-4.x': 'https://x/pull/9'}
+    >>> run.call_args[0][0]
+    ['git', 'ls-remote', '--heads', 'origin', 'refs/heads/backport-pr7-*']
+    >>> [c.args for c in gh.call_args_list]
+    [('branch-4.x', 'me:backport-pr7-branch-4.x'), ('branch-4.1', 'me:backport-pr7-branch-4.1')]
+
+    An unusable fork is never queried, nor is any fork without the flag:
+
+    >>> with patch.object(m, "_fork_owner") as owner, patch.object(git, "run") as run:
+    ...     found = pending_fork_backports(7, ["branch-4.x"])
+    >>> found, owner.call_count, run.call_count
+    ({}, 0, 0)
+    >>> with (
+    ...     patch.object(m, "PROMPT_FOR_BRANCHES_DURING_BACKPORT", True),
+    ...     patch.object(m, "_fork_owner", side_effect=ValueError("origin is the Apache repo")),
+    ...     patch.object(git, "run") as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     found = pending_fork_backports(7, ["branch-4.x"])
+    >>> found, run.call_count
+    ({}, 0)
+    """
+    if not PROMPT_FOR_BRANCHES_DURING_BACKPORT:
+        return {}
+    pattern = "refs/heads/%s*" % _backport_pr_branch(pr_num, "")
+    try:
+        owner = _fork_owner(pushing=False)
+        out = git.run(["git", "ls-remote", "--heads", FORK_REMOTE_NAME, pattern])
+    except Exception as e:
+        print_error("Not looking for earlier backport PRs of #%s: %s" % (pr_num, e))
+        return {}
+    on_fork = {line.split("refs/heads/", 1)[-1] for line in out.splitlines()}
+    pending = {}
+    for b in branch_names:
+        branch = _backport_pr_branch(pr_num, b)
+        if branch in on_fork:
+            pr = github.open_pr(b, "%s:%s" % (owner, branch))
+            if pr:
+                pending[b] = pr["html_url"]
+    return pending
+
+
+def _seed_picks(original, target_ref, branch_names):
+    """The ledger for picks of PR `original` after it, or a backport PR of it, reached
+    `target_ref`: the branches with its footer are landed, those with an open backport PR on
+    the fork are pending.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> with (
+    ...     patch.multiple(
+    ...         sys.modules[__name__],
+    ...         branches_with_merge_footer=lambda pr, names: ["branch-4.x"] if pr == 7 else [],
+    ...         pending_fork_backports=lambda pr, names: {"branch-4.x": "u", "branch-4.1": "v"}
+    ...         if pr == 7 else {},
+    ...     ),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     picks = _seed_picks(7, "branch-4.2", ["branch-4.x", "branch-4.2", "branch-4.1"])
+    >>> picks.landed, picks.pending
+    (['branch-4.2', 'branch-4.x'], {'branch-4.1': 'v'})
+    """
+    landed = [target_ref] + [
+        b for b in branches_with_merge_footer(original, branch_names) if b != target_ref
+    ]
+    if len(landed) > 1:
+        print("Already backported to: %s" % ", ".join(landed[1:]))
+    # An earlier run's backport PR leaves no footer, only its branch on the fork. Treat it as
+    # pending so Upstream-First does not re-pick it, and keep it out of the prompt default.
+    pending = {
+        b: m for b, m in pending_fork_backports(original, branch_names).items() if b not in landed
+    }
+    if pending:
+        print("Backport PR branches already on your fork: %s" % ", ".join(pending))
+    return _PickLedger(landed, pending)
+
+
 def default_pick_branch(branch_names, already_picked):
-    """Highest-ranked release branch that has not already received the change, or None.
+    """Highest-ranked release branch not in `already_picked`, or None.
 
     `branch_names` is ordered newest-first (see `semver_branch_rank`) and `already_picked`
-    holds the branches the change is known to be on, so the prompt never defaults to a
-    branch where the cherry-pick would come up empty. Returns None when every known branch
-    already has it, so callers can say so instead of offering an empty pick.
+    holds the branches kept out of the default: those the change is on, and those with an
+    open backport PR for it. Returns None when that is every known branch.
 
     >>> default_pick_branch(["branch-4.x", "branch-4.3", "branch-4.2"], ("branch-4.x",))
     'branch-4.3'
@@ -1955,29 +2983,125 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
 
 
 def cherry_pick(
-    pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=(), record=None
+    pr_num,
+    merge_hash,
+    default_branch,
+    branch_names,
+    target_ref,
+    already_picked=(),
+    title="",
+    pending=None,
+    record=None,
 ):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
     `_upstream_first_sibling`: when the PR was merged into master and the committer
     types a branch-M.N target while branch-M.x is also a known release branch AND
-    has not already received this commit, prompt to confirm whether to pick into
+    has not landed this commit (`already_picked`), prompt to confirm whether to pick into
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
-    maintenance-only bugfix).
+    maintenance-only bugfix). If branch-M.x only has a pending backport (`pending` maps
+    ref -> marker), it is not picked again; branch-M.N alone may still go to a backport PR,
+    but a direct push needs the maintenance-only confirmation. The same holds inside the
+    both-branches path when branch-M.x goes to a backport PR.
 
-    `record` gets each (ref, commit_hash) pair right after its push, and main() learns of
-    picks only through it, so one survives a later pick that ends the run. Declining to
-    resolve a conflict, or to push past a pre-push check, skips that branch and records
-    nothing; the caller then offers the next branch and still resolves JIRA. The returned list
-    repeats the recorded pairs; nothing reads it.
+    `record` gets each (ref, marker) pair, markers as in `_do_cherry_pick`, as soon as it lands,
+    and main() learns of picks only through it, so one survives a later pick that ends the run.
+    A branch is skipped, recording nothing, on any SkipCherryPick trigger; the caller then
+    offers the next branch and still resolves JIRA. The returned list repeats the recorded
+    pairs; nothing reads it. `title` is the normalized PR title, for the backport-PR path only.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import patch
-    >>> def picks(branch, choice="", ends=(), skips=()):
+    >>> url = "https://github.com/apache/spark/pull/9"
+    >>> def pick(answers, results, pending=None):
+    ...     with (
+    ...         patch("builtins.input", side_effect=answers),
+    ...         patch.object(sys.modules[__name__], "_do_cherry_pick", side_effect=results) as do,
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         cherry_pick(1, "abc", "branch-4.2", ["branch-4.x", "branch-4.2"], "master",
+    ...                     already_picked=("master",), pending=pending)
+    ...     return [(c.args[2], c.kwargs.get("pending_sibling")) for c in do.call_args_list]
+
+    A branch-4.x with only a pending backport PR is not re-picked, and gates branch-4.2:
+
+    >>> pick([""], [("branch-4.2", "def")], pending={"branch-4.x": url})
+    [('branch-4.2', ('branch-4.x', 'https://github.com/apache/spark/pull/9'))]
+
+    Same inside [b]oth once branch-4.x goes to a backport PR; a landed one does not gate:
+
+    >>> pick(["", ""], [("branch-4.x", url), ("branch-4.2", "def")])
+    [('branch-4.x', None), ('branch-4.2', ('branch-4.x', 'https://github.com/apache/spark/pull/9'))]
+    >>> pick(["", ""], [("branch-4.x", "abc"), ("branch-4.2", "def")])
+    [('branch-4.x', None), ('branch-4.2', None)]
+
+    With a pending sibling, [d] asks for the maintenance-only confirmation; declining it
+    returns to the landing prompt, so nothing reaches the Apache remote:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["d", "", "s"]) as inp,
+    ...     patch.object(git, "run", return_value="abc\\n"),
+    ...     patch.object(git, "push") as push,
+    ...     patch.object(sys.modules[__name__], "maybe_binding_policy_warning"),
+    ...     patch.object(sys.modules[__name__], "maybe_compile_check"),
+    ...     patch.object(sys.modules[__name__], "PROMPT_FOR_BRANCHES_DURING_BACKPORT", True),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         _do_cherry_pick(1, "abc", "branch-4.2", pending_sibling=("branch-4.x", url))
+    ...     except SkipCherryPick:
+    ...         pass
+    >>> push.call_count, ["maintenance fix" in c.args[0] for c in inp.call_args_list]
+    (0, [False, True, False])
+
+    Accepting it pushes; [p] needs no confirmation; [s] skips without ending the run; and
+    [b]oth keeps a pending branch-4.x when branch-4.2 is skipped:
+
+    >>> from unittest.mock import Mock
+    >>> def land(answers, fork=url):
+    ...     with (
+    ...         patch("builtins.input", side_effect=answers) as inp,
+    ...         patch.object(git, "run", return_value="abc\\n"),
+    ...         patch.object(git, "push") as push,
+    ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
+    ...                        maybe_compile_check=Mock(), clean_up=Mock(),
+    ...                        should_skip_post_merge_ci=Mock(return_value=False),
+    ...                        _land_via_fork=Mock(return_value=fork),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             result = _do_cherry_pick(1, "abc", "branch-4.2",
+    ...                                      pending_sibling=("branch-4.x", url))
+    ...         except SkipCherryPick:
+    ...             result = "skipped"
+    ...     asked = ["maintenance fix" in c.args[0] for c in inp.call_args_list]
+    ...     return result, push.call_count, asked
+    >>> land(["d", "y"])
+    (('branch-4.2', 'abc'), 1, [False, True])
+    >>> land(["p"])
+    (('branch-4.2', 'https://github.com/apache/spark/pull/9'), 0, [False])
+    >>> pick([""], [SkipCherryPick()], pending={"branch-4.x": url})
+    [('branch-4.2', ('branch-4.x', 'https://github.com/apache/spark/pull/9'))]
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", ""]),
+    ...     patch.object(sys.modules[__name__], "_do_cherry_pick",
+    ...                  side_effect=[("branch-4.x", url), SkipCherryPick()]),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     both = cherry_pick(1, "abc", "branch-4.2", ["branch-4.x", "branch-4.2"], "master",
+    ...                        already_picked=("master",))
+    >>> both
+    [('branch-4.x', 'https://github.com/apache/spark/pull/9')]
+
+    Each pick site records what lands, in order, and a skipped pick records nothing; the
+    branch-M.x pick survives a branch-M.N pick that is skipped or ends the run:
+
+    >>> def picks(branch, choice="", ends=(), skips=(), pending=None):
     ...     recorded = []
-    ...     def do(pr_num, merge_hash, ref, record):
+    ...     def do(pr_num, merge_hash, ref, record, **kwargs):
     ...         if ref in ends:
     ...             sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
     ...         if ref in skips:
@@ -1991,30 +3115,42 @@ def cherry_pick(
     ...     ):
     ...         try:
     ...             cherry_pick(1, "abc", branch, ["branch-4.x", "branch-4.2"], "master",
-    ...                         already_picked=("master",), record=recorded.append)
+    ...                         already_picked=("master",), pending=pending,
+    ...                         record=recorded.append)
     ...         except SystemExit:
     ...             pass
     ...     return recorded
-
-    A plain pick, an [o]nly pick, and a [b]oth pair each record what lands, in order:
-
-    >>> picks("branch-4.x")
-    [('branch-4.x', 'abc')]
-    >>> picks("branch-4.2", "o")
-    [('branch-4.2', 'abc')]
+    >>> picks("branch-4.x"), picks("branch-4.2", "o")
+    ([('branch-4.x', 'abc')], [('branch-4.2', 'abc')])
     >>> picks("branch-4.2", "b")
     [('branch-4.x', 'abc'), ('branch-4.2', 'abc')]
-
-    A skipped pick records nothing, and the branch-M.x pick survives a branch-M.N pick that
-    is skipped or ends the run:
-
+    >>> picks("branch-4.2", pending={"branch-4.x": url})
+    [('branch-4.2', 'abc')]
     >>> picks("branch-4.x", skips=("branch-4.x",)), picks("branch-4.2", "o", skips=("branch-4.2",))
     ([], [])
+    >>> picks("branch-4.2", pending={"branch-4.x": url}, skips=("branch-4.2",))
+    []
     >>> picks("branch-4.2", "b", skips=("branch-4.2",))
     [('branch-4.x', 'abc')]
     >>> picks("branch-4.2", "b", ends=("branch-4.2",))
     [('branch-4.x', 'abc')]
+
+    A direct push to a branch that has an open backport PR points out that PR:
+
+    >>> def left_open(marker):
+    ...     with (
+    ...         patch("builtins.input", return_value="branch-4.x"),
+    ...         patch.object(sys.modules[__name__], "_do_cherry_pick",
+    ...                      return_value=("branch-4.x", marker)),
+    ...         redirect_stdout(StringIO()) as out,
+    ...     ):
+    ...         cherry_pick(1, "abc", "branch-4.x", ["branch-4.x"], "master",
+    ...                     pending={"branch-4.x": url})
+    ...     return "backport PR %s against it is still open" % url in out.getvalue()
+    >>> left_open("def"), left_open("https://github.com/apache/spark/pull/10")
+    (True, False)
     """
+    pending = pending or {}
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
         if pick_ref == "":
@@ -2027,10 +3163,25 @@ def cherry_pick(
             f"Valid branches: {valid_branches}. Please try again."
         )
 
-    def pick(ref):
-        return _do_cherry_pick(pr_num, merge_hash, ref, record)
+    def pick(ref, pending_sibling=None):
+        left_open = pending.get(ref, "")
+        picked = _do_cherry_pick(
+            pr_num, merge_hash, ref, title=title, pending_sibling=pending_sibling, record=record
+        )
+        if _landed(picked[1]) and left_open.startswith("https://"):
+            # The script does not close it: it may hold fixups the direct push left out.
+            print_warning(
+                "%s now has the change, but backport PR %s against it is still open. "
+                "Close it once you have checked it holds nothing more." % (ref, left_open)
+            )
+        return picked
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
+    if sibling_x in pending:
+        try:
+            return [pick(pick_ref, pending_sibling=(sibling_x, pending[sibling_x]))]
+        except SkipCherryPick:
+            return []
     if sibling_x is not None:
         print()
         print("=" * 80)
@@ -2053,7 +3204,8 @@ def cherry_pick(
             picked = []
             try:
                 picked.append(pick(sibling_x))
-                picked.append(pick(pick_ref))
+                pending_x = None if _landed(picked[0][1]) else picked[0]
+                picked.append(pick(pick_ref, pending_sibling=pending_x))
             except SkipCherryPick:
                 pass
             return picked
@@ -3975,7 +5127,8 @@ def check_script_up_to_date():
 
 
 def build_arg_parser():
-    """CLI parser: an optional PR number plus the --dry-run/-n and --compile-prompt flags.
+    """CLI parser: an optional PR number plus the --dry-run/-n,
+    --prompt-for-branches-during-backport and --compile-prompt flags.
 
     --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
     DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
@@ -3992,9 +5145,18 @@ def build_arg_parser():
         "-n",
         action="store_true",
         default=DRY_RUN_ENV,
-        help="Run every read-only step for real but suppress all outbound effects (git push, "
-        "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
-        "Also enabled by setting the DRY_RUN environment variable.",
+        help="Run every read-only step for real but suppress all outbound effects (git pushes "
+        "to Apache and your fork, GitHub PR close/comment/backport-PR creation, JIRA writes), "
+        "logging each as a 'DRY-RUN: would ...' line. Also enabled by setting the DRY_RUN "
+        "environment variable.",
+    )
+    parser.add_argument(
+        "--prompt-for-branches-during-backport",
+        action="store_true",
+        help="When landing each backport pick, also offer [p]: push it to your fork "
+        "(FORK_REMOTE_NAME) and open a backport PR against the branch so CI runs before "
+        "it lands. Open backport PRs from earlier runs then count as pending. Off by default: "
+        "each pick is only pushed directly or skipped, and the fork is never used.",
     )
     parser.add_argument(
         "--compile-prompt",
@@ -4006,8 +5168,10 @@ def build_arg_parser():
 
 
 def main():
-    global git, github, jira_ops, original_head, COMPILE_PROMPT
+    global git, github, jira_ops, original_head, PROMPT_FOR_BRANCHES_DURING_BACKPORT
+    global COMPILE_PROMPT
     args = build_arg_parser().parse_args()
+    PROMPT_FOR_BRANCHES_DURING_BACKPORT = args.prompt_for_branches_during_backport
     COMPILE_PROMPT = args.compile_prompt
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
@@ -4015,9 +5179,9 @@ def main():
         github = DryRunGitHub()
         print(
             bold(
-                "=== DRY-RUN: read-only steps run for real, but the git push to %s, the GitHub "
-                "PR close/comment, and all JIRA writes are suppressed and only logged. ==="
-                % PUSH_REMOTE_NAME
+                "=== DRY-RUN: read-only steps run for real, but git pushes to %s and %s, GitHub "
+                "PR close/comment/backport-PR creation, and all JIRA writes are suppressed and "
+                "only logged. ===" % (PUSH_REMOTE_NAME, FORK_REMOTE_NAME)
             )
         )
 
@@ -4094,24 +5258,18 @@ def main():
     if merge_hash is not None:
         # The change is already on target_ref and on any branch a previous run backported it
         # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
-        picked_refs = [target_ref] + [
-            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
-        ]
-        if len(picked_refs) > 1:
-            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # For a merged backport PR, "it" is the original PR, whose footer the commit carries
+        # and whose number _land_via_fork names its branches after.
+        original = merge_footer_pr(message) or pr_num
+        picks = _seed_picks(original, target_ref, branch_names)
         # Loop so one invocation can reach several maintenance branches, as the merge path does.
-        picked_commits = []
-
-        def record(pair):
-            picked_refs.append(pair[0])
-            picked_commits.append(pair)
-
         try:
             while True:
-                default = default_pick_branch(branch_names, tuple(picked_refs))
+                default = default_pick_branch(branch_names, picks.seen())
                 if default is None:
                     print(
-                        "Every known release branch already contains #%s; nothing to pick." % pr_num
+                        "Every release branch has #%s or a backport PR of it; nothing to pick."
+                        % pr_num
                     )
                     break
                 cherry_pick(
@@ -4120,21 +5278,26 @@ def main():
                     default,
                     branch_names,
                     target_ref,
-                    already_picked=tuple(picked_refs),
-                    record=record,
+                    already_picked=tuple(picks.landed),
+                    title=title,
+                    pending=picks.pending,
+                    record=lambda pair: picks.record([pair]),
                 )
                 prompt = "Would you like to pick %s into another branch?" % merge_hash
                 if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
                     break
         finally:
             # Report whatever was pushed even if a later pick is aborted, since the earlier
-            # pushes have already landed.
-            if picked_commits:
-                post_merge_comment(pr_num, picked_commits)
+            # pushes have already happened.
+            if picks.commits:
+                post_merge_comment(pr_num, picks.commits)
+                if str(original) != str(pr_num):
+                    # The original's own summary is where its backports are looked up.
+                    post_merge_comment(original, picks.commits, via=pr_num)
             # Reconcile JIRA with every branch that contains the merge or revert.
             if subject is not None:
                 title = jira_title_for_backport(subject, pr["title"])
-            update_jira_for_pr(pr_num, title, picked_refs)
+            update_jira_for_pr(pr_num, title, picks.landed)
         sys.exit(0)
 
     # Fetch PR author's GitHub profile and PR commits for commit attribution
@@ -4155,13 +5318,13 @@ def main():
         pr_author_email = "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
 
-    # Collect co-authors: commit authors whose GitHub login differs from the PR author.
-    # This deduplicates the PR author (who may use multiple emails across commits) by login.
+    # A backport opener may author fixups; credit them alongside the original authors.
+    backport = _backport_of(body, base_ref, target_ref)
     co_authors = []
     seen = set()
     for c in pr_commits:
         gh_author = c.get("author")
-        if gh_author and gh_author.get("login") == user_login:
+        if not backport and gh_author and gh_author.get("login") == user_login:
             continue
         raw = "%s <%s>" % (c["commit"]["author"]["name"], c["commit"]["author"]["email"])
         if raw not in seen:
@@ -4178,31 +5341,26 @@ def main():
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
     continue_maybe("Proceed with merging pull request #%s?" % pr_num)
 
-    merged_refs = [target_ref]
-
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
-    # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
-    # then each cherry-pick target as it is picked.
-    merged_commits = [(target_ref, merge_hash)]
-
-    # merged_refs drives both the next prompt default and the already_picked set passed to
-    # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
-    # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
-    # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
-    def record(pair):
-        merged_refs.append(pair[0])
-        merged_commits.append(pair)
-
+    # target_ref, the merge sink, is never to be re-picked.
+    picks = _PickLedger([target_ref])
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
     # already been pushed, so cancelling a backport must not drop that line.
     try:
+        # Seeded inside the try: the fork lookups can stall, and the merge is already pushed.
+        # A merged backport PR inherits the original's branches: the default skips them, and
+        # [p] on a typed pending one updates its PR.
+        if backport:
+            picks = _seed_picks(backport[0], target_ref, branch_names)
         while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-            default = default_pick_branch(branch_names, tuple(merged_refs))
+            default = default_pick_branch(branch_names, picks.seen())
             if default is None:
-                print("Every known release branch already contains #%s; nothing to pick." % pr_num)
+                print(
+                    "Every release branch has #%s or a backport PR of it; nothing to pick." % pr_num
+                )
                 break
             cherry_pick(
                 pr_num,
@@ -4210,24 +5368,29 @@ def main():
                 default,
                 branch_names,
                 target_ref,
-                already_picked=tuple(merged_refs),
-                record=record,
+                already_picked=tuple(picks.landed),
+                title=title,
+                pending=picks.pending,
+                record=lambda pair: picks.record([pair]),
             )
     finally:
-        if merged_commits:
-            # The "Closes #N" keyword in the commit message only auto-closes the PR when the
-            # commit lands on the default branch. For merges into other branches (e.g.
-            # branch-X.Y backport PRs), GitHub leaves the PR open, so close it through the API.
-            pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
-            if pr_state != "closed":
-                close_message = "PR #%s is still open after push; closing it explicitly." % pr_num
-                print("\n%s\n" % bold(close_message))
-                github.close_pr(pr_num)
-            # Record every branch that successfully received the change on the PR.
-            post_merge_comment(pr_num, merged_commits)
+        # The "Closes #N" keyword in the commit message only auto-closes the PR when the
+        # commit lands on the default branch. For merges into other branches (e.g.
+        # branch-X.Y backport PRs), GitHub leaves the PR open, so close it through the API.
+        pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+        if pr_state != "closed":
+            close_message = "PR #%s is still open after push; closing it explicitly." % pr_num
+            print("\n%s\n" % bold(close_message))
+            github.close_pr(pr_num)
+        # Record every branch that received the change, or has a backport PR, on the PR:
+        # the merge sink first, then each cherry-pick as it was picked.
+        post_merge_comment(pr_num, [(target_ref, merge_hash)] + picks.commits)
+        if backport:
+            # The original's summary lists this PR as pending on target_ref; say it landed.
+            post_merge_comment(backport[0], [(target_ref, merge_hash)] + picks.commits, via=pr_num)
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the JIRA update decision.
-        update_jira_for_pr(pr_num, title, merged_refs)
+        update_jira_for_pr(pr_num, title, picks.landed)
 
 
 __test__ = {
@@ -4828,6 +5991,110 @@ __test__ = {
     pass
     pass
     """,
+    "main_ledgers": """
+    What main() passes on as landed and pending. Only landed branches are already_picked and
+    reach JIRA; pending ones go to the pick and stay out of the default. A pick the stand-in
+    hands to `record` reaches the merge summary either way. A merged backport PR, whether
+    merged in this run or an earlier one, starts from the original PR's branches.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nFix\\n\\nCloses #7 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> posted = []  # (PR, via) of each merge comment in the last run
+    >>> def run(base="master", head="h", body="b", message=None, interrupt=False):
+    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": body,
+    ...           "base": {"ref": base}, "user": {"login": "x"}, "head": {"ref": head},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     def get_json(url):
+    ...         if url.endswith("/branches"):
+    ...             names = ("master", "branch-4.x", "branch-4.2", "branch-4.1")
+    ...             return [{"name": b} for b in names]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/pulls/1/commits"):
+    ...             return [{"author": {"login": login}, "commit": {"author": {
+    ...                 "name": name, "email": email}}} for login, name, email in
+    ...                 (("x", "X", "x@x"), ("f", "F", "f@f"))]
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     answers = iter(["y", "n"])  # one more pick on the merge path, then stop
+    ...     def ask(prompt, *args, **kwargs):
+    ...         return next(answers) if "into another branch" in prompt else "n"
+    ...     picked = []  # the ledger is live, so snapshot what each pick is handed
+    ...     def pick(*args, already_picked, pending, record, **kwargs):
+    ...         picked.append((already_picked, sorted(pending)))
+    ...         record(("branch-4.x", "https://x/pull/10"))
+    ...     def fork_backports(pr, names):
+    ...         if interrupt:
+    ...             raise KeyboardInterrupt  # e.g. a stalled ls-remote on the fork
+    ...         return {"branch-4.1": "v"} if pr == 7 else {}
+    ...     default = Mock(return_value="branch-4.x")
+    ...     update, merge, gh, comment = Mock(), Mock(return_value="abc"), Mock(), Mock()
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=gh, check_linked_jira_issues=Mock(),
+    ...                    continue_maybe=Mock(), get_input=ask,
+    ...                    merge_pr=merge, post_merge_comment=comment,
+    ...                    prompt_for_components=Mock(return_value=["SQL"]),
+    ...                    branches_with_merge_footer=lambda pr, names: ["branch-4.2"]
+    ...                    if pr == 7 else [],
+    ...                    pending_fork_backports=fork_backports,
+    ...                    jira_title_for_backport=lambda subject, title: subject,
+    ...                    default_pick_branch=default, cherry_pick=pick,
+    ...                    update_jira_for_pr=update, print=Mock()),
+    ...     ):
+    ...         try:
+    ...             main()
+    ...         except (SystemExit, KeyboardInterrupt):
+    ...             pass
+    ...     posted[:] = [(c.args[0], c.kwargs.get("via")) for c in comment.call_args_list]
+    ...     if interrupt:
+    ...         return gh.close_pr.called, comment.call_args.args[1], update.call_args.args[2]
+    ...     if message is None:
+    ...         authors = ["X <x@x>", "F <f@f>"] if head.startswith("backport-pr") else ["F <f@f>"]
+    ...         assert merge.call_args.args[-1] == authors
+    ...     assert comment.call_args.args[1][-1] == ("branch-4.x", "https://x/pull/10")
+    ...     return sorted(default.call_args_list[0].args[1]), picked[0], update.call_args.args[2]
+
+    A merge seeds only the merged branch; the pick recorded as pending is not landed:
+
+    >>> run()
+    (['master'], (('master',), []), ['master'])
+    >>> posted
+    [('1', None)]
+
+    Merging a backport PR of #7 starts from #7's landed and pending branches:
+
+    >>> run("branch-4.2", "backport-pr7-branch-4.2", "Backport-of: #7" + footer)
+    (['branch-4.1', 'branch-4.2'], (('branch-4.2',), ['branch-4.1']), ['branch-4.2'])
+
+    and its summary also goes on #7, whose own summary listed it as pending:
+
+    >>> posted
+    [('1', None), (7, '1')]
+
+    So does a later run on that merged backport PR, by the original's number:
+
+    >>> run("branch-4.2", message="[SPARK-1][SQL] Fix" + footer + "\\nBackport-PR: #1")
+    (['branch-4.1', 'branch-4.2'], (('branch-4.2',), ['branch-4.1']), ['branch-4.2'])
+    >>> posted
+    [('1', None), (7, '1')]
+
+    An interrupt while seeding a backport-PR merge still closes the PR, comments, and
+    reaches JIRA:
+
+    >>> run("branch-4.2", "backport-pr7-branch-4.2", "Backport-of: #7" + footer, interrupt=True)
+    (True, [('branch-4.2', 'abc')], ['branch-4.2'])
+    >>> posted
+    [('1', None), (7, '1')]
+    """,
     "main_records": """
     main() reports the picks cherry_pick hands to `record`, on a merge and on a backport of a
     merged PR: the merge comment gets them in order and the JIRA update their branches, also
@@ -4872,6 +6139,7 @@ __test__ = {
     ...                    post_merge_comment=comment,
     ...                    prompt_for_components=Mock(return_value=["CORE"]),
     ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    pending_fork_backports=Mock(return_value={}),
     ...                    default_pick_branch=Mock(return_value="branch-4.x"),
     ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock()),
     ...     ):
@@ -4958,6 +6226,7 @@ __test__ = {
     ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
     ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
     ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    pending_fork_backports=Mock(return_value={}),
     ...                    default_pick_branch=pick_default,
     ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
     ...                    print_error=lambda msg: print(msg.splitlines()[0])),

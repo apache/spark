@@ -30,12 +30,14 @@ to for why this is non-obvious):
 
 Spark merges with dev/merge_spark_pr.py rather than the GitHub button, so a merged PR
 shows up as "Closed" (not "Merged") with empty merge metadata, and backports are plain
-cherry-pick pushes. This script does not rely on that metadata. The merge script writes
-a closing trailer "Closes #<pr> from <author>/<branch>" into the master commit, and
-every cherry-pick of it to a maintenance branch retains that trailer; the script finds
-the commits carrying it and reports each branch that contains one. It reports the
-mechanical facts only -- whether a change *should* have been backported is a judgement
-call and is NOT made here.
+cherry-pick pushes or backport PRs that the merge script merges. This script does not rely
+on that metadata. The merge script writes a closing trailer "Closes #<pr> from
+<author>/<branch>" into the master commit, and every cherry-pick of it to a maintenance
+branch retains that trailer. A backport PR keeps the original's trailer and adds
+"Backport-PR: #<backport-pr>", so it is found by that number and counts for the original too.
+The script finds the commits carrying either trailer and reports each branch that contains
+one. It reports the mechanical facts only -- whether a change *should* have been backported
+is a judgement call and is NOT made here.
 
 It first asks GitHub (via the `gh` CLI) whether the PR is open: an open PR cannot have
 merged anywhere, so it returns immediately without touching git. Otherwise it fetches
@@ -62,7 +64,11 @@ import sys
 
 # Shared with dev/merge_spark_pr.py so the two committer tools cannot disagree about where a
 # PR landed. Importable because Python puts this script's own directory first on sys.path.
-from spark_merge_footer import branches_with_merge_footer, merge_footer_trailer
+from spark_merge_footer import (
+    backport_pr_trailer,
+    branches_with_merge_footer,
+    merge_footer_trailer,
+)
 
 REPO = "apache/spark"
 
@@ -194,6 +200,23 @@ def display_key(name):
 
 
 def main():
+    """Prints where the PR in argv landed.
+
+    A closed PR with no commit carrying either trailer is reported as not merged:
+
+    >>> from unittest.mock import patch
+    >>> with (
+    ...     patch.object(sys, "argv", ["pr_merge_status.py", "5"]),
+    ...     patch.dict(main.__globals__, gh=lambda *a, **k: "closed\\tmaster\\tTitle\\n",
+    ...                detect_remote=lambda: "up", fetch_branches=lambda remote: None,
+    ...                latest_major=lambda remote: 4,
+    ...                branches_with_merge_footer=lambda pr, remote, run: {}),
+    ... ):
+    ...     main()  # doctest: +NORMALIZE_WHITESPACE
+    PR #5 (base master): Title
+    closed without merging -- no "Closes #5 from " or "Backport-PR: #5" commit found
+    (rejected or superseded).
+    """
     args = sys.argv[1:]
     all_branches = "--all-branches" in args
     rest = [a for a in args if a != "--all-branches"]
@@ -245,8 +268,8 @@ def main():
             print("  %-12s %s" % (branch, landed[branch]))
     else:
         print(
-            'closed without merging -- no "%s" commit found (rejected or superseded).'
-            % merge_footer_trailer(pr)
+            'closed without merging -- no "%s" or "%s" commit found (rejected or superseded).'
+            % (merge_footer_trailer(pr), backport_pr_trailer(pr))
         )
 
 
