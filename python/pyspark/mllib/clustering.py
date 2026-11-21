@@ -324,7 +324,7 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
 
         x = _convert_to_vector(x)
         for i in range(len(self.centers)):
-            distance = x.squared_distance(self.centers[i])  # type: ignore[attr-defined]
+            distance = x.squared_distance(self.centers[i])
             if distance < best_distance:
                 best = i
                 best_distance = distance
