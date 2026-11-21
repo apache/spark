@@ -1397,6 +1397,34 @@ class JDBCSuite extends SharedSparkSession {
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
+  test("SPARK-62136: MsSqlServer pushes down CAST to STRING only from types it renders as Spark") {
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    def compileCast(dialect: JdbcDialect, from: DataType, to: DataType): Option[String] =
+      dialect.compileExpression(new V2Cast(FieldReference("c"), from, to))
+    val refusedSources =
+      Seq(FloatType, DoubleType, BooleanType, TimestampType, TimestampNTZType, BinaryType)
+    refusedSources.foreach { from =>
+      Seq(StringType, CharType(5), VarcharType(5)).foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isEmpty, s"$from -> $to")
+      }
+    }
+    Seq(ByteType, ShortType, IntegerType, LongType, DecimalType(10, 2), DateType, StringType)
+      .foreach { from =>
+        assert(compileCast(msSqlServer, from, StringType) ===
+          Some("CAST(\"c\" AS NVARCHAR(MAX))"), from)
+      }
+    // Only casts to STRING are refused.
+    Seq(FloatType, DoubleType, BooleanType).foreach { from =>
+      Seq(IntegerType, DecimalType(10, 2)).foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isDefined, s"$from -> $to")
+      }
+    }
+    // Other dialects keep pushing these casts.
+    refusedSources.foreach { from =>
+      assert(compileCast(JdbcDialects.get("jdbc:"), from, StringType).isDefined, from)
+    }
+  }
+
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
     val dialect = JdbcDialects.get("jdbc:")
     val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
