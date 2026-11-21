@@ -2049,6 +2049,38 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  for (withProjection <- Seq(false, true)) {
+    test(s"SPARK-61255: deduplicate DPP build keys, broadcast projection: $withProjection") {
+      val key = AttributeReference("key", IntegerType)()
+      val value = AttributeReference("value", IntegerType)()
+      val build = Project(Seq(Alias(key, "build_key")(), Alias(value, "build_value")()),
+        LocalRelation(key, value))
+      val pruningKey = AttributeReference("part", IntegerType)()
+      val projection = Option.when(withProjection) {
+        BroadcastValueProjection(build, Seq(build.output.head), build.output.last)
+      }
+      val pruning = DynamicPruningSubquery(
+        pruningKey,
+        build,
+        Seq(build.output.head, Add(build.output.last, Literal(1))),
+        Seq(1),
+        onlyInBroadcast = true)(projection)
+      val plan = Join(build, Filter(pruning, LocalRelation(pruningKey)), Inner,
+        Some(EqualTo(Add(build.output.last, Literal(1)), pruningKey)), JoinHint.NONE)
+
+      val analyzed = plan.analyze
+      val subquery = analyzed.collect {
+        case Filter(d: DynamicPruningSubquery, _) => d
+      }.head
+      assert(subquery.resolved)
+      assert(subquery.pruningKey == pruningKey)
+      assert(subquery.buildQuery.outputSet.intersect(build.outputSet).isEmpty)
+      assert(subquery.buildKeys == Seq(subquery.buildQuery.output.head,
+        Add(subquery.buildQuery.output.last, Literal(1))))
+      assert(subquery.broadcastValueProjection == projection)
+    }
+  }
+
   test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
     val listQuery1 = ListQuery(testRelation2.select($"a"))
     val listQuery2 = ListQuery(testRelation2.select($"b"))
