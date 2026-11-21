@@ -114,6 +114,9 @@ case class WindowSpecDefinition(
     case (TimestampType | TimestampNTZType, CalendarIntervalType) => true
     case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) => true
     case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) => true
+    // An integral offset that is wider than the integral order type is not narrowed to that
+    // type, see `WindowFrameTypeCoercion`.
+    case (o: IntegralType, b: IntegralType) if b.defaultSize > o.defaultSize => true
     case (a, b) => a == b
   }
 }
