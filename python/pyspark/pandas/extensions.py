@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import warnings
-from typing import TYPE_CHECKING, Callable, Generic, Optional, Type, Union
+from typing import TYPE_CHECKING, Callable, Generic, Optional, Type, Union, overload
 
 from pyspark.pandas._typing import T
 
@@ -54,8 +54,14 @@ class CachedAccessor(Generic[T]):
         self._name = name
         self._accessor = accessor
 
+    @overload
+    def __get__(self, obj: None, cls: Type[object]) -> Type[T]: ...
+
+    @overload
+    def __get__(self, obj: Union["DataFrame", "Series", "Index"], cls: Type[object]) -> T: ...
+
     def __get__(
-        self, obj: Optional[Union["DataFrame", "Series", "Index"]], cls: Type[T]
+        self, obj: Optional[Union["DataFrame", "Series", "Index"]], cls: Type[object]
     ) -> Union[T, Type[T]]:
         if obj is None:
             return self._accessor
