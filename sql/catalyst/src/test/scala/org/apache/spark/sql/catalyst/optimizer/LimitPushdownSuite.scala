@@ -437,7 +437,7 @@ class LimitPushdownSuite extends PlanTest {
       Limit(3, Union(LocalLimit(3, kept), LocalLimit(3, kept))).analyze)
   }
 
-  test("SPARK-62092: the GlobalLimit is still removed over a local Sort or no Sort") {
+  test("SPARK-62092: the GlobalLimit is still removed over a local Sort") {
     val localSort = testRelation.sortBy($"a".asc).limit(5)
     comparePlans(
       Optimize.execute(Union(localSort, testRelation2).limit(3).analyze),
@@ -446,7 +446,7 @@ class LimitPushdownSuite extends PlanTest {
         LocalLimit(3, testRelation2))).analyze)
   }
 
-  test("SPARK-62092: only emptiness of a LEFT SEMI right side matters, so its limit goes") {
+  test("SPARK-62092: only emptiness of a LEFT SEMI/ANTI right side matters, so its limit goes") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       comparePlans(
         Optimize.execute(x.join(top5, joinType).analyze),
