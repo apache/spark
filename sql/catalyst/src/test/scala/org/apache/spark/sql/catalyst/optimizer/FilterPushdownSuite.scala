@@ -140,16 +140,17 @@ class FilterPushdownSuite extends PlanTest {
     // The divisions are built in ANSI mode, where they can fail, whatever the session's mode is.
     def divide(l: Expression, r: Expression): Expression =
       Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    // The filter below is not NULL, so a division before the blocker can be combined into it.
     Seq(Rand(0) > 0.1, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
       val originalQuery =
         testRelation
-          .where($"c" === 1)
+          .where($"c".isNotNull && $"c" === 1)
           .where(divide($"a", $"b") > 1 && blocker && divide($"b", $"a") > 1 && $"a" === 1)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       val correctAnswer =
         testRelation
-          .where($"c" === 1 && divide($"a", $"b") > 1 && $"a" === 1)
+          .where($"c".isNotNull && $"c" === 1 && divide($"a", $"b") > 1 && $"a" === 1)
           .where(blocker && divide($"b", $"a") > 1)
           .analyze
 
@@ -219,6 +220,28 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelation.where(throwing && $"a" > 1).where(canFail).analyze
 
     comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
+  }
+
+  test("SPARK-62187: a condition that can fail is not combined into a filter whose condition " +
+    "can be NULL") {
+    // The division is built in ANSI mode, where it can fail, whatever the session's mode is.
+    val divide = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
+    // `c = 1` is NULL where `c` is NULL, and the filter below drops that row, but `NULL AND x`
+    // would evaluate the division on it. `a = 1` can not fail, so it is combined.
+    val originalQuery = testRelation
+      .where($"c" === 1)
+      .where(divide && $"a" === 1)
+    val correctAnswer = testRelation
+      .where($"c" === 1 && $"a" === 1)
+      .where(divide)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+
+    // With `c IS NOT NULL`, `c = 1` is not NULL, so the division is combined.
+    val notNull = testRelation.where($"c".isNotNull && $"c" === 1)
+    comparePlans(
+      Optimize.execute(notNull.where(divide).analyze),
+      testRelation.where($"c".isNotNull && $"c" === 1 && divide).analyze)
   }
 
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
@@ -2717,20 +2740,22 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-46707: combine predicate with sequence (without step) with other filters") {
     val x = testRelation.subquery("x")
+    // The filter below is not NULL, so a sequence that can fail can be combined into it.
+    val notNull = $"x.c".isNotNull && $"x.c" > 1
 
     // do not combine when sequence has step param
-    val queryWithStep = x.where($"x.c" > 1)
+    val queryWithStep = x.where(notNull)
       .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
       .analyze
     val optimizedQueryWithStep = Optimize.execute(queryWithStep)
     comparePlans(optimizedQueryWithStep, queryWithStep)
 
     // combine when sequence does not have step param
-    val queryWithoutStep = x.where($"x.c" > 1)
+    val queryWithoutStep = x.where(notNull)
       .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
       .analyze
     val optimizedQueryWithoutStep = Optimize.execute(queryWithoutStep)
-    val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
+    val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && notNull)
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }

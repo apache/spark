@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TestRelations
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 class PhysicalOperationSuite extends SparkFunSuite {
   private val relation = TestRelations.testRelation2
@@ -108,6 +108,31 @@ class PhysicalOperationSuite extends SparkFunSuite {
       case PhysicalOperation(projects, filters, _: Filter) =>
         assert(filters.isEmpty)
       case _ => assert(false)
+    }
+  }
+
+  test("SPARK-62187: a Filter that can fail is not combined with a Filter below it that can " +
+    "be NULL") {
+    // `b = 'x'` is NULL where `b` is NULL, and the Filter below drops that row, but `NULL AND x`
+    // would evaluate the cast on it.
+    val canBeNull = EqualTo(colB, Literal("x"))
+    val canFail = EqualTo(Cast(colA, IntegerType, evalMode = EvalMode.ANSI), Literal(1))
+    val filter = Filter(canFail, Filter(canBeNull, relation))
+    filter match {
+      case PhysicalOperation(_, filters, _: Filter) => assert(filters.isEmpty)
+      case _ => fail()
+    }
+    filter match {
+      case ScanOperation(_, filtersStayUp, filtersPushDown, _: LocalRelation) =>
+        assert(filtersStayUp === Seq(canFail))
+        assert(filtersPushDown === Seq(canBeNull))
+      case _ => fail()
+    }
+    // A condition that can not fail is combined, and so is one over a Filter that is not NULL.
+    Seq(Filter(EqualTo(colA, Literal("y")), Filter(canBeNull, relation)),
+        Filter(canFail, Filter(And(IsNotNull(colB), canBeNull), relation))).foreach {
+      case PhysicalOperation(_, _, _: LocalRelation) =>
+      case other => fail(s"The Filters are not combined: $other")
     }
   }
 }

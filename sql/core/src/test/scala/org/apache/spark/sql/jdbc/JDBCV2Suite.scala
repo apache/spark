@@ -1290,13 +1290,11 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "[(CASE WHEN SALARY > 10000.00 THEN SALARY ELSE LEAST(SALARY, 1000.00) END) > 1200.00]")
     checkAnswer(df12, Seq(Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
+    // One filter, as a filter over `LN(BONUS) > 7.0`, which can be NULL, is not pushed down when
+    // it can fail.
     val df13 = spark.table("h2.test.employee")
-      .filter(logarithm($"bonus") > 7)
-      .filter(exp($"bonus") > 0)
-      .filter(pow($"bonus", 2) === 1440000)
-      .filter(sqrt($"bonus") > 34)
-      .filter(floor($"bonus") === 1200)
-      .filter(ceil($"bonus") === 1200)
+      .filter(logarithm($"bonus") > 7 && exp($"bonus") > 0 && pow($"bonus", 2) === 1440000 &&
+        sqrt($"bonus") > 34 && floor($"bonus") === 1200 && ceil($"bonus") === 1200)
     checkFiltersRemoved(df13)
     checkPushedInfo(df13, "PushedFilters: " +
       "[BONUS IS NOT NULL, LN(BONUS) > 7.0, EXP(BONUS) > 0.0, (POWER(BONUS, 2.0)) = 1440000.0, " +
@@ -1314,13 +1312,10 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df14, "PushedFilters: [BONUS IS NOT NULL]")
     checkAnswer(df14, Seq.empty[Row])
 
+    // One filter, as for df13.
     val df15 = spark.table("h2.test.employee")
-      .filter(logarithm(2, $"bonus") > 10)
-      .filter(log10($"bonus") > 3)
-      .filter(round($"bonus") === 1200)
-      .filter(degrees($"bonus") > 68754)
-      .filter(radians($"bonus") > 20)
-      .filter(signum($"bonus") === 1)
+      .filter(logarithm(2, $"bonus") > 10 && log10($"bonus") > 3 && round($"bonus") === 1200 &&
+        degrees($"bonus") > 68754 && radians($"bonus") > 20 && signum($"bonus") === 1)
     checkFiltersRemoved(df15)
     checkPushedInfo(df15, "PushedFilters: " +
       "[BONUS IS NOT NULL, (LOG(2.0, BONUS)) > 10.0, LOG10(BONUS) > 3.0, " +
@@ -1329,18 +1324,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
+    // One filter, as for df13.
     val df16 = spark.table("h2.test.employee_bonus")
-      .filter(sin($"bonus") < -0.08)
-      .filter(sinh($"bonus") > 200)
-      .filter(cos($"bonus") > 0.9)
-      .filter(cosh($"bonus") > 200)
-      .filter(tan($"bonus") < -0.08)
-      .filter(tanh($"bonus") === 1)
-      .filter(cot($"bonus") < -11)
-      .filter(asin($"factor") > 0.13)
-      .filter(acos($"factor") < 1.47)
-      .filter(atan($"bonus") > 1.4)
-      .filter(atan2($"bonus", $"bonus") > 0.7)
+      .filter(sin($"bonus") < -0.08 && sinh($"bonus") > 200 && cos($"bonus") > 0.9 &&
+        cosh($"bonus") > 200 && tan($"bonus") < -0.08 && tanh($"bonus") === 1 &&
+        cot($"bonus") < -11 && asin($"factor") > 0.13 && acos($"factor") < 1.47 &&
+        atan($"bonus") > 1.4 && atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
       "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
