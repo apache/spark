@@ -291,6 +291,9 @@ class RocksDBStateMachine(
    */
   def acquireStamp(): Long = stateMachineLock.synchronized {
     awaitNotAcquiredWithLock(LOAD)
+    if (state == CLOSED) {
+      throw new StateStoreProviderClosed(stateStoreId)
+    }
     validateAndTransitionState(LOAD)
     incAndGetStampWithLock
   }

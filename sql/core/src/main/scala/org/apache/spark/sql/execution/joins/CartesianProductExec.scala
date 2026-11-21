@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedR
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -37,8 +39,10 @@ class UnsafeCartesianRDD(
     right : RDD[UnsafeRow],
     inMemoryBufferThreshold: Int,
     spillThreshold: Int,
-    sizeInBytesSpillThreshold: Long)
-  extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
+    sizeInBytesSpillThreshold: Long,
+    preferLeftLocations: Boolean = false)
+  extends CartesianRDD[UnsafeRow, UnsafeRow](
+    left.sparkContext, left, right, preferLeftLocations) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
     val rowArray = new ExternalAppendOnlyUnsafeRowArray(
@@ -89,7 +93,8 @@ case class CartesianProductExec(
       rightResults,
       conf.cartesianProductExecBufferInMemoryThreshold,
       conf.cartesianProductExecBufferSpillThreshold,
-      conf.cartesianProductExecBufferSizeSpillThreshold)
+      conf.cartesianProductExecBufferSizeSpillThreshold,
+      preferLeftLocations = hasStateStoreWriter(left))
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
@@ -108,6 +113,12 @@ case class CartesianProductExec(
         joiner.join(r._1, r._2)
       }
     }
+  }
+
+  private def hasStateStoreWriter(plan: SparkPlan): Boolean = plan match {
+    case _: Exchange => false
+    case _: StateStoreWriter => true
+    case _ => plan.children.exists(hasStateStoreWriter)
   }
 
   override protected def withNewChildrenInternal(
