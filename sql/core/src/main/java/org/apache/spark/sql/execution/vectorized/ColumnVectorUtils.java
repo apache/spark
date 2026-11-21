@@ -22,11 +22,12 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import scala.Option;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
@@ -34,6 +35,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.execution.RowToColumnConverter;
@@ -176,15 +178,23 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
+    PhysicalDataType physicalType = PhysicalDataType.apply(t);
     if (o == null) {
-      if (t instanceof CalendarIntervalType || t instanceof VariantType ||
-          t instanceof AnyTimestampNanoType) {
+      if (physicalType instanceof PhysicalCalendarIntervalType ||
+          physicalType instanceof PhysicalVariantType ||
+          physicalType instanceof PhysicalTimestampNTZNanosType ||
+          physicalType instanceof PhysicalTimestampLTZNanosType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
       }
     } else {
-      if (t == DataTypes.BooleanType) {
+      Option<TypeOps> typeOps = TypeOps.apply(t);
+      if (typeOps.isDefined()) {
+        // Nanos values may already use the internal representation.
+        Object value = o instanceof TimestampNanosVal ? o : typeOps.get().toCatalyst(o);
+        appendFrameworkValue(dst, physicalType, value, t);
+      } else if (t == DataTypes.BooleanType) {
         dst.appendBoolean((Boolean) o);
       } else if (t == DataTypes.ByteType) {
         dst.appendByte((Byte) o);
@@ -226,23 +236,44 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         dst.getChild(0).appendByteArray(v.getValue(), 0, v.getValue().length);
         dst.getChild(1).appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
-      } else if (t instanceof AnyTimestampNanoType) {
-        TimestampNanosVal v = (TimestampNanosVal) o;
-        dst.appendStruct(false);
-        dst.getChild(0).appendLong(v.epochMicros);
-        dst.getChild(1).appendShort(v.nanosWithinMicro);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
       } else if (t instanceof TimestampType) {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
-      } else if (t instanceof TimeType) {
-        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o));
       } else {
         throw new SparkUnsupportedOperationException(
           "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
       }
+    }
+  }
+
+  private static void appendFrameworkValue(
+      WritableColumnVector dst, PhysicalDataType physicalType, Object value, DataType t) {
+    if (physicalType instanceof PhysicalBooleanType) {
+      dst.appendBoolean((Boolean) value);
+    } else if (physicalType instanceof PhysicalByteType) {
+      dst.appendByte((Byte) value);
+    } else if (physicalType instanceof PhysicalShortType) {
+      dst.appendShort((Short) value);
+    } else if (physicalType instanceof PhysicalIntegerType) {
+      dst.appendInt((Integer) value);
+    } else if (physicalType instanceof PhysicalLongType) {
+      dst.appendLong((Long) value);
+    } else if (physicalType instanceof PhysicalFloatType) {
+      dst.appendFloat((Float) value);
+    } else if (physicalType instanceof PhysicalDoubleType) {
+      dst.appendDouble((Double) value);
+    } else if (physicalType instanceof PhysicalTimestampNTZNanosType ||
+        physicalType instanceof PhysicalTimestampLTZNanosType) {
+      TimestampNanosVal v = (TimestampNanosVal) value;
+      dst.appendStruct(false);
+      dst.getChild(0).appendLong(v.epochMicros);
+      dst.getChild(1).appendShort(v.nanosWithinMicro);
+    } else {
+      throw new SparkUnsupportedOperationException(
+        "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
     }
   }
 
