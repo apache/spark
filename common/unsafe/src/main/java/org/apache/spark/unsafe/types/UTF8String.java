@@ -285,8 +285,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of code points in it.
    */
   public int numChars() {
-    if (numChars == -1) numChars = getNumChars();
-    return numChars;
+    int chars = numChars;
+    if (chars == -1) {
+      chars = getNumChars();
+      numChars = chars;
+    }
+    return chars;
   }
 
   /**
@@ -388,8 +392,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * string (after possible replacement) must be evaluated first by calling `getIsValid`.
    */
   private byte[] makeValidBytes() {
-    assert(numBytesValid > 0);
-    byte[] bytes = new byte[numBytesValid];
+    int validBytes = numBytesValid;
+    assert(validBytes > 0);
+    byte[] bytes = new byte[validBytes];
     int byteIndex = 0, byteIndexValid = 0;
     while (byteIndex < numBytes) {
       // Read the first byte.
@@ -453,10 +458,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return If string represents a valid UTF8 string.
    */
   public boolean isValid() {
-    if (isValid == UTF8StringValidity.UNKNOWN) {
-      isValid = getIsValid();
+    UTF8StringValidity valid = isValid;
+    if (valid == UTF8StringValidity.UNKNOWN) {
+      valid = getIsValid();
+      isValid = valid;
     }
-    return isValid == UTF8StringValidity.IS_VALID;
+    return valid == UTF8StringValidity.IS_VALID;
   }
 
   /**
@@ -841,10 +848,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean isFullAscii() {
-    if (isFullAscii == IsFullAscii.UNKNOWN) {
-      isFullAscii = getIsFullAscii();
+    IsFullAscii ascii = isFullAscii;
+    if (ascii == IsFullAscii.UNKNOWN) {
+      ascii = getIsFullAscii();
+      isFullAscii = ascii;
     }
-    return isFullAscii == IsFullAscii.FULL_ASCII;
+    return ascii == IsFullAscii.FULL_ASCII;
   }
 
   private IsFullAscii getIsFullAscii() {
@@ -1676,7 +1685,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
-      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      int nc = numChars();
+      int newLimit = limit > nc || limit <= 0 ? nc : limit;
       byte[] input = getBytes();
       int byteIndex = 0;
       UTF8String[] result = new UTF8String[newLimit];
@@ -1695,7 +1705,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
-      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      int nc = numChars();
+      int newLimit = limit > nc || limit <= 0 ? nc : limit;
       byte[] input = getBytes();
       int byteIndex = 0;
       int charIndex = 0;
