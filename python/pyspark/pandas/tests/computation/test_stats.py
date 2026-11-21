@@ -104,6 +104,19 @@ class StatsTestsMixin:
         self.assert_eq(psdf["a"].loc[[]].sum(), pdf["a"].loc[[]].sum())
         self.assert_eq(psdf["a"].loc[[]].sum(min_count=1), pdf["a"].loc[[]].sum(min_count=1))
 
+    def test_sum_with_runtime_generated_nan(self):
+        # SPARK-60657: NaN produced by an expression should be skipped by sum.
+        pdf = pd.DataFrame({"value": [1.0, np.inf, 2.0]})
+        psdf = ps.from_pandas(pdf)
+
+        pser = np.cos(pdf["value"])
+        psser = np.cos(psdf["value"])
+
+        self.assert_eq(psser.sum(), pser.sum())
+        self.assert_eq(psser.sum(skipna=False), pser.sum(skipna=False))
+        self.assert_eq(psser.sum(min_count=2), pser.sum(min_count=2))
+        self.assert_eq(psser.sum(min_count=3), pser.sum(min_count=3))
+
     def test_product(self):
         pdf = pd.DataFrame(
             {"a": [1, -2, -3, np.nan], "b": [0.1, np.nan, -0.3, np.nan], "c": [10, 20, 0, -10]}
