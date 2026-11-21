@@ -402,13 +402,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
-   * standard semantics are off) and extracts the padded expression and the CHAR length.
+   * standard semantics are off) and extracts the padded expression and the CHAR length. A padding
+   * over another one to a length that is not longer matches as one padding of its value.
    */
   private[sql] object ReadSidePadding {
     def unapply(e: Expression): Option[(Expression, Int)] = e match {
       case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
           None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
-        Some((child, n))
+        child match {
+          // The padding of a set operation over the padding of a scan, to a length that is at
+          // least as long, is the padding of the scan to that length.
+          case ReadSidePadding(grandChild, m) if m <= n => Some((grandChild, n))
+          case _ => Some((child, n))
+        }
       case _ => None
     }
   }
@@ -492,26 +498,15 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       attr: Attribute,
       rawType: DataType,
       alwaysPad: Boolean = false): Option[(Expression, DataType)] = {
-    getRawType(attr.metadata).flatMap(padCharToWiderLength(attr, _, rawType, alwaysPad))
-  }
-
-  /** Like the method above, for an expression with the given raw type. */
-  def padCharToWiderLength(
-      expr: Expression,
-      exprRawType: DataType,
-      rawType: DataType,
-      alwaysPad: Boolean): Option[(Expression, DataType)] = {
-    widerCharType(exprRawType, rawType).filter(alwaysPad || _ != exprRawType).map { wider =>
-      val padded = (expr, wider) match {
-        // Pad the value that the scan pads instead of padding it again, so that a comparison
-        // with the padded value can still be pushed down to the source.
-        case (ReadSidePadding(child, _), c: CharType) => createReadSidePadding(child, c)
-        case _ => processStringForCharVarchar(
-          expr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
+    getRawType(attr.metadata).flatMap { attrRawType =>
+      widerCharType(attrRawType, rawType).filter(alwaysPad || _ != attrRawType).map { wider =>
+        val padded = processStringForCharVarchar(
+          attr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
+        (padded, wider)
       }
-      (padded, wider)
     }
   }
+
 
   /**
    * The raw type of a value with the given metadata and data type. The raw type of a column is in
@@ -574,9 +569,25 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       expr: Expression,
       fromType: DataType,
       toType: DataType): Option[Expression] = {
+    // A rebuilt struct reads its fields only where the struct is not null, so a field that is not
+    // nullable stays so, and the narrowed value has the nullability of the given one.
+    def keepNotNull(e: Expression): Expression = e match {
+      case _ if e eq expr => e
+      // The NULL of a struct rebuilt by nullSafeRebuiltStruct has the type of the rebuilt struct.
+      case CaseWhen(Seq((isNull: IsNull, Literal(null, _))), Some(struct)) =>
+        val newStruct = keepNotNull(struct)
+        CaseWhen(Seq((keepNotNull(isNull), Literal(null, newStruct.dataType))), Some(newStruct))
+      case g @ GetStructField(child, ordinal, _) =>
+        val field = g.withNewChildren(Seq(keepNotNull(child)))
+        child.dataType match {
+          case st: StructType if !st(ordinal).nullable && field.nullable => KnownNotNull(field)
+          case _ => field
+        }
+      case other => other.mapChildren(keepNotNull)
+    }
     narrowerCharType(fromType, toType).map { narrower =>
-      processStringForCharVarchar(
-        expr, narrower, charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None)
+      keepNotNull(processStringForCharVarchar(
+        expr, narrower, charFuncName = Some(CHAR_TYPE_NARROWING), varcharFuncName = None))
     }.filterNot(_.fastEquals(expr))
   }
 

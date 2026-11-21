@@ -825,22 +825,29 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         spark.table("t3").union(spark.table("t5")).select("t3.c"),
         Seq(Row(padded), Row(padded)))
-      // and its expression IDs, which columns of its DataFrame resolve to
-      val a = spark.table("t3")
-      val b = spark.table("t5")
-      checkAnswer(a.union(b).select(a("c")), Seq(Row(padded), Row(padded)))
-      checkAnswer(a.union(b).filter(a("c") === "a").select(a("id")), Seq(Row(1), Row(2)))
-      val ac = a.select("c")
-      val bc = b.select("c")
-      checkAnswer(ac.intersect(bc).select(ac("c")), Row(padded))
-      checkAnswer(ac.intersect(bc).filter(ac("c") === "a"), Row(padded))
-      checkAnswer(ac.except(bc).select(ac("c")), Nil)
-      // the shorter child's scan pads to the widest length, instead of being padded again
+      // A DataFrame of the set operation has the widest length, also in a Project over it.
+      val du = spark.table("t3").union(spark.table("t5")).select("c")
+      checkColType(du.schema(0), CharType(5))
+      checkAnswer(du.filter(functions.col("c") === "a"), Seq(Row(padded), Row(padded)))
+      // The children keep their own values: only what they output is padded.
+      checkAnswer(
+        sql("SELECT c, length(c) FROM t3 UNION ALL SELECT c, length(c) FROM t5"),
+        Seq(Row(padded, 3), Row(padded, 5)))
+      checkAnswer(
+        sql("SELECT id FROM t3 WHERE length(c) = 3 AND c LIKE 'a__' " +
+          "UNION ALL SELECT id FROM t5"),
+        Seq(Row(1), Row(2)))
+      checkAnswer(
+        sql("SELECT c FROM t3 WHERE EXISTS (SELECT 1 FROM t3 x WHERE x.c = t3.c) " +
+          "UNION ALL SELECT c FROM t5"),
+        Seq(Row(padded), Row(padded)))
+      // The padding of the shorter child's scan to the widest length matches as one padding of
+      // the column, which a source can be given.
       val plan = sql(s"SELECT * FROM ($union) WHERE c = 'a'").queryExecution.optimizedPlan
-      assert(plan.flatMap(_.expressions).forall(_.find {
-        case CharVarcharUtils.ReadSidePadding(CharVarcharUtils.ReadSidePadding(_, _), _) => true
+      assert(plan.flatMap(_.expressions).exists(_.exists {
+        case CharVarcharUtils.ReadSidePadding(_: Attribute, 5) => true
         case _ => false
-      }.isEmpty))
+      }))
     }
   }
 
@@ -4382,6 +4389,26 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT id FROM (SELECT id, s.c AS c FROM vs) WHERE c = 'a'"),
           Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT s.c FROM vs WHERE id = 3"), Row("abcde"))
+      }
+
+      // a nullable struct with a NOT NULL field
+      withView("vn") {
+        sql("CREATE VIEW vn AS SELECT id, IF(id > 0, named_struct('k', 1, 'c', c), NULL) AS s " +
+          "FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5)")
+        val catalog = spark.sessionState.catalog
+        val view = catalog.getTableMetadata(TableIdentifier("vn"))
+        val storedSchema = StructType(view.schema.map {
+          case field @ StructField("s", StructType(Array(k, c)), true, _) if !k.nullable =>
+            val metadata = CharVarcharUtils.withRawType(c.metadata, CharType(3))
+            field.copy(dataType = StructType(Array(k, c.copy(metadata = metadata))))
+          case field => field
+        })
+        assert(storedSchema != view.schema)
+        catalog.alterTable(view.copy(schema = storedSchema))
+
+        checkAnswer(
+          sql("SELECT id FROM (SELECT id, s.c AS c FROM vn) WHERE c = 'a'"),
+          Seq(Row(1), Row(2)))
       }
     }
   }

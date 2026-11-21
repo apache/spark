@@ -51,9 +51,9 @@ case class UnionLoop(
     copy(anchor = newChildren(0), recursion = newChildren(1))
 
   override protected def computeOutput(): Seq[Attribute] =
-    // The columns have the CHAR lengths of the anchor, see Union.readsRecursiveReference.
-    Union.mergeChildOutputs(children.map(_.output))
-      .zip(outputAttrIds).map { case (x, id) => x.withExprId(id) }
+    Union.mergeChildOutputs(children.map(_.output)).zip(outputAttrIds).map { case (x, id) =>
+      x.withExprId(id)
+    }
 
   override def argString(maxFields: Int): String = {
     id.toString + limit.map(", " + _.toString).getOrElse("") +
