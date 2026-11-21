@@ -952,12 +952,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @throws SparkArithmeticException with the error condition `DATETIME_OVERFLOW` if the number
    *         of days does not fit in an `Int`.
    */
-  def daysBetween(endDay: Int, startDay: Int): Int = {
+  def daysBetween(endDay: Int, startDay: Int, context: QueryContext): Int = {
     try {
       Math.subtractExact(endDay, startDay)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay)
+        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay, context)
     }
   }
 
@@ -968,13 +968,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @throws SparkArithmeticException with the error condition `DATETIME_OVERFLOW` if the
    *         difference does not fit in a `Long` number of microseconds.
    */
-  def subtractDatesToMicros(endDay: Int, startDay: Int): Long = {
+  def subtractDatesToMicros(endDay: Int, startDay: Int, context: QueryContext): Long = {
     try {
       // The difference of two Ints always fits in a Long.
       Math.multiplyExact(endDay.toLong - startDay, MICROS_PER_DAY)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay)
+        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay, context)
     }
   }
 

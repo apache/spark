@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkConf, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -1065,6 +1065,48 @@ class DateFunctionsSuite extends SharedSparkSession {
     checkAnswer(df.select(date_diff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
     checkAnswer(df.selectExpr("date_diff(a, d)"), Seq(Row(1), Row(1)))
+  }
+
+  gridTest("SPARK-60910: DATETIME_OVERFLOW of date subtraction has the query context")(
+      Seq(false, true)) { ansiEnabled =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+      val dates = "VALUES (date_from_unix_date(2147483647), date_from_unix_date(-1)) AS t(e, s)"
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"SELECT datediff(s, e), datediff(e, s) FROM $dates").collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"),
+        context = ExpectedContext(fragment = "datediff(e, s)", start = 23, stop = 36))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql("SELECT e - s FROM VALUES (DATE'+500000-01-01', DATE'1970-01-01') AS t(e, s)")
+            .collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "subtract DATE '1970-01-01' from DATE '+500000-01-01'"),
+        context = ExpectedContext(fragment = "e - s", start = 7, stop = 11))
+      val df = spark.range(1).select(
+        date_from_unix_date(lit(2147483647)).as("e"), date_from_unix_date(lit(-1)).as("s"))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          df.select(datediff(col("e"), col("s"))).collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"),
+        context = ExpectedContext(
+          fragment = "datediff", callSitePattern = getCurrentClassCallSitePattern))
+      // The replacements that the migration guide suggests for the previous behavior.
+      checkAnswer(
+        sql(s"SELECT try_subtract(unix_date(e), unix_date(s)), try_subtract(e, s) FROM $dates"),
+        Row(null, null))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        sql("SELECT unix_date(e) - unix_date(s) " +
+          "FROM VALUES (date_from_unix_date(2147483647), date_from_unix_date(-1)) AS t(e, s)"),
+        Row(Int.MinValue))
+    }
   }
 
   test("date_from_unix_date") {

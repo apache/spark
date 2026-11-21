@@ -1209,7 +1209,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "datediff(date_from_unix_date(2147483647), date_from_unix_date(-1))"
+  } ]
 }
 
 
@@ -1224,7 +1231,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '+5881580-07-11' from DATE '1969-12-30'"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "date_diff(date_from_unix_date(-2), date_from_unix_date(2147483647))"
+  } ]
 }
 
 
@@ -1239,7 +1253,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '1970-01-02' from DATE '-5877641-06-23'"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "datediff(date_from_unix_date(-2147483648), date_from_unix_date(1))"
+  } ]
 }
 
 
@@ -1254,7 +1275,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "date_from_unix_date(2147483647) - date_from_unix_date(-1)"
+  } ]
 }
 
 
@@ -1269,7 +1297,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '1970-01-01' from DATE '-5877641-06-23'"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "date_from_unix_date(-2147483648) - date_from_unix_date(0)"
+  } ]
 }
 
 

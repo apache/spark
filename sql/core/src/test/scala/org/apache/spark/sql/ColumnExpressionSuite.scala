@@ -3770,7 +3770,9 @@ class ColumnExpressionSuite extends SharedSparkSession {
             .collect()
         },
         condition = "DATETIME_OVERFLOW",
-        parameters = Map("operation" -> "subtract DATE '1970-01-01' from DATE '+500000-01-01'"))
+        parameters = Map("operation" -> "subtract DATE '1970-01-01' from DATE '+500000-01-01'"),
+        context = ExpectedContext(
+          fragment = "minus", callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
