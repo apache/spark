@@ -1176,6 +1176,9 @@ CatalystTranspiler.register()
 
 def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     """Get the transpilers we should try."""
+    # Registers the `java` target. Imported here, not at the top, because it imports us.
+    from pyspark.sql import transpile_java  # noqa: F401
+
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
