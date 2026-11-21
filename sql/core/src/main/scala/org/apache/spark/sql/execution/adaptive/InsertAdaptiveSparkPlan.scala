@@ -46,6 +46,8 @@ case class InsertAdaptiveSparkPlan(
 
   override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
 
+  private val compiledSubqueries = mutable.HashMap.empty[Long, SparkPlan]
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
@@ -149,8 +151,11 @@ case class InsertAdaptiveSparkPlan(
       case e @ (_: expressions.ScalarSubquery | _: ListQuery | _: DynamicPruningSubquery) =>
         val subquery = e.asInstanceOf[SubqueryExpression]
         if (!subqueryMap.contains(subquery.exprId.id)) {
-          val executedPlan = compileSubquery(subquery.plan)
-          verifyAdaptivePlan(executedPlan, subquery.plan)
+          val executedPlan = compiledSubqueries.getOrElseUpdate(subquery.exprId.id, {
+            val plan = compileSubquery(subquery.plan)
+            verifyAdaptivePlan(plan, subquery.plan)
+            plan
+          })
           subqueryMap.put(subquery.exprId.id, executedPlan)
         }
       case _ =>
