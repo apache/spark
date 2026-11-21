@@ -3048,10 +3048,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         name,
                     )
 
+            # Only a test that proves a parameter non-null is normalized; any other
+            # early return keeps interpreted Python.
+            def early_return_unnarrowed(x):
+                if x > 0:
+                    return 1
+                return 0
+
+            self._fallback_reason(early_return_unnarrowed)
+
     def test_udf_transpile_null_guard_warning(self):
-        # When the transpiler still emits a null guard (because
-        # non-null cannot be proven), it emits a UserWarning at construction time.
+        # When the transpiler still emits a null guard (because non-null cannot be
+        # proven), it emits one UserWarning naming the UDF at construction time.
         import warnings
+
+        from pyspark.sql.transpile import _transpile_func
 
         def unguarded_gt(x):
             return x > 0
@@ -3062,8 +3073,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 u = UserDefinedFunction(unguarded_gt, BooleanType())
             null_guard_warnings = [w for w in caught if "NULL guard" in str(w.message)]
             self.assertTrue(u.transpiled, "unguarded_gt should transpile (under strict or loose)")
-            self.assertTrue(null_guard_warnings, "Expected a UserWarning about NULL guard")
-            self.assertIn("NULL guard", str(null_guard_warnings[0].message))
+            self.assertEqual(len(null_guard_warnings), 1, "Expected one NULL guard UserWarning")
+            self.assertIn("unguarded_gt", str(null_guard_warnings[0].message))
+
+            # It is not raised while transpiling, so escalating warnings keeps every
+            # option; it raises from the constructor instead.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                options, *_, null_guarded = _transpile_func(self.spark, unguarded_gt, BooleanType())
+                with self.assertRaisesRegex(UserWarning, "unguarded_gt.*NULL guard"):
+                    UserDefinedFunction(unguarded_gt, BooleanType())
+            self.assertTrue(null_guarded)
+            self.assertEqual([str(c) for c in options], [str(c) for c in u.transpiled])
 
     def test_udf_transpile_null_narrowing_len(self):
         # A guarded len() call should skip the raise_error null guard.
