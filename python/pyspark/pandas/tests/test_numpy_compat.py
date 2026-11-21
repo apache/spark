@@ -1028,6 +1028,77 @@ class NumPyCompatTestsMixin:
         finally:
             reset_option("compute.ops_on_diff_frames")
 
+    def test_np_binary_ufunc_scalar_left_operand(self):
+        # The scalar is the left operand, so NumPy dispatches through the right-hand Series
+        # or Index, e.g. np.gcd(2, psser).
+        pdf = pd.DataFrame({"a": [1, 2, 4, 6, 9]}, index=[1, 2, 3, 5, 8])
+        psdf = ps.from_pandas(pdf)
+
+        for np_name in [
+            "arctan2",
+            "copysign",
+            "gcd",
+            "hypot",
+            "lcm",
+            "logaddexp",
+            "maximum",
+            "minimum",
+        ]:
+            np_func = getattr(np, np_name)
+            with self.subTest(np_name=np_name):
+                self.assert_eq(np_func(6, pdf.a), np_func(6, psdf.a), almost=True)
+                self.assert_eq(np_func(6, pdf.index), np_func(6, psdf.index), almost=True)
+
+    def test_np_shift_scalar_left_int64(self):
+        # The shifted value's literal type decides Spark's shift width. These counts cross
+        # the 32-bit boundary, so an int32 literal both truncates the dtype and the values.
+        counts = [-1, 0, 1, 31, 32, 63, 64, 65]
+        pser = pd.Series(counts, dtype="int64")
+        psser = ps.from_pandas(pser)
+        scalars = (1, True, np.int8(1), np.int32(1), np.int64(1), -2, 1024)
+        for scalar in scalars:
+            for func in (np.left_shift, np.right_shift):
+                with self.subTest(func=func.__name__, scalar=repr(scalar)):
+                    self.assert_eq(func(scalar, pser), func(scalar, psser))
+                    self.assert_eq(func(scalar, pser.index), func(scalar, psser.index))
+
+        # Series-first shifts and a narrower series stay on their existing literal rules.
+        values = pd.Series([1, -2, 1024], dtype="int64")
+        ps_values = ps.from_pandas(values)
+        self.assert_eq(np.left_shift(values, 3), np.left_shift(ps_values, 3))
+        self.assert_eq(np.right_shift(values, 3), np.right_shift(ps_values, 3))
+        narrow = pd.Series([0, 1, 3], dtype="int32")
+        ps_narrow = ps.from_pandas(narrow)
+        self.assert_eq(np.left_shift(1, narrow), np.left_shift(1, ps_narrow))
+        self.assert_eq(np.right_shift(8, narrow), np.right_shift(8, ps_narrow))
+
+    def test_np_ufunc_where_mask_only(self):
+        psser = ps.Series([1, 0, 1])
+        for func, args in ((np.sqrt, (4.0,)), (np.gcd, (2, 3))):
+            with self.subTest(func=func.__name__):
+                with self.assertRaises(NotImplementedError):
+                    func(*args, where=psser)
+                with self.assertRaises(NotImplementedError):
+                    func(*args, where=psser.index)
+        with self.assertRaises(NotImplementedError):
+            list(map(lambda mask: np.sqrt(4.0, where=mask), [psser]))
+
+    def test_np_binary_ufunc_scalar_left_dataframe(self):
+        pdf = pd.DataFrame({"c0": [1, 4], "c1": [2, 6]})
+        psdf = ps.from_pandas(pdf)
+
+        for func, scalar in ((np.gcd, 2), (np.arctan2, 6), (np.true_divide, 10)):
+            with self.subTest(func=func.__name__):
+                got = func(scalar, psdf)
+                expected = func(scalar, pdf)
+                self.assert_eq(got, expected, almost=True)
+                self.assert_eq(got.index, expected.index)
+                self.assert_eq(list(got.columns), list(expected.columns))
+
+        # DataFrame-first calls still take each column as the left operand.
+        self.assert_eq(np.gcd(psdf, 1), np.gcd(pdf, 1), almost=True)
+        self.assert_eq(np.true_divide(psdf, 10), np.true_divide(pdf, 10), almost=True)
+
     def test_np_spark_compat_frame(self):
         from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
