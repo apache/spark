@@ -21,6 +21,8 @@ import java.io._
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, ClosedChannelException, SelectionKey, ServerSocketChannel, SocketChannel}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -514,6 +516,15 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   /**
+   * The current epoch time in nanoseconds, comparable with the worker's `time.time_ns()`.
+   * `System.nanoTime()` counts from an arbitrary origin, and `System.currentTimeMillis()` is
+   * only precise to a millisecond. This is a method rather than inline in `compute()` so that a
+   * test can check its precision, which the tests that run a Python worker cannot see.
+   */
+  private[python] def currentTimeNanos(): Long =
+    ChronoUnit.NANOS.between(Instant.EPOCH, Instant.now())
+
+  /**
    * Decode the init response that follows START_OF_INIT_RESPONSE: a length-prefixed JSON object
    * that is `{}` once the worker is initialized, or carries an `error` if initialization failed.
    * Unknown fields are ignored.
@@ -898,7 +909,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Iterator[OUT] = {
-    val startTime = System.currentTimeMillis
+    val startTimeNs = BasePythonRunner.currentTimeNanos()
     val env = SparkEnv.get
 
     // Log task context information at the start of computation
@@ -1009,7 +1020,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         bufferSize))
     }
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, handle, releasedOrClosed, context)
+      dataIn, writer, startTimeNs, env, worker, handle, releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
@@ -1088,7 +1099,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected def newReaderIterator(
       stream: DataInputStream,
       writer: Writer,
-      startTime: Long,
+      startTimeNs: Long,
       env: SparkEnv,
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
@@ -1329,7 +1340,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   abstract class ReaderIterator(
       stream: DataInputStream,
       writer: Writer,
-      startTime: Long,
+      startTimeNs: Long,
       env: SparkEnv,
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
@@ -1401,26 +1412,27 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       def requiredMetric(name: String): Long = workerMetrics.getOrElse(name,
         throw new SparkException(s"Missing Python worker metric: $name"))
 
-      // Read required inputs before updating any SQL or task metrics.
-      val bootTime = requiredMetric("bootTimestampMs")
-      val initTime = requiredMetric("initTimestampMs")
-      val finishTime = requiredMetric("finishTimestampMs")
-      val pythonExecutionDurationMs = requiredMetric("pythonExecutionDurationMs")
+      // Read required inputs before updating any SQL or task metrics. Timings are in
+      // nanoseconds.
+      val bootTime = requiredMetric("bootTimestampNs")
+      val initTime = requiredMetric("initTimestampNs")
+      val finishTime = requiredMetric("finishTimestampNs")
+      val pythonExecutionDuration = requiredMetric("pythonExecutionDurationNs")
       val memoryBytesSpilled = requiredMetric("memoryBytesSpilled")
       val diskBytesSpilled = requiredMetric("diskBytesSpilled")
 
       // A reused Python worker records bootTime before waiting for this task, so it can precede
-      // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
-      val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
-      val boot = pythonWorkerInitializationStartTime - startTime
+      // startTimeNs. Use the later timestamp to exclude the worker's idle time from initialization.
+      val pythonWorkerInitializationStartTime = math.max(startTimeNs, bootTime)
+      val boot = pythonWorkerInitializationStartTime - startTimeNs
       val init = initTime - pythonWorkerInitializationStartTime
-      val total = finishTime - startTime
+      val total = finishTime - startTimeNs
       val finish = finishTime - initTime
       val calculatedMetrics = Map(
-        "pythonBootTime" -> boot,
-        "pythonInitTime" -> init,
-        "pythonTotalTime" -> total,
-        "pythonProcessingTime" -> pythonExecutionDurationMs)
+        "pythonBootTimeNs" -> boot,
+        "pythonInitTimeNs" -> init,
+        "pythonTotalTimeNs" -> total,
+        "pythonProcessingTimeNs" -> pythonExecutionDuration)
       // Select registered report values; calculated timings take precedence over raw aliases.
       val sqlMetrics = workerMetrics.filter { case (name, _) => metrics.contains(name) } ++
         calculatedMetrics
@@ -1434,9 +1446,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         f"$dataKB%.2f KB"
       }
 
-      logInfo(log"Times: total = ${MDC(TOTAL_TIME, total)}, " +
-        log"boot = ${MDC(TIME, boot)}, init = ${MDC(TIME, init)}, " +
-        log"finish = ${MDC(TIME, finish)} - " +
+      // The log line reports milliseconds.
+      def millis(nanos: Long): Long = TimeUnit.NANOSECONDS.toMillis(nanos)
+      logInfo(log"Times: total = ${MDC(TOTAL_TIME, millis(total))}, " +
+        log"boot = ${MDC(TIME, millis(boot))}, init = ${MDC(TIME, millis(init))}, " +
+        log"finish = ${MDC(TIME, millis(finish))} - " +
         log"Batches: ${MDC(COUNT, batchesProcessed)}, Data: ${MDC(SIZE, dataStr)} - " +
         log"${MDC(TASK_NAME, taskIdentifier(context))}")
       sqlMetrics.foreach { case (name, value) =>
@@ -1990,14 +2004,14 @@ private[spark] class PythonRunner(
   protected override def newReaderIterator(
       stream: DataInputStream,
       writer: Writer,
-      startTime: Long,
+      startTimeNs: Long,
       env: SparkEnv,
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTimeNs, env, worker, handle, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         throwIfWriterFailed()

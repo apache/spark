@@ -737,7 +737,7 @@ class TransformWithStateTestsMixin:
                 metrics = plan.metrics()
                 self.assertTrue(metrics.contains("numTotalStateRows"))
                 self.assertGreater(metrics.apply("pythonDataSent").value(), 0)
-                self.assertTrue(metrics.contains("pythonDataReadTime"))
+                self.assertTrue(metrics.contains("pythonDataReadTimeNs"))
                 self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
 
     def test_transform_with_state_batch_query_initial_state(self):

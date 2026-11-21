@@ -99,7 +99,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
                     result = build()
                     self.assertEqual([row[0] for row in result.collect()], [0, 1])
                     plan = result._jdf.queryExecution().executedPlan()
-                    while not plan.metrics().contains("pythonProcessingTime"):
+                    while not plan.metrics().contains("pythonProcessingTimeNs"):
                         self.assertEqual(plan.children().size(), 1)
                         plan = plan.children().apply(0)
                     metrics = plan.metrics()

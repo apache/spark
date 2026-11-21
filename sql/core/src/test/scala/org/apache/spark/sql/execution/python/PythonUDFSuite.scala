@@ -103,9 +103,9 @@ class PythonUDFSuite extends SharedSparkSession {
       "data sent to Python workers",
       "data returned from Python workers",
       "number of output rows",
-      "time to initialize Python workers",
-      "time to start Python workers",
-      "time to run Python workers")
+      "time to initialize Python workers (ns)",
+      "time to start Python workers (ns)",
+      "time to run Python workers (ns)")
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
@@ -208,10 +208,10 @@ class PythonUDFSuite extends SharedSparkSession {
       "data sent to Python workers",
       "data returned from Python workers",
       "number of output rows",
-      "time to initialize Python workers",
-      "time to start Python workers",
-      "time to run Python workers",
-      "time to execute Python code")
+      "time to initialize Python workers (ns)",
+      "time to start Python workers (ns)",
+      "time to run Python workers (ns)",
+      "time to execute Python code (ns)")
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
@@ -239,16 +239,20 @@ class PythonUDFSuite extends SharedSparkSession {
       fail("Expected BatchEvalPythonExec in executed plan")
     }
 
-    val processingTime = pythonExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
-    val pythonTotalTime = pythonExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+    val processingTime = pythonExec.metrics.get("pythonProcessingTimeNs").map(_.value).getOrElse(0L)
+    val pythonTotalTime = pythonExec.metrics.get("pythonTotalTimeNs").map(_.value).getOrElse(0L)
 
     // Processing time should be non-zero
     assert(processingTime > 0,
-      s"pythonProcessingTime should be > 0, but was $processingTime")
+      s"pythonProcessingTimeNs should be > 0, but was $processingTime")
 
     // Python total time should also be non-zero and >= processing time
     assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
-      s"pythonTotalTime should be > 0, but was $pythonTotalTime")
+      s"pythonTotalTimeNs should be > 0, but was $pythonTotalTime")
+
+    // The timings are nanosecond timing metrics, named with their unit.
+    Seq("pythonBootTimeNs", "pythonInitTimeNs", "pythonTotalTimeNs", "pythonProcessingTimeNs")
+      .foreach(name => assert(pythonExec.metrics(name).metricType == "nsTiming", name))
   }
 
   test("reused Python worker initialization excludes pre-task idle time") {
@@ -269,13 +273,13 @@ class PythonUDFSuite extends SharedSparkSession {
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       Thread.sleep(1000L)
       val pythonExec = executePythonUDF()
-      val bootTime = pythonExec.metrics("pythonBootTime").value
-      val initTime = pythonExec.metrics("pythonInitTime").value
-      val totalTime = pythonExec.metrics("pythonTotalTime").value
+      val bootTime = pythonExec.metrics("pythonBootTimeNs").value
+      val initTime = pythonExec.metrics("pythonInitTimeNs").value
+      val totalTime = pythonExec.metrics("pythonTotalTimeNs").value
 
-      assert(bootTime === 0L, s"expected a reused Python worker, but boot time was $bootTime ms")
+      assert(bootTime === 0L, s"expected a reused Python worker, but boot time was $bootTime ns")
       assert(initTime <= totalTime,
-        s"initialization time $initTime ms exceeded total worker time $totalTime ms")
+        s"initialization time $initTime ns exceeded total worker time $totalTime ns")
     }
   }
 
@@ -292,13 +296,13 @@ class PythonUDFSuite extends SharedSparkSession {
 
       // If Arrow execution is available, verify the metric, otherwise, skip the test
       arrowExec.foreach { exec =>
-        val processingTime = exec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
-        val pythonTotalTime = exec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+        val processingTime = exec.metrics.get("pythonProcessingTimeNs").map(_.value).getOrElse(0L)
+        val pythonTotalTime = exec.metrics.get("pythonTotalTimeNs").map(_.value).getOrElse(0L)
 
         assert(processingTime > 0,
-          s"pythonProcessingTime should be > 0 for ArrowEvalPythonExec, but was $processingTime")
+          s"pythonProcessingTimeNs should be > 0 for ArrowEvalPythonExec, but was $processingTime")
         assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
-          s"pythonTotalTime should be > 0 for ArrowEvalPythonExec, but was $pythonTotalTime")
+          s"pythonTotalTimeNs should be > 0 for ArrowEvalPythonExec, but was $pythonTotalTime")
       }
     }
   }
@@ -322,14 +326,15 @@ class PythonUDFSuite extends SharedSparkSession {
         }
 
         // Verify the metric exists and has a positive value
-        val processingTime = udtfExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
-        val pythonTotalTime = udtfExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+        val processingTime =
+          udtfExec.metrics.get("pythonProcessingTimeNs").map(_.value).getOrElse(0L)
+        val pythonTotalTime = udtfExec.metrics.get("pythonTotalTimeNs").map(_.value).getOrElse(0L)
 
         assert(processingTime > 0,
-          s"pythonProcessingTime should be > 0 for BatchEvalPythonUDTFExec," +
+          s"pythonProcessingTimeNs should be > 0 for BatchEvalPythonUDTFExec," +
             s" but was $processingTime")
         assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
-          s"pythonTotalTime should be > 0 for BatchEvalPythonUDTFExec," +
+          s"pythonTotalTimeNs should be > 0 for BatchEvalPythonUDTFExec," +
             s" but was $pythonTotalTime")
       } finally {
         spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)

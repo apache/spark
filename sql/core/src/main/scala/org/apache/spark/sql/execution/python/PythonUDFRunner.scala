@@ -112,14 +112,14 @@ abstract class BasePythonUDFRunner(
   protected override def newReaderIterator(
       stream: DataInputStream,
       writer: Writer,
-      startTime: Long,
+      startTimeNs: Long,
       env: SparkEnv,
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTimeNs, env, worker, handle, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         throwIfWriterFailed()

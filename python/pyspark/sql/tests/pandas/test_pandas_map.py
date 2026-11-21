@@ -637,11 +637,11 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                 yield combined.iloc[1:]
 
         phase_names = (
-            "pythonDataReadTime",
-            "pythonInputPreparationTime",
-            "pythonUDFExecutionTime",
-            "pythonOutputPreparationTime",
-            "pythonDataWriteTime",
+            "pythonDataReadTimeNs",
+            "pythonInputPreparationTimeNs",
+            "pythonUDFExecutionTimeNs",
+            "pythonOutputPreparationTimeNs",
+            "pythonDataWriteTimeNs",
         )
         with self.sql_conf(
             {
@@ -665,8 +665,9 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                     for name in phase_names:
                         self.assertFalse(metrics.apply(name).isZero(), name)
                     phases = [metrics.apply(name).value() for name in phase_names]
-                    self.assertGreaterEqual(phases[2], 10)
-                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+                    self.assertGreaterEqual(phases[2], 10_000_000)
+                    processing = metrics.apply("pythonProcessingTimeNs").value()
+                    self.assertLessEqual(sum(phases), processing)
 
 
 if __name__ == "__main__":

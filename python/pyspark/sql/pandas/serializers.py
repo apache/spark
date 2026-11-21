@@ -83,7 +83,7 @@ class ArrowStreamSerializer(Serializer):
         import pyarrow as pa
 
         write_timer = (
-            WorkerMetrics().measure("pythonDataWriteTime")
+            WorkerMetrics().measure("pythonDataWriteTimeNs")
             if self._detailed_timing_enabled
             else None
         )
@@ -119,7 +119,9 @@ class ArrowStreamSerializer(Serializer):
         import pyarrow as pa
 
         read_timer = (
-            WorkerMetrics().measure("pythonDataReadTime") if self._detailed_timing_enabled else None
+            WorkerMetrics().measure("pythonDataReadTimeNs")
+            if self._detailed_timing_enabled
+            else None
         )
         clock = time.perf_counter_ns
         read_duration_ns = 0
@@ -160,7 +162,7 @@ class ArrowStreamSerializer(Serializer):
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
         if self._detailed_timing_enabled:
             duration_ns = time.perf_counter_ns() - start_ns
-            WorkerMetrics().measure("pythonDataWriteTime").add_duration_ns(duration_ns)
+            WorkerMetrics().measure("pythonDataWriteTimeNs").add_duration_ns(duration_ns)
         yield from itertools.chain([first], batch_iterator)
 
     def __repr__(self) -> str:
