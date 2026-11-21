@@ -294,15 +294,15 @@ trait PredicateHelper extends AliasHelper with Logging {
    * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
    * others, by pushing them below a join, moving them into the condition of a join or combining
    * them into the filter below, and the ones that may not. A non-deterministic or throwable
-   * conjunct may not, and nor may a conjunct written after it that can fail: one that
-   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
-   * inputs of the joins or of the filter below, that can fail (see
+   * conjunct may not, and nor may a conjunct written after it that can fail (see `canFail`), with
+   * the columns of `plans`, the inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. The conjuncts that may not move are returned in their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
-   * condition of the join below them, so only the ones that can not fail may move.
+   * condition of the join below them, or the condition of the filter below them when it can be
+   * NULL (see `canBeNull`), so only the ones that can not fail may move.
    */
   protected def splitMovable(
       conditions: Seq[Expression],
@@ -314,10 +314,41 @@ trait PredicateHelper extends AliasHelper with Logging {
       conditions.span(cond => cond.deterministic && !cond.throwable)
     }
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
-    val (cannotFail, stayUp) = following.partition { cond =>
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
-    }
+    val (cannotFail, stayUp) = following.partition(!canFail(_, failable))
     (leading ++ cannotFail, stayUp)
+  }
+
+  /**
+   * Returns true if the conjunct `cond` can fail on a row: [[ExprUtils.canEvaluateUnconditionally]]
+   * rejects it, or it reads a column in `failable`. A filter that `PartitionPruning` or
+   * `InjectRuntimeFilter` adds computes its subquery once, so only its key counts.
+   */
+  protected def canFail(cond: Expression, failable: => AttributeSet): Boolean = {
+    val computed = cond match {
+      case d: DynamicPruningSubquery => d.pruningKey
+      case BloomFilterMightContain(_: ScalarSubquery, XxHash64(Seq(key), _)) => key
+      case _ => cond
+    }
+    !ExprUtils.canEvaluateUnconditionally(computed) ||
+      computed.references.exists(failable.contains)
+  }
+
+  /**
+   * Returns true if `condition`, the condition of a filter, can be NULL. A filter drops a row on
+   * which its condition is NULL, but `NULL AND x` still evaluates `x`, so a conjunct of the filter
+   * above that can fail may not be combined into it. A column that a conjunct `IS NOT NULL`
+   * checks, also through a null-intolerant expression, is not NULL when the condition is, so it
+   * is taken as not nullable in the other conjuncts, as `FilterExec` does.
+   */
+  protected def canBeNull(condition: Expression): Boolean = {
+    val conjuncts = splitConjunctivePredicates(condition)
+    val notNull = AttributeSet(conjuncts.flatMap {
+      case IsNotNull(e) if isNullIntolerant(e) => e.references
+      case _ => Nil
+    })
+    conjuncts.exists(_.transform {
+      case a: Attribute if notNull.contains(a) => a.withNullability(false)
+    }.nullable)
   }
 
   /**
