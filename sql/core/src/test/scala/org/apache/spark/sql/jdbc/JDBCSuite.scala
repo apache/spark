@@ -2187,6 +2187,77 @@ class JDBCSuite extends SharedSparkSession {
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 
+  test("SPARK-61543: Instant JDBC literals agree with Timestamp across time zones") {
+    val instant = Instant.parse("2026-06-26T05:00:00.123456Z")
+    val dialects = Seq(
+      "jdbc:postgresql://localhost/test",
+      "jdbc:h2:mem:test",
+      "jdbc:mysql://localhost/test",
+      "jdbc:derby:memory:test")
+    for (jvmZone <- Seq(DateTimeTestUtils.UTC, DateTimeTestUtils.LA)) {
+      DateTimeTestUtils.withDefaultTimeZone(jvmZone) {
+        for (sessionZone <- Seq("UTC", "America/Chicago", "Asia/Tokyo")) {
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionZone) {
+            dialects.foreach { url =>
+              val dialect = JdbcDialects.get(url)
+              assert(dialect.compileValue(instant) ===
+                dialect.compileValue(Timestamp.from(instant)),
+                s"$url, JVM=$jvmZone, session=$sessionZone")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61543: JDBC timestamp pushdown is independent of the datetime API") {
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.UTC) {
+      val testUrl = "jdbc:h2:mem:instant_timezone"
+      val connection = DriverManager.getConnection(testUrl)
+      try {
+        val statement = connection.createStatement()
+        try {
+          statement.execute("SET TIME ZONE 'UTC'")
+          statement.execute("CREATE TABLE events (id INT, ts TIMESTAMP WITH TIME ZONE)")
+          statement.execute(
+            """INSERT INTO events VALUES
+              |(1, TIMESTAMP WITH TIME ZONE '2026-06-26 00:00:00+00:00'),
+              |(2, TIMESTAMP WITH TIME ZONE '2026-06-26 04:00:00+00:00'),
+              |(3, TIMESTAMP WITH TIME ZONE '2026-06-26 05:30:00+00:00'),
+              |(4, TIMESTAMP WITH TIME ZONE '2026-06-26 23:00:00+00:00'),
+              |(5, TIMESTAMP WITH TIME ZONE '2026-06-27 04:59:00+00:00'),
+              |(6, TIMESTAMP WITH TIME ZONE '2026-06-27 05:00:00+00:00')""".stripMargin)
+        } finally {
+          statement.close()
+        }
+        val start = Instant.parse("2026-06-26T05:00:00Z")
+        val end = Instant.parse("2026-06-27T05:00:00Z")
+        for {
+          java8Api <- Seq(false, true)
+          pushDown <- Seq(false, true)
+        } {
+          withSQLConf(
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Chicago") {
+            val input = spark.read.format("jdbc")
+              .option("url", testUrl)
+              .option("dbtable", "events")
+              .option("sessionInitStatement", "SET TIME ZONE 'UTC'")
+              .option("pushDownPredicate", pushDown.toString)
+              .load()
+            withClue(s"java8Api=$java8Api, pushDown=$pushDown") {
+              checkAnswer(
+                input.where($"TS" >= lit(start) && $"TS" < lit(end)).select("ID"),
+                Seq(Row(3), Row(4), Row(5)))
+            }
+          }
+        }
+      } finally {
+        connection.close()
+      }
+    }
+  }
+
   test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
     // Test for SPARK-33867
     val timestamp = Instant.parse("2001-02-20T11:22:33.543543Z")
