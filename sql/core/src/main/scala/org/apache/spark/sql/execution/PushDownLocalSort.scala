@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, AttributeMap, AttributeSet, SortOrder}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.window.{WindowExecBase, WindowGroupLimitExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -57,7 +57,7 @@ import org.apache.spark.sql.internal.SQLConf
  * it is pushed through, so a sort over the renamed column is still matched below. Only plain
  * renames are followed, and the rule never crosses a shuffle or a non-order-preserving operator.
  */
-object PushDownLocalSort extends Rule[SparkPlan] {
+object PushDownLocalSort extends Rule[SparkPlan] with AliasHelper {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED)) {
@@ -102,18 +102,15 @@ object PushDownLocalSort extends Rule[SparkPlan] {
       // a sort over the renamed column is still matched below. Only plain renames are followed; an
       // expression alias leaves the sort key referencing an output attribute the child does not
       // produce, so the `subsetOf(op.child.outputSet)` check below rejects it.
-      val outputExprs = plan match {
-        case p: ProjectExec => p.projectList
-        case _ => Nil
+      val renames = plan match {
+        case p: ProjectExec => getRenameMap(p.projectList)
+        case _ => AttributeMap.empty[Attribute]
       }
-      val rewrittenUpperOrder = if (outputExprs.isEmpty) {
+      val rewrittenUpperOrder = if (renames.isEmpty) {
         upperOrder
       } else {
-        val aliasToAttributeMap = AttributeMap(outputExprs.collect {
-          case a @ Alias(child: AttributeReference, _) => (a.toAttribute, child: Attribute)
-        })
         upperOrder.map { _.transformUp {
-            case a: Attribute => aliasToAttributeMap.getOrElse(a, a)
+            case a: Attribute => renames.getOrElse(a, a)
           }.asInstanceOf[SortOrder]
         }
       }

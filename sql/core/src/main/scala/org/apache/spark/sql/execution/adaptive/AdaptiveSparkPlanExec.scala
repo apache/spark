@@ -169,6 +169,10 @@ case class AdaptiveSparkPlanExec(
       // rewrite can take it. It shares the instance above, which carries the root distribution
       // the rewrite must keep.
       PushDownShuffleExchangeThroughUnion(ensureRequirements),
+      // Must run after `EnsureRequirements`, whose exchanges it moves, and before
+      // `StampUnionDecisions`, which must see the layout a node ends up with. It shares the
+      // instance above, which carries the root distribution the rewrite must keep.
+      PushDownKeyedShuffleExchange(ensureRequirements, context.queryContainsSubqueries),
       // Must run after `EnsureRequirements` and the shuffle push-down: it fixes each `UnionExec`'s
       // partitioning decision, so every rule below and the execution itself read the answer the
       // exchanges above it were planned against.

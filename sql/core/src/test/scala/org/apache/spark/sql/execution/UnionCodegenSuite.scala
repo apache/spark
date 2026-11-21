@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, PushDownKeyedShuffleExchange}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
@@ -1131,21 +1131,24 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // from the outside by the extension-driven cases in `SparkSessionExtensionSuite`, which need a
     // session of their own.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
-      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
-      // and no rule in between can change a partitioning the parent already planned against. The
-      // shuffle push-down sits between the two in the AQE list only, which
-      // `AdaptiveQueryExecSuite` covers. A count would break on a sixth legitimate pass and say
-      // nothing about the order.
+      // Pins the property the standard pipeline has to keep: a stamping pass runs right behind
+      // `EnsureRequirements` and the rules that move its exchanges without changing what a union
+      // reports, so the decision is taken from the plan the exchanges were placed in and no rule
+      // in between can change a partitioning the parent already planned against. The keyed shuffle
+      // push-down is such a rule: it replaces the hash shuffle under a clustered consumer and
+      // leaves the layout it replaces reported, so the union sees the same partitioning. A count
+      // would break on a sixth legitimate pass and say nothing about the order.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_.isInstanceOf[StampUnionDecisions])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      val keyedPushDown = rules.indexWhere(_.isInstanceOf[PushDownKeyedShuffleExchange])
       val columnarRules =
         rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
-      assert(ensureRequirements >= 0 && firstStamp == ensureRequirements + 1 &&
-          firstStamp < columnarRules,
-        "expected a stamping pass right behind EnsureRequirements and before the columnar " +
-          s"rules, got $ensureRequirements/$firstStamp/$columnarRules")
+      assert(ensureRequirements >= 0 && keyedPushDown == ensureRequirements + 1 &&
+          firstStamp == ensureRequirements + 2 && firstStamp < columnarRules,
+        "expected the keyed shuffle push-down and then a stamping pass behind " +
+          s"EnsureRequirements and before the columnar rules, got " +
+          s"$ensureRequirements/$keyedPushDown/$firstStamp/$columnarRules")
 
       val stamped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
         val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))

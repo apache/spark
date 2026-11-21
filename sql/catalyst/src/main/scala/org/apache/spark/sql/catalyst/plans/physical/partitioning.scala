@@ -828,6 +828,26 @@ case class KeyedPartitioning(
   def expressionsDescribeKeys: Boolean = !expressions.exists(TransformExpression.hasReducedKeys)
 
   /**
+   * The layout's own conditions for serving as the template of a shuffle, which
+   * `KeyedShuffleSpec.canCreatePartitioning` asks and a rewrite that moves a shuffle onto the
+   * layout as it stands asks too. Lay another child out on these keys and each key gets a single
+   * partition, so the keys have to be unique. The layout's undeclared rows have to sit where a
+   * shuffle over it routes them, which is `hash % numPartitions`. And the partition expressions
+   * have to be what the keys were computed from, since a shuffle evaluates them per row to decide
+   * where it goes.
+   *
+   * The spec's other clauses are not properties of the layout: its key positions and the shape of
+   * its partition expressions exist because `createPartitioning` rewrites the layout onto another
+   * child's keys, which a caller that reuses the layout as it stands does not do.
+   *
+   * The grouped clause is not locally redundant: `EnsureRequirements` wraps a child whose
+   * `KeyedPartitioning` does not satisfy the distribution in a `GroupPartitionsExec` before it
+   * builds a spec, so no planned tree reaches an ungrouped layout here.
+   */
+  private[sql] def canTemplateShuffle: Boolean =
+    isGrouped && unknownKeysRouted && expressionsDescribeKeys
+
+  /**
    * Projects this partitioning onto the key positions in `positions`, whose order becomes the order
    * of the projected expressions and key fields. The projected `isGrouped` and `isCollapsed` are
    * computed together, because dropping a position can map keys that were distinct here onto the
@@ -2602,16 +2622,7 @@ case class KeyedShuffleSpec(
   override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-      // Shuffling another child onto these partition keys assigns each key a single partition, so
-      // an ungrouped partitioning cannot be reproduced: its duplicate keys live in more than one
-      // partition. This is the local gate. Such a spec is not reachable in a planned tree for a
-      // non-local reason -- `EnsureRequirements` wraps a child whose `KeyedPartitioning` does not
-      // satisfy the distribution in a `GroupPartitionsExec` before it builds any spec -- so do not
-      // read this clause as redundant.
-      partitioning.isGrouped &&
-      // The sibling laid out here routes its undeclared rows by `hash % numPartitions`, so it
-      // lands where this side's own undeclared rows sit only while this layout still does too.
-      partitioning.unknownKeysRouted &&
+      partitioning.canTemplateShuffle &&
       // Every partition expression must map to a clustering key, otherwise `createPartitioning`
       // cannot rewrite it. This also keeps the unprojected spec returned by `createShuffleSpec`
       // for a marked narrowing projection from being chosen as the best spec.
@@ -2628,10 +2639,7 @@ case class KeyedShuffleSpec(
         // children shuffled onto it. Whether Spark can evaluate it is `canEvaluatePartitioning`.
         case t: TransformExpression => argumentsAreColumns(t)
         case _ => false
-      } &&
-      // Shuffling another child onto these keys evaluates the partition expressions per row to
-      // decide where each row goes, and reduced keys are not what those expressions compute.
-      partitioning.expressionsDescribeKeys
+      }
 
   /** Whether Spark can evaluate each transform of this layout, see `canEvaluate`. */
   override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall(canEvaluate)

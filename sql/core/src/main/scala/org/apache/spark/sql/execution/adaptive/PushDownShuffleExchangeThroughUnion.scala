@@ -185,21 +185,10 @@ case class PushDownShuffleExchangeThroughUnion(
       }
     }
 
-    def accepted(candidate: SparkPlan): Boolean = {
-      // Local checks do not cover ancestors or elided repartitions below the root. Reject the
-      // whole proposal if any plan requirement or recorded output layout is lost.
-      val satisfied = ensureRequirements.requiredDistribution match {
-        // A user repartition elided above was asked for on all its keys, so a layout on a subset
-        // of them does not stand in for it.
-        case Some(required: ClusteredDistribution) =>
-          ValidateRequirements.validate(candidate, required.copy(requireAllClusterKeys = true))
-        case Some(required) =>
-          ValidateRequirements.validate(candidate, required)
-        case None =>
-          ValidateRequirements.validate(candidate)
-      }
-      satisfied && !candidate.exists(node => !PartitioningOrigin.validateNode(node))
-    }
+    // Local checks do not cover ancestors or elided repartitions below the root. Reject the
+    // whole proposal if any plan requirement or recorded output layout is lost.
+    def accepted(candidate: SparkPlan): Boolean =
+      ValidateRequirements.validateWithOrigins(candidate, ensureRequirements.requiredDistribution)
 
     val pushed = rewrite(preferRemovedLayout = false)
     if (pushed.fastEquals(plan)) {
