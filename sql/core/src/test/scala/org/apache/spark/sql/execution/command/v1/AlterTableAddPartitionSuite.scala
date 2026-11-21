@@ -110,6 +110,27 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     }
   }
 
+  test("SPARK-60527: keep existing partitions and stats with IF NOT EXISTS") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        val part0Loc = getPartitionLocation(t, "part=0")
+        val onePartSize = getTableSize(t)
+        assert(onePartSize > 0)
+
+        // A non-empty directory which is not a partition of the table
+        val otherLoc = copyPartition(t, "part=0", "part=1")
+        sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (part=0) LOCATION '$otherLoc'")
+
+        checkPartitions(t, Map("part" -> "0"))
+        assert(getPartitionLocation(t, "part=0") === part0Loc)
+        assert(getTableSize(t) === onePartSize)
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0)))
+      }
+    }
+  }
+
   test("SPARK-34138: keep dependents cached after table altering") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
