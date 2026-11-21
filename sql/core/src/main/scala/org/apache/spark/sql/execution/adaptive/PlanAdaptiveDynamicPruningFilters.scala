@@ -77,7 +77,9 @@ case class PlanAdaptiveDynamicPruningFilters(
       name: String,
       projection: BroadcastValueProjection,
       context: AdaptiveExecutionContext): Option[BaseSubqueryExec] = {
-    QueryExecution.prepareExecutedPlan(projection.sourcePlan, context) match {
+    // Compile the source plan as a subquery, as for a direct reuse, so that AQE wraps it even if
+    // it has no exchange.
+    InsertAdaptiveSparkPlan(context).compileSubquery(projection.sourcePlan) match {
       case adaptive: AdaptiveSparkPlanExec =>
         reusableBroadcast(
           name,

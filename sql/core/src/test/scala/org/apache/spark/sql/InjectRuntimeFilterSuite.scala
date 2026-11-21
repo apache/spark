@@ -1936,15 +1936,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withDppTestConf(projection, SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       assertRewroteWithBloomFilterForDroppedDpp(query("bf2"))
     }
-    withDppTestConf(projection, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withDppTestConf(projection) {
       assert(bloomFilterKeys(query("bf3")).isEmpty)
       assert(dynamicPruningFilters(query("bf3")) ==
         Seq(classOf[ProjectedBroadcastValueSubqueryExec]))
-    }
-    // AQE plans the projected filter as `true`, see SPARK-60703.
-    withDppTestConf(projection, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      assert(bloomFilterKeys(query("bf3")).isEmpty)
-      assert(dynamicPruningFilters(query("bf3")) == Seq(Literal.TrueLiteral))
     }
   }
 
