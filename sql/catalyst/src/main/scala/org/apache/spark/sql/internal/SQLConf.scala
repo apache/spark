@@ -6063,10 +6063,12 @@ object SQLConf {
   val PYTHON_UDF_ROW_SIZE_GUARD_ENABLED =
     buildConf("spark.sql.execution.python.udf.rowSizeGuard.enabled")
       .internal()
-      .doc("When true, guard pickle-serialized (non-Arrow) Python UDF evaluation against " +
-        "top-level string and binary argument payloads whose combined size exceeds " +
-        "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
-        "arguments before conversion and pickling. Nested inputs are not estimated.")
+      .doc("When true, guard pickle-serialized (non-Arrow) scalar Python UDF evaluation against " +
+        "top-level variable-width argument payloads whose combined size exceeds " +
+        "rowSizeGuard.maxRowHeapFraction of executor heap. Arguments with string, binary, " +
+        "binary-view (geometry and geography), or variant storage are estimated, including " +
+        "the SQL storage types of user-defined types. The guard checks the projected arguments " +
+        "before conversion and pickling. Nested inputs and Python UDTFs are not covered.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -6075,10 +6077,12 @@ object SQLConf {
   val PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION =
     buildConf("spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction")
       .internal()
-      .doc("Maximum combined byte size of one projected input row's top-level string and " +
-        "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
-        "is approximately 1/12 of the executor heap; conversion and pickling can require " +
-        "multiple copies of the argument bytes.")
+      .doc("Maximum combined byte size of one projected input row's top-level variable-width " +
+        "Python UDF argument payloads estimated by rowSizeGuard.enabled, as a fraction of " +
+        "executor max heap. The default 0.083 is approximately 1/12 of the executor heap; " +
+        "conversion and pickling can require multiple copies of the argument bytes. This " +
+        "estimate is a lower bound on conversion memory, especially for geometry and geography, " +
+        "whose conversion can allocate parsed object graphs much larger than the stored bytes.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
