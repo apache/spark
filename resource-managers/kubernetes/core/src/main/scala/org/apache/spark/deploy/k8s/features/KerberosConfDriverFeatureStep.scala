@@ -131,14 +131,13 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endConfigMap()
           .build()
       } else {
-        val krb5Conf = new File(krb5File.get)
         new VolumeBuilder()
           .withName(KRB_FILE_VOLUME)
           .withNewConfigMap()
           .withName(newConfigMapName)
           .withItems(new KeyToPathBuilder()
-            .withKey(krb5Conf.getName())
-            .withPath(krb5Conf.getName())
+            .withKey(KRB_FILE_NAME)
+            .withPath(KRB_FILE_NAME)
             .build())
           .endConfigMap()
           .build()
@@ -154,8 +153,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
       val containerWithMount = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
           .withName(KRB_FILE_VOLUME)
-          .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
-          .withSubPath("krb5.conf")
+          .withMountPath(KRB_FILE_DIR_PATH + "/" + KRB_FILE_NAME)
+          .withSubPath(KRB_FILE_NAME)
           .endVolumeMount()
         .build()
 
@@ -215,14 +214,17 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    val props = scala.collection.mutable.Map.empty[String, String]
     // If a submission-local keytab is provided, update the Spark config so that it knows the
     // path of the keytab in the driver container.
     if (needKeytabUpload) {
       val ktName = new File(keytab.get).getName()
-      Map(KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
-    } else {
-      Map.empty
+      props += (KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
     }
+    if (hasKerberosConf) {
+      props += (KRB_CONFIG_MAP_NAME -> krb5CMap.getOrElse(newConfigMapName))
+    }
+    props.toMap
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
@@ -236,7 +238,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> Files.readString(file.toPath)).asJava)
+            Map(KRB_FILE_NAME -> Files.readString(file.toPath)).asJava)
           .build()
       }
     } ++ {
