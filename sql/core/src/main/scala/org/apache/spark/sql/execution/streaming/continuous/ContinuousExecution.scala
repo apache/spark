@@ -24,7 +24,7 @@ import java.util.function.UnaryOperator
 
 import scala.collection.mutable.{Map => MutableMap}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -39,8 +39,9 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, StreamingV2ScanPushDown, TERMINATED, WatermarkPropagator}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Clock
@@ -196,10 +197,18 @@ class ContinuousExecution(
       case Some((latestEpochId, _)) =>
         execCtx.updateStatusMessage("Starting new streaming query " +
           s"and getting offsets from latest epoch $latestEpochId")
-        val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
+        val recordedOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without end epoch offsets!")
-        }.asInstanceOf[OffsetSeq]
+        }
+        if (recordedOffsets.metadataOpt.exists(metadata =>
+            OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+              .contains("true"))) {
+          throw new SparkIllegalArgumentException(
+            errorClass = "STREAMING_QUERY_EVOLUTION_ERROR." +
+              "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED")
+        }
+        val nextOffsets = recordedOffsets.asInstanceOf[OffsetSeq]
         committedOffsets = nextOffsets.toStreamProgress(sources)
         execCtx.batchId = latestEpochId + 1
 
