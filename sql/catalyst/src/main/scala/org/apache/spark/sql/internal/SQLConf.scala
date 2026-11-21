@@ -696,6 +696,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_PUSH_FAILABLE_FILTERS_THROUGH_GENERATE =
+    buildConf("spark.sql.legacy.pushFailableFiltersThroughGenerate")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc("When true, the query optimizer also pushes a filter condition that can fail, such as " +
+      "`10 / x > 0` in ANSI mode, below a generator without OUTER or a TRANSFORM script, and " +
+      "only keeps a throwable one, such as `raise_error`, above them. These operators can " +
+      "output no row for an input row, so the query can raise an error on such a row that it " +
+      "does not raise without the pushdown. When false, only a condition that `ExprUtils." +
+      "canEvaluateUnconditionally` accepts, or a dynamic partition pruning or runtime filter " +
+      "whose key it accepts, is pushed below them, which also keeps some conditions that " +
+      "cannot fail above them, such as `upper(s) = 'A'`.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -11010,6 +11026,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def splitProjectionForExpensiveFilters: Boolean =
     getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
+
+  def legacyPushFailableFiltersThroughGenerate: Boolean =
+    getConf(LEGACY_PUSH_FAILABLE_FILTERS_THROUGH_GENERATE)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 

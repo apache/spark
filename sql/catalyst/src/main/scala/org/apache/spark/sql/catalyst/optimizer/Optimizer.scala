@@ -2998,7 +2998,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
+      pushDownPredicate(filter, u.child, keepFailableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
@@ -3032,6 +3032,22 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case g: Generate => !g.outer
     case _: ScriptTransformation => true
     case _ => false
+  }
+
+  /**
+   * Whether `cond` can not fail on the input rows that an operator of [[canDropRows]] drops, so
+   * that it can be pushed below the operator. [[ExprUtils.canEvaluateUnconditionally]] decides
+   * this conservatively, so some conditions that can not fail stay above the operator too, such
+   * as `upper(s) = 'X'`. A dynamic partition pruning or runtime filter, which the optimizer adds
+   * to reach a scan, can only fail through its key, as its subquery or bloom filter is computed
+   * once, wherever the filter is.
+   */
+  private def cannotFailOnDroppedRows(cond: Expression): Boolean = cond match {
+    case d: DynamicPruningSubquery => ExprUtils.canEvaluateUnconditionally(d.pruningKey)
+    case p: PerPartitionRuntimeFilterSubquery => ExprUtils.canEvaluateUnconditionally(p.key)
+    case BloomFilterMightContain(bloomFilter, XxHash64(Seq(key), _))
+        if bloomFilter.references.isEmpty => ExprUtils.canEvaluateUnconditionally(key)
+    case _ => ExprUtils.canEvaluateUnconditionally(cond)
   }
 
   // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
@@ -3119,15 +3135,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   private def pushDownPredicate(
       filter: Filter,
       grandchild: LogicalPlan,
-      keepThrowableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      keepFailableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild. With `keepThrowableUp`, a throwable predicate is not pushed even when
-    // it is written first, as the operator in between can drop rows it would then see.
+    // come from grandchild. With `keepFailableUp`, a predicate that can fail, such as a throwable
+    // one or an ANSI division, is not pushed even when it is written first, as the operator in
+    // between can drop rows it would then see (see `cannotFailOnDroppedRows`). The legacy conf
+    // keeps only a throwable predicate up, as before.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
+    val canPushBelow: Expression => Boolean = if (!keepFailableUp) {
+      _ => true
+    } else if (SQLConf.get.legacyPushFailableFiltersThroughGenerate) {
+      !_.throwable
+    } else {
+      cannotFailOnDroppedRows
+    }
     val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
-      cond.deterministic && !(keepThrowableUp && cond.throwable) &&
-        cond.references.subsetOf(grandchild.outputSet)
+      cond.deterministic && canPushBelow(cond) && cond.references.subsetOf(grandchild.outputSet)
     }
 
     if (pushDown.nonEmpty) {
