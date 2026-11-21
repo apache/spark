@@ -1750,6 +1750,40 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-62137: as-of joins: do not push a condition that can fail ahead of a throwable " +
+    "as-of key") {
+    // A nearest as-of join that allows exact matches without a tolerance has its keys only in the
+    // sort keys of the sort-merge operator, which evaluates the ON condition only on the pairs
+    // that it matches. After a throwable key, a where condition over the left side of an inner
+    // join that can fail stays above the join, and an ON conjunct that can fail stays in the ON
+    // condition, also one over the right side of a left outer join. The others move.
+    val leftTime = asOfLeft.output(0)
+    val throwingKey = If(leftTime < 0, Cast(RaiseError(Literal("neg")), IntegerType), leftTime)
+    def nearest(
+        left: LogicalPlan,
+        right: LogicalPlan,
+        condition: Expression,
+        joinType: JoinType): LogicalPlan =
+      AsOfJoin(left, right, throwingKey, asOfRight.output(0), Some(condition), joinType,
+        tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
+    val leftDivide = Divide(leftValue, Literal(2), NumericEvalContext(EvalMode.ANSI)) > 1
+    val rightDivide = Divide(rightValue, Literal(2), NumericEvalContext(EvalMode.ANSI)) > 1
+    val keys = leftKey === rightKey
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      comparePlans(
+        Optimize.execute(
+          nearest(asOfLeft, asOfRight, keys, Inner).where(leftDivide && leftValue > 1).analyze),
+        nearest(asOfLeft.where(leftValue > 1), asOfRight, keys, Inner).where(leftDivide).analyze)
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        comparePlans(
+          Optimize.execute(nearest(asOfLeft, asOfRight,
+            keys && leftDivide && rightDivide && rightValue > 2, joinType).analyze),
+          nearest(asOfLeft, asOfRight.where(rightValue > 2),
+            keys && leftDivide && rightDivide, joinType).analyze)
+      }
+    }
+  }
+
   test("as-of joins: push a right-side join condition into the right side") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       val originalQuery = asOfJoin(

@@ -3435,18 +3435,29 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Returns true if the conditions of a filter over a join of `joinType` with `condition` are
+   * Returns true if the conditions of a filter over a join of `joinType` with `conditions` are
    * written after a conjunct that keeps the ones that can fail in place (see the `afterBarrier`
    * parameter of [[splitMovable]]). An inner join, including an inner as-of join and an inner
    * external lookup join, evaluates its condition before the filter, so the filter's conditions
    * are written after it, as at the end of its ON clause, and a non-deterministic or throwable
    * conjunct of it keeps the ones that can fail in place. So does such a conjunct of the
    * condition of a left semi or left anti join, which decides which left rows reach the filter.
-   * The other joins keep every row of the side that they push the filter's conditions to.
+   * The other joins keep every row of the side that they push the filter's conditions to. The
+   * conditions of an as-of join include the ones it evaluates to choose a match (see
+   * [[asOfMatchExpressions]]).
    */
-  private def hasBarrier(joinType: JoinType, condition: Option[Expression]): Boolean =
+  private def hasBarrier(joinType: JoinType, conditions: Iterable[Expression]): Boolean =
     (joinType.isInstanceOf[InnerLike] || joinType == LeftSemi || joinType == LeftAnti) &&
-      condition.exists(cond => !cond.deterministic || cond.throwable)
+      conditions.exists(cond => !cond.deterministic || cond.throwable)
+
+  /**
+   * The expressions that an as-of join evaluates to choose a match, before its ON condition: the
+   * comparison of its MATCH_CONDITION or as-of keys, and the keys that it sorts its inputs by. A
+   * nearest join that allows exact matches without a tolerance has its keys only in the latter.
+   * The join evaluates its ON condition only on the pairs that pass the comparison.
+   */
+  private def asOfMatchExpressions(j: AsOfJoin): Seq[Expression] =
+    j.asOfCondition +: (j.leftSortExprs ++ j.rightSortExprs)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
@@ -3602,7 +3613,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(filterCondition, j: AsOfJoin) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) = split(
         splitConjunctivePredicates(filterCondition), j.left, j.right,
-        hasBarrier(j.joinType, j.condition))
+        hasBarrier(j.joinType, asOfMatchExpressions(j) ++ j.condition))
       if (leftFilterConditions.isEmpty) {
         f
       } else {
@@ -3614,9 +3625,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // Right-side ON predicates can filter the right input first.
     // Left-side ON predicates can filter the left input only for an inner join
     // because a left outer join keeps every left row.
+    // The join evaluates its ON condition only on the pairs that pass its match comparison, so a
+    // non-deterministic or throwable expression of the match keeps the ON conjuncts that can fail
+    // in place, for both join types.
     case j: AsOfJoin =>
-      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
-        split(j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right)
+      val afterBarrier = asOfMatchExpressions(j).exists(e => !e.deterministic || e.throwable)
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) = split(
+        j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right, afterBarrier)
       val (pushedLeftConditions, keptLeftConditions) = j.joinType match {
         case Inner => (leftJoinConditions, Nil)
         case LeftOuter => (Nil, leftJoinConditions)
