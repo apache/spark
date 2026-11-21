@@ -264,29 +264,38 @@ trait PredicateHelper extends AliasHelper with Logging {
    *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
    *    this run, and a `Tail` is only at the top of a plan.
    */
-  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+  protected def failableOutput(plan: LogicalPlan): AttributeSet =
+    failableOutputWith(plan, ExprUtils.canEvaluateUnconditionally)
+
+  /**
+   * `failableOutput`, with `cannotFail` judging whether an expression cannot fail instead of
+   * [[ExprUtils.canEvaluateUnconditionally]], for a caller that accepts more expressions.
+   */
+  protected def failableOutputWith(
+      plan: LogicalPlan,
+      cannotFail: Expression => Boolean): AttributeSet = plan match {
     case Project(projectList, child) =>
-      val below = failableOutput(child)
+      val below = failableOutputWith(child, cannotFail)
       AttributeSet(projectList.collect {
         case a: Alias if a.child.deterministic &&
-            (!ExprUtils.canEvaluateUnconditionally(a.child) ||
-              a.child.references.exists(below.contains)) => a.toAttribute
+            (!cannotFail(a.child) || a.child.references.exists(below.contains)) => a.toAttribute
         case a: Attribute if below.contains(a) => a
       })
     case agg: Aggregate =>
       AttributeSet(agg.aggregateExpressions.flatMap {
         case a: Alias =>
           val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
-          if (result.deterministic && !ExprUtils.canEvaluateUnconditionally(result)) {
+          if (result.deterministic && !cannotFail(result)) {
             Some(a.toAttribute)
           } else {
             None
           }
         case _ => None
       })
-    case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
+    case j: Join =>
+      failableOutputWith(j.left, cannotFail) ++ failableOutputWith(j.right, cannotFail)
     case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
-      failableOutput(plan.children.head)
+      failableOutputWith(plan.children.head, cannotFail)
     case _ => AttributeSet.empty
   }
 

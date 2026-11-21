@@ -294,14 +294,25 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * non-throwing children, for example, reports non-throwable.
    */
   def canEvaluateUnconditionally(e: Expression): Boolean =
-    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) &&
-      canEvaluateUnconditionallyInternal(e)
+    canEvaluateUnconditionallyWith(e, _ => false)
 
-  private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
-    // The collation of a Collate evaluates to its name; it only sets the type.
-    case _: AttributeReference | _: Literal | _: ResolvedCollation => true
-    case _ if isTotalOperator(e) => e.children.forall(canEvaluateUnconditionallyInternal)
-    case _ => false
+  /**
+   * `canEvaluateUnconditionally`, also accepting an operator that `operatorCannotFail` accepts,
+   * whose children are then checked as those of a total operator. Unlike one `isTotalOperator`
+   * accepts, such an operator need only not fail, for any values of its children; it may look at
+   * their form for that, e.g. at a literal pattern. The whole tree is still checked for being
+   * deterministic and having no subquery.
+   */
+  private[catalyst] def canEvaluateUnconditionallyWith(
+      e: Expression,
+      operatorCannotFail: Expression => Boolean): Boolean = {
+    def check(node: Expression): Boolean = node match {
+      // The collation of a Collate evaluates to its name; it only sets the type.
+      case _: AttributeReference | _: Literal | _: ResolvedCollation => true
+      case _ if isTotalOperator(node) || operatorCannotFail(node) => node.children.forall(check)
+      case _ => false
+    }
+    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) && check(e)
   }
 
   /**

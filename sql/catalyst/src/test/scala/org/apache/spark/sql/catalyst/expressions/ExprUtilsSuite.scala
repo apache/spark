@@ -27,6 +27,7 @@ import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -742,5 +743,21 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("canEvaluateUnconditionally: non-deterministic expressions are excluded") {
     assert(!ExprUtils.canEvaluateUnconditionally(LessThan(Rand(Literal(0L)), Literal(0.5))))
+  }
+
+  test("SPARK-60731: canEvaluateUnconditionallyWith: also accepts the operators given, checks " +
+    "their children, and checks the whole tree") {
+    val s = AttributeReference("s", StringType)()
+    val acceptRegex: Expression => Boolean = _.isInstanceOf[StringRegexExpression]
+    assert(ExprUtils.canEvaluateUnconditionallyWith(Not(RLike(s, Literal("abc"))), acceptRegex))
+    assert(ExprUtils.canEvaluateUnconditionallyWith(
+      RLike(Coalesce(Seq(s, Literal("x"))), Literal("abc")), acceptRegex))
+    assert(!ExprUtils.canEvaluateUnconditionallyWith(RLike(Upper(s), Literal("abc")), acceptRegex))
+    // Even when every operator is accepted, the tree must be deterministic and have no subquery.
+    val acceptAll: Expression => Boolean = _ => true
+    assert(!ExprUtils.canEvaluateUnconditionallyWith(
+      LessThan(Rand(Literal(0L)), Literal(0.5)), acceptAll))
+    assert(!ExprUtils.canEvaluateUnconditionallyWith(
+      EqualTo(ScalarSubquery(LocalRelation(s)), s), acceptAll))
   }
 }

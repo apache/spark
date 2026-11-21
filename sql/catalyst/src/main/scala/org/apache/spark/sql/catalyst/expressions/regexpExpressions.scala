@@ -101,9 +101,47 @@ abstract class StringRegexExpression extends BinaryExpression
 
   /** Whether matching against the constant pattern `str` is likely to be expensive. */
   protected def isExpensivePattern(str: String): Boolean = true
+
+  /**
+   * Whether matching against `right` cannot fail: it is a literal pattern that is null, which
+   * makes the result null, or that has at most `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters (UTF-16
+   * code units), passes `isStackSafePattern` and compiles. Unlike `_expensivePattern`, it does not
+   * evaluate a foldable pattern that is not a literal yet, such as one `ConstantFolding` has not
+   * folded, as evaluating it can fail. The projection split of `PushPredicateThroughNonJoin`
+   * reads it (SPARK-60731). This is not `isTotal`, which the other rules read too and which
+   * promises more than not failing.
+   */
+  private[catalyst] final lazy val cannotFailPattern: Boolean = right match {
+    case Literal(null, _) => true
+    case Literal(pattern: UTF8String, _) =>
+      val str = pattern.toString
+      str.length <= StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH &&
+        isStackSafePattern(str) && {
+          try {
+            compile(str)
+            true
+          } catch {
+            case NonFatal(_) => false
+          }
+        }
+    case _ => false
+  }
+
+  /**
+   * Whether matching against the constant pattern `str`, of at most
+   * `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters, cannot overflow the stack. Java's regex engine
+   * recurses once per node of the pattern, once per repetition of a quantified group, and, for a
+   * `{}` quantifier or for `\R` or `\X`, each time the length of a match changes, such as for `.`
+   * over supplementary characters. So a long pattern, or such a quantifier over a long input, can
+   * overflow the stack.
+   */
+  protected def isStackSafePattern(str: String): Boolean = false
 }
 
 private[catalyst] object StringRegexExpression {
+  /** The longest pattern, in UTF-16 code units, that `cannotFailPattern` accepts. */
+  val MAX_CANNOT_FAIL_PATTERN_LENGTH = 100
+
   /**
    * Whether matching `regex` is likely to be expensive. A failed match tries every combination of
    * the lengths that its repeating quantifiers take, so each one costs a factor of the input
@@ -385,6 +423,10 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   // Each `%` becomes a `.*`. `LikeSimplification` rewrites most patterns with fewer than three.
   override protected def isExpensivePattern(str: String): Boolean =
     StringRegexExpression.isExpensiveRegex(escape(str), matchesWhole = true)
+
+  // The only quantifier of the regex a LIKE pattern translates to is `.*`, which Java's regex
+  // engine matches in a loop rather than by recursion.
+  override protected def isStackSafePattern(str: String): Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
@@ -741,6 +783,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override protected def isExpensivePattern(str: String): Boolean =
     StringRegexExpression.isExpensiveRegex(str, matchesWhole = false)
+  // A pattern without `(`, `\` or `{` has no group, no `{}` quantifier and no `\R` or `\X`.
+  override protected def isStackSafePattern(str: String): Boolean =
+    !str.exists(c => c == '(' || c == '\\' || c == '{')
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 
