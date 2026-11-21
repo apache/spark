@@ -286,14 +286,20 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
       // Marker inside the input iterator to indicate the start of the next batch.
       private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
 
+      // Closes the root and allocator of the group being written if the task completes before
+      // the end of the group. One listener serves all the groups. As with the listener added by
+      // `PythonArrowInput.newWriter`, it runs after the writer is done.
+      context.addTaskCompletionListener[Unit] { _ =>
+        if (writer != null) writer.close()
+      }
+
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
         if (!nextBatchStart.hasNext) {
           if (inputIterator.hasNext) {
             dataOut.writeInt(1) // Notify that there is a group to read.
             assert(writer == null || writer.isClosed)
             writer = ArrowWriterWrapper.createAndStartArrowWriter(
-              schema, timeZoneId, pythonExec,
-              largeVarTypes, dataOut, context)
+              schema, timeZoneId, pythonExec, largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             writer.unloader = ArrowCompressionUtils.createVectorUnloader(writer.root, self.codec)
             nextBatchStart = inputIterator.next()

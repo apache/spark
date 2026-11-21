@@ -25,7 +25,7 @@ import org.apache.arrow.vector.{TimeStampVector, VectorSchemaRoot, ViewVarBinary
 import org.apache.arrow.vector.complex.ListViewVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1303,19 +1303,14 @@ class ArrowWriterSuite extends SparkFunSuite {
     writer.root.close()
   }
 
-  test("SPARK-60737: ArrowWriterWrapper closes its allocator on task completion if starting the " +
-      "stream fails") {
+  test("SPARK-60737: ArrowWriterWrapper.createAndStartArrowWriter closes its allocator if " +
+      "starting the stream fails") {
     val failingOut = new DataOutputStream(new OutputStream {
       override def write(b: Int): Unit = throw new IOException("write failure")
     })
-    val context = TaskContext.empty()
-    try {
-      intercept[IOException] {
-        ArrowWriterWrapper.createAndStartArrowWriter(new StructType().add("s", StringType),
-          "UTC", "ArrowWriterSuite", largeVarTypes = false, failingOut, context)
-      }
-    } finally {
-      context.markTaskCompleted(None)
+    intercept[IOException] {
+      ArrowWriterWrapper.createAndStartArrowWriter(new StructType().add("s", StringType),
+        "UTC", "ArrowWriterSuite", largeVarTypes = false, failingOut)
     }
     assert(!ArrowUtils.rootAllocator.getChildAllocators.asScala
       .exists(_.getName == "stdout writer for ArrowWriterSuite"))
