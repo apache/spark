@@ -453,6 +453,43 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 0)
   }
 
+  test("SPARK-61741: binary comparison with zero distinct count but min/max set") {
+    // An earlier estimate can leave a column with min/max but no distinct values. The boundary
+    // cases of evaluateBinaryForNumeric (literal equal to min or max) used to compute 1.0 / ndv
+    // and then fail converting NaN to BigDecimal.
+    val zeroNdv = ColumnStat(distinctCount = Some(0), min = Some(1), max = Some(10),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    Seq(LessThan(attrInt, Literal(10)), LessThanOrEqual(attrInt, Literal(1)),
+        GreaterThan(attrInt, Literal(1)), GreaterThanOrEqual(attrInt, Literal(10)),
+        LessThan(attrInt, Literal(5))).foreach { condition =>
+      validateEstimatedStats(
+        Filter(condition, StatsTestPlan(Seq(attrInt), 0, AttributeMap(Seq(attrInt -> zeroNdv)))),
+        Nil,
+        expectedRowCount = 0)
+    }
+  }
+
+  test("SPARK-61741: range estimation stays finite after repeated ranges reach zero NDV") {
+    // Initial column statistics are valid: two distinct values, min=-3 and max=1.
+    // Repeated inferred range predicates can reduce the estimated NDV to zero.
+    // A subsequent comparison must not divide by zero or produce NaN.
+    val a = AttributeReference("a", IntegerType)()
+    val validStats = ColumnStat(distinctCount = Some(2), min = Some(-3), max = Some(1),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val less = LessThan(a, Literal(1))
+    val greater = GreaterThan(a, Literal(0))
+    val predicates: Seq[Seq[Expression]] = Seq(
+      Seq(less, greater, less, greater),
+      Seq(greater, less, greater, less))
+    predicates.foreach { conditions =>
+      val source = StatsTestPlan(Seq(a), 2, AttributeMap(Seq(a -> validStats)))
+      validateEstimatedStats(
+        Filter(conditions.reduceLeft(And.apply), source),
+        Nil,
+        expectedRowCount = 0)
+    }
+  }
+
   test("evaluateInSet with string") {
     validateEstimatedStats(
       Filter(InSet(attrString, Set("A0")),
