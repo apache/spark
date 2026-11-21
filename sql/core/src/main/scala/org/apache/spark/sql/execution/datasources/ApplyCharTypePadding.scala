@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
+import org.apache.spark.sql.catalyst.analysis.{ApplyCharTypePaddingHelper, SetOperationCharPadding}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, UnionLoop, View, WriteDelta}
@@ -103,8 +103,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
    * [[SetOperationCharPadding]]. This narrows the values of recursive CTEs and views, whose
    * columns keep shorter lengths, to those lengths.
    */
-  private def narrowCharColumns(plan: LogicalPlan): LogicalPlan =
-    narrowViewColumns(narrowRecursiveTerms(plan))
+  private def narrowCharColumns(plan: LogicalPlan): LogicalPlan = {
+    if (SetOperationCharPadding.isEnabled) narrowViewColumns(narrowRecursiveTerms(plan)) else plan
+  }
 
   /**
    * The columns of a recursive CTE have the CHAR lengths of its anchor. This narrows values of the

@@ -269,7 +269,10 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
       if (targetTypes.exists(_.isDefined)) {
         // Add an extra Project if the targetTypes are different from the original types.
-        children.map(widenTypes(_, targetTypes))
+        val keepCharTypes =
+          CharVarcharUtils.keepsCharTypesInCast(
+            children.map(_.output), targetTypes, SetOperationCharPadding.isEnabled)
+        children.map(widenTypes(_, targetTypes, keepCharTypes))
       } else {
         Nil
       }
@@ -290,16 +293,20 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[Option[DataType]]): LogicalPlan = {
+    private def widenTypes(
+        plan: LogicalPlan,
+        targetTypes: Seq[Option[DataType]],
+        keepCharTypes: Seq[Boolean]): LogicalPlan = {
       var changed = false
-      val casted = plan.output.zip(targetTypes).map {
-        case (e, Some(dt)) if e.dataType != dt =>
+      val casted = plan.output.zip(targetTypes).zip(keepCharTypes).map {
+        case ((e, Some(dt)), keepCharType) if e.dataType != dt =>
           changed = true
-          // The cast keeps the CHAR types of the value that it doesn't change, see
-          // SetOperationCharPadding.
+          // The cast keeps the CHAR types of the value that it doesn't change, where the set
+          // operation can pad them, see SetOperationCharPadding.
           Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)(
-            explicitMetadata = CharVarcharUtils.metadataOfCast(e.metadata, dt))
-        case (e, _) => e
+            explicitMetadata =
+              if (keepCharType) CharVarcharUtils.metadataOfCast(e.metadata, dt) else None)
+        case ((e, _), _) => e
       }
       if (changed) {
         Project(casted, plan)

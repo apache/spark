@@ -381,7 +381,12 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       charFuncName: Option[String],
       varcharFuncName: Option[String],
       keepFieldNullability: Boolean): Expression = {
-    val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
+    // A raw type doesn't record the nullability of its elements and fields, which the array does.
+    val param = arr.dataType match {
+      case ArrayType(elementType, elementContainsNull) if keepFieldNullability =>
+        NamedLambdaVariable("x", elementType, elementContainsNull)
+      case _ => NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
+    }
     val funcBody =
       processStringForCharVarchar(param, et, charFuncName, varcharFuncName, keepFieldNullability)
     if (funcBody.fastEquals(param)) {
@@ -590,6 +595,13 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }.filterNot(_.fastEquals(expr))
   }
 
+  /** Whether the expression narrows a value with [[narrowCharToLength]]. */
+  def isNarrowing(e: Expression): Boolean = e.exists {
+    case s: StaticInvoke =>
+      s.functionName == CHAR_TYPE_NARROWING && s.staticObject == classOf[CharVarcharCodegenUtils]
+    case _ => false
+  }
+
   // The CHAR types of toType where fromType is longer, and STRING elsewhere, with the field names
   // of toType. None if they are not both CHAR types, or structs and arrays of them, of one shape.
   // Fields of other types must be the same.
@@ -606,7 +618,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         } else {
           None
         }
-      case (ArrayType(et1, _), ArrayType(et2, containsNull)) =>
+      // The value narrowed is of fromType, so its elements are as nullable as there.
+      case (ArrayType(et1, containsNull), ArrayType(et2, _)) =>
         narrowerCharType(et1, et2).map(ArrayType(_, containsNull))
       // other fields of a struct, such as an INT next to a CHAR
       case _ if fromType == toType && !hasChar(toType) => Some(toType)
@@ -621,6 +634,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    */
   def rawTypeOfCast(rawType: DataType, dataType: DataType): Option[DataType] = {
     (rawType, dataType) match {
+      // A CHAR or VARCHAR type of its own, under first-class CHAR and VARCHAR types, is the type.
+      case (_, t: CharType) => Some(t)
+      case (_, t: VarcharType) => Some(t)
       case (c: CharType, s: StringType) if c.collationId == s.collationId => Some(c)
       case (v: VarcharType, s: StringType) if v.collationId == s.collationId => Some(v)
       case (StructType(rawFields), StructType(fields)) if rawFields.length == fields.length =>
@@ -649,6 +665,32 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   def metadataOfCast(metadata: Metadata, dataType: DataType): Option[Metadata] = {
     getRawType(metadata).flatMap(rawTypeOfCast(_, dataType)).filter(hasCharVarchar)
       .map(withRawType(Metadata.empty, _))
+  }
+
+  /**
+   * For each position of the outputs of the children of a set operation cast to the given types
+   * (None for no cast), whether a cast keeps the CHAR and VARCHAR types of the value, see
+   * [[metadataOfCast]]. Only where each child has a raw type, and the raw types after the casts are
+   * the same or can be widened to one, so that the set operation pads the children to the same
+   * lengths; and only if `enabled`, as the set operation pads them, see SetOperationCharPadding.
+   * Elsewhere, the output would keep the raw type of the first child for values that don't have it.
+   */
+  def keepsCharTypesInCast(
+      childOutputs: Seq[Seq[Attribute]],
+      targetTypes: Seq[Option[DataType]],
+      enabled: Boolean): Seq[Boolean] = {
+    childOutputs.transpose.zip(targetTypes).map { case (attrs, targetType) =>
+      val castTypes = attrs.map { attr =>
+        getRawType(attr.metadata).flatMap(rawTypeOfCast(_, targetType.getOrElse(attr.dataType)))
+      }
+      enabled && castTypes.forall(_.isDefined) &&
+        castTypes.flatten.exists(hasCharVarchar) &&
+        // The same raw types need no padding; others need padding to the same lengths.
+        (castTypes.flatten.map(normalizeCharType).distinct.length == 1 ||
+          castTypes.flatten.map(Option(_)).reduce { (left, right) =>
+            for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+          }.isDefined)
+    }
   }
 
   /** The metadata with the given raw type, for a value padded to the CHAR lengths of that type. */

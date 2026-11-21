@@ -109,14 +109,29 @@ object SetOperationCharPadding {
   private def widerCharRawTypes(
       children: Seq[LogicalPlan],
       childOutputs: Seq[Seq[Attribute]]): Seq[Option[DataType]] = {
-    val conf = SQLConf.get
-    // As in ApplyCharTypePadding, CHAR is a STRING in the legacy mode, and nothing is padded.
-    if ((conf.charVarcharAsString && !conf.charVarcharStandardSemantics) ||
-        children.exists(readsRecursiveReference)) {
-      Seq.fill(childOutputs.head.length)(None)
+    def none = Seq.fill(childOutputs.head.length)(None)
+    if (!isEnabled) {
+      none
     } else {
-      CharVarcharUtils.widerCharRawTypes(childOutputs)
+      val rawTypes = CharVarcharUtils.widerCharRawTypes(childOutputs)
+      // Most set operations need no padding, so the plan is only walked when one does.
+      if (rawTypes.exists(_.isDefined) && children.exists(readsRecursiveReference)) {
+        none
+      } else {
+        rawTypes
+      }
     }
+  }
+
+  /**
+   * Whether set operations of CHAR columns of different lengths have the widest length. Not in the
+   * legacy mode where CHAR is a STRING, in which ApplyCharTypePadding pads nothing either, or
+   * with [[SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS]].
+   */
+  def isEnabled: Boolean = {
+    val conf = SQLConf.get
+    !(conf.charVarcharAsString && !conf.charVarcharStandardSemantics) &&
+      !conf.getConf(SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS)
   }
 
   /**

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
 import org.apache.spark.sql.catalyst.analysis.{UpdateAttributeNullability, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan, LogicalPlanIntegrity}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -30,6 +30,11 @@ import org.apache.spark.util.Utils
  */
 class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
   extends RuleExecutor[LogicalPlan] {
+
+  // As the optimizer, this is not part of the analysis phase, also when a rule of the analyzer
+  // runs a query, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan =
+    AnalysisHelper.markOutsideAnalyzer(super.execute(plan))
 
   private def fixedPoint =
     FixedPoint(

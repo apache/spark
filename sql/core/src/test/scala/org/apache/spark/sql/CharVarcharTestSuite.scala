@@ -662,7 +662,7 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: union of char columns of different lengths") {
-    withTable("t3", "t5", "s3", "s5", "m3", "m5", "n3", "i3", "i5", "b3") {
+    withTable("t3", "t5", "s3", "s5", "m3", "m5", "n3", "i3", "i5", "b3", "w3", "w10", "w5") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
       sql("INSERT INTO t3 VALUES (1, 'a')")
@@ -705,6 +705,35 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         sql(s"SELECT s FROM b3 INTERSECT ($inner)"), Row(Row(1L, "a" + " ".repeat(4))))
       checkAnswer(sql(s"SELECT s FROM b3 EXCEPT ($inner)"), Nil)
+
+      // A widening cast keeps the CHAR and VARCHAR types only where the children can be padded
+      // to the same lengths.
+      sql(s"CREATE TABLE w3(s STRUCT<v: VARCHAR(3), n: INT>, m MAP<INT, CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE w10(s STRUCT<v: VARCHAR(10), n: BIGINT>, m MAP<BIGINT, CHAR(5)>) " +
+        s"USING $format")
+      val noKeptTypes = sql("SELECT s, m FROM w3 UNION ALL SELECT s, m FROM w10")
+      noKeptTypes.schema.foreach { field =>
+        assert(CharVarcharUtils.getRawType(field.metadata).isEmpty)
+      }
+      // The same CHAR types need no padding, and are kept.
+      sql(s"CREATE TABLE w5(m MAP<BIGINT, CHAR(3)>) USING $format")
+      checkColType(
+        sql("SELECT m FROM w3 UNION ALL SELECT m FROM w5").schema(0),
+        MapType(LongType, CharType(3)))
+
+      // With the legacy flag, the output has the CHAR length of its first child, as before.
+      withSQLConf(SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key -> "true") {
+        val legacy = sql("SELECT c FROM t3 UNION ALL SELECT c FROM t5")
+        checkColType(legacy.schema(0), CharType(3))
+        checkAnswer(legacy, Seq(Row("a  "), Row("a" + " ".repeat(4))))
+        // and a widening cast of the first child keeps no CHAR type, as nothing is padded
+        withTable("lc3", "lc5") {
+          sql(s"CREATE TABLE lc3(s STRUCT<k: INT, c: CHAR(3)>) USING $format")
+          sql(s"CREATE TABLE lc5(s STRUCT<k: BIGINT, c: CHAR(5)>) USING $format")
+          val legacyCast = sql("SELECT s FROM lc3 UNION ALL SELECT s FROM lc5")
+          assert(CharVarcharUtils.getRawType(legacyCast.schema(0).metadata).isEmpty)
+        }
+      }
 
       // a struct with fields of other types
       sql(s"CREATE TABLE m3(s STRUCT<id: INT, c: CHAR(3)>) USING $format")
@@ -771,6 +800,13 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(sql(s"SELECT 1 WHERE 'a' IN ($union)"), Row(1))
       checkAnswer(sql("SELECT 1 WHERE 'a' IN (SELECT c FROM t5)"), Row(1))
       checkAnswer(sql("SELECT 1 WHERE 'abcdef' IN (SELECT c FROM t5)"), Nil)
+      checkAnswer(sql("SELECT 1 WHERE lower('A') IN (SELECT c FROM t5)"), Row(1))
+      checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM t5) IN ('a')"), Row(1))
+      checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM t5) IN ('b', 'a')"), Row(1))
+      // A comparison of types that don't match is an analysis error.
+      val mismatch = intercept[AnalysisException](
+        sql("SELECT 1 WHERE (SELECT c FROM t5) = array('a')").collect())
+      assert(mismatch.getCondition.startsWith("DATATYPE_MISMATCH"))
       // scalar subqueries
       checkAnswer(
         sql("SELECT id FROM (SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5) " +
@@ -873,6 +909,43 @@ trait CharVarcharTestSuite extends QueryTest {
           checkAnswer(sql("SELECT c FROM l3 UNION ALL SELECT c FROM l5"), Seq(Row("a"), Row("a")))
           checkAnswer(sql("SELECT c FROM l3 UNION SELECT c FROM l5"), Row("a"))
         }
+      }
+
+      // A comparison with a constant that fails, in a branch that is never evaluated, is left
+      // to the evaluation of the query.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("SELECT CASE WHEN false THEN (SELECT c FROM t3) = CAST(1 / 0 AS STRING) " +
+            "ELSE true END"),
+          Row(true))
+      }
+      // The recursive term keeps the nullability of its arrays when it is narrowed.
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        checkAnswer(
+          sql("""WITH RECURSIVE r(a, n) AS (
+                 |  SELECT array(named_struct('c', c)), 0 FROM t3
+                 |  UNION ALL
+                 |  SELECT array(IF(r.n = 0, NULL, named_struct('c', t5.c))), r.n + 1
+                 |  FROM r CROSS JOIN t5 WHERE r.n < 1)
+                 |SELECT n, a FROM r""".stripMargin),
+          Seq(Row(0, Seq(Row("a  "))), Row(1, Seq(null))))
+      }
+
+      // A recursive term of arrays with NOT NULL elements keeps their nullability.
+      withTable("a3", "a5") {
+        sql(s"CREATE TABLE a3(arr ARRAY<STRUCT<a: CHAR(3) NOT NULL>>) USING $format")
+        sql(s"CREATE TABLE a5(arr ARRAY<STRUCT<a: CHAR(5) NOT NULL>>) USING $format")
+        sql("INSERT INTO a3 SELECT array(named_struct('a', 'x'))")
+        sql("INSERT INTO a5 SELECT array(named_struct('a', 'y'))")
+        checkAnswer(
+          sql("""WITH RECURSIVE r(arr, d) AS (
+                 |  SELECT arr, 0 FROM a3
+                 |  UNION ALL
+                 |  SELECT a5.arr, d + 1 FROM a5, r WHERE d < 1)
+                 |SELECT d, arr FROM r""".stripMargin),
+          Seq(Row(0, Seq(Row("x  "))), Row(1, Seq(Row("y  ")))))
       }
 
       // the default collation, implicit or explicit, is the same collation
@@ -4432,6 +4505,10 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           Seq(Row(1, "a" + " ".repeat(2)), Row(2, "a" + " ".repeat(2)), Row(3, "abcde")))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'abcde'"), Row(3))
+        // With the legacy flag, the view returns what it did before Spark 5.0.
+        withSQLConf(SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key -> "true") {
+          checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Row(1))
+        }
       }
 
       // a struct built from the columns has the raw types in the metadata of its fields
@@ -4453,6 +4530,26 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT id FROM (SELECT id, s.c AS c FROM vs) WHERE c = 'a'"),
           Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT s.c FROM vs WHERE id = 3"), Row("abcde"))
+      }
+
+      // A view with type evolution evolves to the CHAR length of its query.
+      withView("ve") {
+        sql("CREATE VIEW ve WITH SCHEMA TYPE EVOLUTION AS " +
+          "SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5")
+        val catalog = spark.sessionState.catalog
+        val view = catalog.getTableMetadata(TableIdentifier("ve"))
+        catalog.alterTable(view.copy(schema = StructType(view.schema.map {
+          case field if field.name == "c" =>
+            field.copy(metadata = CharVarcharUtils.withRawType(field.metadata, CharType(3)))
+          case field => field
+        })))
+        // The first query narrows the values to the length the view stores...
+        checkAnswer(sql("SELECT id FROM ve WHERE c = 'a'"), Seq(Row(1), Row(2)))
+        // ...and the view then stores the length of its query.
+        val evolved = catalog.getTableMetadata(TableIdentifier("ve")).schema("c")
+        assert(CharVarcharUtils.getRawType(evolved.metadata).contains(CharType(5)))
+        checkColType(spark.table("ve").schema(1), CharType(5))
+        checkAnswer(sql("SELECT id FROM ve WHERE c = 'a'"), Seq(Row(1), Row(2)))
       }
 
       // a view that casts a field of the struct to its stored type
@@ -4502,6 +4599,22 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         checkAnswer(
           sql("SELECT id FROM (SELECT id, s.c AS c FROM vn) WHERE c = 'a'"),
           Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("SPARK-61972: a view of a union of VARCHAR columns under standard semantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("v3", "v5") {
+        withView("vv") {
+          sql(s"CREATE TABLE v3(c VARCHAR(3)) USING $format")
+          sql(s"CREATE TABLE v5(c VARCHAR(5)) USING $format")
+          sql("INSERT INTO v3 VALUES ('a')")
+          sql("INSERT INTO v5 VALUES ('abcde')")
+          sql("CREATE VIEW vv AS SELECT c FROM v3 UNION ALL SELECT c FROM v5")
+          assert(spark.table("vv").schema.head.dataType === VarcharType(5))
+          checkAnswer(spark.table("vv"), Seq(Row("a"), Row("abcde")))
+        }
       }
     }
   }
