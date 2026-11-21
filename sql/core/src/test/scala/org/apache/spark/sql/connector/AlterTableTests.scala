@@ -1391,6 +1391,47 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
+  test("SPARK-59188: alter fields of a struct nested in an array of arrays") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, a array<array<struct<x: int, y: string>>>) " +
+        s"USING $v2Format")
+      sql(s"ALTER TABLE $t ADD COLUMN a.element.element.z double")
+      sql(s"ALTER TABLE $t ALTER COLUMN a.element.element.x TYPE bigint")
+      sql(s"ALTER TABLE $t ALTER COLUMN a.element.element.y COMMENT 'doc'")
+      sql(s"ALTER TABLE $t RENAME COLUMN a.element.element.y TO yy")
+
+      val renamed = StructField("yy", StringType, nullable = true,
+        new MetadataBuilder().putString("comment", "doc").build())
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("a", ArrayType(ArrayType(StructType(Seq(
+          StructField("x", LongType),
+          renamed,
+          StructField("z", DoubleType))))))))
+
+      sql(s"ALTER TABLE $t DROP COLUMN a.element.element.z")
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("a", ArrayType(ArrayType(StructType(Seq(
+          StructField("x", LongType),
+          renamed)))))))
+    }
+  }
+
+  test("SPARK-59188: alter the type of a struct field in an array nested in a map value") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, m map<string, array<struct<x: int>>>) USING $v2Format")
+      sql(s"ALTER TABLE $t ALTER COLUMN m.value.element.x TYPE bigint")
+
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("m", MapType(StringType, ArrayType(StructType(Seq(
+          StructField("x", LongType))))))))
+    }
+  }
+
   test("AlterTable: drop column must exist if required") {
     val t = fullTableName("table_name")
     withTable(t) {
