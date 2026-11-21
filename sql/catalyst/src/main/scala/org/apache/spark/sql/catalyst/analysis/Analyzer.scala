@@ -3357,6 +3357,17 @@ class Analyzer(
       case _ => expr
     }
 
+    /**
+     * Returns the expression to report for a nested generator. A SQL pipe operator item keeps its
+     * PipeExpression below the alias, so strip it too to report the same expression as the
+     * equivalent plain SQL query.
+     */
+    private def trimAliasAndPipeExpression(expr: NamedExpression): Expression =
+      trimAlias(expr) match {
+        case PipeExpression(child, _, _) => child
+        case other => other
+      }
+
     private object AliasedGenerator {
       /**
        * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
@@ -3365,10 +3376,9 @@ class Analyzer(
        * @return (the [[Generator]], seq of output names, outer flag)
        */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
-        case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
-        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
-        case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
+        case Alias(GeneratorItem(g, None, outer), name) if g.resolved =>
+          Some((g, name :: Nil, outer))
+        case GeneratorItem(g, Some(names), outer) if g.resolved => Some((g, names, outer))
         case _ => None
       }
     }
@@ -3381,11 +3391,13 @@ class Analyzer(
 
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
-        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(
+          trimAliasAndPipeExpression(nestedGenerator))
 
       case Aggregate(_, aggList, _, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
-        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(
+          trimAliasAndPipeExpression(nestedGenerator))
 
       case Aggregate(_, aggList, _, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
