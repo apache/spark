@@ -368,6 +368,17 @@ values (0), (1) lhs(a)
 table t
 |> set z = 1;
 
+-- SET with a column name that matches two copies of the same column.
+select x, x from t
+|> set x = 1;
+
+select x, * from t
+|> set x = 1;
+
+-- SET with a column name that matches two copies of a column from a UNION branch.
+select * from (select x, x from t union all select x, x from t)
+|> set x = 1;
+
 -- SET with an alias.
 table t
 |> set x = 1 as z;
@@ -501,6 +512,16 @@ select x, x from t
 |> eval x = 1;
 
 select x, * from t
+|> eval x = 1;
+
+-- EVAL with a column name that matches two copies of a column from a UNION branch.
+select * from (select x, x from t union all select x, x from t)
+|> eval x = 1;
+
+-- After DROP, only the copies that the UNION tagged as duplicates are left, and name resolution
+-- finds neither of them.
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
 |> eval x = 1;
 
 -- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
