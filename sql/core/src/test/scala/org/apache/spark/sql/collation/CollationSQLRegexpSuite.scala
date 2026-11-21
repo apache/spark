@@ -415,6 +415,33 @@ class CollationSQLRegexpSuite
     })
   }
 
+  test("RLike simplification preserves non-binary collation semantics") {
+    // A column stays unfolded. ConstantFolding evaluates a literal RLIKE before this rule
+    // runs, so a bad Contains rewrite of a literal never shows up in the result.
+    withSQLConf(SQLConf.RLIKE_SIMPLIFICATION_ENABLED.key -> "true") {
+      withTable("rlike_collation") {
+        sql("CREATE TABLE rlike_collation(c STRING) USING parquet")
+        sql("INSERT INTO rlike_collation VALUES ('\u0131')")
+
+        val lcase = sql("SELECT c COLLATE UTF8_LCASE RLIKE 'i' FROM rlike_collation")
+        checkAnswer(lcase, Row(true))
+        val lcaseExpr = lcase.queryExecution.optimizedPlan.asInstanceOf[Project]
+          .projectList.head.asInstanceOf[Alias].child
+        assert(lcaseExpr.isInstanceOf[RLike], lcase.queryExecution.optimizedPlan)
+
+        checkAnswer(
+          sql("SELECT contains(c COLLATE UTF8_LCASE, 'i') FROM rlike_collation"),
+          Row(false))
+
+        val binary = sql("SELECT c RLIKE 'i' FROM rlike_collation")
+        checkAnswer(binary, Row(false))
+        val binaryExpr = binary.queryExecution.optimizedPlan.asInstanceOf[Project]
+          .projectList.head.asInstanceOf[Alias].child
+        assert(binaryExpr.isInstanceOf[Contains], binary.queryExecution.optimizedPlan)
+      }
+    }
+  }
+
   test("Support StringSplit string expression with collation") {
     // Supported collations
     case class StringSplitTestCase[R](l: String, r: String, c: String, result: R)

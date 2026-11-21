@@ -696,6 +696,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val RLIKE_SIMPLIFICATION_ENABLED =
+    buildConf("spark.sql.optimizer.rlikeSimplification.enabled")
+    .doc("When true, Spark rewrites a non-null constant RLIKE pattern on a " +
+      "UTF8_BINARY value into containment checks. A leading or trailing .* " +
+      "on the pattern or on one alternative, and a plain outer group of " +
+      "parentheses, are removed, and | separates literal alternatives. " +
+      "Escapes, anchors, empty alternatives, and other constructs stay " +
+      "regular expressions, as does a non-null pattern on any other " +
+      "collation. A null pattern yields null. Several alternatives read " +
+      "the value again, so a costly value can take longer. When false " +
+      "(default), Spark evaluates every RLIKE pattern as a regular " +
+      "expression.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)

@@ -1,0 +1,35 @@
+OpenJDK 64-Bit Server VM 17.0.21.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+Short input, 4 alternatives:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Disabled: original RLIKE                             40             41           2          0.0       39665.5       1.0X
+Enabled: simplified Contains                         17             20           2          0.1       17044.8       2.3X
+
+OpenJDK 64-Bit Server VM 17.0.21.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+Long input, 4 alternatives:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Disabled: original RLIKE                            558            562           6          0.0      558183.9       1.0X
+Enabled: simplified Contains                         16             18           2          0.1       16105.9      34.7X
+
+OpenJDK 64-Bit Server VM 17.0.21.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+Short input, 32 alternatives:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Disabled: original RLIKE                             79             82           2          0.0       79243.3       1.0X
+Enabled: simplified Contains                         14             15           1          0.1       14466.7       5.5X
+
+OpenJDK 64-Bit Server VM 17.0.21.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+Long input, 32 alternatives:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Disabled: original RLIKE                           3306           3331          37          0.0     3305888.8       1.0X
+Enabled: simplified Contains                         19             19           1          0.1       18608.9     177.7X
+
+OpenJDK 64-Bit Server VM 17.0.21.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+Expensive deterministic input, 32 alternatives:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Disabled: original RLIKE                                   80             81           1          0.0       80250.9       1.0X
+Enabled: simplified Contains                               15             17           2          0.1       15110.1       5.3X
+
