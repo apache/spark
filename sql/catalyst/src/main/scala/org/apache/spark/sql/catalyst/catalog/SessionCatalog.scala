@@ -2320,7 +2320,9 @@ class SessionCatalog(
           p => p.getDefault() match {
             case Some(defaultExpr) =>
               // This cast is needed to ensure the default value is of the target data type.
-              InputParameter(p.name, Some(Cast(parseDefault(defaultExpr, parser), p.dataType)))
+              val default = Cast(parseDefault(defaultExpr, parser), p.dataType)
+              default.foreach(_.setTagValue(SQLFunction.INSERTED_PARAMETER_DEFAULT, ()))
+              InputParameter(p.name, Some(default))
             case None =>
               InputParameter(p.name)
           }
@@ -2677,6 +2679,16 @@ class SessionCatalog(
   }
 
   /**
+   * Whether [[lookupFunctionInfoByIdentifier]] finds `ident`, without recording a temp function
+   * as referred.
+   */
+  def functionExistsByIdentifier(ident: FunctionIdentifier, tableFunction: Boolean): Boolean = {
+    val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
+    registry.functionExists(ident) &&
+      (!isTempFunctionIdentifier(ident) || isTempFunctionVisibleInContext(ident))
+  }
+
+  /**
    * Resolves a scalar function by identifier in the system catalog.
    * Applies view context for temporary functions.
    */
@@ -2722,6 +2734,17 @@ class SessionCatalog(
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     lookupFunctionWithShadowing(name, functionRegistry, checkBuiltinOperators = true)
   }
+
+  /**
+   * Whether [[lookupBuiltinOrTempFunction]] finds `name`, without recording a temp function as
+   * referred. For existence checks that do not decide the owner: a persistent function earlier in
+   * the path may own the call.
+   */
+  def builtinOrTempFunctionExists(name: String): Boolean =
+    FunctionRegistry.builtinOperators.contains(name.toLowerCase(Locale.ROOT)) ||
+      sessionFunctionKindsInResolutionOrder.exists { kind =>
+        functionExistsByIdentifier(functionIdentifierForKind(kind, name), tableFunction = false)
+      }
 
   /**
    * Look up the `ExpressionInfo` of the given function by name.
