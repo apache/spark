@@ -588,15 +588,15 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case _ => false
     })
 
-  // Whether `a` has a user-defined aggregate function without a default result. Such a function
+  // Whether `a` has a user-defined aggregate function. Such a function has no default result, but
   // can return a value other than NULL on empty input, e.g. a Scala Aggregator with a zero that is
   // not NULL, while the count bug handling takes NULL there (see
   // RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups).
   private def hasUserDefinedAggregate(a: Aggregate): Boolean =
     a.aggregateExpressions.exists(_.exists {
-      case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isEmpty &&
-        (ae.aggregateFunction.isInstanceOf[UserDefinedExpression] ||
-          ae.aggregateFunction.containsPattern(USER_DEFINED_AGGREGATION))
+      case ae: AggregateExpression =>
+        ae.aggregateFunction.isInstanceOf[UserDefinedExpression] ||
+          ae.aggregateFunction.containsPattern(USER_DEFINED_AGGREGATION)
       case _ => false
     })
 

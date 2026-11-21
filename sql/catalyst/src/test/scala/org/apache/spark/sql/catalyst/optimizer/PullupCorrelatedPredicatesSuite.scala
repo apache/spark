@@ -564,6 +564,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(correlated(udaf)) == inLegacy, f)
       assert(countBugResult(correlated(udaf)).isEmpty, f)
       assert(countBugHandling(filtered(udaf)) == inLegacy, f)
+      // One in a grouped aggregate below returns no row on empty input, which does not matter.
+      val overGrouped = testRelation2.where($"a" === $"c").groupBy($"c")(udaf.as("u"))
+        .groupBy()(max($"u").as("s"))
+      assert(countBugResult(overGrouped) == Some("1"), f)
     }
     Seq(collated.groupBy($"a")($"a", max($"a").as("m")),
         // A grouping key that is not in the output.
