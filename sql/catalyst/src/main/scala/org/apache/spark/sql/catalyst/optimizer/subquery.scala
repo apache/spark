@@ -920,19 +920,19 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // which DecorrelateInnerQuery computes in the count bug branch, when the conditional
         // evaluation of SPARK-61482 is off, since the UDF would then run for every outer row. One
         // in the top Aggregate runs for every outer row on master too (see constructLeftJoins).
-        // So does a subquery with a user-defined aggregate function in a lower Aggregate without
-        // grouping expressions (see hasUserDefinedAggregate), whose value over no rows master does
-        // not use: it evaluates the top Aggregate over no rows, which is right for some of them,
-        // e.g. COUNT(*) FILTER (WHERE s IS NULL) over a Scala Aggregator with a zero of 0.
+        // A subquery with a user-defined aggregate function in a lower Aggregate without grouping
+        // expressions (see hasUserDefinedAggregate) keeps the handling of before altogether, as
+        // with the legacy conf, also without countBugResult below: the value over no rows that
+        // both take for that Aggregate can be wrong, while master does not use it, but evaluates
+        // the top Aggregate over no rows, which is right for some of them, e.g.
+        // COUNT(*) FILTER (WHERE s IS NULL) over a Scala Aggregator with a zero of 0.
+        val lowerAggs = sub match {
+          case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
+          case _ => Nil
+        }
         val legacyNestedAggregate =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
-            (sub match {
-              case agg: Aggregate => agg.child.exists {
-                case a: Aggregate => a.groupingExpressions.isEmpty && hasUserDefinedAggregate(a)
-                case _ => false
-              }
-              case _ => false
-            })
+            lowerAggs.exists(a => a.groupingExpressions.isEmpty && hasUserDefinedAggregate(a))
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType) && sameWhenEqual(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation = legacyNestedAggregate ||
@@ -942,10 +942,6 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             lowerAggs.exists(a => correlatedUngroupedAggregate(a) &&
               RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(a).values
                 .exists(EvalOnlyWhen.hasLiftedUDF)))
-        lazy val lowerAggs = sub match {
-          case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
-          case _ => Nil
-        }
         lazy val correlatedLowerAggs = lowerAggs.filter(correlatedUngroupedAggregate)
         // The lower Aggregates that selected decorrelation before SPARK-60501, correlated or not.
         def defaultResultCountBugAgg(a: Aggregate): Boolean =
