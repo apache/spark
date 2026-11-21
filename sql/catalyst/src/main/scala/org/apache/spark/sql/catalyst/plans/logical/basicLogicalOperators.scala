@@ -450,10 +450,10 @@ case class Intersect(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  private lazy val widenCharLengths = !children.exists(Union.readsRecursiveReference)
+  private lazy val charRawTypes = Union.widerCharRawTypes(children)
 
   private def computeOutput(): Seq[Attribute] =
-    Intersect.mergeChildOutputs(children.map(_.output), widenCharLengths)
+    Intersect.mergeChildOutputs(children.map(_.output), charRawTypes)
 }
 
 /** Factory methods for `Intersect` nodes. */
@@ -462,17 +462,13 @@ object Intersect {
    * We don't use right.output because those rows get excluded from the set. The CHAR lengths of
    * the raw types are the widest of both children, see Union.mergeChildOutputs.
    */
-  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
-    mergeChildOutputs(childOutputs, widenCharLengths = true)
-
   def mergeChildOutputs(
       childOutputs: Seq[Seq[Attribute]],
-      widenCharLengths: Boolean): Seq[Attribute] = {
-    val rawTypes = Union.widerCharRawTypes(childOutputs, widenCharLengths)
+      charRawTypes: Seq[Option[DataType]] = Nil): Seq[Attribute] = {
     childOutputs.head.zip(childOutputs.tail.head).zipWithIndex.map {
       case ((leftAttr, rightAttr), i) =>
         val attr = leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
-        Union.withWiderCharRawType(attr, rawTypes.lift(i).flatten)
+        Union.withWiderCharRawType(attr, charRawTypes.lift(i).flatten)
     }
   }
 }
@@ -504,10 +500,10 @@ case class Except(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  private lazy val widenCharLengths = !children.exists(Union.readsRecursiveReference)
+  private lazy val charRawTypes = Union.widerCharRawTypes(children)
 
   private def computeOutput(): Seq[Attribute] =
-    Except.mergeChildOutputs(children.map(_.output), widenCharLengths)
+    Except.mergeChildOutputs(children.map(_.output), charRawTypes)
 }
 
 /** Factory methods for `Except` nodes. */
@@ -516,15 +512,11 @@ object Except {
    * We don't use right.output because those rows get excluded from the set. The CHAR lengths of
    * the raw types are the widest of both children, see Union.mergeChildOutputs.
    */
-  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
-    mergeChildOutputs(childOutputs, widenCharLengths = true)
-
   def mergeChildOutputs(
       childOutputs: Seq[Seq[Attribute]],
-      widenCharLengths: Boolean): Seq[Attribute] = {
-    val rawTypes = Union.widerCharRawTypes(childOutputs, widenCharLengths)
+      charRawTypes: Seq[Option[DataType]] = Nil): Seq[Attribute] = {
     childOutputs.head.zipWithIndex.map { case (leftAttr, i) =>
-      Union.withWiderCharRawType(leftAttr, rawTypes.lift(i).flatten)
+      Union.withWiderCharRawType(leftAttr, charRawTypes.lift(i).flatten)
     }
   }
 }
@@ -535,21 +527,18 @@ object Union {
     Union (left :: right :: Nil)
   }
 
-  // updating nullability to make all the children consistent, and the CHAR lengths of the raw
-  // types if the children have CHAR columns of different lengths, see
-  // CharVarcharUtils.widerCharRawTypes. ApplyCharTypePadding pads the values of the shorter ones.
-  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
-    mergeChildOutputs(childOutputs, widenCharLengths = true)
-
+  // updating nullability to make all the children consistent, and the raw types to
+  // `charRawTypes`, the raw types with the widest CHAR lengths of the children, see
+  // widerCharRawTypes. ApplyCharTypePadding pads the values of the shorter ones.
   def mergeChildOutputs(
       childOutputs: Seq[Seq[Attribute]],
-      widenCharLengths: Boolean): Seq[Attribute] = {
-    val rawTypes = widerCharRawTypes(childOutputs, widenCharLengths)
+      charRawTypes: Seq[Option[DataType]] = Nil): Seq[Attribute] = {
     childOutputs.transpose.zipWithIndex.map { case (attrs, i) =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      val metadata = rawTypes(i).map(CharVarcharUtils.withRawType(firstAttr.metadata, _))
+      val metadata = charRawTypes.lift(i).flatten
+        .map(CharVarcharUtils.withRawType(firstAttr.metadata, _))
         .getOrElse(firstAttr.metadata)
       if (firstAttr.dataType == newDt && metadata == firstAttr.metadata) {
         firstAttr.withNullability(nullable)
@@ -560,13 +549,17 @@ object Union {
     }
   }
 
-  private[sql] def widerCharRawTypes(
-      childOutputs: Seq[Seq[Attribute]],
-      widenCharLengths: Boolean): Seq[Option[DataType]] = {
-    if (widenCharLengths) {
-      CharVarcharUtils.widerCharRawTypes(childOutputs)
+  /**
+   * The raw types with the widest CHAR lengths for the output of a Union, Intersect or Except with
+   * the given children, see [[CharVarcharUtils.widerCharRawTypes]]. The set operation's output and
+   * the padding of its children by ApplyCharTypePadding both use them. None for every position of
+   * a set operation that reads a recursive reference, see [[readsRecursiveReference]].
+   */
+  def widerCharRawTypes(children: Seq[LogicalPlan]): Seq[Option[DataType]] = {
+    if (children.exists(readsRecursiveReference)) {
+      Seq.fill(children.head.output.length)(None)
     } else {
-      Seq.fill(childOutputs.head.length)(None)
+      CharVarcharUtils.widerCharRawTypes(children.map(_.output))
     }
   }
 
@@ -580,11 +573,13 @@ object Union {
   }
 
   /**
-   * Whether the plan reads the recursive reference of a recursive CTE that it is not part of, as a
-   * set operation in the recursive term can. The CHAR lengths of such a set operation are not
-   * widened, as those of the [[UnionLoop]] are not: they must stay the lengths of the reference.
+   * Whether the plan reads the recursive reference of a recursive CTE that it is not part of,
+   * such as the union of the anchor and the recursive term of a recursive CTE before it becomes a
+   * [[UnionLoop]]. The CHAR lengths of a set operation over it are not widened, as those of the
+   * [[UnionLoop]] are not: its columns have the CHAR lengths of the anchor, and
+   * ApplyCharTypePadding narrows the values of the recursive term to them.
    */
-  def readsRecursiveReference(plan: LogicalPlan): Boolean = plan match {
+  private def readsRecursiveReference(plan: LogicalPlan): Boolean = plan match {
     case _: UnionLoop => false
     case r: CTERelationRef => r.recursive
     case _: UnionLoopRef => true
@@ -614,10 +609,10 @@ abstract class UnionBase extends LogicalPlan {
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  private lazy val widenCharLengths = !children.exists(Union.readsRecursiveReference)
+  private lazy val charRawTypes = Union.widerCharRawTypes(children)
 
   protected def computeOutput(): Seq[Attribute] =
-    Union.mergeChildOutputs(children.map(_.output), widenCharLengths)
+    Union.mergeChildOutputs(children.map(_.output), charRawTypes)
 
   /**
    * Maps the constraints containing a given (original) sequence of attributes to those with a

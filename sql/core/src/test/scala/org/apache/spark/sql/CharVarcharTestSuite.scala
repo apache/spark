@@ -804,6 +804,15 @@ trait CharVarcharTestSuite extends QueryTest {
                |  WHERE n < 2)
                |SELECT n FROM r WHERE c = 'a'""".stripMargin),
         Seq(Row(0), Row(1), Row(2)))
+      // the values of the recursive term are narrowed to the CHAR lengths of the anchor
+      checkAnswer(
+        sql("""WITH RECURSIVE r(c, n) AS (
+               |  SELECT c, 0 FROM t3
+               |  UNION ALL
+               |  (WITH x AS (SELECT c, n FROM r WHERE n < 2)
+               |   SELECT c, n + 1 FROM x UNION ALL SELECT c, 10 FROM t5 WHERE false))
+               |SELECT n FROM r WHERE c = 'a'""".stripMargin),
+        Seq(Row(0), Row(1), Row(2)))
 
       // the default collation, implicit or explicit, is the same collation
       sql(s"CREATE TABLE tc(id INT, c CHAR(5) COLLATE UTF8_BINARY) USING $format")
@@ -816,6 +825,22 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         spark.table("t3").union(spark.table("t5")).select("t3.c"),
         Seq(Row(padded), Row(padded)))
+      // and its expression IDs, which columns of its DataFrame resolve to
+      val a = spark.table("t3")
+      val b = spark.table("t5")
+      checkAnswer(a.union(b).select(a("c")), Seq(Row(padded), Row(padded)))
+      checkAnswer(a.union(b).filter(a("c") === "a").select(a("id")), Seq(Row(1), Row(2)))
+      val ac = a.select("c")
+      val bc = b.select("c")
+      checkAnswer(ac.intersect(bc).select(ac("c")), Row(padded))
+      checkAnswer(ac.intersect(bc).filter(ac("c") === "a"), Row(padded))
+      checkAnswer(ac.except(bc).select(ac("c")), Nil)
+      // the shorter child's scan pads to the widest length, instead of being padded again
+      val plan = sql(s"SELECT * FROM ($union) WHERE c = 'a'").queryExecution.optimizedPlan
+      assert(plan.flatMap(_.expressions).forall(_.find {
+        case CharVarcharUtils.ReadSidePadding(CharVarcharUtils.ReadSidePadding(_, _), _) => true
+        case _ => false
+      }.isEmpty))
     }
   }
 
@@ -4363,10 +4388,11 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 
   test("SPARK-61972: char columns of different lengths without read-side padding") {
     withTempPath { dir =>
-      withTable("t3", "t5") {
+      withTable("t3", "t5", "tc") {
         sql("SELECT 'a' as c").write.format(format).save(dir.toString)
         sql(s"CREATE TABLE t3 (c CHAR(3)) USING $format LOCATION '$dir'")
         sql(s"CREATE TABLE t5 (c CHAR(5)) USING $format LOCATION '$dir'")
+        sql(s"CREATE TABLE tc (c CHAR(5) COLLATE UTF8_BINARY) USING $format LOCATION '$dir'")
         withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
           checkAnswer(sql("SELECT c FROM t3 WHERE c IN (SELECT c FROM t5)"), Row("a"))
           checkAnswer(sql("SELECT c FROM t5 WHERE c IN (SELECT c FROM t3)"), Row("a"))
@@ -4376,6 +4402,10 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           checkAnswer(sql("SELECT c FROM t3 EXCEPT SELECT c FROM t5"), Nil)
           checkAnswer(
             sql("SELECT c FROM t3 UNION SELECT c FROM t5"), Row("a" + " ".repeat(4)))
+          // the default collation given explicitly is the same raw type
+          checkAnswer(
+            sql("SELECT c FROM t3 UNION ALL SELECT c FROM tc"),
+            Seq(Row("a" + " ".repeat(4)), Row("a" + " ".repeat(4))))
         }
       }
     }

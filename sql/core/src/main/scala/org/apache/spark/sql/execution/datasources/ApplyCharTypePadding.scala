@@ -25,7 +25,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Except, Intersect, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Union, View, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Except, Filter, GlobalLimit, Intersect, LocalLimit, LogicalPlan, OverwriteByExpression, Project, ReplaceData, Sort, SubqueryAlias, Union, UnionLoop, View, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, EXCEPT, INTERSECT, REPLACE_DATA, UNION, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
   ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 
 /**
  * This rule performs string padding for char type.
@@ -106,43 +107,149 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
    * CHAR(m). This pads the values of the shorter children to that length, so that they match the
    * values of the other children and comparisons padded to it. Like read-side padding, it does not
    * truncate longer values. Without read-side padding, the values of the widest children can be
-   * shorter too, so `padAllChildren` pads them as well. Then it narrows the columns of views that
-   * store a shorter length.
+   * shorter too, so `padAllChildren` pads them as well. Then it narrows the values of recursive
+   * CTEs and views that have shorter lengths.
    */
   private def padSetOperations(plan: LogicalPlan, padAllChildren: Boolean): LogicalPlan = {
     val newPlan = plan.transformUpWithNewOutput({
       // An unresolved set operation, or one with children of different arity, fails in
-      // CheckAnalysis. One that reads a recursive reference keeps its CHAR lengths.
-      case op @ (_: Union | _: Intersect | _: Except)
-          if op.resolved && !op.children.exists(Union.readsRecursiveReference) =>
-        val rawTypes = CharVarcharUtils.widerCharRawTypes(op.children.map(_.output))
+      // CheckAnalysis.
+      case op @ (_: Union | _: Intersect | _: Except) if op.resolved =>
+        val rawTypes = Union.widerCharRawTypes(op.children)
         if (rawTypes.forall(_.isEmpty)) {
           op -> Nil
         } else {
-          val newChildren = op.children.map { child =>
-            // A column at more than one position has one raw type, and gets one padded column.
-            val paddedColumns = mutable.HashMap.empty[ExprId, NamedExpression]
-            val projectList = child.output.zip(rawTypes).map {
-              case (attr, Some(rawType)) => paddedColumns.getOrElseUpdate(attr.exprId,
-                CharVarcharUtils.padCharToWiderLength(attr, rawType, padAllChildren).map {
-                  case (padded, paddedRawType) =>
-                    Alias(padded, attr.name)(
-                      qualifier = attr.qualifier,
-                      explicitMetadata =
-                        Some(CharVarcharUtils.withRawType(attr.metadata, paddedRawType)))
-                }.getOrElse(attr))
-              case (attr, _) => attr
-            }
-            if (projectList == child.output) child else Project(projectList, child)
-          }
-          val newOp = op.withNewChildren(newChildren)
+          val newOp = op.withNewChildren(op.children.map(padChild(_, rawTypes, padAllChildren)))
           newOp -> op.output.zip(newOp.output)
             .distinctBy { case (a, _) => a.exprId }
-            .filterNot { case (a, b) => a == b }
+            .filterNot { case (a, b) => a.exprId == b.exprId }
         }
     }, skipCond = p => p.analyzed || !p.containsAnyPattern(UNION, INTERSECT, EXCEPT),
       canGetOutput = _.resolved)
-    narrowViewColumns(newPlan)
+    narrowViewColumns(narrowRecursiveTerms(newPlan))
+  }
+
+  /**
+   * Pads the columns of a child of a set operation to the given raw types. A column is padded
+   * where it is produced if it can be, see [[padAtSource]], so that it keeps its expression ID,
+   * and otherwise in a Project over the child, which gives it a new one.
+   */
+  private def padChild(
+      child: LogicalPlan,
+      rawTypes: Seq[Option[DataType]],
+      padAllChildren: Boolean): LogicalPlan = {
+    // A column at more than one position has one raw type, see widerCharRawTypes.
+    val columns = child.output.zip(rawTypes).collect {
+      case (attr, Some(rawType)) => attr.exprId -> rawType
+    }.distinctBy(_._1)
+    val (newChild, paddedAtSource) = columns.foldLeft((child, Set.empty[ExprId])) {
+      case ((plan, padded), (exprId, rawType)) =>
+        padAtSource(plan, exprId, rawType, padAllChildren)
+          .map(newPlan => (newPlan, padded + exprId))
+          .getOrElse((plan, padded))
+    }
+    val paddedColumns = mutable.HashMap.empty[ExprId, NamedExpression]
+    val projectList = newChild.output.zip(rawTypes).map {
+      case (attr, Some(rawType)) if !paddedAtSource.contains(attr.exprId) =>
+        paddedColumns.getOrElseUpdate(attr.exprId,
+          CharVarcharUtils.padCharToWiderLength(attr, rawType, padAllChildren).map {
+            case (padded, paddedRawType) =>
+              Alias(padded, attr.name)(
+                qualifier = attr.qualifier,
+                explicitMetadata =
+                  Some(CharVarcharUtils.withRawType(attr.metadata, paddedRawType)))
+          }.getOrElse(attr))
+      case (attr, _) => attr
+    }
+    if (projectList == newChild.output) newChild else Project(projectList, newChild)
+  }
+
+  /**
+   * Pads the column of the plan with the given expression ID to the CHAR lengths of `rawType`
+   * where it is produced, in an alias of a Project under operators that pass the column through,
+   * and gives the references to it in them the new raw type. The column keeps its expression ID,
+   * so that a set operation keeps the output of its first child, which references to the columns
+   * of the child's DataFrame resolve to. Returns None if the column is produced elsewhere, or does
+   * not need padding.
+   */
+  private def padAtSource(
+      plan: LogicalPlan,
+      exprId: ExprId,
+      rawType: DataType,
+      alwaysPad: Boolean): Option[LogicalPlan] = {
+    def withNewChild(p: LogicalPlan, newChild: LogicalPlan): LogicalPlan = {
+      val metadata = newChild.output.find(_.exprId == exprId).get.metadata
+      p.withNewChildren(Seq(newChild)).transformExpressions {
+        case a: AttributeReference if a.exprId == exprId => a.withMetadata(metadata)
+      }
+    }
+    plan match {
+      case p @ Project(projectList, child) =>
+        projectList.find(_.exprId == exprId) match {
+          case Some(a: Alias) =>
+            CharVarcharUtils.getRawType(a.metadata).flatMap { aliasRawType =>
+              CharVarcharUtils.padCharToWiderLength(a.child, aliasRawType, rawType, alwaysPad)
+            }.map { case (padded, paddedRawType) =>
+              val newAlias = Alias(padded, a.name)(
+                a.exprId,
+                a.qualifier,
+                Some(CharVarcharUtils.withRawType(a.metadata, paddedRawType)),
+                a.nonInheritableMetadataKeys)
+              p.copy(projectList = projectList.map {
+                case ne if ne.exprId == exprId => newAlias
+                case ne => ne
+              })
+            }
+          case Some(_: Attribute) =>
+            padAtSource(child, exprId, rawType, alwaysPad).map(withNewChild(p, _))
+          case _ => None
+        }
+      case _: SubqueryAlias | _: Filter | _: Sort | _: LocalLimit | _: GlobalLimit =>
+        padAtSource(plan.children.head, exprId, rawType, alwaysPad).map(withNewChild(plan, _))
+      case _ => None
+    }
+  }
+
+  /**
+   * The columns of a recursive CTE have the CHAR lengths of its anchor. This narrows values of the
+   * recursive term with longer CHAR lengths, such as those of a set operation in it, to them, as
+   * [[narrowViewColumns]] does for a view.
+   */
+  private def narrowRecursiveTerms(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsUp {
+      case loop: UnionLoop if loop.resolved =>
+        val recursion = loop.recursion
+        val projectList = recursion.output.zip(loop.anchor.output).map { case (attr, anchorAttr) =>
+          (for {
+            rawType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
+            anchorType <- CharVarcharUtils.getRawType(anchorAttr.metadata, anchorAttr.dataType)
+            narrowed <- narrowToLength(attr, rawType, anchorType)
+          } yield Alias(narrowed, attr.name)(
+            qualifier = attr.qualifier,
+            explicitMetadata = Some(CharVarcharUtils.withRawType(attr.metadata, anchorType))
+          )).getOrElse(attr)
+        }
+        if (projectList == recursion.output) {
+          loop
+        } else {
+          loop.copy(recursion = Project(projectList, recursion))
+        }
+    }
+  }
+
+  // The value narrowed to the CHAR lengths of `toType`, with the data type of the value. A rebuilt
+  // struct loses the metadata of its fields, which holds their raw types.
+  private def narrowToLength(
+      expr: Expression,
+      fromType: DataType,
+      toType: DataType): Option[Expression] = {
+    CharVarcharUtils.narrowCharToLength(expr, fromType, toType).map { narrowed =>
+      if (narrowed.dataType == expr.dataType) {
+        narrowed
+      } else {
+        Cast(narrowed, expr.dataType, Some(conf.sessionLocalTimeZone))
+      }
+    }
   }
 
   /**
@@ -166,16 +273,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
               viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
               attr <- queryAttr(child)
               queryType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
-              narrowed <- CharVarcharUtils.narrowCharToLength(child, queryType, viewType)
-            } yield {
-              // A rebuilt struct loses the metadata of its fields, which holds their raw types.
-              val newChild = if (narrowed.dataType == child.dataType) {
-                narrowed
-              } else {
-                Cast(narrowed, child.dataType, Some(conf.sessionLocalTimeZone))
-              }
-              a.withNewChildren(Seq(newChild)).asInstanceOf[Alias]
-            }).getOrElse(a)
+              narrowed <- narrowToLength(child, queryType, viewType)
+            } yield a.withNewChildren(Seq(narrowed)).asInstanceOf[Alias]).getOrElse(a)
           case other => other
         }
         if (newProjectList == projectList) {

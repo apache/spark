@@ -101,7 +101,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
     val output = mergeChildOutputs(
       unresolvedOperator,
       deduplicatedChildOutputs,
-      widenCharLengths = !deduplicatedChildren.exists(Union.readsRecursiveReference))
+      Union.widerCharRawTypes(deduplicatedChildren))
     scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
 
     OperatorWithUncomparableTypeValidator.validate(unresolvedOperator, output)
@@ -442,11 +442,11 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   private def mergeChildOutputs(
       unresolvedPlan: LogicalPlan,
       childOutputs: Seq[Seq[Attribute]],
-      widenCharLengths: Boolean): Seq[Attribute] = {
+      charRawTypes: Seq[Option[DataType]]): Seq[Attribute] = {
     unresolvedPlan match {
-      case _: Union => Union.mergeChildOutputs(childOutputs, widenCharLengths)
-      case _: Except => Except.mergeChildOutputs(childOutputs, widenCharLengths)
-      case _: Intersect => Intersect.mergeChildOutputs(childOutputs, widenCharLengths)
+      case _: Union => Union.mergeChildOutputs(childOutputs, charRawTypes)
+      case _: Except => Except.mergeChildOutputs(childOutputs, charRawTypes)
+      case _: Intersect => Intersect.mergeChildOutputs(childOutputs, charRawTypes)
       case other =>
         throw SparkException.internalError(
           s"Set operation resolver should not be used for ${other.nodeName}"

@@ -51,8 +51,8 @@ case class UnionLoop(
     copy(anchor = newChildren(0), recursion = newChildren(1))
 
   override protected def computeOutput(): Seq[Attribute] =
-    // ApplyCharTypePadding does not pad the anchor and recursion to the same CHAR lengths.
-    Union.mergeChildOutputs(children.map(_.output), widenCharLengths = false)
+    // The columns have the CHAR lengths of the anchor, see Union.readsRecursiveReference.
+    Union.mergeChildOutputs(children.map(_.output))
       .zip(outputAttrIds).map { case (x, id) => x.withExprId(id) }
 
   override def argString(maxFields: Int): String = {

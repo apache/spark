@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
+  AttributeReference,
   BinaryComparison,
   Expression,
+  ExprId,
   In,
   InSubquery,
   Literal,
@@ -33,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, IN_SUBQUERY}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
-import org.apache.spark.sql.types.{CharType, Metadata, StringType}
+import org.apache.spark.sql.types.{CharType, Metadata, MetadataBuilder, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -91,12 +93,40 @@ object ApplyCharTypePaddingHelper {
     plan.resolveOperatorsUpWithSubqueriesAndPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN, IN_SUBQUERY)) {
       case operator =>
-        operator.transformExpressionsUpWithPruning(
+        withRawTypesOfInput(operator).transformExpressionsUpWithPruning(
             _.containsAnyPattern(BINARY_COMPARISON, IN, IN_SUBQUERY)) {
           case e if !e.childrenResolved => e
           case withChildrenResolved =>
             singleNodePaddingForStringComparison(withChildrenResolved, padCharCol)
         }
+    }
+  }
+
+  /**
+   * A reference resolved before its operator, such as a column of a DataFrame, keeps the raw type
+   * its column had then, which a set operation can widen since. This gives the CHAR references of
+   * the operator the raw types of the columns of its children, which comparisons pad to.
+   */
+  private def withRawTypesOfInput(operator: LogicalPlan): LogicalPlan = {
+    // A query with unresolved children fails in CheckAnalysis.
+    val rawTypes = if (operator.childrenResolved) {
+      operator.children.flatMap(_.output).flatMap { attr =>
+        CharVarcharUtils.getRawTypeString(attr.metadata).map(attr.exprId -> _)
+      }.toMap
+    } else {
+      Map.empty[ExprId, String]
+    }
+    if (rawTypes.isEmpty) {
+      operator
+    } else {
+      operator.transformExpressions {
+        case a: AttributeReference if CharVarcharUtils.getRawTypeString(a.metadata)
+            .exists(rawType => rawTypes.get(a.exprId).exists(_ != rawType)) =>
+          a.withMetadata(new MetadataBuilder()
+            .withMetadata(a.metadata)
+            .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawTypes(a.exprId))
+            .build())
+      }
     }
   }
 

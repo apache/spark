@@ -459,10 +459,26 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     if (rawTypeStrings.exists(_.isEmpty) || rawTypeStrings.distinct.length == 1) {
       None
     } else {
-      rawTypeStrings.map(s => Option(CatalystSqlParser.parseDataType(s.get))).reduce {
-        (left, right) => for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+      val rawTypes = rawTypeStrings.map(s => CatalystSqlParser.parseDataType(s.get))
+      // Raw types can differ only in how they print, such as with the default collation given
+      // explicitly or with other names of struct fields. They have the same lengths already.
+      if (rawTypes.map(normalizeCharType).distinct.length == 1) {
+        None
+      } else {
+        rawTypes.map(Option(_)).reduce {
+          (left, right) => for (l <- left; r <- right; wider <- widerCharType(l, r)) yield wider
+        }
       }
     }
+  }
+
+  // The type with the collation of each CHAR type given explicitly, and without field names.
+  private def normalizeCharType(dt: DataType): DataType = dt match {
+    case c: CharType => CharType(c.length, Some(c.collationId))
+    case StructType(fields) =>
+      StructType(fields.map(f => StructField("", normalizeCharType(f.dataType))))
+    case ArrayType(et, _) => ArrayType(normalizeCharType(et))
+    case other => other
   }
 
   /**
@@ -476,12 +492,24 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       attr: Attribute,
       rawType: DataType,
       alwaysPad: Boolean = false): Option[(Expression, DataType)] = {
-    getRawType(attr.metadata).flatMap { attrRawType =>
-      widerCharType(attrRawType, rawType).filter(alwaysPad || _ != attrRawType).map { wider =>
-        val padded = processStringForCharVarchar(
-          attr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
-        (padded, wider)
+    getRawType(attr.metadata).flatMap(padCharToWiderLength(attr, _, rawType, alwaysPad))
+  }
+
+  /** Like the method above, for an expression with the given raw type. */
+  def padCharToWiderLength(
+      expr: Expression,
+      exprRawType: DataType,
+      rawType: DataType,
+      alwaysPad: Boolean): Option[(Expression, DataType)] = {
+    widerCharType(exprRawType, rawType).filter(alwaysPad || _ != exprRawType).map { wider =>
+      val padded = (expr, wider) match {
+        // Pad the value that the scan pads instead of padding it again, so that a comparison
+        // with the padded value can still be pushed down to the source.
+        case (ReadSidePadding(child, _), c: CharType) => createReadSidePadding(child, c)
+        case _ => processStringForCharVarchar(
+          expr, wider, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
       }
+      (padded, wider)
     }
   }
 
