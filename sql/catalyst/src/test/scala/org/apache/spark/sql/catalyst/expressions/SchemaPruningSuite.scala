@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.types._
 
@@ -37,6 +37,64 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     }
     val prunedSchema = SchemaPruning.pruneSchema(schema, requestedRootFields)
     assert(prunedSchema === expectedSchema)
+  }
+
+  for ((dataType, prunedType, defaultSQL, expectedSQL) <- Seq(
+      ("STRUCT<a:INT,b:INT>", "STRUCT<b:INT>",
+        "named_struct('a',11,'b',22)", "named_struct('b',22)"),
+      ("ARRAY<STRUCT<a:INT,b:INT>>", "ARRAY<STRUCT<b:INT>>",
+        "array(named_struct('a',11,'b',22),CAST(NULL AS STRUCT<a:INT,b:INT>)," +
+          "named_struct('a',0,'b',CAST(NULL AS INT)))",
+        "array(named_struct('b',22),CAST(NULL AS STRUCT<b:INT>)," +
+          "named_struct('b',CAST(NULL AS INT)))"),
+      ("MAP<STRING,STRUCT<a:INT,b:INT>>", "MAP<STRING,STRUCT<b:INT>>",
+        "map('key',named_struct('a',11,'b',22),'nil',CAST(NULL AS STRUCT<a:INT,b:INT>))",
+        "map('key',named_struct('b',22),'nil',CAST(NULL AS STRUCT<b:INT>))"),
+      ("STRUCT<a:INT,b:INT>", "STRUCT<b:INT>",
+        "CAST(NULL AS STRUCT<a:INT,b:INT>)", "CAST(NULL AS STRUCT<b:INT>)"),
+      ("STRUCT<a:INT,b:ARRAY<STRUCT<x:INT,y:STRING>>>",
+        "STRUCT<b:ARRAY<STRUCT<y:STRING>>>",
+        "named_struct('a',11,'b',array(named_struct('x',1,'y','kept')))",
+        "named_struct('b',array(named_struct('y','kept')))"),
+      ("MAP<STRUCT<a:INT,b:INT>,STRUCT<c:INT,d:INT>>",
+        "MAP<STRUCT<b:INT>,STRUCT<d:INT>>",
+        "map(named_struct('a',1,'b',2),named_struct('c',3,'d',4))",
+        "map(named_struct('b',2),named_struct('d',4))"),
+      ("ARRAY<STRUCT<a:INT,b:INT>>", "ARRAY<STRUCT<b:INT>>", "array()", "array()"),
+      ("MAP<STRING,STRUCT<a:INT,b:INT>>", "MAP<STRING,STRUCT<b:INT>>", "map()", "map()"))) {
+    test(s"SPARK-60790: prune default $defaultSQL to $prunedType") {
+      val original = StructType.fromDDL(s"v $dataType").head
+        .withCurrentDefaultValue(defaultSQL)
+        .withExistenceDefaultValue(defaultSQL)
+      val requested = StructType.fromDDL(s"v $prunedType").head.copy(metadata = original.metadata)
+      val schema = SchemaPruning.pruneSchema(StructType(Seq(original)), Seq(
+        SchemaPruning.RootField(requested, derivedFromAtt = false)))
+      val field = schema.head
+      val expected = requested.withExistenceDefaultValue(expectedSQL)
+      val actualValue = ResolveDefaultColumns.getExistenceDefaultValue(field)
+      val expectedValue = ResolveDefaultColumns.getExistenceDefaultValue(expected)
+      assert(Literal.create(actualValue, field.dataType).sql ==
+        Literal.create(expectedValue, field.dataType).sql)
+      assert(field.getCurrentDefaultValue() == original.getCurrentDefaultValue())
+      assert(original.getExistenceDefaultValue().contains(defaultSQL))
+      assert(SchemaPruning.pruneSchema(schema, Seq(
+        SchemaPruning.RootField(requested, derivedFromAtt = false))) === schema)
+    }
+  }
+
+  test("SPARK-60790: preserve distinct map keys after default projection") {
+    val field = StructType.fromDDL("v MAP<STRUCT<a:INT,b:INT>,STRUCT<c:INT,d:INT>>").head
+      .withExistenceDefaultValue(
+        "map(named_struct('a',1,'b',2),named_struct('c',3,'d',4)," +
+          "named_struct('a',5,'b',2),named_struct('c',7,'d',6))")
+    val requested = StructType.fromDDL("v MAP<STRUCT<b:INT>,STRUCT<d:INT>>").head
+      .copy(metadata = field.metadata)
+    val pruned = SchemaPruning.pruneSchema(StructType(Seq(field)), Seq(
+      SchemaPruning.RootField(requested, derivedFromAtt = false))).head
+    val value = ResolveDefaultColumns.getExistenceDefaultValue(pruned).asInstanceOf[MapData]
+    assert(value.numElements() == 2)
+    assert((0 until 2).map(i => value.keyArray().getStruct(i, 1).getInt(0)) == Seq(2, 2))
+    assert((0 until 2).map(i => value.valueArray().getStruct(i, 1).getInt(0)) == Seq(4, 6))
   }
 
   test("prune schema by the requested fields") {

@@ -53,6 +53,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
 
+  // Read schemas retain the declared type so a default can be resolved before nested projection.
+  private val EXISTS_DEFAULT_TYPE_METADATA_KEY = "__EXISTS_DEFAULT_SOURCE_TYPE"
+
   // Fails if the given catalog does not support column default value.
   def validateCatalogForDefaultValue(
       columns: Seq[ColumnDefinition],
@@ -473,14 +476,77 @@ object ResolveDefaultColumns extends QueryErrorsBase
     schema.fields.map(getExistenceDefaultValue)
   }
 
+  // Projection can make map keys equal, so project the resolved value instead of rebuilding SQL.
+  private[sql] def withExistenceDefaultType(
+      field: StructField,
+      original: StructField): StructField = {
+    original.getExistenceDefaultValue().map { defaultSQL =>
+      val metadata = new MetadataBuilder().withMetadata(field.metadata)
+        .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, defaultSQL)
+      if (original.metadata.contains(EXISTS_DEFAULT_TYPE_METADATA_KEY)) {
+        metadata.putString(EXISTS_DEFAULT_TYPE_METADATA_KEY,
+          original.metadata.getString(EXISTS_DEFAULT_TYPE_METADATA_KEY))
+      } else if (field.dataType != original.dataType) {
+        metadata.putString(EXISTS_DEFAULT_TYPE_METADATA_KEY, original.dataType.json)
+      } else {
+        metadata.remove(EXISTS_DEFAULT_TYPE_METADATA_KEY)
+      }
+      field.copy(metadata = metadata.build())
+    }.getOrElse(field)
+  }
+
   def getExistenceDefaultValue(field: StructField): Any = {
     if (field.hasExistenceDefaultValue) {
-      val expr = analyzeExistenceDefaultValue(field)
+      val sourceField = if (field.metadata.contains(EXISTS_DEFAULT_TYPE_METADATA_KEY)) {
+        field.copy(dataType = DataType.fromJson(
+          field.metadata.getString(EXISTS_DEFAULT_TYPE_METADATA_KEY)))
+      } else {
+        field
+      }
+      val expr = analyzeExistenceDefaultValue(sourceField)
       // The expression should be a literal value by this point, possibly wrapped in a cast
       // function. This is enforced by the execution of commands that assign default values.
-      expr.eval()
+      pruneDefaultValue(expr.eval(), sourceField.dataType, field.dataType)
     } else {
       null
+    }
+  }
+
+  private def pruneDefaultValue(value: Any, sourceType: DataType, targetType: DataType): Any = {
+    if (value == null || sourceType == targetType) {
+      value
+    } else {
+      (sourceType, targetType) match {
+        case (source: StructType, target: StructType) =>
+          val row = value.asInstanceOf[InternalRow]
+          InternalRow.fromSeq(target.fields.toSeq.map { field =>
+            val index = source.fieldIndex(field.name)
+            if (row.isNullAt(index)) {
+              null
+            } else {
+              val sourceFieldType = source(index).dataType
+              pruneDefaultValue(row.get(index, sourceFieldType), sourceFieldType, field.dataType)
+            }
+          })
+        case (ArrayType(sourceElement, _), ArrayType(targetElement, _)) =>
+          val array = value.asInstanceOf[ArrayData]
+          new GenericArrayData(Array.tabulate[Any](array.numElements()) { index =>
+            if (array.isNullAt(index)) {
+              null
+            } else {
+              pruneDefaultValue(array.get(index, sourceElement), sourceElement, targetElement)
+            }
+          })
+        case (MapType(sourceKey, sourceValue, sourceNulls),
+            MapType(targetKey, targetValue, targetNulls)) =>
+          val map = value.asInstanceOf[MapData]
+          val keys = pruneDefaultValue(map.keyArray(), ArrayType(sourceKey, false),
+            ArrayType(targetKey, false)).asInstanceOf[ArrayData]
+          val values = pruneDefaultValue(map.valueArray(), ArrayType(sourceValue, sourceNulls),
+            ArrayType(targetValue, targetNulls)).asInstanceOf[ArrayData]
+          new ArrayBasedMapData(keys, values)
+        case _ => value
+      }
     }
   }
 
