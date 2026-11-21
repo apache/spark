@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
+import org.apache.spark.sql.catalyst.optimizer.{PerPartitionRuntimeFilterSubquery, UnwrapCastInBinaryComparison}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
@@ -42,9 +42,9 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
-import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta, V1Write, Write}
+import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -192,7 +192,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val (dynamicFilters, postScanFilters) = filters.partition {
+      // A per-partition bloom filter is not planned as a filter above the scan. The scan applies
+      // it, see below.
+      val placeholders = filters.collect { case p: PerPartitionRuntimeFilterSubquery => p }
+      val scanFilters = filters.filterNot(_.isInstanceOf[PerPartitionRuntimeFilterSubquery])
+      val (dynamicFilters, postScanFilters) = scanFilters.partition {
         case _: DynamicPruning => true
         case _ => false
       }
@@ -215,10 +219,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
       // has a matching row. A built-in file scan gets no group filter, so no runtime filter prunes
       // its read.
-      val groupBasedRead = relation.relation.table match {
-        case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
-        case _ => false
-      }
+      val groupBasedRead = relation.isGroupBasedRead
       val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty && !groupBasedRead) {
         postScanFilters.filter { f =>
           f.deterministic &&
@@ -270,13 +271,22 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val storageFilters = storageFiltersFor(relation, filtersAbove)
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
-      val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
+      // With a per-partition bloom filter, the scan has the aggregate of the creation side as its
+      // child. The join above the scan implies the filter. So one the scan cannot take is dropped,
+      // as is a second one.
+      val perPartition = placeholders.iterator.flatMap { p =>
+        PerPartitionRuntimeFilterSubquery.aggregateOf(p, relation).map { aggregate =>
+          (PerPartitionBloomFilter(PerPartitionRuntimeFilterSubquery.checkOf(p.key, aggregate),
+            p.sizing), planLater(aggregate))
+        }
+      }.nextOption()
+      val scanExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, keyGroupedPartitioning,
-        storageFilters, checked.isDefined)
+        storageFilters, checked.isDefined, perPartition.map(_._1), perPartition.map(_._2))
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
-        batchExec, !batchExec.supportsColumnar) :: Nil
+        scanExec, !scanExec.supportsColumnar) :: Nil
 
     // StreamingV2ScanPushDown takes what each streaming scan reads with the same match.
     case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
@@ -1146,7 +1156,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
   protected[sql] def withProjectAndFilter(
       project: Seq[NamedExpression],
       filters: Seq[Expression],
-      scan: LeafExecNode,
+      scan: SparkPlan,
       needsUnsafeConversion: Boolean): SparkPlan = {
     val filterCondition = filters.reduceLeftOption(And)
     val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)

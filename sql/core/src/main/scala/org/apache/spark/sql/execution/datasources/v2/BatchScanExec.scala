@@ -19,11 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Objects
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.PerPartitionSizing
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{PartitioningCollection, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
@@ -46,6 +50,17 @@ import org.apache.spark.util.ArrayImplicits._
  *                       post-scan `Filter` too.
  * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
  *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
+ * @param perPartitionBloomFilter A per-partition runtime bloom filter the readers get as a storage
+ *                                filter, see [[PerPartitionBloomFilter]]. The readers of each split
+ *                                get it with the bloom filters of the partitions of
+ *                                `bloomFilterAggregate` that report the split's partition key, ORed
+ *                                into one. They get it ANDed with `storageFilters`. A split with no
+ *                                bloom filter is not read, unless the partition keys cannot be
+ *                                matched, see `perPartitionBloomFilterRDD`. The join above implies
+ *                                the check, so nothing above the scan checks it.
+ * @param bloomFilterAggregate The aggregate of the creation side of `perPartitionBloomFilter`, with
+ *                             a bloom filter for each group of its partition transform. The only
+ *                             child of the scan, set only with `perPartitionBloomFilter`.
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
@@ -55,7 +70,9 @@ case class BatchScanExec(
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     storageFilters: Seq[Expression] = Nil,
-    appendsCheckedColumn: Boolean = false
+    appendsCheckedColumn: Boolean = false,
+    perPartitionBloomFilter: Option[PerPartitionBloomFilter] = None,
+    bloomFilterAggregate: Option[SparkPlan] = None
   ) extends DataSourceV2ScanExecBase {
 
   // The readers are asked for the column only with storage filters, and append it last.
@@ -63,13 +80,28 @@ case class BatchScanExec(
     (storageFilters.nonEmpty && output.lastOption.exists(_.dataType == BooleanType)),
     "A checked column comes with storage filters, last in the output")
 
+  require(perPartitionBloomFilter.isDefined == bloomFilterAggregate.isDefined,
+    "A per-partition bloom filter comes with its aggregate")
+
+  override def children: Seq[SparkPlan] = bloomFilterAggregate.toSeq
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
+    sharePlanning(copy(bloomFilterAggregate = newChildren.headOption))
+
+  // The aggregate only holds the bloom filters, which a task reads in full before it opens a
+  // reader.
+  override def kWayMergeInputs: Seq[SparkPlan] = Nil
+
   // The output the scan was planned for, without the checked column the readers append.
   private def scanOutput: Seq[AttributeReference] =
     if (appendsCheckedColumn) output.init else output
 
-  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy` and `clone` hand it over to a
-  // copy over the same `Scan`. Any other new node plans its own, including one the case-class
-  // `copy` makes.
+  // The width of what the readers return when they append the checked column.
+  private def checkedOutputWidth: Option[Int] = Option.when(appendsCheckedColumn)(output.length)
+
+  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy`, `clone`, `withNewChildren`
+  // and `withoutPerPartitionBloomFilter` hand it over to a copy over the same `Scan`. Any other
+  // new node plans its own, including one the case-class `copy` makes.
   @transient private var plannedScan: PlannedScan =
     if (scan == null) null else new PlannedScan(scan)
 
@@ -86,7 +118,10 @@ case class BatchScanExec(
       case _ =>
         SQLMetrics.createMetric(sparkContext, name)
     }
-    Map("numOutputRows" -> metric)
+    Map("numOutputRows" -> metric) ++ perPartitionBloomFilter.map { _ =>
+      "numSkippedSplits" -> SQLMetrics.createMetric(sparkContext,
+        "number of splits skipped by runtime filters")
+    }
   }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
@@ -96,13 +131,15 @@ case class BatchScanExec(
           this.runtimeFilters == other.runtimeFilters &&
           this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning &&
           this.storageFilters == other.storageFilters &&
-          this.appendsCheckedColumn == other.appendsCheckedColumn
+          this.appendsCheckedColumn == other.appendsCheckedColumn &&
+          this.perPartitionBloomFilter == other.perPartitionBloomFilter &&
+          this.bloomFilterAggregate == other.bloomFilterAggregate
     case _ =>
       false
   }
 
-  override def hashCode(): Int = Objects.hash(
-    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn)
+  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, prunedKeyGroupedPartitioning,
+    storageFilters, appendsCheckedColumn, perPartitionBloomFilter, bloomFilterAggregate)
 
   /**
    * The reported partitioning keys restricted to those still present in `output`. A key may
@@ -129,9 +166,10 @@ case class BatchScanExec(
 
   override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
-  // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
-  // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
-  // The readers get its result, so the task does not carry the subquery's plan.
+  // The storage filters ANDed into one, which the readers of every task get when the scan reads
+  // without per-partition bloom filters. A runtime bloom arrives as a ScalarSubquery over the
+  // build side, which SparkPlan has computed by the time this is forced. The readers get its
+  // result, so the task does not carry the subquery's plan.
   @transient private lazy val storageFilterRequest: Option[StorageFilterRequest] =
     storageFilters.map(StorageFilterPlanning.withSubqueryResults)
       .reduceOption(And)
@@ -142,15 +180,57 @@ case class BatchScanExec(
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
-      new DataSourceRDD(
+      perPartitionBloomFilterRDD.getOrElse(new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
-        storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
+        storageFilterRequest, checkedOutputWidth))
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
   }
 
+  // The RDD whose readers get the per-partition bloom filter of their split's partition key. None
+  // without one, with no splits, or when the partition keys of the splits and of the aggregate
+  // cannot be matched. The scan then reads every split without the bloom filters. The join above
+  // drops the rows they would reject anyway.
+  private def perPartitionBloomFilterRDD: Option[RDD[InternalRow]] =
+    perPartitionBloomFilter.zip(bloomFilterAggregate).flatMap { case (filter, aggregate) =>
+      val splitKeys = reportedKeyedPartitioning
+        .map(_.partitionKeys).filter(_.length == filteredPartitions.length)
+      val bloomKeys = PartitioningCollection.representativeOf(aggregate.outputPartitioning)
+        .filterNot(_.mayContainUnknownPartitionKeys).map(_.partitionKeys)
+      (splitKeys, bloomKeys) match {
+        case (Some(splitKeys), Some(bloomKeys)) if splitKeys.isEmpty || bloomKeys.isEmpty ||
+            splitKeys.head.dataTypes == bloomKeys.head.dataTypes =>
+          val partitionsByKey = bloomKeys.zipWithIndex.groupMap(_._1)(_._2)
+          val bloomPartitions =
+            splitKeys.map(k => partitionsByKey.getOrElse(k, Nil).toArray).toArray
+          val blooms = if (aggregate.supportsColumnar) {
+            // The RDD reads each row's bloom filter bytes before it moves to the next row.
+            aggregate.executeColumnar().mapPartitionsInternal(_.flatMap(_.rowIterator().asScala))
+          } else {
+            aggregate.execute()
+          }
+          val condition = (storageFilters.map(StorageFilterPlanning.withSubqueryResults) :+
+            filter.check).reduce(And)
+          Some(new PerPartitionStorageFilterRDD(
+            sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+            checkedOutputWidth, blooms, bloomPartitions,
+            aggregate.output.indexWhere(_.exprId == filter.bloomFilter.exprId), condition,
+            filter.bloomFilter, scanOutput, longMetric("numSkippedSplits")))
+        case _ if filteredPartitions.isEmpty => None
+        case _ =>
+          logWarning("Reading a scan without its per-partition bloom filters, since the " +
+            "partition keys of its splits and of its aggregate do not match")
+          None
+      }
+    }
+
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = sharePlanning(super.makeCopy(newArgs))
+
+  /** This scan without its per-partition bloom filter, over the partitions this one planned. */
+  private[v2] def withoutPerPartitionBloomFilter: BatchScanExec =
+    sharePlanning(copy(perPartitionBloomFilter = None, bloomFilterAggregate = None))
+      .asInstanceOf[BatchScanExec]
 
   // `TreeNode.clone` does not go through `makeCopy`.
   override def clone(): SparkPlan = sharePlanning(super.clone())
@@ -173,7 +253,12 @@ case class BatchScanExec(
         _.map(QueryPlan.normalizeExpressions(_, output))),
       // Storage filters change what the scan returns, so a scan carrying one must not be reused for
       // a plain scan of the same table.
-      storageFilters = QueryPlan.normalizePredicates(storageFilters, output))
+      storageFilters = QueryPlan.normalizePredicates(storageFilters, output),
+      perPartitionBloomFilter = perPartitionBloomFilter.zip(bloomFilterAggregate).map {
+        case (filter, aggregate) => filter.copy(
+          check = QueryPlan.normalizeExpressions(filter.check, aggregate.output ++ output))
+      },
+      bloomFilterAggregate = bloomFilterAggregate.map(_.canonicalized))
   }
 
   override def simpleString(maxFields: Int): String = {
@@ -196,12 +281,29 @@ case class BatchScanExec(
   }
 
   // Only when the scan has some, since an empty one would change every other scan's description.
-  private def storageFiltersDescription: Option[String] = Option.when(storageFilters.nonEmpty) {
-    s"StorageFilters: ${storageFilters.mkString("[", ",", "]")}"
+  private def storageFiltersDescription: Option[String] = {
+    val filters = storageFilters ++ perPartitionBloomFilter.map(_.check)
+    Option.when(filters.nonEmpty)(s"StorageFilters: ${filters.mkString("[", ",", "]")}")
   }
 
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
+  }
+}
+
+/**
+ * The per-partition runtime bloom filter of a [[BatchScanExec]].
+ *
+ * @param check the check of each row of the scan, `might_contain` over the bloom filter column of
+ *              the scan's `bloomFilterAggregate` and the hash of a key over the scan's columns
+ * @param sizing the sizing of the bloom filters, for the whole creation side
+ */
+case class PerPartitionBloomFilter(check: Expression, sizing: PerPartitionSizing) {
+
+  /** The bloom filter column of the aggregate. */
+  def bloomFilter: Attribute = check match {
+    case BloomFilterMightContain(a: Attribute, _) => a
+    case _ => throw SparkException.internalError(s"Not a per-partition bloom filter check: $check")
   }
 }
 

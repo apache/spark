@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{DummySparkPlan, InputAdapter, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.{DummySparkPlan, InputAdapter, LeafExecNode, SafeForKWayMerge, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, TimestampType}
@@ -575,6 +575,23 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       assert(GroupPartitionsExec(columnarChild).supportsColumnar, "test setup")
       assert(!GroupPartitionsExec(columnarChild, sortedMergeOrdering = Some(childOrdering))
         .supportsColumnar)
+    }
+  }
+
+  test("SPARK-62098: a node outside the whitelist below one inside it keeps the merge from " +
+      "running") {
+    // The node walks down through the nodes that mix in SafeForKWayMerge, so the DummySparkPlan
+    // below one counts too.
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending))
+    val child = SafePassThrough(DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering))
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      assert(GroupPartitionsExec(child).tryEnableSortedMerge().isEmpty)
+      val merging = GroupPartitionsExec(child, sortedMergeOrdering = Some(childOrdering))
+      val error = intercept[SparkException](merging.execute())
+      assert(error.getMessage.contains("holds DummySparkPlan"))
     }
   }
 
@@ -1134,6 +1151,16 @@ private case class UnsafeColumnarLeaf(override val outputPartitioning: Partition
 }
 
 /** A leaf whose ordering follows a config, the way a V2 scan's key-derived ordering does. */
+/** A node that returns its child's rows as they are, and mixes in SafeForKWayMerge. */
+private case class SafePassThrough(child: SparkPlan) extends UnaryExecNode with SafeForKWayMerge {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
 private case class ConfOrderedLeaf(
     ordering: Seq[SortOrder],
     override val outputPartitioning: Partitioning) extends LeafExecNode with SafeForKWayMerge {

@@ -45,10 +45,9 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{SizePerPartitionStorageFilters, TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
@@ -840,9 +839,12 @@ object QueryExecution {
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
-      // Must run before `EnsureRequirements`, which then plans the query without the semi joins
-      // this rule drops.
-      ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),
+      // Must run before `EnsureRequirements`, which can put a node between the partial and the
+      // final aggregate of a per-partition bloom filter. This rule sizes both. It must also run
+      // before `PlanDynamicPruningFilters`, which reuses a broadcast for a DPP filter only when it
+      // matches the filter's build plan. That plan has no per-partition bloom filters. So a scan
+      // this rule plans without its bloom filters lets the broadcast above it match.
+      SizePerPartitionStorageFilters(ensureRequirements, unionConf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
