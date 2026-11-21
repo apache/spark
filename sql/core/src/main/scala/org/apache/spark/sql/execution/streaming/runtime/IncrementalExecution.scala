@@ -27,8 +27,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
+import org.apache.spark.sql.catalyst.analysis.{UnsupportedOperationChecker, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -158,6 +159,12 @@ class IncrementalExecution(
     // query started, which the plan must still apply to all the rows that it reads, see
     // StreamingV2ScanPushDown.
     StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized, pushedFilterRewrites)
+    // Unlike the other unsupported operation checks, which run when the query starts, this one
+    // runs once the confs of the checkpoint are restored, on the plan that eviction derives from.
+    if (isFirstBatch && sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        InlineCTE(alwaysInline = true).apply(optimized), outputMode)
+    }
     WidenStatefulOperatorAttributeNullability(optimized)
   }
 
