@@ -23,13 +23,14 @@ import java.nio.file.Files
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.{CompressionCodecFactory, CompressionInputStream, Decompressor, DefaultCodec, GzipCodec}
+import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory, CompressionInputStream, Decompressor, DefaultCodec, GzipCodec}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.io.{HadoopCodecStreams, ZStdCompressionCodec}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, LZ4, NONE, SNAPPY, UNCOMPRESSED}
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.internal.SQLConf
@@ -409,14 +410,16 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
       Seq("value").toDF().write.text(dir.getCanonicalPath)
       // The suggested codec list is built from a Map, so its order is not asserted here; the read
       // set additionally includes zstd/zstandard/zst on top of the write-supported codecs.
-      checkErrorMatchPVals(
+      checkError(
         exception = intercept[SparkIllegalArgumentException] {
           spark.read.option("decompression", "illegal").text(dir.getCanonicalPath).collect()
         },
         condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        sqlState = Some("56038"),
         parameters = Map(
           "codecName" -> "illegal",
-          "availableCodecs" -> ".*zstd.*")
+          "availableCodecs" -> ".*zstd.*"),
+        matchPVals = true
       )
     }
   }
@@ -441,6 +444,37 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
           assert(if (split) numPartitions > 1 else numPartitions == 1,
             s"decompression=$readCodec on $name: $numPartitions partitions")
           checkAnswer(df, lines.map(Row(_)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option rejects a class that is not a creatable codec") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.txt")
+      writeCompressed(file, "a\nb", "gzip")
+      // Each class loads, but Hadoop cannot create it as a codec: not a CompressionCodec, the
+      // CompressionCodec interface itself, a codec without a no-argument constructor, and an
+      // abstract codec, which only the abstract check rejects. The
+      // read must fail while planning, where `ignoreCorruptFiles` cannot turn the per-file
+      // failures into an empty result.
+      Seq(
+        classOf[String].getName,
+        classOf[CompressionCodec].getName,
+        classOf[ArgumentOnlyDecompressionCodec].getName,
+        classOf[AbstractDecompressionCodec].getName
+      ).foreach { codec =>
+        Seq(true, false).foreach { ignoreCorrupt =>
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+            checkError(
+              exception = intercept[SparkIllegalArgumentException] {
+                spark.read.option("decompression", codec).text(file.getCanonicalPath).collect()
+              },
+              condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+              sqlState = Some("56038"),
+              parameters = Map("codecName" -> codec, "availableCodecs" -> ".*zstd.*"),
+              matchPVals = true)
+          }
         }
       }
     }
@@ -495,9 +529,44 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
             spark.read.option("decompression", "gzip").text(dir.getCanonicalPath).collect()
           },
           condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER",
+          sqlState = "0A000",
           parameters = Map(
             "option" -> "\"decompression\"",
-            "config" -> s"\"${SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key}\""))
+            "config" -> toSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key)))
+      }
+    }
+  }
+
+  test("SPARK-60217 a cached plan keeps honoring decompression with the legacy line reader") {
+    withTempDir { dir =>
+      // (file name, codec written, `decompression`, expected rows)
+      Seq(
+        ("data.txt", "gzip", "gzip", Seq(Row("a"), Row("b"))),
+        ("plain.txt.gz", "", "none", Seq(Row("a"), Row("b")))
+      ).foreach { case (name, writeCodec, readCodec, expected) =>
+        val file = new File(dir, name)
+        writeCompressed(file, "a\nb", writeCodec)
+        val df = spark.read.option("decompression", readCodec).text(file.getCanonicalPath)
+        // The legacy line reader is rejected while planning. A Dataset keeps its executed plan,
+        // so the check does not run again; the reader chosen per task must still follow the
+        // codec the plan recorded rather than switch to Hadoop's extension-based reader.
+        checkAnswer(df, expected)
+        withSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key -> "false") {
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60217 the legacy line reader still applies to reads without decompression") {
+    withTempDir { dir =>
+      // Hadoop's LineRecordReader does not know the `.gzip` extension and reads the file as-is,
+      // while the imported reader maps it to gzip and would fail on the plain text. So the read
+      // succeeds only if a read without the option still switches to Hadoop's reader.
+      val file = new File(dir, "plain.txt.gzip")
+      writeCompressed(file, "a\nb", "")
+      withSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key -> "false") {
+        checkAnswer(spark.read.text(file.getCanonicalPath), Seq(Row("a"), Row("b")))
       }
     }
   }
@@ -578,6 +647,12 @@ class FailingDecompressionCodec extends DefaultCodec {
 object FailingDecompressionCodec {
   val message = "Cannot create a FailingDecompressionCodec input stream"
 }
+
+/** A codec with no no-argument constructor, which Hadoop cannot create by reflection. */
+class ArgumentOnlyDecompressionCodec(unused: Int) extends DefaultCodec
+
+/** An abstract codec with a no-argument constructor, which Hadoop cannot create by reflection. */
+abstract class AbstractDecompressionCodec extends DefaultCodec
 
 /** A codec that cannot be created, like one whose class fails to initialize on an executor. */
 class UnconstructibleDecompressionCodec extends DefaultCodec {

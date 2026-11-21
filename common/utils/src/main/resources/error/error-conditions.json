@@ -9686,12 +9686,12 @@
       },
       "DECOMPRESSION_CODEC_FOR_ARCHIVE" : {
         "message" : [
-          "The <option> option for the archive file <path>. Archives are always decompressed based on their file name extension. Remove the option, or read the archive files separately from the other files."
+          "The <option> option for the archive file <path>. Remove the option, or read the archive files separately from the other files."
         ]
       },
       "DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER" : {
         "message" : [
-          "The <option> option when <config> is false, because Hadoop's line reader infers the codec from the file name extension. Set <config> to true, or remove the option."
+          "The <option> option when <config> is false, because Hadoop's line reader infers the codec from the file name extension. Remove the option."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {
