@@ -78,33 +78,41 @@ private[hive] class SparkGetSchemasOperation(
         // filtering deferred).
         val resolvedCatalog = catalogManager.currentCatalog
         val catalogNameValue = resolvedCatalog.name()
-        if (catalogNameValue == CatalogManager.SESSION_CATALOG_NAME) {
-          // For spark_catalog, use the V1 SessionCatalog directly (transparent delegation)
-          catalog.listDatabases(schemaPattern).foreach { dbName =>
-            rowSet.addRow(Array[AnyRef](dbName, catalogNameValue))
-          }
-          // Global temp view database is only relevant for spark_catalog
-          val globalTempViewDb = catalog.globalTempDatabase
-          val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-          if (schemaName == null || schemaName.isEmpty ||
-              databasePattern.matcher(globalTempViewDb).matches()) {
-            rowSet.addRow(Array[AnyRef](globalTempViewDb, catalogNameValue))
-          }
-        } else {
-          resolvedCatalog match {
-            case nsCatalog: SupportsNamespaces =>
-              val databasePattern = Pattern.compile(
-                CLIServiceUtils.patternToRegex(schemaName))
-              nsCatalog.listNamespaces().foreach { ns =>
-                // Only top-level namespaces (depth=1) are exposed as JDBC schemas.
-                val nsName = ns.head
-                if (schemaName == null || schemaName.isEmpty ||
-                    databasePattern.matcher(nsName).matches()) {
-                  rowSet.addRow(Array[AnyRef](nsName, catalogNameValue))
-                }
+        val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
+        // Use SupportsNamespaces uniformly for all catalogs including the session
+        // catalog (V2SessionCatalog implements SupportsNamespaces). This avoids
+        // assuming that a spark_catalog override delegates to the built-in session
+        // catalog.
+        val listedNamespaces = resolvedCatalog match {
+          case nsCatalog: SupportsNamespaces =>
+            // NOTE: The DSv2 SupportsNamespaces.listNamespaces() API does not accept a
+            // pattern argument, so filtering is applied client-side. This is a potential
+            // performance consideration for catalogs with a very large number of
+            // namespaces.
+            val namespaces = nsCatalog.listNamespaces()
+            namespaces.foreach { ns =>
+              // Only top-level namespaces (depth=1) are exposed as JDBC schemas.
+              val nsName = ns.head
+              if (schemaName == null || schemaName.isEmpty ||
+                  databasePattern.matcher(nsName).matches()) {
+                rowSet.addRow(Array[AnyRef](nsName, catalogNameValue))
               }
-            case _ =>
-              // Catalog doesn't support namespaces -- return empty
+            }
+            namespaces.map(_.head).toSet
+          case _ =>
+            logWarning(log"Catalog ${MDC(CATALOG_NAME, catalogNameValue)} does not support " +
+              log"namespace listing; no schemas will be returned.")
+            Set.empty[String]
+        }
+        // The global temp view database is a Spark pseudo-namespace that only exists
+        // for the session catalog; it is not a real catalog namespace. Add it only if
+        // listNamespaces() did not already include it (dedup).
+        if (catalogNameValue == CatalogManager.SESSION_CATALOG_NAME) {
+          val globalTempViewDb = catalog.globalTempDatabase
+          if (!listedNamespaces.contains(globalTempViewDb) &&
+              (schemaName == null || schemaName.isEmpty ||
+              databasePattern.matcher(globalTempViewDb).matches())) {
+            rowSet.addRow(Array[AnyRef](globalTempViewDb, catalogNameValue))
           }
         }
       } else {
