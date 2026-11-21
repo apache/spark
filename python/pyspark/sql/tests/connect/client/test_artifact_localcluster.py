@@ -15,9 +15,15 @@
 # limitations under the License.
 #
 import os
+import unittest
 
-from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
+from pyspark.sql.tests.connect.client.test_artifact import (
+    ArtifactTestsMixin,
+    GlobalPyFilesPrecedenceTestsMixin,
+    GlobalPyFilesTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.util import is_remote_only
 
 
 class LocalClusterArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
@@ -31,6 +37,21 @@ class LocalClusterArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
     def root(cls):
         # In local cluster, we can mimic the production usage.
         return "."
+
+    @classmethod
+    def master(cls):
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[2,2,512]")
+
+
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
+class LocalClusterGlobalPyFilesTests(
+    GlobalPyFilesTestsMixin, GlobalPyFilesPrecedenceTestsMixin, ReusedConnectTestCase
+):
+    @classmethod
+    def conf(cls):
+        return cls.with_global_py_files(
+            super().conf().set("spark.driver.memory", "512M").set("spark.executor.memory", "512M")
+        )
 
     @classmethod
     def master(cls):

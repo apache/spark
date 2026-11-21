@@ -210,8 +210,18 @@ def setup_spark_files(
         SparkFiles._root_directory = spark_files_dir
         SparkFiles._is_running_on_worker = True
 
+    # SPARK-62000: The Python files that the application was started with, for a worker of a
+    # session with artifact isolation. They are added here, after the worker has started. The
+    # session's own files still come first: the worker starts in the session's folder, which
+    # Python puts first on sys.path, and the session's includes are added below, in front.
+    path_changed = False
+    global_python_path = os.environ.get("SPARK_GLOBAL_PYTHON_PATH", "")
+    for path in reversed([p for p in global_python_path.split(os.pathsep) if p]):
+        path_changed = add_path(path) or path_changed
+
     # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-    path_changed = add_path(spark_files_dir)  # *.py files that were added will be copied here
+    # *.py files that were added will be copied here
+    path_changed = add_path(spark_files_dir) or path_changed
     if not isinstance(infile_or_spark_files_dir, str):
         python_includes = [
             utf8_deserializer.loads(infile_or_spark_files_dir)

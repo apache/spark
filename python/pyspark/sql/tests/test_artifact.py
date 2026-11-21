@@ -23,7 +23,10 @@ from pathlib import Path
 
 from pyspark.errors import PySparkRuntimeError, SparkRuntimeException
 from pyspark.sql.functions import assert_true, lit, udf
-from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
+from pyspark.sql.tests.connect.client.test_artifact import (
+    ArtifactTestsMixin,
+    GlobalPyFilesTestsMixin,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -230,6 +233,26 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_file(self.spark.newSession())
+
+
+class GlobalPyFilesTests(GlobalPyFilesTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def conf(cls):
+        return cls.with_global_py_files(super().conf())
+
+    def test_global_py_files_without_artifact_state(self):
+        # A worker of a session without artifact isolation imports the application's Python
+        # files from the default files directory, and gets no SPARK_GLOBAL_PYTHON_PATH.
+        @udf("string")
+        def func(x):
+            import os
+
+            import global_py_files_module
+
+            return f"{global_py_files_module.value}, {os.environ.get('SPARK_GLOBAL_PYTHON_PATH')}"
+
+        rows = self.spark.range(1).select(func("id")).collect()
+        self.assertEqual([r[0] for r in rows], ["global module, None"])
 
 
 if __name__ == "__main__":

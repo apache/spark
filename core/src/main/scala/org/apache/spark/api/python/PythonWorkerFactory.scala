@@ -21,7 +21,8 @@ import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStre
 import java.net.{InetAddress, InetSocketAddress, SocketException, StandardProtocolFamily, UnixDomainSocketAddress}
 import java.net.SocketTimeoutException
 import java.nio.channels._
-import java.util.Arrays
+import java.nio.file.Files
+import java.util.{Arrays, Locale}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
@@ -33,7 +34,8 @@ import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.Python.PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE
+import org.apache.spark.internal.config.Python.{PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE, PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED}
+import org.apache.spark.internal.config.SUBMIT_PYTHON_FILES
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -139,15 +141,63 @@ private[spark] class PythonWorkerFactory(
     conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
   private var lastActivityNs = 0L
-  new MonitorThread().start()
-
-  @GuardedBy("self")
-  private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
 
   private val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
+
+  // Before the monitor thread starts, because it can fail.
+  private val globalPythonPath = globalPythonFilesPath
+
+  new MonitorThread().start()
+
+  @GuardedBy("self")
+  private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
+
+  /**
+   * SPARK-62000: The Python path of the Python files that the application was started with, for
+   * the workers of a session with artifact isolation, like the global JARs that the class loader
+   * of such a session inherits (SPARK-51537). The workers get it in `SPARK_GLOBAL_PYTHON_PATH`
+   * and add it when they set up the files of a task, as the workers of a session without
+   * isolation add the default files directory and its archives. The session's own files still
+   * come first, because the workers start in the session's folder, which Python puts first on
+   * sys.path, and add the session's archives in front of these files.
+   * It is not on the PYTHONPATH that the workers start with, so a file named like a module of
+   * the standard library cannot stop them from starting.
+   *
+   * It takes the copies of these files in the default files directory, so that it works on every
+   * host. spark-submit makes them in client mode outside YARN, and PySpark when it starts the
+   * driver. A JVM driver on YARN in client mode and an application in standalone cluster deploy
+   * mode get no copies. It adds only the modules and the archives with PySpark's extensions,
+   * `.zip`, `.egg` and `.jar`, not the rest of that directory, which PySpark puts on its path. It
+   * leaves out an archive that the PYTHONPATH the workers start with already names, as YARN's
+   * does on its executors, so that the workers read it once.
+   */
+  private def globalPythonFilesPath: String = {
+    val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+    if (jobArtifactUUID == "default" ||
+        !conf.get(PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED)) {
+      ""
+    } else {
+      val rootDir = new File(SparkFiles.getRootDirectory()).getAbsoluteFile
+      val files = conf.get(SUBMIT_PYTHON_FILES)
+        .map(path => new File(rootDir, new File(Utils.resolveURI(path).getPath).getName))
+        .distinct
+        .filter(_.isFile)
+      val modules = files.filter(_.getName.endsWith(".py"))
+      val startPath = pythonPath.split(File.pathSeparator).map(new File(_))
+        .filter(_.isAbsolute).map(_.getCanonicalPath).toSet
+      val packages = files.filter { file =>
+        Seq(".zip", ".egg", ".jar").exists(file.getName.toLowerCase(Locale.ROOT).endsWith) &&
+          !startPath.contains(file.getCanonicalPath)
+      }
+      // A package is imported from its archive, and a module from a directory, which holds
+      // only the modules.
+      PythonUtils.mergePythonPaths(packages.map(_.getPath) ++
+        Option.when(modules.nonEmpty)(globalPythonModulesDirectory(conf, modules).getPath): _*)
+    }
+  }
 
   def create(): (PythonWorker, Option[PythonWorkerHandle]) = {
     if (useDaemon) {
@@ -278,6 +328,9 @@ private[spark] class PythonWorkerFactory(
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
+      if (globalPythonPath.nonEmpty) {
+        workerEnv.put("SPARK_GLOBAL_PYTHON_PATH", globalPythonPath)
+      }
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
       if (isUnixDomainSock) {
@@ -355,6 +408,9 @@ private[spark] class PythonWorkerFactory(
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
+        if (globalPythonPath.nonEmpty) {
+          workerEnv.put("SPARK_GLOBAL_PYTHON_PATH", globalPythonPath)
+        }
         if (isUnixDomainSock) {
           workerEnv.put(
             "PYTHON_WORKER_FACTORY_SOCK_DIR",
@@ -571,4 +627,47 @@ private[spark] object PythonWorkerFactory {
   val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
 
   private[spark] val defaultDaemonModule = "pyspark.daemon"
+
+  // The directory that holds copies of the application's Python modules, and their paths.
+  @GuardedBy("this")
+  private var globalPythonModules: Option[(Seq[String], File)] = None
+
+  /**
+   * Deletes the directory of copies of the application's Python modules, when the `SparkEnv`
+   * whose worker factories use it stops, so that it does not outlive its `SparkContext`.
+   */
+  private[spark] def clearGlobalPythonModulesDirectory(): Unit = synchronized {
+    try {
+      globalPythonModules.foreach { case (_, dir) => Utils.deleteRecursively(dir) }
+    } finally {
+      globalPythonModules = None
+    }
+  }
+
+  /**
+   * Returns a directory under the local directory that holds copies of `modules`, the
+   * application's Python modules, and nothing else, like `__pyfiles__` on YARN. It is created
+   * once for each set of modules, which does not change while an application runs.
+   */
+  private[python] def globalPythonModulesDirectory(conf: SparkConf, modules: Seq[File]): File =
+    synchronized {
+      val paths = modules.map(_.getPath)
+      globalPythonModules.collect {
+        case (cachedPaths, dir) if cachedPaths == paths && dir.isDirectory => dir
+      }.getOrElse {
+        val dir = Utils.createTempDir(Utils.getLocalDir(conf), "pyfiles")
+        try {
+          modules.foreach { module =>
+            Files.copy(module.toPath, dir.toPath.resolve(module.getName))
+          }
+        } catch {
+          case e: Throwable =>
+            // Not cached yet, so nothing else would delete it.
+            try Utils.deleteRecursively(dir) catch { case d: Throwable => e.addSuppressed(d) }
+            throw e
+        }
+        globalPythonModules = Some((paths, dir))
+        dir
+      }
+    }
 }
