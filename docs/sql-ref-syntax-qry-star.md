@@ -51,7 +51,8 @@ except_clause
   * **field_name**
 
     A reference to a field in a column of the set of columns that you can reference.
-    If you exclude all fields from a STRUCT, the result is an empty STRUCT.
+    If you exclude all fields from a STRUCT, the result is an empty STRUCT, even if the STRUCT is NULL.
+    If you exclude only some of the fields, a NULL STRUCT stays NULL.
     Each name must reference a column included in the set of columns that you can reference or their fields.
     Otherwise, Spark SQL raises a UNRESOLVED_COLUMN error. If names overlap or are not unique, Spark raises an EXCEPT_OVERLAPPING_COLUMNS error.
 
