@@ -25,14 +25,13 @@ class GroupByRollingCountMixin:
     def test_groupby_rolling_count(self):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
-        # TODO(SPARK-43432): Fix `min_periods` for Rolling.count() to work same as pandas
         self.assert_eq(
             psser.groupby(psser).rolling(2).count().sort_index(),
-            pser.groupby(pser).rolling(2, min_periods=1).count().sort_index(),
+            pser.groupby(pser).rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psser.groupby(psser).rolling(2).count().sum(),
-            pser.groupby(pser).rolling(2, min_periods=1).count().sum(),
+            pser.groupby(pser).rolling(2).count().sum(),
         )
 
         # Multiindex
@@ -44,7 +43,7 @@ class GroupByRollingCountMixin:
         psser = ps.from_pandas(pser)
         self.assert_eq(
             psser.groupby(psser).rolling(2).count().sort_index(),
-            pser.groupby(pser).rolling(2, min_periods=1).count().sort_index(),
+            pser.groupby(pser).rolling(2).count().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
@@ -52,28 +51,28 @@ class GroupByRollingCountMixin:
 
         self.assert_eq(
             psdf.groupby(psdf.a).rolling(2).count().sort_index(),
-            pdf.groupby(pdf.a).rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pdf.a).rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(psdf.a).rolling(2).count().sum(),
-            pdf.groupby(pdf.a).rolling(2, min_periods=1).count().sum(),
+            pdf.groupby(pdf.a).rolling(2).count().sum(),
         )
         self.assert_eq(
             psdf.groupby(psdf.a + 1).rolling(2).count().sort_index(),
-            pdf.groupby(pdf.a + 1).rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pdf.a + 1).rolling(2).count().sort_index(),
         )
 
         self.assert_eq(
             psdf.b.groupby(psdf.a).rolling(2).count().sort_index(),
-            pdf.b.groupby(pdf.a).rolling(2, min_periods=1).count().sort_index(),
+            pdf.b.groupby(pdf.a).rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(psdf.a)["b"].rolling(2).count().sort_index(),
-            pdf.groupby(pdf.a)["b"].rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pdf.a)["b"].rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(psdf.a)[["b"]].rolling(2).count().sort_index(),
-            pdf.groupby(pdf.a)[["b"]].rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pdf.a)[["b"]].rolling(2).count().sort_index(),
         )
 
         # Multiindex column
@@ -83,13 +82,29 @@ class GroupByRollingCountMixin:
 
         self.assert_eq(
             psdf.groupby(("a", "x")).rolling(2).count().sort_index(),
-            pdf.groupby(("a", "x")).rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(("a", "x")).rolling(2).count().sort_index(),
         )
 
         self.assert_eq(
             psdf.groupby([("a", "x"), ("a", "y")]).rolling(2).count().sort_index(),
-            pdf.groupby([("a", "x"), ("a", "y")]).rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby([("a", "x"), ("a", "y")]).rolling(2).count().sort_index(),
         )
+
+    def test_groupby_rolling_count_min_periods(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 1, 2, 1, 2, 2, 1],
+                "b": [1.0, np.nan, 3.0, np.nan, np.nan, 6.0, 7.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        for min_periods in [None, 1, 2, 3]:
+            with self.subTest(min_periods=min_periods):
+                psser_rolling = psdf.groupby(psdf.a)["b"].rolling(3, min_periods=min_periods)
+                pser_rolling = pdf.groupby(pdf.a)["b"].rolling(3, min_periods=min_periods)
+                self.assert_eq(
+                    psser_rolling.count().sort_index(), pser_rolling.count().sort_index()
+                )
 
 
 class GroupByRollingCountTests(

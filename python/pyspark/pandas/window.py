@@ -194,7 +194,12 @@ class RollingLike(RollingAndExpanding[FrameLike]):
 
     def count(self) -> FrameLike:
         def count(scol: Column) -> Column:
-            return F.count(scol).over(self._window)
+            # Same as pandas: whether a result is produced depends on the number of rows in the
+            # window reaching 'min_periods', not on how many of them are non-NaN.
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                F.count(scol).over(self._window),
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore[attr-defined]
 
@@ -266,6 +271,15 @@ class Rolling(RollingLike[FrameLike]):
         dtype: float64
 
         >>> s.rolling(3).count()
+        0    NaN
+        1    NaN
+        2    2.0
+        3    2.0
+        dtype: float64
+
+        A result needs at least `min_periods` rows in the window, whether or not they are NaN.
+
+        >>> s.rolling(3, min_periods=1).count()
         0    1.0
         1    2.0
         2    2.0
@@ -281,8 +295,8 @@ class Rolling(RollingLike[FrameLike]):
 
         >>> s.to_frame().rolling(3).count()
              0
-        0  1.0
-        1  2.0
+        0  NaN
+        1  NaN
         2  2.0
         3  2.0
         """
@@ -1139,17 +1153,17 @@ class RollingGroupby(RollingLike[FrameLike]):
         --------
         >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).count().sort_index()
-        2  0     1.0
-           1     2.0
-        3  2     1.0
-           3     2.0
+        2  0     NaN
+           1     NaN
+        3  2     NaN
+           3     NaN
            4     3.0
-        4  5     1.0
-           6     2.0
+        4  5     NaN
+           6     NaN
            7     3.0
            8     3.0
-        5  9     1.0
-           10    2.0
+        5  9     NaN
+           10    NaN
         dtype: float64
 
         For DataFrame, each rolling count is computed column-wise.
@@ -1158,16 +1172,16 @@ class RollingGroupby(RollingLike[FrameLike]):
         >>> df.groupby(df.A).rolling(2).count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 B
         A
-        2 0   1.0
+        2 0   NaN
           1   2.0
-        3 2   1.0
+        3 2   NaN
           3   2.0
           4   2.0
-        4 5   1.0
+        4 5   NaN
           6   2.0
           7   2.0
           8   2.0
-        5 9   1.0
+        5 9   NaN
           10  2.0
         """
         return super().count()
