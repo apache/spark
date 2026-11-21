@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.IdentityHashMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -30,10 +32,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, ReplaceCurrentLike, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST_TO_TIMESTAMP, CURRENT_LIKE, PLAN_EXPRESSION, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -144,7 +147,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   private def getDefaultValueExprOpt(field: StructField): Option[Expression] = {
     if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      Some(analyze(field, "INSERT"))
+      Some(analyze(field, "INSERT", preserveCurrentTime = true))
     } else {
       None
     }
@@ -210,17 +213,19 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @param metadataKey   which key to look up from the column metadata; generally either
    *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
+   * @param preserveCurrentTime whether to leave current-time expressions for the enclosing query.
    * @return Result of the analysis and constant-folding operation.
    */
   def analyze(
       field: StructField,
       statementType: String,
-      metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
+      metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+      preserveCurrentTime: Boolean = false): Expression = {
     field.metadata.getExpression[Expression](metadataKey) match {
       case (sql, Some(expr)) =>
-        analyze(field.name, field.dataType, expr, sql, statementType)
+        analyze(field.name, field.dataType, expr, sql, statementType, preserveCurrentTime)
       case (sql, _) =>
-        analyze(field.name, field.dataType, sql, statementType)
+        analyze(field.name, field.dataType, sql, statementType, preserveCurrentTime)
     }
   }
 
@@ -234,6 +239,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
       dataType: DataType,
       defaultSQL: String,
       statementType: String): Expression = {
+    analyze(colName, dataType, defaultSQL, statementType, preserveCurrentTime = false)
+  }
+
+  private def analyze(
+      colName: String,
+      dataType: DataType,
+      defaultSQL: String,
+      statementType: String,
+      preserveCurrentTime: Boolean): Expression = {
     // Parse the expression.
     lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
@@ -243,7 +257,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
           statementType, colName, defaultSQL, ex)
     }
-    analyze(colName, dataType, parsed, defaultSQL, statementType)
+    analyze(colName, dataType, parsed, defaultSQL, statementType, preserveCurrentTime)
   }
 
   /**
@@ -264,7 +278,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
       V2ExpressionUtils.toCatalyst(defaultValue.getExpression) match {
         case Some(defaultExpr) =>
           val defaultSQL = Option(defaultValue.getSql).getOrElse(defaultExpr.sql)
-          analyze(colName, dataType, defaultExpr, defaultSQL, statementType)
+          analyze(colName, dataType, defaultExpr, defaultSQL, statementType,
+            preserveCurrentTime = false)
 
         case None if defaultValue.getSql != null =>
           analyze(colName, dataType, defaultValue.getSql, statementType)
@@ -282,7 +297,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
       dataType: DataType,
       defaultExpr: Expression,
       defaultSQL: String,
-      statementType: String): Expression = {
+      statementType: String,
+      preserveCurrentTime: Boolean): Expression = {
     // Check invariants before moving on to analysis.
     if (defaultExpr.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
@@ -290,13 +306,16 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
 
     // Analyze the parse result.
-    val plan = try {
+    val (plan, unfolded) = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
-      // Eagerly execute finish-analysis and constant-folding rules before checking whether the
-      // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      val expression = analyzed.collectFirst {
+        case Project(Seq(a: Alias), OneRowRelation()) => a.child
+      }.get
+      // Retain the analyzed expression for statement binding while validating an eager copy.
+      val folded = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      (folded, expression)
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -321,7 +340,110 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
 
     // Perform implicit coercion from the provided expression type to the required column type.
-    coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+    val coerced = coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+    val currentDefault = if (preserveCurrentTime) {
+      val replaced = if (unfolded.containsPattern(RUNTIME_REPLACEABLE)) {
+        ReplaceExpressions.replace(unfolded)
+      } else {
+        unfolded
+      }
+      // Non-time current-like functions retain the default analyzer's catalog context.
+      val bound = ReplaceCurrentLike(DefaultColumnAnalyzer.catalogManager)
+        .applyForExpression(replaced)
+      Option.when(bound.containsPattern(CURRENT_LIKE))(bound)
+    } else {
+      None
+    }
+    currentDefault.map { expr =>
+      DeferredDefaultValue(expr, dataType, statementType, colName, defaultSQL, conf.getAllConfs)
+    }.getOrElse(coerced)
+  }
+
+  private def isTimeToTimestampCast(expression: Expression): Boolean = expression match {
+    case cast: Cast =>
+      Cast.isTimeToTimestampNTZ(cast.child.dataType, cast.dataType) ||
+        Cast.isTimeToTimestampLTZ(cast.child.dataType, cast.dataType)
+    case _ => false
+  }
+
+  private def containsDeferredClock(
+      expression: Expression,
+      dependencies: IdentityHashMap[Expression, java.lang.Boolean] =
+        new IdentityHashMap[Expression, java.lang.Boolean]): Boolean = {
+    if (expression.containsPattern(CURRENT_LIKE)) {
+      true
+    } else if (!expression.containsPattern(CAST_TO_TIMESTAMP)) {
+      false
+    } else {
+      val cached = dependencies.get(expression)
+      if (cached != null) {
+        cached.booleanValue()
+      } else {
+        val result = isTimeToTimestampCast(expression) ||
+          expression.children.exists(containsDeferredClock(_, dependencies))
+        dependencies.put(expression, result)
+        result
+      }
+    }
+  }
+
+  // Keep the validated output schema even if clock binding changes a type-defining operand.
+  // Only the final statement-bound value is converted, using the same default coercion policy.
+  private case class DeferredDefaultValue(
+      child: Expression,
+      targetType: DataType,
+      statementType: String,
+      colName: String,
+      defaultSQL: String,
+      settings: Map[String, String]) extends UnaryExpression with CodegenFallback {
+    override lazy val dataType: DataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
+    override def nullable: Boolean = true
+    override lazy val foldable: Boolean = !containsDeferredClock(child)
+    override def stateful: Boolean = true
+    override def sql: String = child.sql
+    override protected def stringArgs: Iterator[Any] = Iterator(child, dataType)
+
+    // Local relation conversion can evaluate the default before ConstantFolding runs. Cache only
+    // within this prepared expression; fresh copies and clock rewrites receive an empty cache.
+    @transient private lazy val value: Any = {
+      val evalConf = new SQLConf
+      settings.foreach { case (key, setting) => evalConf.setConfString(key, setting) }
+      SQLConf.withExistingConf(evalConf) {
+        val source = SpecialDatetimeValues.applyForExpression(child)
+        val literal = Literal.create(source.eval(EmptyRow), source.dataType)
+        val converted = coerceDefaultValue(
+          literal, targetType.asNullable, statementType, colName, defaultSQL).eval(EmptyRow)
+        if (dataType == dataType.asNullable) {
+          converted
+        } else {
+          // Conversion has already established the leaf types. Use table assignment only to
+          // generate nested null checks, without imposing its different conversion policy.
+          val input = AttributeReference(colName, dataType.asNullable, nullable = true)()
+          val target = AttributeReference(colName, dataType, nullable = true)()
+          evalConf.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, SQLConf.StoreAssignmentPolicy.ANSI)
+          val output = TableOutputResolver.resolveOutputColumns(
+            "", Seq(target), LocalRelation(input), byName = false, evalConf)
+          val checked = output match {
+            case project: Project => project.projectList.head
+            case _ => input
+          }
+          checked.transform {
+            case attr: AttributeReference if attr.exprId == input.exprId =>
+              BoundReference(0, input.dataType, input.nullable)
+          }.eval(InternalRow(converted))
+        }
+      }
+    }
+
+    override def eval(input: InternalRow): Any = {
+      if (!foldable) {
+        throw SparkException.internalError("Default evaluated before statement clock binding")
+      }
+      InternalRow.copyValue(value)
+    }
+
+    override protected def withNewChildInternal(newChild: Expression): DeferredDefaultValue =
+      copy(child = newChild)
   }
 
   /**
