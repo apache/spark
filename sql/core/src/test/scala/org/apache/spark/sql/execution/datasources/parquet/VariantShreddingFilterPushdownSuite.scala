@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
@@ -362,6 +364,33 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       assert(baseline(read) == Seq(Row(1500L)))
       forEachReader { (_, _) =>
         checkAnswer(read, Seq(Row(1500L)))
+      }
+    }
+  }
+
+  test("SPARK-60916: BOOLEAN IN above the IN filter threshold with a bloom filter") {
+    withTempDir { dir =>
+      withSQLConf(writeConf("a boolean", annotate = true): _*) {
+        spark.sql("SELECT parse_json('{\"a\":' || (id % 2 = 0) || '}') AS v " +
+            "FROM range(0, 10, 1, 1)")
+          .coalesce(1)
+          .write
+          .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED, true)
+          .mode("overwrite")
+          .parquet(dir.getAbsolutePath)
+      }
+      def read: DataFrame = spark.read.parquet(dir.getAbsolutePath)
+        .selectExpr("try_variant_get(v, '$.a', 'boolean') AS a")
+        .where("a IN (true, false)")
+      val expected = baseline(read)
+      assert(expected.length == 10, s"baseline should return every row, got $expected")
+      withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1",
+          ParquetInputFormat.BLOOM_FILTERING_ENABLED -> "true") {
+        forEachReader { (_, _) =>
+          // The bloom filter level of parquet-java cannot hash a Boolean in an `in` predicate.
+          checkAnswer(read, expected)
+        }
       }
     }
   }
