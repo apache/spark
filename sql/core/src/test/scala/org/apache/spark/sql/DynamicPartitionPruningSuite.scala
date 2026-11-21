@@ -2723,7 +2723,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
 class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
   with DisableAdaptiveExecutionSuite {
 
-  test("preserve direct broadcast pruning for existing hash and null-aware modes") {
+  test("SPARK-60758: reuse a broadcast directly only with the same hash mode") {
     withSQLConf(
         SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
@@ -2732,6 +2732,14 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
       val source = spark.table("product").queryExecution.optimizedPlan
       val build = QueryExecution.createSparkPlan(spark.sessionState.planner, source)
       val probe = spark.range(4).queryExecution.sparkPlan
+      val matchedHashJoin = BroadcastHashJoinExec(
+        Seq(probe.output.head),
+        Seq(build.output.head),
+        Inner,
+        BuildRight,
+        None,
+        probe,
+        build)
       val mismatchedHashJoin = BroadcastHashJoinExec(
         Seq(probe.output.head),
         Seq(build.output(1)),
@@ -2754,8 +2762,10 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
       assert(nullAwareJoin.isNullAwareAntiJoin)
 
       Seq(
-        "mismatched hash mode" -> mismatchedHashJoin,
-        "null-aware anti join" -> nullAwareJoin).foreach { case (name, existingJoin) =>
+        ("same hash mode", matchedHashJoin, true),
+        ("mismatched hash mode", mismatchedHashJoin, false),
+        ("null-aware anti join", nullAwareJoin, false)
+      ).foreach { case (name, existingJoin, reuse) =>
         val pruning = DynamicPruningSubquery(
           probe.output.head,
           source,
@@ -2768,9 +2778,41 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
           case in: InSubqueryExec => in
         })
 
-        assert(directFilters.size === 1, s"$name:\n$rewritten")
-        assert(directFilters.head.plan.isInstanceOf[SubqueryBroadcastExec],
-          s"$name:\n$rewritten")
+        if (reuse) {
+          assert(directFilters.size === 1, s"$name:\n$rewritten")
+          assert(directFilters.head.plan.isInstanceOf[SubqueryBroadcastExec],
+            s"$name:\n$rewritten")
+        } else {
+          assert(directFilters.isEmpty, s"$name:\n$rewritten")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60758: a DPP filter does not broadcast again a plan broadcast in another mode") {
+    withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The first branch is a shuffle join. Its DPP filter can reuse only the broadcast of the same
+      // plan in the second branch, and only if that join broadcasts it on the filter's key.
+      Seq(
+        "f2.store_id = s.store_id" -> true,
+        "f2.units_sold = s.store_id * 10" -> false).foreach { case (condition, reuse) =>
+        val df = sql(
+          s"""
+             |SELECT f.date_id FROM fact_sk f
+             |JOIN (SELECT store_id FROM dim_store WHERE country = 'NL') s
+             |  ON f.store_id = s.store_id
+             |UNION ALL
+             |SELECT /*+ BROADCAST(s) */ f2.date_id FROM fact_np f2
+             |JOIN (SELECT store_id FROM dim_store WHERE country = 'NL') s ON $condition
+             |""".stripMargin)
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = reuse)
+        val plan = df.queryExecution.executedPlan
+        assert(collectWithSubqueries(plan) { case b: BroadcastExchangeLike => b }.size === 1,
+          plan)
       }
     }
   }

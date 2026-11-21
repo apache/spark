@@ -1416,23 +1416,17 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60702: do not add bloom filter if physical planning keeps the dpp filter over the " +
-    "build plan of a null-aware anti join") {
+  test("SPARK-60758: add bloom filter if the dpp filter cannot reuse the broadcast of a " +
+    "null-aware anti join") {
     // The join is a shuffle join. The `not in` subquery broadcasts the build plan of its DPP
-    // filter. Without AQE, physical planning keeps the filter, though it builds its own
-    // broadcast. AQE plans the filter as `true`, so there the key gets the bloom filter.
+    // filter, but in another mode, so physical planning plans the filter as `true`.
     val query = "select * from bf5part p join (select c2 from bf2 where a2 = 62 and c2 is not " +
       "null) d on p.f5 = d.c2 where p.a5 not in (select c2 from bf2 where a2 = 62 and c2 is not " +
       "null)"
     withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500",
         SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "-1") {
       assertBloomFilterWithoutDpp(query)
-      if (conf.adaptiveExecutionEnabled) {
-        assertRewroteWithBloomFilterForDroppedDpp(query)
-      } else {
-        assert(bloomFilterKeys(query).isEmpty)
-        assert(dynamicPruningFilters(query) == Seq(classOf[SubqueryBroadcastExec]))
-      }
+      assertRewroteWithBloomFilterForDroppedDpp(query)
     }
   }
 

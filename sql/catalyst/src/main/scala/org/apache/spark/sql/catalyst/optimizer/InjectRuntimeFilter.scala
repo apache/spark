@@ -531,15 +531,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // The plans that a broadcast hash join of `plan` could broadcast, as
-  // `getBroadcastHashJoinBuildSide` picks them, but no null-aware anti join under AQE. The list can
-  // hold more plans than physical planning broadcasts, and no fewer that a DPP filter can reuse,
-  // unless the statistics change after this rule. It takes each side without the DPP filters on top
-  // of it, since cleanup can still drop them.
+  // `getBroadcastHashJoinBuildSide` picks them, but no null-aware anti join. The list can hold more
+  // plans than physical planning broadcasts, and no fewer that a DPP filter can reuse, unless the
+  // statistics change after this rule. It takes each side without the DPP filters on top of it,
+  // since cleanup can still drop them.
   private def broadcastablePlans(plan: LogicalPlan): Seq[LogicalPlan] = plan.flatMap {
-    // AQE plans a DPP filter as `true` even if a null-aware anti join broadcasts its build plan.
-    // Without AQE, physical planning keeps such a filter, though the filter builds its own
-    // broadcast.
-    case ExtractSingleColumnNullAwareAntiJoin(_, _) if conf.adaptiveExecutionEnabled => Nil
+    // Physical planning plans a DPP filter as `true` even if a null-aware anti join broadcasts its
+    // build plan, since that broadcast has another mode.
+    case ExtractSingleColumnNullAwareAntiJoin(_, _) => Nil
     case join: Join =>
       getBroadcastHashJoinBuildSide(join, conf).map {
         case BuildLeft => withoutDppFilters(join.left)
