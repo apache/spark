@@ -498,11 +498,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
           enabled)
         // Nor one in the argument of an aggregate function, whose result over no rows it is not.
         assert(countBugHandling(filtered(max(udfOnD))) == inDecorrelation, enabled)
-        // But one in the top aggregate, whose value over no rows has it.
+        // Nor one in the top aggregate: its value over no rows runs for every outer row on
+        // master too, in constructLeftJoins.
         val udfOnSum = PythonUDF("udf", null, LongType, Seq(sum($"s")),
           PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
-        assert(countBugHandling(filtered(max($"d")), Seq(udfOnSum)) ==
-          (if (enabled) inDecorrelation else inLegacy), enabled)
+        assert(countBugHandling(filtered(max($"d")), Seq(udfOnSum)) == inDecorrelation, enabled)
       }
     }
     assert(countBugHandling(filtered(max($"d")), others = Seq($"a"),
@@ -589,6 +589,16 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(nonEquality, Seq(isNullCount), outer = testRelation.limit(10)).isEmpty)
     assert(countBugResult(nonEquality, Seq(isNullCount), outer = streamingOuter).isEmpty)
     assert(countBugResult(nonEquality, outer = streamingOuter) == Some("1"))
+    // One that is the same as that of master is used too, and needs no LIMIT above.
+    val coalescedSum = coalesce(sum($"s"), Literal(5.0))
+    assert(countBugResult(nonEquality, Seq(coalescedSum), outer = nonDeterministicOuter) ==
+      Some("5.0"))
+    assert(keepLimitAbove(nonEquality.groupBy()(coalescedSum.as("r"))).toSet == Set(false))
+    // The domain joins keep one of the outer values that compare equal, e.g. 0.0 for -0.0 and
+    // 0.0, so for a DOUBLE outer reference such a result is not used either.
+    val overDouble = testRelation2.where($"b" > $"d").groupBy()(max($"d").as("s"))
+    assert(countBugResult(overDouble, Seq(isNullCount)).isEmpty)
+    assert(countBugResult(overDouble) == Some("1"))
     val belowUnion = testRelation2.where($"a" === $"c").select($"d")
       .union(testRelation2.where($"a" === $"c").select($"d")).groupBy()(max($"d").as("s"))
     assert(countBugResult(belowUnion, Seq(isNullCount)) == Some("1"))

@@ -653,9 +653,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * that is not inlined (which may be a non-deterministic one; a CTERelationRef does not tell) and
    * a streaming source (for which the domain joins fail). It also checks the plans of the
    * subqueries in `input`. A relation is taken to give the same rows again, as elsewhere in Spark,
-   * e.g. in a self-join, except a LogicalRDD or an ExternalRDD (in sql/core, so matched by name),
-   * whose RDD can give other rows when computed again, e.g. one of random values; a source
-   * outside Spark that gives other rows, e.g. over JDBC, is not detected. Anything else,
+   * e.g. in a self-join, except a LogicalRDD (in sql/core, so matched by name), whose RDD can
+   * give other rows when computed again, e.g. one of random values. That also takes a DataFrame
+   * from local data in classic PySpark or a checkpointed one, which do not. A source outside Spark
+   * that gives other rows, e.g. over JDBC, is not detected, nor is a cached plan whose evicted
+   * partitions give other rows when computed again. (An ExternalRDD, e.g. of Dataset.toDS() over
+   * an RDD, is below a SerializeFromObject, which this check rejects.) Anything else,
    * e.g. a LIMIT (other than over rows of constants), a window function, a sample or a FIRST,
    * keeps the previous handling.
    */
@@ -683,15 +686,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
               case _ => false
             })
         case _: CTERelationRef => false
-        case l: LeafNode => !l.isStreaming && !rddRelations.contains(l.nodeName)
+        case l: LeafNode => !l.isStreaming && l.nodeName != "LogicalRDD"
         case _ => false
       }
       !known || !p.expressions.forall(_.deterministic) ||
         !p.subqueries.forall(repeatableInput(_, inSubquery = true))
     }
-
-  // The leaf nodes over an RDD (see repeatableInput).
-  private val rddRelations = Set("LogicalRDD", "ExternalRDD")
 
   // Whether every row of `plan` is the same row of constants, so that a LIMIT over it gives the
   // same rows whichever rows it keeps.
@@ -902,9 +902,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // subquery to it, may give other rows when computed again (see repeatableInput and
         // mayMoveIntoOuterInput), and for outer references that are not orderable, for which the
         // domain joins fail. So does a subquery with a scalar Python or external UDF in the
-        // values over no rows of a correlated Aggregate without grouping expressions, which
+        // values over no rows of a correlated lower Aggregate without grouping expressions, which
         // DecorrelateInnerQuery computes in the count bug branch, when the conditional evaluation
-        // of SPARK-61482 is off, since the UDF would then run for every outer row.
+        // of SPARK-61482 is off, since the UDF would then run for every outer row. One in the top
+        // Aggregate runs for every outer row on master too (see constructLeftJoins).
         val legacyNestedAggregate =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
         lazy val domainJoinsWork = inputRepeatable && !mayMove(exprId) &&
@@ -913,12 +914,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           !domainJoinsWork ||
           (!conf.getConf(
             SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
-            sub.exists {
-              case a: Aggregate => correlatedUngroupedAggregate(a) &&
-                RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(a).values
-                  .exists(EvalOnlyWhen.hasLiftedUDF)
-              case _ => false
-            })
+            lowerAggs.exists(a => correlatedUngroupedAggregate(a) &&
+              RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(a).values
+                .exists(EvalOnlyWhen.hasLiftedUDF)))
         lazy val lowerAggs = sub match {
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
           case _ => Nil
@@ -988,8 +986,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // nothing of the one row below it, or the same as master's result. Otherwise the
         // subquery does not use countBugResult where the domain joins are known not to work,
         // which keeps the results of master, also the wrong ones for outer rows without matching
-        // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). This is
-        // decided the first time, as mayHaveCountBug.
+        // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). So does it
+        // for outer references of a type whose equal values may differ (see sameWhenEqual): the
+        // domain joins keep one of them, e.g. 0.0 for -0.0 and 0.0, and give its result to the
+        // outer rows with the others, which can be master's result over no rows for one where
+        // countBugResult would be wrong. This is decided the first time, as mayHaveCountBug.
+        lazy val domainKeysStable = outerAttrs.forall(e => sameWhenEqual(e.dataType))
         // With countBugResult, the top Aggregate is over exactly one row for every outer row, that
         // of the Aggregates of the chain below it (see evalSubqueryOnEmptyCorrelatedInput).
         lazy val countBugResultForEveryRow = sub match {
@@ -1013,7 +1015,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           countBugResult.isDefined && decorrelatedPlan.exists(_.isInstanceOf[DomainJoin]) &&
           !countBugResultForEveryRow && !countBugResultAsOnMaster
         val countBugResultKept =
-          if (countBugResultForMissedRows && !domainJoinsWork) None else countBugResult
+          if (countBugResultForMissedRows && (!domainJoinsWork || !domainKeysStable)) {
+            None
+          } else {
+            countBugResult
+          }
         // With handleCountBugInDecorrelate, noDefaultResultCountBugAgg says that the count bug is
         // handled in DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
         // So does countBugResultForMissedRows for a subquery that uses countBugResult (see above).
