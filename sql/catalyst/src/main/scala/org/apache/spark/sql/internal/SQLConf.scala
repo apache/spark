@@ -363,16 +363,6 @@ object SQLConf {
       .toSequence
       .createWithDefault(Nil)
 
-  val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
-    buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
-      .internal()
-      .version("4.1.0")
-      .doc(
-        "When true, prefer the column from the underlying relation over the lateral column alias " +
-        "reference with the same name (see SPARK-53734).")
-      .booleanConf
-      .createWithDefault(true)
-
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
       .internal()

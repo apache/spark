@@ -5187,18 +5187,7 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   }
 
   test("SPARK-53734: Prefer table column over LCA when resolving array index") {
-    val query = "SELECT 1 AS col1, col2[col1] FROM VALUES(0, ARRAY(1, 2));"
-    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "true") {
-      checkAnswer(sql(query), Row(1, 1))
-    }
-
-    withSQLConf(
-      SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false",
-      // Single-pass analyzer doesn't support this legacy behavior.
-      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
-    ) {
-      checkAnswer(sql(query), Row(1, 2))
-    }
+    checkAnswer(sql("SELECT 1 AS col1, col2[col1] FROM VALUES(0, ARRAY(1, 2));"), Row(1, 1))
   }
 
   gridTest("SPARK-55811: Catch NonFatal instead of UnresolvedException when calling " +
