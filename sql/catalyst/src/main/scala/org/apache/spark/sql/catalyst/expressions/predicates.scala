@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, PerPartitionRuntimeFilterSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
@@ -320,23 +321,34 @@ trait PredicateHelper extends AliasHelper with Logging {
 
   /**
    * Returns true if the conjunct `cond` can fail on a row: [[ExprUtils.canEvaluateUnconditionally]]
-   * rejects it, or it reads a column in `failable`. A filter that `PartitionPruning` or
-   * `InjectRuntimeFilter` adds computes its subquery once, so only its key counts.
+   * rejects it, or it reads a column in `failable`. The check is conservative: it also rejects
+   * many expressions that can not fail in fact, e.g. `exp(x) > 0` or a `CASE WHEN`. Constant
+   * parts count as what they evaluate to, as `ConstantFolding` folds them, e.g. `1 + 1` in
+   * `d_moy = 1 + 1`, unless they fail to. A filter that `PartitionPruning` or
+   * `InjectRuntimeFilter` adds computes its subquery once, also after `MergeSubplans` merges it,
+   * so only its key counts.
    */
   protected def canFail(cond: Expression, failable: => AttributeSet): Boolean = {
     val computed = cond match {
       case d: DynamicPruningSubquery => d.pruningKey
-      case BloomFilterMightContain(_: ScalarSubquery, XxHash64(Seq(key), _)) => key
+      case BloomFilterMightContain(
+          _: ScalarSubquery | GetStructField(_: ScalarSubquery, _, _), XxHash64(Seq(key), _)) =>
+        key
+      case p: PerPartitionRuntimeFilterSubquery => p.key
       case _ => cond
     }
-    !ExprUtils.canEvaluateUnconditionally(computed) ||
-      computed.references.exists(failable.contains)
+    // `failed` keeps a part that fails to fold from being tagged, as it may be shared with a plan.
+    val folded = ConstantFolding.constantFolding(computed, isConditionalBranch = true,
+      failed = java.util.Collections.newSetFromMap(
+        new java.util.IdentityHashMap[Expression, java.lang.Boolean]()))
+    !ExprUtils.canEvaluateUnconditionally(folded) || folded.references.exists(failable.contains)
   }
 
   /**
    * Returns true if `condition`, the condition of a filter, can be NULL. A filter drops a row on
    * which its condition is NULL, but `NULL AND x` still evaluates `x`, so a conjunct of the filter
-   * above that can fail may not be combined into it. A column that a conjunct `IS NOT NULL`
+   * above that can fail may be combined into it only under an `If` (see `CombineFilters`). A
+   * column that a conjunct `IS NOT NULL`
    * checks, also through a null-intolerant expression, is not NULL when the condition is, so it
    * is taken as not nullable in the other conjuncts, as `FilterExec` does.
    */

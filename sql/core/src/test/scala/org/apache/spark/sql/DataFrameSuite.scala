@@ -3135,6 +3135,19 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62187: a filter condition that can fail is not evaluated on a joined row that the " +
+    "filter below drops as NULL") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `a.f > b.g OR a.x > 5` is NULL on the joined row, so the filter below, which goes into the
+      // join condition, drops it before the outer one divides by zero on it.
+      val a = Seq((1, 5, 1, 1)).toDF("k", "f", "x", "v")
+      val b = Seq[(Int, Integer, Int)]((1, null, 1)).toDF("k", "g", "w")
+      val df = a.join(b, a("k") === b("k")).where(a("f") > b("g") || a("x") > 5)
+        .where(lit(10) / (a("v") - b("w")) > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On
