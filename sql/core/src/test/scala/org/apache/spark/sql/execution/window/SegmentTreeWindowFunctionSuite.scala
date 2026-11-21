@@ -94,6 +94,20 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       baseDF.select($"id", $"pk", count($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
+  test("SPARK-60267: SUM over ROWS frames with offsets near Int.MaxValue") {
+    // The frame width used to size the block cache was computed in Int arithmetic and overflowed
+    // for these offsets, failing the query with "maxCachedBlocks must be >= 1".
+    Seq(
+      (0, Int.MaxValue),
+      (-Int.MaxValue, 0),
+      (-1, Int.MaxValue),
+      (-Int.MaxValue, 1),
+      (-Int.MaxValue, Int.MaxValue)).foreach { case (lo, hi) =>
+      checkEquivalence(() =>
+        baseDF.select($"id", $"pk", sum($"v").over(winSpec(lo, hi)).as("agg")))
+    }
+  }
+
   test("AVG over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
     checkEquivalence(() =>
       baseDF.select($"id", $"pk", avg($"v").over(winSpec(-3, 3)).as("agg")))
