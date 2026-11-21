@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import datetime
+import os
 import unittest
+from unittest import mock
 
 from pyspark.sql.types import (
     ArrayType,
@@ -24,6 +27,9 @@ from pyspark.sql.types import (
     Row,
     StringType,
     StructType,
+    TimestampLTZNanosType,
+    TimestampNTZType,
+    TimestampType,
 )
 from pyspark.testing.utils import (
     have_pandas,
@@ -580,6 +586,66 @@ class ConverterTests(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_converter_from_pandas_nested_timestamp(self):
+        tz = "America/Los_Angeles"
+        aware = datetime.datetime(2020, 1, 1, 12, tzinfo=datetime.timezone.utc)
+        naive = datetime.datetime(2020, 1, 1, 12)
+        # The naive value is read in the session timezone: 12:00 PST (UTC-8) -> 20:00 UTC.
+        naive_as_session = datetime.datetime(2020, 1, 1, 20, tzinfo=datetime.timezone.utc)
+
+        conv = _create_converter_from_pandas(ArrayType(TimestampType()), timezone=tz)
+        assert_series_equal(
+            conv(pd.Series([[aware, naive, None], None])),
+            pd.Series([[aware, naive_as_session, None], None]),
+        )
+
+        nanos = pd.Timestamp("2020-01-01 12:00:00.000000001", tz="UTC")
+        conv = _create_converter_from_pandas(ArrayType(TimestampLTZNanosType()), timezone=tz)
+        result = conv(pd.Series([[nanos, naive, None], None]))
+        assert_series_equal(
+            result,
+            pd.Series([[nanos, pd.Timestamp(naive_as_session), None], None]),
+        )
+        self.assertEqual(result[0][0].nanosecond, 1)
+
+    def test_converter_to_pandas_nested_timestamp(self):
+        tz = "America/Los_Angeles"
+        aware = datetime.datetime(2020, 1, 1, 12, tzinfo=datetime.timezone.utc)
+        naive = datetime.datetime(2020, 1, 1, 12)
+        # 12:00 UTC -> 04:00 PST (UTC-8).
+        expected_from_utc = pd.Timestamp("2020-01-01 04:00:00")
+        # 12:00 JST (UTC+9) -> 03:00 UTC -> 19:00 PST on the previous day.
+        expected_from_local = pd.Timestamp("2019-12-31 19:00:00")
+
+        conv = _create_converter_to_pandas(ArrayType(TimestampType()), timezone=tz)
+        assert_series_equal(
+            conv(pd.Series([[aware, naive, None], None])),
+            pd.Series([[expected_from_utc, expected_from_utc, None], None]),
+        )
+
+        with mock.patch.dict(os.environ, {"TZ": "Asia/Tokyo"}):
+            conv = _create_converter_to_pandas(
+                ArrayType(TimestampType()), timezone=tz, timestamp_utc_localized=False
+            )
+        assert_series_equal(
+            conv(pd.Series([[aware, naive], None])),
+            pd.Series([[expected_from_utc, expected_from_local], None]),
+        )
+
+        nanos = pd.Timestamp("2020-01-01 12:00:00.000000001", tz="UTC")
+        conv = _create_converter_to_pandas(ArrayType(TimestampLTZNanosType()), timezone=tz)
+        result = conv(pd.Series([[nanos, None], None]))
+        assert_series_equal(
+            result,
+            pd.Series([[pd.Timestamp("2020-01-01 04:00:00.000000001"), None], None]),
+        )
+        self.assertEqual(result[0][0].nanosecond, 1)
+
+        conv = _create_converter_to_pandas(ArrayType(TimestampNTZType()))
+        result = conv(pd.Series([[naive, None], None]))
+        assert_series_equal(result, pd.Series([[pd.Timestamp(naive), None], None]))
+        self.assertIsInstance(result[0][0], pd.Timestamp)
 
 
 if __name__ == "__main__":
