@@ -108,8 +108,7 @@ to_protobuf.__doc__ = PyProtobufFunctions.to_protobuf.__doc__
 
 
 def _read_descriptor_set_file(filePath: str) -> bytes:
-    with open(filePath, "rb") as f:
-        return f.read()
+    return PyProtobufFunctions._read_descriptor_set_file(filePath)
 
 
 def _test() -> None:
