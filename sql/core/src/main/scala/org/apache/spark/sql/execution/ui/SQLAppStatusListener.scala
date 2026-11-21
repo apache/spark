@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
@@ -62,8 +63,12 @@ class SQLAppStatusListener(
     cleanupExecutions(count)
   }
 
+  // Live applications that write a history snapshot also flush their remaining executions, so
+  // the snapshot keeps the partial metrics that event log replay would.
+  private val flushOnClose = !live || HistorySnapshotStore.isEnabled(conf)
+
   kvstore.onFlush {
-    if (!live) {
+    if (flushOnClose) {
       val now = System.nanoTime()
       liveExecutions.values.asScala.foreach { exec =>
         // This saves the partial aggregated metrics to the store; this works currently because
