@@ -51,6 +51,71 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     Symbol("relatives").map(StringType, name),
     $"employer".struct(employer))
 
+  test("SPARK-42504: prune nested fields through adjacent projects") {
+    val query = contact
+      .select($"employer", ($"id" + 1).as("x"))
+      .select($"employer".getField("id").as("employerId"), $"x", ($"x" + 1).as("y"))
+      .analyze
+    val expected = contact
+      .select($"employer".getField("id").as("_extract_id"), ($"id" + 1).as("x"))
+      .select($"_extract_id".as("employerId"), $"x", ($"x" + 1).as("y"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("SPARK-42504: prune nested fields through an alias in adjacent projects") {
+    val query = contact
+      .select($"employer".getField("company").as("company"), ($"id" + 1).as("x"))
+      .select($"company".getField("name").as("companyName"), $"x", ($"x" + 1).as("y"))
+      .analyze
+    val expected = contact
+      .select($"employer".getField("company").getField("name").as("_extract_name"),
+        ($"id" + 1).as("x"))
+      .select($"_extract_name".as("companyName"), $"x", ($"x" + 1).as("y"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("SPARK-42504: retain a whole struct referenced above adjacent projects") {
+    val query = contact
+      .select($"employer", ($"id" + 1).as("x"))
+      .select($"employer", $"employer".getField("id"), $"x", ($"x" + 1).as("y"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), query)
+  }
+
+  test("SPARK-42504: do not duplicate expensive struct expressions") {
+    val struct = If($"id" > 0, $"employer", Literal.create(null, employer))
+    val query = contact.select(struct.as("s"))
+      .select($"s".getField("id"), $"s".getField("company").getField("name"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), query)
+  }
+
+  test("SPARK-42504: do not inline nondeterministic struct expressions") {
+    val struct = CreateNamedStruct(Seq(
+      Literal("a"), Rand(1), Literal("b"), Rand(2), Literal("c"), Literal(0)))
+    val query = contact.select(struct.as("s"))
+      .select($"s".getField("a"), $"s".getField("b"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), query)
+  }
+
+  test("SPARK-42504: keep array indexing inside conditional expressions") {
+    val field = GetStructField(
+      GetArrayItem($"friends", Literal(99), failOnError = true), 0, Some("first"))
+    val query = contact.select($"id", $"friends", ($"id" + 1).as("x"))
+      .select(If($"id" < 0, field, Literal("ok")).as("first"), $"x", ($"x" + 1).as("y"))
+      .analyze
+
+    comparePlans(Optimize.execute(query), query)
+  }
+
   test("Pushing a single nested field projection") {
     def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
       val middle = GetStructField($"name", 1, Some("middle"))
