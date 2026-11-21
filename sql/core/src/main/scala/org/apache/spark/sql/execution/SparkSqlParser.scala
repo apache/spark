@@ -1294,7 +1294,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
-      // TODO: what does this message mean?
       throw QueryParsingErrors.useDefinedRecordReaderOrWriterClassesError(ctx)
     }
 
@@ -1388,8 +1387,11 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val path = Option(ctx.path).map(x => string(visitStringLit(x))).getOrElse("")
 
-    if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
+    if (path.nonEmpty && storage.locationUri.nonEmpty) {
       throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
+    }
+    if (path.isEmpty && storage.locationUri.isEmpty) {
+      throw QueryParsingErrors.directoryPathMissingError(ctx)
     }
 
     if (!path.isEmpty) {

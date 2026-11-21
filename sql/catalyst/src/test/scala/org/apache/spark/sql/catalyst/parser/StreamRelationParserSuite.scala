@@ -731,6 +731,19 @@ class StreamRelationParserSuite extends AnalysisTest {
       condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
   }
 
+  test("STREAM t CHANGES - error: column reference in timestamp") {
+    val sql = "SELECT * FROM STREAM t CHANGES FROM TIMESTAMP col_name"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "STREAM t CHANGES FROM TIMESTAMP col_name",
+        start = 14,
+        stop = 53))
+  }
+
   test("Parse Exception: IDENTIFIED BY on non-streaming table") {
     // Regular (non-streaming) tables should not allow IDENTIFIED BY
     interceptParseException(parsePlan)(
