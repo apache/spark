@@ -1306,6 +1306,37 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-62195: joins: do not push a condition over a column that can fail through a " +
+    "union, a window, a watermark, a pushdown operator or an aggregate key ahead of a " +
+    "non-deterministic one") {
+    // `q` can fail as the ANSI division does. These operators pass it on, the union from its
+    // second child by position, and so does an aggregation that groups by it, also as an alias.
+    // Below them, `PushPredicateThroughNonJoin` would push a condition over it on through the
+    // projection. So after `rand(0) > 0.1`, `q > 0` stays above the join, while `a > 0`, which
+    // can not fail, is pushed.
+    val relation = LocalRelation(attrA, attrB, $"t".timestamp)
+    def project(child: LogicalPlan): LogicalPlan =
+      child.select($"a", $"t", Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)).as("q"))
+    val projected = project(relation)
+    val winExpr = windowExpr(count($"a"), windowSpec($"q" :: Nil, Nil, UnspecifiedFrame))
+    val streaming = LocalRelation(Seq(attrA, attrB, $"t".timestamp), Nil, isStreaming = true)
+    Seq(
+      relation.select($"a", $"t", Cast($"b", DoubleType).as("q")).union(projected),
+      projected.window(winExpr.as("w") :: Nil, $"q" :: Nil, Nil),
+      EventTimeWatermark(UUID.randomUUID(), $"t", new CalendarInterval(0, 0, 1000L),
+        project(streaming)),
+      projected.distribute($"q")(2),
+      projected.groupBy($"a", $"q")($"a", $"q"),
+      projected.groupBy($"a", $"q")($"a", $"q".as("q"))
+    ).foreach { side =>
+      val originalQuery =
+        side.join(testRelation1).where(Rand(0) > 0.1 && $"q" > 0 && $"a" > 0)
+      val correctAnswer =
+        side.where($"a" > 0).join(testRelation1).where(Rand(0) > 0.1 && $"q" > 0)
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
