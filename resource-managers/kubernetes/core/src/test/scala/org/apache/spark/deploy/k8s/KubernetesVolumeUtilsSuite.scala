@@ -257,6 +257,38 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(e.getMessage.contains("nfs.volumeName.options.server"))
   }
 
+  test("Parses csi volumes correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.csi.volumeName.mount.path", "/path")
+    sparkConf.set("test.csi.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.csi.volumeName.options.driver", "csi.example.com")
+    sparkConf.set("test.csi.volumeName.options.fsType", "ext4")
+    sparkConf.set("test.csi.volumeName.options.nodePublishSecretName", "csi-secret")
+    sparkConf.set("test.csi.volumeName.options.volumeAttributes.foo", "bar")
+    // Only `options.volumeAttributes.*` become CSI volume attributes; any other unknown
+    // `options.*` key is ignored rather than swept in as an attribute.
+    sparkConf.set("test.csi.volumeName.options.unknownOption", "ignored")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesCSIVolumeConf] ===
+      KubernetesCSIVolumeConf("csi.example.com", Map("foo" -> "bar"),
+        fsType = Some("ext4"), nodePublishSecretName = Some("csi-secret")))
+  }
+
+  test("Fails on missing csi driver option") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.csi.volumeName.mount.path", "/path")
+    sparkConf.set("test.csi.volumeName.options.volumeAttributes.foo", "bar")
+
+    val e = intercept[NoSuchElementException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
+    }
+    assert(e.getMessage.contains("csi.volumeName.options.driver is required for csi"))
+  }
+
   test("SPARK-47003: Check emptyDir volume size") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
