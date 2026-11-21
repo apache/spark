@@ -3758,6 +3758,47 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60473: NOT IN subquery on non-nullable float/double columns with -0.0/0.0 and NaNs") {
+    withTable("spark_60473_t", "spark_60473_u",
+        "spark_60473_t2", "spark_60473_u2", "spark_60473_v") {
+      sql("CREATE TABLE spark_60473_t (x DOUBLE NOT NULL) USING parquet")
+      sql("CREATE TABLE spark_60473_u (y DOUBLE NOT NULL) USING parquet")
+      sql("INSERT INTO spark_60473_t VALUES (0.0D)")
+      sql("INSERT INTO spark_60473_u VALUES (-0.0D)")
+
+      // Single column NOT IN with 0.0 vs -0.0
+      checkAnswer(
+        sql("SELECT * FROM spark_60473_t WHERE x NOT IN (SELECT y FROM spark_60473_u)"),
+        Nil)
+
+      // Single column NOT IN with NaN
+      sql("CREATE TABLE spark_60473_t2 (x DOUBLE NOT NULL) USING parquet")
+      sql("CREATE TABLE spark_60473_u2 (y DOUBLE NOT NULL) USING parquet")
+      sql("INSERT INTO spark_60473_t2 VALUES (cast('NaN' as double))")
+      sql("INSERT INTO spark_60473_u2 VALUES (cast('NaN' as double))")
+      checkAnswer(
+        sql(
+          "SELECT * FROM spark_60473_t2 WHERE x NOT IN (SELECT y FROM spark_60473_u2)"),
+        Nil)
+
+      // Multi-column NOT IN with non-nullable columns
+      sql(
+        "CREATE TABLE spark_60473_v (x1 DOUBLE NOT NULL, x2 FLOAT NOT NULL) USING parquet")
+      sql("INSERT INTO spark_60473_v VALUES (0.0D, -0.0F)")
+      checkAnswer(
+        sql("""SELECT * FROM spark_60473_v
+              |WHERE (x1, x2) NOT IN (SELECT 0.0D, 0.0F)""".stripMargin),
+        Nil)
+
+      // Nested condition with ExistenceJoin
+      checkAnswer(
+        sql("""SELECT * FROM spark_60473_t2
+              |WHERE 1 = 0
+              |  OR x NOT IN (SELECT y FROM spark_60473_u2)""".stripMargin),
+        Nil)
+    }
+  }
+
   test("SPARK-61927: keep the written order of a throwable condition and a predicate subquery") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t1", "t2") {
