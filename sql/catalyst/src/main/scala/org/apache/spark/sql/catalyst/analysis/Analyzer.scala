@@ -165,6 +165,11 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
+    // The temporary functions that resolution built in this analysis, including in the SQL
+    // functions it expands but not in views. Unlike `referredTempFunctionNames`, a lookup that only
+    // checks whether a function exists does not add to it. A persistent SQL function rejects them
+    // unless `spark.sql.legacy.allowTempFunctionInPersistedSQLFunction` is set.
+    boundTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
     // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
@@ -604,7 +609,8 @@ class Analyzer(
 
   /**
    * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
-   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`), and the
+   * temporary functions that function resolution built (`AnalysisContext.boundTempFunctionNames`).
    *
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
@@ -613,15 +619,18 @@ class Analyzer(
    *
    * Only the variables read by the body itself are returned. A SQL function that the body calls
    * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
-   * that function's dependency rather than becoming one of the function under creation.
+   * that function's dependency rather than becoming one of the function under creation. Temporary
+   * functions, by contrast, include those built while expanding a called function.
    */
-  def executeWithReferredTempVariablesUnderIdentifier(
-      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+  def executeWithReferredTempObjects(
+      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]], Seq[String]) = {
     AnalysisContext.withNewAnalysisContext {
       AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
         val analyzed = executeSameContext(plan)
-        // Read the accumulator before the context is restored on exit.
-        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+        // Read the accumulators before the context is restored on exit.
+        val context = AnalysisContext.get
+        (analyzed, context.referredTempVariableNamesUnderIdentifier.toSeq,
+          context.boundTempFunctionNames.toSeq)
       }
     }
   }

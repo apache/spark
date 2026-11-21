@@ -2584,6 +2584,12 @@ class SessionCatalog(
       }
     }
 
+  // Records a temp function that resolution builds. See `AnalysisContext.boundTempFunctionNames`.
+  private def recordBoundTempFunction[T](name: String, result: Option[T]): Option[T] = {
+    if (result.isDefined) AnalysisContext.get.boundTempFunctionNames += name
+    result
+  }
+
   /** Resolves the function identifier for the given kind and unqualified name. */
   private def functionIdentifierForKind(
       kind: SessionFunctionKind,
@@ -2687,7 +2693,9 @@ class SessionCatalog(
       None
     } else if (isTempFunctionIdentifier(ident)) {
       synchronized {
-        handleViewContext(ident.funcName, Option(functionRegistry.lookupFunction(ident, arguments)))
+        recordBoundTempFunction(ident.funcName, handleViewContext(
+          ident.funcName,
+          Option(functionRegistry.lookupFunction(ident, arguments))))
       }
     } else {
       Some(functionRegistry.lookupFunction(ident, arguments))
@@ -2705,9 +2713,9 @@ class SessionCatalog(
       None
     } else if (isTempFunctionIdentifier(ident)) {
       synchronized {
-        handleViewContext(
+        recordBoundTempFunction(ident.funcName, handleViewContext(
           ident.funcName,
-          Option(tableFunctionRegistry.lookupFunction(ident, arguments)))
+          Option(tableFunctionRegistry.lookupFunction(ident, arguments))))
       }
     } else {
       Some(tableFunctionRegistry.lookupFunction(ident, arguments))

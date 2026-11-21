@@ -4802,6 +4802,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION =
+    buildConf("spark.sql.legacy.allowTempFunctionInPersistedSQLFunction")
+      .internal()
+      .doc("When true, CREATE FUNCTION for a persistent SQL function rejects only the temporary " +
+        "function references that earlier versions detected, and accepts the others again, such " +
+        "as a call to a temporary table function, a call through an IDENTIFIER clause, or a use " +
+        "through another SQL function. Called from a session without the temporary function, " +
+        "such a function fails, or for a `session.` call, runs another function.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_NON_EMPTY_LOCATION_IN_CTAS =
     buildConf("spark.sql.legacy.allowNonEmptyLocationInCTAS")
       .internal()
