@@ -1057,7 +1057,8 @@ DropTempViewCommand cv_tmp_view, false
 -- !query
 CREATE TEMPORARY FUNCTION cv_tmp_fn() RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand cv_tmp_fn, INT, 1, false, true, false, false
+CreateSQLFunctionCommand INT, 1, false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.cv_tmp_fn
 
 
 -- !query
@@ -1131,13 +1132,15 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE TEMPORARY FUNCTION cv_tf1() RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand cv_tf1, INT, 1, false, true, false, false
+CreateSQLFunctionCommand INT, 1, false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.cv_tf1
 
 
 -- !query
 CREATE TEMPORARY FUNCTION cv_tf2(x INT) RETURNS INT RETURN x + 1
 -- !query analysis
-CreateSQLFunctionCommand cv_tf2, x INT, INT, x + 1, false, true, false, false
+CreateSQLFunctionCommand x INT, INT, x + 1, false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.cv_tf2
 
 
 -- !query
