@@ -1412,8 +1412,8 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Full Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on one side + time constraints for correct
-      results, optionally specify watermark on the other side for all state cleanup
+      Conditionally supported, must specify watermark on both sides + time constraints for
+      correct results
     </td>
   </tr>
   <tr>

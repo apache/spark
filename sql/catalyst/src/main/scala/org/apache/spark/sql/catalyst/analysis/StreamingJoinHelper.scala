@@ -52,6 +52,65 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Find the ordinal of the equality key whose watermark evicts the state of both inputs.
+   *
+   * Join keys of both sides generate rows of the same fields, that is, same sequence of data
+   * types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
+   * then it will never consider joining keys that are < state key watermark (i.e. event time
+   * watermark). On the other side (i.e. right side), even if there is no watermark defined,
+   * there has to be an equivalent column (i.e., timestamp). And any right side data that has the
+   * timestamp < watermark will not match will not match with left side data, as the left side get
+   * filtered with the explicitly defined watermark. So, the watermark in timestamp column in
+   * left side keys effectively causes the timestamp on the right side to have a watermark.
+   * We will use the ordinal of the left timestamp in the left keys to find the corresponding
+   * right timestamp in the right keys.
+   */
+  def findJoinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.zipWithIndex.collectFirst {
+      case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+    } orElse {
+      rightKeys.zipWithIndex.collectFirst {
+        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+      }
+    }
+  }
+
+  /**
+   * Whether an equality key of one input bounds, by that input's watermark, the equal key of the
+   * other input's state rows. Later rows of this input pass late-row filtering only with the
+   * watermarked column, or the end of a watermarked window, above the watermark. Their keys are
+   * above it too if the key is that column, or that column shifted forward by constants. With a
+   * backward shift, or a key in another form, they can still match state keys at or below the
+   * watermark, which eviction removes.
+   */
+  def isKeyBoundedByWatermark(key: Expression, inputAttributes: AttributeSet): Boolean = {
+    def isWatermarked(a: AttributeReference): Boolean =
+      a.metadata.contains(delayKey) && inputAttributes.contains(a)
+    def isNotBackward(shift: Expression): Boolean = shift.foldable && (shift.eval() match {
+      case i: CalendarInterval => i.months >= 0 && i.days >= 0 && i.microseconds >= 0
+      case n: java.lang.Number => n.longValue >= 0
+      case _ => false
+    })
+    key match {
+      case a: AttributeReference => isWatermarked(a)
+      // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
+      case GetStructField(a: AttributeReference, 1, _) => isWatermarked(a)
+      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
+        isKeyBoundedByWatermark(child, inputAttributes)
+      case DatetimeSub(_, _, replacement) => isKeyBoundedByWatermark(replacement, inputAttributes)
+      case TimestampAddInterval(start, interval, _) =>
+        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputAttributes)
+      case TimestampAddYMInterval(start, interval, _) =>
+        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputAttributes)
+      case TimestampAdd(_, quantity, start, _) =>
+        isNotBackward(quantity) && isKeyBoundedByWatermark(start, inputAttributes)
+      case _ => false
+    }
+  }
+
+  /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the

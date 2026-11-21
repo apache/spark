@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -732,6 +733,66 @@ object UnsupportedOperationChecker extends Logging {
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           "is not supported without a watermark in the join keys, or a watermark on " +
           "the nullable side and an appropriate range condition")(join)
+    }
+
+    if (SQLConf.get.getConf(SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED)) {
+      checkStreamStreamJoinWatermarkDirection(join)
+    }
+  }
+
+  /**
+   * When the join evicts an unmatched row of an input, an outer join outputs it with NULLs and a
+   * left semi join drops it. Both are final only if later rows of the other input cannot match
+   * the row. So the other input's watermark must bound this input's state, through the
+   * equality key that eviction uses or through a range condition.
+   */
+  private def checkStreamStreamJoinWatermarkDirection(join: Join): Unit = {
+    val (leftKeys, rightKeys) = join match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) => (leftKeys, rightKeys)
+      case _ => (Nil, Nil)
+    }
+    val keyOrdinal = StreamingJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+
+    def checkInput(
+        stateSide: String,
+        state: LogicalPlan,
+        otherSide: String,
+        other: LogicalPlan,
+        otherKeys: Seq[Expression]): Unit = {
+      val boundedByKey = keyOrdinal.exists { ordinal =>
+        StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other.outputSet)
+      }
+      // TODO: [SPARK-62002] [SPARK-61989] With a watermarked equality key, eviction uses the key
+      //  and ignores the range, yet this arm still accepts an input that a range condition
+      //  bounds. Make this arm precise for such keyed joins.
+      lazy val boundedByRange = StreamingJoinHelper.getStateValueWatermark(
+        state.outputSet, other.outputSet, join.condition, Some(1000000)).isDefined
+      if (!boundedByKey && !boundedByRange) {
+        val confKey = SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key
+        // Without a watermarked equality key, only a range condition evicts this input.
+        val reason = if (keyOrdinal.isDefined) {
+          s"a later row of the $otherSide input can match a $stateSide row that the join " +
+            "already evicted"
+        } else {
+          s"the join never evicts the $stateSide input's state, so its unmatched rows are " +
+            "never output"
+        }
+        throwError(
+          s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
+            s"is not supported without a watermark on the $otherSide input that bounds the " +
+            s"state of the $stateSide input, through an equality on the $otherSide input's " +
+            s"event-time column or a range condition. Otherwise, $reason. To skip this " +
+            s"check, set $confKey to false.")(join)
+      }
+    }
+
+    join.joinType match {
+      case LeftOuter | LeftSemi => checkInput("left", join.left, "right", join.right, rightKeys)
+      case RightOuter => checkInput("right", join.right, "left", join.left, leftKeys)
+      case FullOuter =>
+        checkInput("left", join.left, "right", join.right, rightKeys)
+        checkInput("right", join.right, "left", join.left, leftKeys)
+      case _ =>
     }
   }
 }
