@@ -2067,6 +2067,42 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  test("SPARK-62038: restart evicts state that the cutoff of the previous run kept") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("lt"))
+      .withWatermark("lt", "1 second")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rt"))
+      .withWatermark("rt", "1 second")
+    def joined(seconds: Int): DataFrame = left
+      .join(right, expr(s"leftKey = rightKey AND lt > rt - INTERVAL $seconds SECONDS"),
+        "left_outer")
+      .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      withTempDir { checkpointDir =>
+        val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+        testStream(joined(10))(
+          start,
+          MultiAddData(leftInput, (1, 20L))(rightInput, (9, 20L)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (8, 27L))(rightInput, (9, 27L)),
+          CheckNewAnswer(),
+          // The watermark is 26 and the cutoff 16, so lt = 20 stays in state.
+          AddData(rightInput, (9, 28L)),
+          CheckNewAnswer(),
+          StopStream)
+        // The restarted query cuts off at 21, above the 16 of the previous run. An upgrade that
+        // raises a cutoff, such as SPARK-61985, restarts the same way.
+        testStream(joined(5))(
+          start,
+          AddData(rightInput, (9, 29L)),
+          CheckNewAnswer(Row(1, 20L, null)))
+      }
+    }
+  }
 }
 
 /** Adds tests that are specific to state format V1-V3 (not compatible with V4). */

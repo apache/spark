@@ -410,9 +410,9 @@ class StreamingInnerJoinV4Suite
   }
 
   test("prevStateWatermark must be None in the first batch") {
-    // Regression test for the IncrementalExecution guard: in the first batch
-    // prevOffsetSeqMetadata is None, so eventTimeWatermarkForLateEvents must NOT
-    // be passed to getStateWatermarkPredicates.  Without the guard the watermark
+    // Regression test for the IncrementalExecution guard: in the first batch of a run
+    // isFirstBatch is true, so eventTimeWatermarkForLateEvents must NOT be passed to
+    // getStateWatermarkPredicates.  Without the guard the watermark
     // propagation framework yields Some(0) even in batch 0, which would cause
     // scanEvictedKeys to skip state entries at timestamp 0.
     val input1 = MemoryStream[(Int, Int)]
@@ -522,9 +522,9 @@ class StreamingInnerJoinV4Suite
         MultiAddData(input1, (1, 5))(input2, (1, 5)),
         CheckNewAnswer((1, 5, 2, 3)),
 
-        // Batch 2+: even though prevOffsetSeqMetadata is now defined, legacy mode
-        // must keep prevStateWatermark = None to avoid collapsing the eviction scan
-        // range.
+        // Batch 2+: even though this is no longer the first batch of the run, legacy
+        // mode must keep prevStateWatermark = None to avoid collapsing the eviction
+        // scan range.
         MultiAddData(input1, (2, 30))(input2, (2, 30)),
         CheckNewAnswer((2, 30, 4, 6)),
         Execute { q =>
