@@ -348,7 +348,9 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
   override lazy val rowOrderIndependent: Boolean =
-    (isDeterministic || isRowOrderIndependent) && arguments.forall(_.rowOrderIndependent)
+    (isDeterministic || isRowOrderIndependent ||
+      scalarFunction.exists(_.isRowOrderIndependent)) &&
+      arguments.forall(_.rowOrderIndependent)
 
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
@@ -474,8 +476,16 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
+  private def scalarFunctionRowOrderIndependent: Boolean = targetObject match {
+    case Literal(fn: ScalarFunction[_], _) if functionName == ScalarFunction.MAGIC_METHOD_NAME =>
+      fn.isRowOrderIndependent
+    case _ => false
+  }
+
   override lazy val rowOrderIndependent: Boolean =
-    deterministic || (isDeterministic && children.forall(_.rowOrderIndependent))
+    deterministic ||
+      ((isDeterministic || scalarFunctionRowOrderIndependent) &&
+        children.forall(_.rowOrderIndependent))
   override def inputTypes: Seq[AbstractDataType] =
     if (methodInputTypes.nonEmpty) {
       Seq(targetObject.dataType) ++ methodInputTypes

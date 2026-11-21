@@ -295,9 +295,13 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   def func: PythonFunction
   def evalType: Int
   def udfDeterministic: Boolean
+  def udfRowOrderIndependent: Boolean = false
   def resultId: ExprId
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  override lazy val rowOrderIndependent: Boolean =
+    (udfDeterministic || udfRowOrderIndependent) && children.forall(_.rowOrderIndependent)
 
   override def expensive: Boolean = true
 
@@ -473,7 +477,8 @@ case class PythonUDF(
     // single lambda, and one more for each enclosing lambda when the UDF is lifted out of a nested
     // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
     // for every non-element-wise eval type, where it stays at its default of 1.
-    elementwiseNestingDepth: Int = 1)
+    elementwiseNestingDepth: Int = 1,
+    override val udfRowOrderIndependent: Boolean = false)
   extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(

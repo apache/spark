@@ -3054,6 +3054,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
+
+    case filter @ Filter(condition, u: UnaryNode)
+        if (u.isInstanceOf[BatchEvalPython] || u.isInstanceOf[ArrowEvalPython]) &&
+          allowRowOrderIndependent(u.expressions) =>
+      // BatchEvalPython and ArrowEvalPython are row-preserving (never drop rows).
+      assert(!canDropRows(u))
+      lazy val failable = failableOutput(u.child)
+      val (pushDown, stayUp) = splitPushable(splitConjunctivePredicates(condition))(
+        canPush = cond =>
+          cond.deterministic &&
+            cond.references.subsetOf(u.child.outputSet) &&
+            !cond.references.exists(u.producedAttributes.contains),
+        throwable = isRowOrderIndependentBarrier(_, failable))
+      if (pushDown.nonEmpty) {
+        val newChild = u.withNewChildren(Seq(Filter(pushDown.reduceLeft(And), u.child)))
+        if (stayUp.nonEmpty) Filter(stayUp.reduceLeft(And), newChild) else newChild
+      } else {
+        filter
+      }
   }
 
   private[optimizer] def allowRowOrderIndependent(exprs: Seq[Expression]): Boolean =

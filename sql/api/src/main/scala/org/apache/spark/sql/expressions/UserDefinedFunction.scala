@@ -20,6 +20,7 @@ package org.apache.spark.sql.expressions
 import scala.reflect.runtime.universe.{typeOf, TypeTag}
 import scala.util.Try
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder, Row}
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -60,6 +61,15 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
   def deterministic: Boolean
 
   /**
+   * Returns true iff the UDF evaluation for each row is independent of row ordering, prior rows,
+   * partition index, and task/file-split context. Deterministic UDFs are always row-order
+   * independent.
+   *
+   * @since 5.0.0
+   */
+  def rowOrderIndependent: Boolean = deterministic
+
+  /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 1.3.0
@@ -89,6 +99,14 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
    * @since 2.3.0
    */
   def asNondeterministic(): UserDefinedFunction
+
+  /**
+   * Updates UserDefinedFunction to nondeterministic while declaring that each row's evaluation is
+   * independent of row ordering, prior rows, partition index, and task/file-split context.
+   *
+   * @since 5.0.0
+   */
+  def asRowOrderIndependentNondeterministic(): UserDefinedFunction = asNondeterministic()
 }
 
 private[spark] case class SparkUserDefinedFunction(
@@ -98,8 +116,11 @@ private[spark] case class SparkUserDefinedFunction(
     outputEncoder: Option[Encoder[_]] = None,
     givenName: Option[String] = None,
     nullable: Boolean = true,
-    deterministic: Boolean = true)
+    deterministic: Boolean = true,
+    udfRowOrderIndependent: Boolean = false)
     extends UserDefinedFunction {
+
+  override def rowOrderIndependent: Boolean = deterministic || udfRowOrderIndependent
 
   override def withName(name: String): SparkUserDefinedFunction = {
     copy(givenName = Option(name))
@@ -114,10 +135,18 @@ private[spark] case class SparkUserDefinedFunction(
   }
 
   override def asNondeterministic(): SparkUserDefinedFunction = {
-    if (!deterministic) {
+    if (!deterministic && !udfRowOrderIndependent) {
       this
     } else {
-      copy(deterministic = false)
+      copy(deterministic = false, udfRowOrderIndependent = false)
+    }
+  }
+
+  override def asRowOrderIndependentNondeterministic(): SparkUserDefinedFunction = {
+    if (!deterministic && udfRowOrderIndependent) {
+      this
+    } else {
+      copy(deterministic = false, udfRowOrderIndependent = true)
     }
   }
 
@@ -200,6 +229,12 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     } else {
       copy(deterministic = false)
     }
+  }
+
+  override def asRowOrderIndependentNondeterministic(): UserDefinedAggregator[IN, BUF, OUT] = {
+    throw new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+      messageParameters = Map("functionName" -> this.name))
   }
 
   override def name: String = givenName.getOrElse(aggregator.name)

@@ -809,17 +809,21 @@ class CommonInlineUserDefinedFunction(Expression):
         function: Union[PythonUDF, JavaUDF],
         deterministic: bool = False,
         arguments: Optional[Sequence[Expression]] = None,
+        row_order_independent: bool = False,
     ):
         super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
         self._arguments: Sequence[Expression] = arguments or []
         self._function = function
+        self._row_order_independent = (not deterministic) and row_order_independent
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         expr = self._create_proto_expression()
         expr.common_inline_user_defined_function.function_name = self._function_name
         expr.common_inline_user_defined_function.deterministic = self._deterministic
+        if self._row_order_independent:
+            expr.common_inline_user_defined_function.row_order_independent = True
         if len(self._arguments) > 0:
             expr.common_inline_user_defined_function.arguments.extend(
                 [arg.to_plan(session) for arg in self._arguments]
@@ -835,6 +839,8 @@ class CommonInlineUserDefinedFunction(Expression):
         expr = proto.CommonInlineUserDefinedFunction()
         expr.function_name = self._function_name
         expr.deterministic = self._deterministic
+        if self._row_order_independent:
+            expr.row_order_independent = True
         if len(self._arguments) > 0:
             expr.arguments.extend([arg.to_plan(session) for arg in self._arguments])
         expr.python_udf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))

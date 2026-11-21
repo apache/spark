@@ -462,6 +462,9 @@ message CommonInlineUserDefinedFunction {
   }
   // (Required) Indicate if this function should be applied on distinct values.
   bool is_distinct = 7;
+  // (Optional) Indicate if each row's evaluation is independent of row ordering, prior rows,
+  // partition index, and task/file-split context. Defaults to false when unset.
+  optional bool row_order_independent = 8;
 }
 
 message PythonUDF {

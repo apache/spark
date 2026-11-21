@@ -34,6 +34,9 @@ case class ApplyFunctionExpression(
   override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toImmutableArraySeq
   override lazy val deterministic: Boolean = function.isDeterministic &&
       children.forall(_.deterministic)
+  override lazy val rowOrderIndependent: Boolean =
+    (function.isDeterministic || function.isRowOrderIndependent) &&
+      children.forall(_.rowOrderIndependent)
   override def foldable: Boolean = deterministic && children.forall(_.foldable)
   override def stateful: Boolean = true
 

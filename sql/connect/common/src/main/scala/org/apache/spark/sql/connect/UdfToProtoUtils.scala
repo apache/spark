@@ -79,6 +79,9 @@ private[sql] object UdfToProtoUtils {
       .setDeterministic(udf.deterministic)
       .setIsDistinct(isDistinct)
       .addAllArguments(arguments.asJava)
+    if (!udf.deterministic && udf.rowOrderIndependent) {
+      invokeUdf.setRowOrderIndependent(true)
+    }
     val protoUdf = invokeUdf.getScalarScalaUdfBuilder
       .setNullable(udf.nullable)
     udf match {

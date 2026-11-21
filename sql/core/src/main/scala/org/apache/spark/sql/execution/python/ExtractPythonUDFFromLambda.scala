@@ -448,7 +448,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         // `PythonUDF.liftedElementwiseEvalType`.
         PythonUDF.liftedElementwiseEvalType(udf.evalType),
         udf.udfDeterministic,
-        elementwiseNestingDepth = newDepth)
+        elementwiseNestingDepth = newDepth,
+        udfRowOrderIndependent = udf.udfRowOrderIndependent)
       // Calls share one lifted UDF when their lifted forms have the same key; `overArray` keeps
       // each argument's determinism, so `lifted` is deterministic exactly when `udf` is. A key-form
       // comparator (the one caller passing `alsoBind`) shares a nondeterministic call too: its
