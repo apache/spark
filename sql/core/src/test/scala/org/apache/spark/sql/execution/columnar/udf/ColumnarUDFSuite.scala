@@ -178,6 +178,15 @@ class FailingFunction extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = throw new ArithmeticException("boom")
 }
 
+/** Fails as a function whose native library cannot be loaded. */
+class LinkageFailingFunction extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    // scalastyle:off throwerror
+    throw new UnsatisfiedLinkError("no library")
+    // scalastyle:on throwerror
+  }
+}
+
 /** Returns the point (x, x) for a bigint x, as a value of a user-defined type. */
 class PointFunction extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = {
@@ -365,6 +374,13 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
               condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
               parameters = Map("joinType" -> joinType))
         }
+        // A scalar subquery that is not aggregated becomes a left single join.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT x, (SELECT y FROM b WHERE add(a.x, b.y) = 3) FROM a").collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
+          parameters = Map("joinType" -> "LEFT SINGLE"))
         // A call that reads one side is evaluated below the join.
         checkAnswer(
           sql("SELECT * FROM a WHERE EXISTS (SELECT 1 FROM b WHERE add(b.y, b.y) = a.x)"),
@@ -558,6 +574,43 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       parameters = Map("name" -> "engine_only", "kinds" -> "[some-engine]"))
   }
 
+  test("a function without any implementation cannot be called") {
+    val none = ColumnarUserDefinedFunction.create("no_impl", Seq(LongType), LongType)
+    checkError(
+      exception = intercept[AnalysisException](spark.range(5).select(none(col("id")))),
+      condition = "COLUMNAR_UDF_NO_IMPLEMENTATION",
+      parameters = Map("name" -> "`no_impl`"))
+    withFunctions(none) {
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT no_impl(id) FROM range(5)")),
+        condition = "COLUMNAR_UDF_NO_IMPLEMENTATION",
+        parameters = Map("name" -> "`no_impl`"),
+        context = ExpectedContext(fragment = "no_impl(id)", start = 7, stop = 17))
+    }
+  }
+
+  test("a call in the default of a variable is not supported") {
+    withFunctions(addOne) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("DECLARE VARIABLE columnar_udf_var BIGINT DEFAULT add_one(1)")
+        },
+        condition = "INVALID_DEFAULT_VALUE.COLUMNAR_UDF",
+        parameters = Map(
+          "statement" -> "DECLARE VARIABLE",
+          "colName" -> "`system`.`session`.`columnar_udf_var`",
+          "defaultValue" -> "add_one(1)"))
+      // A variable can be set to the result of a call, which is a query of its own.
+      try {
+        sql("DECLARE VARIABLE columnar_udf_var BIGINT DEFAULT 0")
+        sql("SET VAR columnar_udf_var = add_one(1)")
+        checkAnswer(sql("SELECT columnar_udf_var"), Row(2L))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS columnar_udf_var")
+      }
+    }
+  }
+
   test("a function that returns one of its arguments fails") {
     val identity = ColumnarUserDefinedFunction.create(
       "identity", Seq(LongType), LongType, new ReturnArgumentFunction)
@@ -675,6 +728,23 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         "result" -> "bigint",
         "reason" -> "java.lang.ArithmeticException: boom"))
     assert(e.getCause.isInstanceOf[ArithmeticException])
+  }
+
+  test("a function that fails with a LinkageError") {
+    val failing = ColumnarUserDefinedFunction.create(
+      "no_library", Seq(LongType), LongType, new LinkageFailingFunction)
+    val e = intercept[SparkException] {
+      spark.range(5).select(failing(col("id"))).collect()
+    }
+    checkError(
+      exception = e,
+      condition = "FAILED_EXECUTE_UDF",
+      parameters = Map(
+        "functionName" -> "`no_library`",
+        "signature" -> "bigint",
+        "result" -> "bigint",
+        "reason" -> "java.lang.UnsatisfiedLinkError: no library"))
+    assert(e.getCause.isInstanceOf[UnsatisfiedLinkError])
   }
 
   test("a result of a user-defined type") {

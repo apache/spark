@@ -1055,16 +1055,25 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case alter: AlterTableCommand =>
             AlterTableValidation.validate(alter, this)
 
-          case c: CreateVariable
-              if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
+          // A columnar UDF is evaluated by a node below the operator that calls it, and the
+          // command has no such child.
+          case c: CreateVariable if c.resolved &&
+              c.defaultExpr.child.containsAnyPattern(PLAN_EXPRESSION, COLUMNAR_UDF) =>
             val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
               (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
                 .toImmutableArraySeq)
-            throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-              "DECLARE VARIABLE",
-              varName,
-              c.defaultExpr.originalSQL)
+            if (c.defaultExpr.child.containsPattern(PLAN_EXPRESSION)) {
+              throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+                "DECLARE VARIABLE",
+                varName,
+                c.defaultExpr.originalSQL)
+            } else {
+              throw QueryCompilationErrors.defaultValuesMayNotContainColumnarUDFs(
+                "DECLARE VARIABLE",
+                varName,
+                c.defaultExpr.originalSQL)
+            }
 
           case c: Call if c.resolved =>
             if (!c.bound) {

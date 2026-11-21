@@ -105,10 +105,10 @@ case class EvalColumnarUDFsExec(
     val inputTypeStrings: Array[String] =
       udfs.map(_.children.map(_.dataType.catalogString).mkString(", ")).toArray
     val resultTypes: Array[DataType] = udfs.map(_.dataType).toArray
-    // A column vector has the SQL type of a user-defined type, so the type of a result is
-    // compared with the declared type after the same replacement. CHAR and VARCHAR, which a
-    // declared type has when they are first-class types, are compared as STRING, so that the
-    // vector of such a result can be of either type.
+    // The types that the results are compared with. A column vector has the SQL type of a
+    // user-defined type, so a declared type gets the same replacement. CHAR and VARCHAR, which
+    // a declared type has when they are first-class types, are compared as STRING on both
+    // sides, so that the vector of such a result can be of either type.
     val resultVectorTypes: Array[DataType] = resultTypes.map(EvalColumnarUDFsExec.vectorType)
     val numOutputRows = longMetric("numOutputRows")
     val numOutputBatches = longMetric("numOutputBatches")
@@ -181,7 +181,9 @@ case class EvalColumnarUDFsExec(
             val result = try {
               functions(i).eval(args)
             } catch {
-              case NonFatal(e) =>
+              // A function that calls a native library can fail with a `LinkageError`, which
+              // is not a `NonFatal` one.
+              case e @ (NonFatal(_) | _: LinkageError) =>
                 throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
                   names(i), inputTypeStrings(i), resultTypes(i).catalogString, e)
             }
@@ -235,8 +237,9 @@ object EvalColumnarUDFsExec {
     })
   }
 
+  /** Whether the result has the given type, which is the `vectorType` of a declared type. */
   private def hasType(result: ColumnVector, expected: DataType): Boolean = {
-    DataType.equalsStructurally(result.dataType(), expected, true) ||
-      DataType.equalsStructurally(vectorType(result.dataType()), expected, true)
+    DataType.equalsStructurally(
+      CharVarcharUtils.replaceCharVarcharWithStringAlways(result.dataType()), expected, true)
   }
 }

@@ -72,8 +72,14 @@ import org.apache.spark.util.ArrayImplicits._
  *    COALESCE, or on one side of AND or OR, is evaluated for every row, and so are the
  *    expressions that compute its arguments, which can then fail for rows that the branch
  *    would have skipped.
+ *  - The same holds for a conditional expression that the optimizer adds. A correlated
+ *    subquery with an aggregate function that is not null over no rows, such as `count`, is
+ *    evaluated as an outer join, where the result of the aggregate is chosen by a condition.
+ *    A call over that result, as in `SELECT sum(x) FROM (SELECT f(count(*)) AS x ...)`, is
+ *    evaluated for every outer row, also for the value over no rows when the row has matching
+ *    rows, and can then fail for a value that the query does not need.
  *
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Evolving
 final class ColumnarUserDefinedFunction private (
@@ -119,6 +125,9 @@ final class ColumnarUserDefinedFunction private (
   }
 
   private[sql] def builder(children: Seq[Expression]): Expression = {
+    if (function.isEmpty && engineImplementations.isEmpty) {
+      throw QueryCompilationErrors.columnarUDFNoImplementationError(name)
+    }
     if (children.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
@@ -147,7 +156,7 @@ final class ColumnarUserDefinedFunction private (
 }
 
 /**
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Evolving
 object ColumnarUserDefinedFunction {
@@ -185,8 +194,9 @@ object ColumnarUserDefinedFunction {
 
   /**
    * Creates a deterministic function that can return null, with no implementation that Spark
-   * runs. Its implementations for other engines are added with `withEngineImplementation`, and
-   * a query that calls it fails when Spark has to run the call itself.
+   * runs. Its implementations for other engines are added with `withEngineImplementation`: a
+   * function without any implementation cannot be called. A query that calls a function with
+   * such implementations only fails when Spark has to run the call itself.
    *
    * @param name the name of the function
    * @param inputTypes the types of the arguments, which the arguments of a call are cast to

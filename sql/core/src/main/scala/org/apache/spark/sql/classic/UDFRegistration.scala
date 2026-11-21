@@ -54,7 +54,7 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
   /**
    * Registers a columnar user-defined function under its name, so that SQL can call it.
    *
-   * @since 4.4.0
+   * @since 4.5.0
    */
   @Evolving
   def registerColumnar(udf: ColumnarUserDefinedFunction): ColumnarUserDefinedFunction = {

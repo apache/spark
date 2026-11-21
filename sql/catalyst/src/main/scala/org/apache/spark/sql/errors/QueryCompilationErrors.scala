@@ -3118,7 +3118,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def useColumnarUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     // The join can also come from a correlated EXISTS or IN subquery, as a semi, anti or
-    // existence join. An existence join has no SQL form.
+    // existence join, or from a correlated scalar subquery, as a left single join. An
+    // existence join has no SQL form.
     val joinTypeName = joinType match {
       case _: ExistenceJoin => "EXISTENCE"
       case other => other.sql
@@ -3126,6 +3127,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
       messageParameters = Map("joinType" -> toSQLStmt(joinTypeName)))
+  }
+
+  def columnarUDFNoImplementationError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMNAR_UDF_NO_IMPLEMENTATION",
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
@@ -4401,6 +4408,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       defaultValue: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue))
+  }
+
+  def defaultValuesMayNotContainColumnarUDFs(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.COLUMNAR_UDF",
       messageParameters = Map(
         "statement" -> toSQLStmt(statement),
         "colName" -> toSQLId(colName),

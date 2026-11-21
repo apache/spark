@@ -36,14 +36,15 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * by an operator of its own, with its own instance.
  * <p>
  * An exception that the function throws fails the query with the error condition
- * {@code FAILED_EXECUTE_UDF}, with the exception as its cause.
+ * {@code FAILED_EXECUTE_UDF}, with the exception as its cause. So does a {@code LinkageError},
+ * such as the one of a native library that cannot be loaded.
  * <p>
  * The result must not depend on how the rows are split into batches, nor on the order of the
  * rows or of the batches. Spark evaluates the function for every row that reaches it, also for
  * rows whose result the query does not use, such as in a branch of a CASE expression that is
  * not taken.
  *
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Evolving
 public interface ColumnarScalarFunction extends Serializable {

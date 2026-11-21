@@ -1248,6 +1248,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "COLUMNAR_UDF_NO_IMPLEMENTATION" : {
+    "message" : [
+      "The columnar function <name> has no implementation. Create it with an implementation that Spark runs, or add an implementation for another engine with `withEngineImplementation`."
+    ],
+    "sqlState" : "42K0E"
+  },
   "COLUMNAR_UDF_RESULT_IS_ARGUMENT" : {
     "message" : [
       "The columnar function <name> returned one of its argument columns, or a vector inside one. It must return a vector of its own, which Spark closes."
@@ -4372,6 +4378,11 @@
       "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
     ],
     "subClass" : {
+      "COLUMNAR_UDF" : {
+        "message" : [
+          "which contains a call of a columnar user-defined function."
+        ]
+      },
       "DATA_TYPE" : {
         "message" : [
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
@@ -9633,7 +9644,7 @@
       },
       "COLUMNAR_UDF_IN_JOIN_CONDITION" : {
         "message" : [
-          "Columnar UDF over columns of both sides in the condition of a <joinType> join. The condition is the ON clause of the join, or the correlated predicate of an EXISTS or IN subquery, which is evaluated as such a join."
+          "Columnar UDF over columns of both sides in the condition of a <joinType> join. The condition is the ON clause of the join, or the correlated predicate of an EXISTS, IN or scalar subquery, which is evaluated as such a join."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

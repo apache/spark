@@ -33,7 +33,7 @@ import org.apache.spark.annotation.Evolving
  *
  * An implementation is created with `ColumnarUDFImplementation.create`.
  *
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Evolving
 final class ColumnarUDFImplementation private (
@@ -56,7 +56,7 @@ final class ColumnarUDFImplementation private (
 }
 
 /**
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Evolving
 object ColumnarUDFImplementation {
