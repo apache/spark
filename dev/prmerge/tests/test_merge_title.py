@@ -87,71 +87,83 @@ class PrepareMergeTitleTests(unittest.TestCase):
         )
         for title in titles:
             with self.subTest(title=title):
-                result, prompt, errors, _ = self._prepare(title)
+                result, prompt, errors, output = self._prepare(title)
                 self.assertEqual(result, title)
                 self.assertFalse(prompt.called)
                 self.assertEqual(errors, [])
+                self.assertEqual(output, "")
 
     def test_an_unchanged_title_is_not_reprinted(self):
         result, prompt, errors, output = self._prepare("[SPARK-1234][SQL] Fix")
         self.assertEqual(result, "[SPARK-1234][SQL] Fix")
         self.assertFalse(prompt.called)
         self.assertEqual(errors, [])
-        self.assertNotIn("Normalized title", output)
+        self.assertEqual(output, "")
 
     def test_component_case_and_followup_are_normalized(self):
-        result, prompt, _, output = self._prepare("[SPARK-1234][FOLLOWUP][sql] Fix")
+        result, prompt, errors, output = self._prepare("[SPARK-1234][FOLLOWUP][sql] Fix")
         self.assertEqual(result, "[SPARK-1234][SQL][FOLLOWUP] Fix")
         self.assertFalse(prompt.called)
-        self.assertIn("Normalized title: [SPARK-1234][SQL][FOLLOWUP] Fix", output)
+        self.assertEqual(errors, [])
+        self.assertEqual(output, "Normalized title: [SPARK-1234][SQL][FOLLOWUP] Fix\n")
 
     def test_version_tags_move_ahead_of_components(self):
-        result, prompt, _, output = self._prepare("[SPARK-1234][SQL][4.2][sql] Fix")
+        result, prompt, errors, output = self._prepare("[SPARK-1234][SQL][4.2][sql] Fix")
         self.assertEqual(result, "[SPARK-1234][4.2][SQL] Fix")
         self.assertFalse(prompt.called)
-        self.assertIn("Normalized title: [SPARK-1234][4.2][SQL] Fix", output)
+        # A version tag is not an unknown tag, so there is no warning.
+        self.assertEqual(errors, [])
+        self.assertEqual(output, "Normalized title: [SPARK-1234][4.2][SQL] Fix\n")
 
     def test_surrounding_whitespace_is_stripped_and_printed(self):
         wrapped = ' Revert "[SPARK-1234][SQL] Fix" '
-        result, prompt, _, output = self._prepare(wrapped)
+        result, prompt, errors, output = self._prepare(wrapped)
         self.assertEqual(result, 'Revert "[SPARK-1234][SQL] Fix"')
         self.assertFalse(prompt.called)
-        self.assertIn('Normalized title: Revert "[SPARK-1234][SQL] Fix"', output)
-        result, prompt, _, output = self._prepare(" [SPARK-1234][SQL] Fix ")
+        self.assertEqual(errors, [])
+        self.assertEqual(output, 'Normalized title: Revert "[SPARK-1234][SQL] Fix"\n')
+        result, prompt, errors, output = self._prepare(" [SPARK-1234][SQL] Fix ")
         self.assertEqual(result, "[SPARK-1234][SQL] Fix")
         self.assertFalse(prompt.called)
-        self.assertIn("Normalized title: [SPARK-1234][SQL] Fix", output)
+        self.assertEqual(errors, [])
+        self.assertEqual(output, "Normalized title: [SPARK-1234][SQL] Fix\n")
 
     def test_missing_primary_component_is_prompted_and_printed(self):
-        result, prompt, _, output = self._prepare("[SPARK-1234] Fix")
+        result, prompt, errors, output = self._prepare("[SPARK-1234] Fix")
         self.assertEqual(result, "[SPARK-1234][CORE] Fix")
         prompt.assert_called_once_with()
-        self.assertIn("Normalized title: [SPARK-1234][CORE] Fix", output)
+        self.assertEqual(errors, [])
+        self.assertEqual(output, "Normalized title: [SPARK-1234][CORE] Fix\n")
 
     def test_unknown_tag_is_kept_and_reported(self):
-        result, prompt, errors, _ = self._prepare("[SPARK-1234][SQL][BOGUS] Fix")
+        result, prompt, errors, output = self._prepare("[SPARK-1234][SQL][BOGUS] Fix")
         self.assertEqual(result, "[SPARK-1234][SQL][BOGUS] Fix")
         self.assertEqual(errors, ["Title has unknown tag(s): [BOGUS]"])
+        self.assertEqual(output, "")
         self.assertFalse(prompt.called)
 
     def test_malformed_title_fails(self):
-        result, prompt, _, _ = self._prepare("[SQL] Fix")
+        result, prompt, errors, output = self._prepare("[SQL] Fix")
         self.assertEqual(
             result,
             "Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], "
             "or [TRIVIAL]: '[SQL] Fix'",
         )
         self.assertFalse(prompt.called)
+        self.assertEqual(errors, [])
+        self.assertEqual(output, "")
 
     def test_bare_revert_quote_is_parsed_as_an_ordinary_title(self):
         for title in ('Revert "', 'Reapply "'):
             with self.subTest(title=title):
-                result, _, _, _ = self._prepare(title)
+                result, _, errors, output = self._prepare(title)
                 self.assertEqual(
                     result,
                     "Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], "
                     f"or [TRIVIAL]: '{title}'",
                 )
+                self.assertEqual(errors, [])
+                self.assertEqual(output, "")
 
 
 def _squashed(text):
@@ -162,9 +174,10 @@ def _wrapped(title):
     """
     Run check_wrapped_title and summarize how it stopped.
 
-    A failure is `fail:` plus the message. A prompt is `confirm:` plus whether the
-    inner title is treated as a revert or a re-land. Anything else is the printed text,
-    or `pass` when there is none.
+    A failure is `fail:` plus the message. A prompt is `confirm:` plus the JIRA update
+    direction the warning names (a revert or a re-land, decided by the outer wrappers) and,
+    in parentheses, which warning was shown (word, quote, or one word). Anything else is the
+    printed text, or `pass` when there is none.
     """
     stop = Mock(side_effect=SystemExit)
     confirm = Mock()

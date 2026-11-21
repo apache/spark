@@ -175,7 +175,7 @@ class RevertJiraIssueTests(unittest.TestCase):
         client.transition_issue.assert_not_called()
 
     def test_missing_reopen_transition_asks_for_a_manual_reopen(self):
-        _, _, output = self._revert(
+        _, client, output = self._revert(
             ["skip", "y"],
             _catalog(),
             status="Resolved",
@@ -185,6 +185,7 @@ class RevertJiraIssueTests(unittest.TestCase):
             "No Reopen Issue transition available for SPARK-1234; reopen it manually.",
             output,
         )
+        client.transition_issue.assert_not_called()
 
     def test_reopen_lookup_and_transition_failures_are_nonfatal(self):
         _, client, output = self._revert(

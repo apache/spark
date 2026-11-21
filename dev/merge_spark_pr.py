@@ -3962,7 +3962,7 @@ def check_script_up_to_date():
     fail(
         "Your local %s is out of date: apache/spark master has a newer revision (%s) that is not "
         "in your local history. Update it before merging, e.g.:\n"
-        "    git fetch %s master && git checkout %s/master -- %s dev/prmerge\n"
+        "    git fetch %s master && git checkout --no-overlay %s/master -- %s dev/prmerge\n"
         "then re-run. Set SKIP_VERSION_CHECK=1 to bypass (e.g. when changing this script itself)."
         % (
             MERGE_SCRIPT_REPO_PATH,
@@ -4239,12 +4239,14 @@ def run_prmerge_tests() -> bool:
     import io
     import unittest
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Python puts the script's real directory on sys.path, so resolve symlinks here too.
+    script_dir = os.path.dirname(os.path.realpath(__file__))
     start_dir = os.path.join(script_dir, "prmerge", "tests")
     not_found = "prmerge tests were not found; refusing to merge.\n"
     hint = (
         "If dev/prmerge/ is behind master, update it with the script:\n"
-        f"    git fetch {PUSH_REMOTE_NAME} master && git checkout {PUSH_REMOTE_NAME}/master -- "
+        f"    git fetch {PUSH_REMOTE_NAME} master && "
+        f"git checkout --no-overlay {PUSH_REMOTE_NAME}/master -- "
         "dev/merge_spark_pr.py dev/prmerge\n"
     )
     # discover() raises ImportError when this directory is missing.

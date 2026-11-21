@@ -16,15 +16,17 @@
 #
 
 """
-Tests for the `__main__` block of `dev/merge_spark_pr.py`.
+Tests for the `__main__` block of `dev/merge_spark_pr.py` and for `run_prmerge_tests`.
 """
 
 import ast
 import doctest
 import io
 import subprocess
+import sys
+import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -54,7 +56,7 @@ class EntrypointTests(unittest.TestCase):
         self.code = _entrypoint()
         self.refused = subprocess.CalledProcessError(1, "git checkout")
 
-    def _exec(self, main, *, leave_flag_on=False):
+    def _exec(self, main, *, leave_flag_on=False, suite_passes=True):
         overrides = {"original_head": "master"}
         if not leave_flag_on:
             overrides["preserve_local_state"] = False
@@ -71,7 +73,7 @@ class EntrypointTests(unittest.TestCase):
                 main=main,
                 # The block under test also runs the suite. Stub it so this exec does not
                 # re-enter the tests while git and input are patched.
-                run_prmerge_tests=lambda: True,
+                run_prmerge_tests=lambda: suite_passes,
             )
             if leave_flag_on:
                 # The compiled block reads this name from the globals it is exec'd with.
@@ -113,3 +115,61 @@ class EntrypointTests(unittest.TestCase):
         self.assertEqual(ended, -1)
         self.assertEqual(ran, [])
         self.assertEqual(commands, [])
+
+    def test_failing_prmerge_tests_stop_before_main(self):
+        ran = []
+        commands, ended = self._exec(lambda: ran.append(1), suite_passes=False)
+        self.assertEqual(ended, -1)
+        self.assertEqual(ran, [])
+        self.assertEqual(commands, [])
+
+
+class RunPrmergeTestsTests(unittest.TestCase):
+    def _run(self, tests=None, *, symlink=False):
+        """
+        Run `run_prmerge_tests` for a script in a temp dir whose `prmerge/tests` holds a
+        single test module with the given source, or no such directory when it is `None`.
+        """
+        tmp = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        script = tmp / "real" / "merge_spark_pr.py"
+        if tests is None:
+            script.parent.mkdir()
+        else:
+            tests_dir = script.parent / "prmerge" / "tests"
+            tests_dir.mkdir(parents=True)
+            (tests_dir.parent / "__init__.py").touch()
+            (tests_dir / "__init__.py").touch()
+            (tests_dir / "test_x.py").write_text(tests)
+        script.touch()
+        if symlink:
+            link = tmp / "link" / "merge_spark_pr.py"
+            link.parent.mkdir()
+            link.symlink_to(script)
+            script = link
+        output, errors = io.StringIO(), io.StringIO()
+        with (
+            patch.object(merge_spark_pr, "__file__", str(script)),
+            # Discovery records its top-level dir on the loader. Keep that off the shared one.
+            patch.object(unittest, "defaultTestLoader", unittest.TestLoader()),
+            # Discovery imports `prmerge.tests` under the same name as the real package.
+            patch.dict(sys.modules),
+            patch.object(sys, "path", list(sys.path)),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            for name in [m for m in sys.modules if m.split(".")[0] == "prmerge"]:
+                del sys.modules[name]
+            passed = merge_spark_pr.run_prmerge_tests()
+        self.assertEqual(output.getvalue(), "")
+        return passed, errors.getvalue()
+
+    def test_anything_but_a_passing_suite_refuses(self):
+        header = "import unittest\nclass T(unittest.TestCase):\n    def test(self): "
+        passing, failing = header + "pass\n", header + "self.fail()\n"
+        for name, tests in (("missing", None), ("failing", failing), ("zero tests", "")):
+            with self.subTest(name):
+                passed, errors = self._run(tests)
+                self.assertFalse(passed)
+                self.assertIn("If dev/prmerge/ is behind master", errors)
+        self.assertEqual(self._run(passing), (True, ""))
+        self.assertEqual(self._run(passing, symlink=True), (True, ""))
