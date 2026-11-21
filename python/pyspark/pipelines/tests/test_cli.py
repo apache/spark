@@ -468,6 +468,7 @@ class CLIUtilityTests(ReusedConnectTestCase):
             self.assertIn(self.REMOTE_ADVICE, output)
             self.assertIn("--conf spark.sql.catalogImplementation=hive", output)
             self.assertIn("spark.sql.catalog.<name>", output)
+            self.assertIn("--conf spark.sql.defaultCatalog=<name>", output)
             self.assertNotIn(self.LOCAL_ADVICE, output)
 
             output = self.catalog_message(spark, catalog, remote=False)

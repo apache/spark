@@ -344,8 +344,8 @@ def warn_if_tables_are_not_kept(spark: SparkSession, catalog: Optional[str], rem
             "The tables this run creates are kept only while this Spark Connect server runs. To keep "
             "them across server restarts, start the server with a catalog that keeps metadata, for "
             "example with --conf spark.sql.catalogImplementation=hive, or with a connector catalog "
-            "under --conf spark.sql.catalog.<name>=<catalog class> and that name as 'catalog' in "
-            "the pipeline spec."
+            "under --conf spark.sql.catalog.<name>=<catalog class> and "
+            "--conf spark.sql.defaultCatalog=<name>."
         )
     else:
         advice = (
