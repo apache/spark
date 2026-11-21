@@ -151,4 +151,98 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       assert(buffer.callsToRelease === 1)
     }
   }
+
+  /**
+   * Creates a reader of local map outputs, listed in reverse. Map output `m` holds the records
+   * `(m, value)` for each value in `mapValues(m)`, in one block per reduce partition.
+   *
+   * @param listedMapIndex the map index that the blocks of map output `m` are listed with.
+   */
+  private def mapOutputReader(
+      mapValues: Seq[Seq[Int]],
+      numReducePartitions: Int = 1,
+      listedMapIndex: Int => Int = identity): BlockStoreShuffleReader[Int, Int] = {
+    val testConf = new SparkConf(false)
+    sc = new SparkContext("local", "test", testConf)
+
+    val shuffleId = 3
+    val serializer = new JavaSerializer(testConf)
+    // As in the test above, the BlockManager is mocked so that each map output is served as a
+    // local block from an in-memory buffer, without running a shuffle map stage.
+    val blockManager = mock(classOf[BlockManager])
+    val localBlockManagerId = BlockManagerId("test-client", "test-client", 1)
+    when(blockManager.blockManagerId).thenReturn(localBlockManagerId)
+
+    val blockInfos = mapValues.zipWithIndex.flatMap { case (values, mapIndex) =>
+      val byteOutputStream = new ByteArrayOutputStream()
+      val serializationStream = serializer.newInstance().serializeStream(byteOutputStream)
+      values.foreach { value =>
+        serializationStream.writeKey(mapIndex)
+        serializationStream.writeValue(value)
+      }
+      serializationStream.close()
+      val bytes = byteOutputStream.toByteArray
+      (0 until numReducePartitions).map { reduceId =>
+        val shuffleBlockId = ShuffleBlockId(shuffleId, 100 + mapIndex, reduceId)
+        val managedBuffer = new NioManagedBuffer(ByteBuffer.wrap(bytes))
+        when(blockManager.getLocalBlockData(meq(shuffleBlockId))).thenReturn(managedBuffer)
+        (shuffleBlockId, bytes.length.toLong, listedMapIndex(mapIndex))
+      }
+    }
+
+    // The reader only uses the dependency's serializer, aggregator and key ordering, so the
+    // dependency is mocked rather than built from a real RDD and partitioner.
+    val shuffleHandle = {
+      val dependency = mock(classOf[ShuffleDependency[Int, Int, Int]])
+      when(dependency.serializer).thenReturn(serializer)
+      when(dependency.aggregator).thenReturn(None)
+      when(dependency.keyOrdering).thenReturn(None)
+      new BaseShuffleHandle(shuffleId, dependency)
+    }
+    val serializerManager = new SerializerManager(
+      serializer,
+      new SparkConf()
+        .set(config.SHUFFLE_COMPRESS, false)
+        .set(config.SHUFFLE_SPILL_COMPRESS, false))
+    val taskContext = TaskContext.empty()
+    new BlockStoreShuffleReader(
+      shuffleHandle,
+      Seq((localBlockManagerId, blockInfos.reverse)).iterator,
+      taskContext,
+      taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      serializerManager,
+      blockManager)
+  }
+
+  test("readMapOutputs() labels each map output with its map index") {
+    val numMaps = 4
+    val (mapIndexes, mapOutputIterator) =
+      mapOutputReader((0 until numMaps).map(mapIndex => 0 to mapIndex)).readMapOutputs()
+    val mapOutputs = mapOutputIterator.map { case (mapIndex, records) =>
+      mapIndex -> records.map(record => (record._1, record._2)).toList
+    }.toList
+    assert(mapIndexes.toSeq === (0 until numMaps))
+    // Local blocks are read in the order they are listed, here in reverse.
+    assert(mapOutputs.map(_._1) === (0 until numMaps).reverse)
+    mapOutputs.foreach { case (mapIndex, records) =>
+      assert(records === (0 to mapIndex).map(value => (mapIndex, value)))
+    }
+  }
+
+  test("readMapOutputs() requires a single block per map output") {
+    // With two reduce partitions, each map output has two blocks and would be returned twice.
+    val reader = mapOutputReader(Seq(Seq(1), Seq(2)), numReducePartitions = 2)
+    val e = intercept[IllegalArgumentException](reader.readMapOutputs())
+    assert(e.getMessage.contains("with a single block per map output"))
+  }
+
+  test("readMapOutputs() fails on a block without a single map index") {
+    // A push-merged block holds the blocks of several map outputs, so it is listed with the map
+    // index SHUFFLE_PUSH_MAP_ID, and its rows could not be put in map index order.
+    val reader = mapOutputReader(
+      Seq(Seq(1)), listedMapIndex = _ => MapOutputTracker.SHUFFLE_PUSH_MAP_ID)
+    val (_, mapOutputs) = reader.readMapOutputs()
+    val e = intercept[SparkException](mapOutputs.next())
+    assert(e.getMessage.contains("Unknown map index for shuffle block"))
+  }
 }
