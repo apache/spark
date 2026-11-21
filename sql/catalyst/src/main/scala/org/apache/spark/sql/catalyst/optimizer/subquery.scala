@@ -922,10 +922,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // in the top Aggregate runs for every outer row on master too (see constructLeftJoins).
         // A subquery with a user-defined aggregate function in a lower Aggregate without grouping
         // expressions (see hasUserDefinedAggregate) keeps the handling of before altogether, as
-        // with the legacy conf, also without countBugResult below: the value over no rows that
-        // both take for that Aggregate can be wrong, while master does not use it, but evaluates
-        // the top Aggregate over no rows, which is right for some of them, e.g.
-        // COUNT(*) FILTER (WHERE s IS NULL) over a Scala Aggregator with a zero of 0.
+        // with the legacy conf, also without countBugResult below. For a correlated such
+        // Aggregate, countBugResult and the domain joins take NULL as its value over no rows,
+        // which can be wrong, while master, unless a function with a default result is next to
+        // it, evaluates the top Aggregate over no rows instead, which is right for some of them,
+        // e.g. COUNT(*) FILTER (WHERE s IS NULL) over a Scala Aggregator with a zero of 0. The
+        // check also takes an uncorrelated one, and one next to a function with a default
+        // result, to be conservative; master handles those the same way.
         val lowerAggs = sub match {
           case agg: Aggregate => agg.child.collect { case a: Aggregate => a }
           case _ => Nil
