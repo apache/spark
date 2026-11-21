@@ -63,6 +63,27 @@ Project [typeof(to_time(00:12:00, Some(cast(null as string)))) AS typeof(to_time
 
 
 -- !query
+select to_time('00:00:00.1234567'), to_time('00:00:00.123456789', 'HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [to_time(00:00:00.1234567, None) AS to_time(00:00:00.1234567)#x, to_time(00:00:00.123456789, Some(HH:mm:ss.SSSSSSSSS)) AS to_time(00:00:00.123456789, HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_time('00:00:00.123456789')
+-- !query analysis
+Project [try_to_time(to_time(00:00:00.123456789, None)) AS try_to_time(to_time(00:00:00.123456789))#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('00:00:00.1234567') = time'00:00:00.123456'
+-- !query analysis
+Project [(to_time(00:00:00.1234567, None) = 00:00:00.123456) AS (to_time(00:00:00.1234567) = TIME '00:00:00.123456')#x]
++- OneRowRelation
+
+
+-- !query
 select to_time("11", "HH")
 -- !query analysis
 Project [to_time(11, Some(HH)) AS to_time(11, HH)#x]
@@ -2027,6 +2048,41 @@ Project [time_from_seconds(90000) AS time_from_seconds(90000)#x]
 SELECT time_from_seconds(NULL)
 -- !query analysis
 Project [time_from_seconds(null) AS time_from_seconds(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(52200.123456789)
+-- !query analysis
+Project [time_from_seconds(52200.123456789) AS time_from_seconds(52200.123456789)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(CAST(0.0000001 AS DOUBLE))
+-- !query analysis
+Project [time_from_seconds(cast(1E-7 as double)) AS time_from_seconds(CAST(1E-7 AS DOUBLE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(CAST(8.2 AS DOUBLE))
+-- !query analysis
+Project [time_from_seconds(cast(8.2 as double)) AS time_from_seconds(CAST(8.2 AS DOUBLE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(0.0000001) = TIME'00:00:00'
+-- !query analysis
+Project [(time_from_seconds(1E-7) = 00:00:00) AS (time_from_seconds(1E-7) = TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(-0.0000001)
+-- !query analysis
+Project [time_from_seconds(-1E-7) AS time_from_seconds(-1E-7)#x]
 +- OneRowRelation
 
 
