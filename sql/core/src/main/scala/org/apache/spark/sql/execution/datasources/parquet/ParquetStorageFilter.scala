@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BasePredicate, BloomFilterMightContain, BoundReference, Expression, If, IsNotNull, Literal, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterErrors, StorageFilterPredicate}
@@ -139,8 +140,9 @@ object ParquetStorageFilter {
 
   /**
    * Builds a [[ParquetStorageFilter]] from storage filters bound to the scan's requested data
-   * schema, combined with AND. Every condition below is asserted, since `storageFiltersFor`
-   * pre-checks them and a violation is a planner bug.
+   * schema. The blooms are combined with AND, and so are the conjuncts over their key columns,
+   * `IsNotNull` first, which are evaluated only where the blooms keep the row. Every condition
+   * below is asserted, since `storageFiltersFor` pre-checks them and a violation is a planner bug.
    */
   def create(
       boundExpressions: Seq[Expression],
@@ -149,17 +151,30 @@ object ParquetStorageFilter {
       maxSplicedRowGroupBytes: Long): ParquetStorageFilter = {
     require(boundExpressions.nonEmpty,
       "storage filters must be non-empty; callers with nothing to push must not call create")
-    val expr = boundExpressions.reduce(And)
+    // The conjuncts over the blooms' key columns go under an `If` on the blooms, so they run only
+    // on the rows the blooms keep. In one `And`, subexpression elimination would compute what
+    // they share on every row.
+    val (blooms, conditions) =
+      boundExpressions.partition(_.isInstanceOf[BloomFilterMightContain])
+    // `IsNotNull` first, as `FilterExec` checks it before the conjuncts over its column, so a
+    // conjunct that throws on null never sees the null keys the blooms keep.
+    val onKeys = conditions.sortBy(e => if (e.isInstanceOf[IsNotNull]) 0 else 1)
+    val expr = if (blooms.isEmpty || onKeys.isEmpty) {
+      boundExpressions.reduce(And)
+    } else {
+      If(blooms.reduce(And), onKeys.reduce(And), Literal.FalseLiteral)
+    }
 
     // The ordinals this predicate reads, deduplicated and sorted. The order only makes the key
     // row's layout deterministic.
     val originalOrdinals = expr.collect { case b: BoundReference => b.ordinal }.distinct.sorted
-    // These messages name the expression by its node, since a bloom's literal renders as
+    // These messages name the filters by their nodes, since a bloom's literal renders as
     // megabytes of hex.
+    val names = boundExpressions.map(_.prettyName).mkString(", ")
     require(originalOrdinals.nonEmpty,
-      s"storage filter ${expr.prettyName} has no bound reference to a key column")
+      s"storage filters $names have no bound reference to a key column")
     require(originalOrdinals.forall(i => i >= 0 && i < requestedSchema.length),
-      s"storage filter ${expr.prettyName} references ordinals " +
+      s"storage filters $names reference ordinals " +
         s"${originalOrdinals.mkString("[", ", ", "]")} outside the ${requestedSchema.length} " +
         s"fields of ${requestedSchema.catalogString}")
     val keyFields = originalOrdinals.map(requestedSchema.fields(_))
@@ -224,6 +239,17 @@ object ParquetStorageFilter {
         !bloom.references.exists(a => a.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
     case _ => false
   }
+
+  /**
+   * Whether the reader can evaluate `expr`, a conjunct over the key columns of the accepted
+   * storage filters, together with them: no subquery, and nothing unevaluable but column
+   * references.
+   */
+  def isSupportedFilterOnKeys(expr: Expression): Boolean =
+    !expr.containsPattern(PLAN_EXPRESSION) && !expr.exists {
+      case _: Attribute => false
+      case e => e.isInstanceOf[Unevaluable]
+    }
 
   /**
    * Throws what reserving the survivor buffer's memory raised, in a form `FileScanRDD` cannot take
