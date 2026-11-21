@@ -3114,6 +3114,23 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62144: a filter condition that can fail is not pushed through an operator " +
+    "ahead of a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct is false on every row, so the `AND` short-circuit keeps the division
+      // by zero on id 3 from being evaluated. Each query is built inside the config loop, so it
+      // is planned under that config.
+      def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
+      def condition: Column = rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0
+      Seq(true, false).foreach { codegen =>
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          checkAnswer(df.groupBy($"id").agg(count("*") as "c").where(condition), Nil)
+          checkAnswer(df.union(df).where(condition), Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On
