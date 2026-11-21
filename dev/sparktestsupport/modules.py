@@ -885,6 +885,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_zip",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_geo_utils",
         "pyspark.sql.tests.test_geographytype",
         "pyspark.sql.tests.test_geometrytype",
         "pyspark.sql.tests.test_python_worker_env",

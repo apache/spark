@@ -206,7 +206,7 @@ try:
         packages=connect_packages + test_packages,
         include_package_data=True,
         package_data={
-            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json", "**/*.csv"],
         },
         license="Apache-2.0",
         license_files=["LICENSE", "NOTICE"],
