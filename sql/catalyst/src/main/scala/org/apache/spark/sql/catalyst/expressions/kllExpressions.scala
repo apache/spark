@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQL
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -265,7 +266,13 @@ abstract class KllSketchGetNBase
   """,
   group = "sketch_funcs",
   since = "4.1.0")
-case class KllSketchMergeBigint(left: Expression, right: Expression) extends KllSketchMergeBase {
+case class KllSketchMergeBigint(
+    left: Expression,
+    right: Expression,
+    lowestCompactingK: Boolean)
+  extends KllSketchMergeBase {
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_bigint"
@@ -273,10 +280,10 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
     try {
       val leftBuffer = left.asInstanceOf[Array[Byte]]
       val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val leftSketch = KllLongsSketch.heapify(Memory.wrap(leftBuffer))
-      val rightSketch = KllLongsSketch.wrap(Memory.wrap(rightBuffer))
-      leftSketch.merge(rightSketch)
-      leftSketch.toByteArray
+      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
+        KllLongsSketch.heapify, KllLongsSketch.wrap, KllLongsSketch.newHeapInstance)
+      target.merge(input)
+      target.toByteArray
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -303,7 +310,13 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
   """,
   group = "sketch_funcs",
   since = "4.1.0")
-case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllSketchMergeBase {
+case class KllSketchMergeFloat(
+    left: Expression,
+    right: Expression,
+    lowestCompactingK: Boolean)
+  extends KllSketchMergeBase {
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_float"
@@ -311,10 +324,10 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
     try {
       val leftBuffer = left.asInstanceOf[Array[Byte]]
       val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val leftSketch = KllFloatsSketch.heapify(Memory.wrap(leftBuffer))
-      val rightSketch = KllFloatsSketch.wrap(Memory.wrap(rightBuffer))
-      leftSketch.merge(rightSketch)
-      leftSketch.toByteArray
+      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
+        KllFloatsSketch.heapify, KllFloatsSketch.wrap, KllFloatsSketch.newHeapInstance)
+      target.merge(input)
+      target.toByteArray
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -341,7 +354,13 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
   """,
   group = "sketch_funcs",
   since = "4.1.0")
-case class KllSketchMergeDouble(left: Expression, right: Expression) extends KllSketchMergeBase {
+case class KllSketchMergeDouble(
+    left: Expression,
+    right: Expression,
+    lowestCompactingK: Boolean)
+  extends KllSketchMergeBase {
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_double"
@@ -349,10 +368,10 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
     try {
       val leftBuffer = left.asInstanceOf[Array[Byte]]
       val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val leftSketch = KllDoublesSketch.heapify(Memory.wrap(leftBuffer))
-      val rightSketch = KllDoublesSketch.wrap(Memory.wrap(rightBuffer))
-      leftSketch.merge(rightSketch)
-      leftSketch.toByteArray
+      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
+        KllDoublesSketch.heapify, KllDoublesSketch.wrap, KllDoublesSketch.newHeapInstance)
+      target.merge(input)
+      target.toByteArray
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -368,6 +387,34 @@ abstract class KllSketchMergeBase
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def nullIntolerant: Boolean = true
+
+  /** The value of [[SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K]] at resolve time. */
+  def lowestCompactingK: Boolean
+
+  // Leaves out `lowestCompactingK`, so plan strings do not change.
+  override protected def stringArgs: Iterator[Any] = Iterator(left, right)
+
+  /**
+   * Returns (target, input) for `target.merge(input)`. The merge keeps the k of `target`, so
+   * `target` has the k that the result takes.
+   */
+  protected def mergeTargetAndInput[T <: KllSketch](
+      left: Memory,
+      right: Memory)(
+      heapify: Memory => T,
+      wrap: Memory => T,
+      newHeapInstance: Int => T): (T, T) = {
+    val rightView = wrap(right)
+    lazy val leftView = wrap(left)
+    if (lowestCompactingK && rightView.isEmpty && leftView.isEmpty) {
+      (newHeapInstance(KllSketch.DEFAULT_K), rightView)
+    } else if (lowestCompactingK && !rightView.isEmpty &&
+        (leftView.isEmpty || rightView.isEstimationMode && rightView.getK < leftView.getK)) {
+      (heapify(right), leftView)
+    } else {
+      (heapify(left), rightView)
+    }
+  }
 }
 
 // scalastyle:off line.size.limit
