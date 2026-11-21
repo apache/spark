@@ -1265,6 +1265,29 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTestWithoutStringPromotion(StringType, TimestampNTZNanosType(9), None)
   }
 
+  test("SPARK-60534: widen CHAR/VARCHAR with non-string types to unbounded STRING") {
+    Seq(false, true).foreach { standardSemantics =>
+      withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        Seq(CharType(1), VarcharType(1),
+          CharType(1, "UTF8_LCASE"), VarcharType(1, "UTF8_LCASE")).foreach { st =>
+          val expected = if (standardSemantics) StringType(st.collationId) else st
+          Seq(IntegerType, DoubleType, DecimalType(10, 2), DateType, TimestampType).foreach { dt =>
+            checkWidenType(TypeCoercion.findWiderTypeForTwo, st, dt, Some(expected))
+          }
+          checkWidenType(TypeCoercion.findWiderTypeForTwo, st, NullType, Some(st))
+          checkWidenType(TypeCoercion.findWiderTypeForTwo, st, BooleanType, None)
+          checkWidenType(TypeCoercion.findWiderTypeForTwo, st, BinaryType, None)
+        }
+        checkWidenType(TypeCoercion.findWiderTypeForTwo,
+          CharType(1), CharType(3), Some(CharType(3)))
+        checkWidenType(TypeCoercion.findWiderTypeForTwo,
+          CharType(1), VarcharType(3), Some(VarcharType(3)))
+      }
+    }
+  }
+
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
