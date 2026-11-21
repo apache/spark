@@ -4758,6 +4758,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -5706,9 +5715,7 @@ object SQLConf {
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
-        "or a NumPy ndarray. " +
-        "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "or a NumPy ndarray.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -6680,7 +6687,7 @@ object SQLConf {
         "input relation resolves, so errors that leave it unresolved, such as a missing " +
         "table, are reported first.")
       .internal()
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -7206,10 +7213,10 @@ object SQLConf {
     buildConf("spark.sql.legacy.listAllSessionsResources")
       .internal()
       .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
-        "of every session, as before Spark 4.4, also in a session whose artifacts are isolated. " +
+        "of every session, as before Spark 4.5, also in a session whose artifacts are isolated. " +
         "When false, such a session lists those added to it and those added to the SparkContext " +
         "outside of any session.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

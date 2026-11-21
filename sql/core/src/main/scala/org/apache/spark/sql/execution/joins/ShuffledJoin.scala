@@ -207,14 +207,15 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * The coalesced keys of `keyPairs` with every key left first, and with every key right first.
    * For keys that pass `isNullOnNullPadding`, `Coalesce(l, r)` and `Coalesce(r, l)` agree on every
    * output row: a matched row has equal keys, and an unmatched row has a NULL on the other side.
-   * `USING` gives the left-first order, and a query usually writes all of its keys in one order,
-   * so the mixed orders are not reported.
+   * The partitioning claim reports only these two uniform orders. A sort merge join can use
+   * the corresponding expressions as ordering alternatives at each key position without
+   * enumerating mixed orders.
    *
    * The attributes are nullable, as in `output`. A child's non-nullable attribute would let the
    * optimizer simplify `coalesce(k, ...)` to `k` once the claim is recorded in a plan, such as a
    * checkpointed `LogicalRDD`, though `k` is NULL on the rows padding its side.
    */
-  private def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
+  protected def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
     def nullable(e: Expression): Expression = e.transform {
       case a: Attribute => a.withNullability(true)
     }
@@ -230,10 +231,10 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * pads with NULLs for that side. Conservative: an attribute of `side` is, so is a
    * null-intolerant expression over at least one such child, and so is a `Coalesce` all of whose
    * children are, such as the merged key of a lower FULL OUTER join. `coalesce(a.x, 0)` is not,
-   * since it is 0 on a padded row, which would put the coalesced key of an unmatched row of the
-   * other side on the wrong partition.
+   * since it is 0 on a padded row, so the coalesced key of an unmatched row of the other side
+   * would not necessarily preserve that row's partitioning or ordering.
    */
-  private def isNullOnNullPadding(e: Expression, side: AttributeSet): Boolean = e match {
+  protected def isNullOnNullPadding(e: Expression, side: AttributeSet): Boolean = e match {
     case a: Attribute => side.contains(a)
     case c: Coalesce => c.children.forall(isNullOnNullPadding(_, side))
     case _ => e.nullIntolerant && e.children.exists(isNullOnNullPadding(_, side))

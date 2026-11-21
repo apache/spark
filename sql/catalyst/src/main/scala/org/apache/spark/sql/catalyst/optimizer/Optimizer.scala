@@ -2642,9 +2642,13 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
     // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
-    // inner condition must be deterministic.
+    // inner condition must be deterministic. When it is throwable, e.g. one that `ReorderJoin`
+    // keeps in a filter in place of the top join, only the outer conjuncts that can not fail are
+    // combined: the inner filter drops a row on which its condition is NULL, but `NULL AND x`
+    // evaluates `x`.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
+      val (movable, rest) = splitMovable(
+        splitConjunctivePredicates(fc), Seq(grandChild), afterBarrier = nc.throwable)
       val mergedFilter = (ExpressionSet(movable) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
@@ -3445,8 +3449,17 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      val (movable, stayUp) =
-        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
+      // An inner join evaluates its condition before the filter, so the filter's conditions are
+      // written after it, as at the end of its ON clause, and a non-deterministic or throwable
+      // conjunct of it keeps the ones that can fail in place. So does such a conjunct of the
+      // condition of a left semi or left anti join, which decides which left rows reach the
+      // filter. The other joins keep every row of the side that they push the filter's
+      // conditions to.
+      val afterBarrier =
+        (joinType.isInstanceOf[InnerLike] || joinType == LeftSemi || joinType == LeftAnti) &&
+          joinCondition.exists(cond => !cond.deterministic || cond.throwable)
+      val (movable, stayUp) = splitMovable(
+        splitConjunctivePredicates(filterCondition), Seq(left, right), afterBarrier)
       val (leftFilterConditions, rightFilterConditions, commonMovable) =
         splitBySide(movable, left, right)
       val commonFilterCondition = commonMovable ++ stayUp
@@ -3458,7 +3471,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           // don't push throwable expressions into join condition, nor the other conjuncts that
-          // may not move
+          // may not move. The ones that move may go ahead of the join condition: when it has a
+          // non-deterministic or throwable conjunct, only the ones that can not fail move.
           val (newJoinConditions, notInJoin) = commonMovable.partition(canEvaluateWithinJoin)
           val others = notInJoin ++ stayUp
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)

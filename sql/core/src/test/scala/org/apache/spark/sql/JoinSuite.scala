@@ -2078,6 +2078,43 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         (4L to 9L).map(i => Row(i, i, i)))
     }
   }
+
+  test("SPARK-62069: do not evaluate a join or filter condition on the rows that a lower inner " +
+    "join removes") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("tb1", "tb2", "tb3") {
+        Seq((1, 1, 5), (2, 2, 5)).toDF("k", "v", "f").write.saveAsTable("tb1")
+        Seq[(Int, Option[Int])]((1, None), (2, Some(1))).toDF("k", "g").write.saveAsTable("tb2")
+        Seq((1, 1), (2, 0)).toDF("v", "w").write.saveAsTable("tb3")
+        // The CASE WHEN is NULL on the row whose k is 1, so the join with t2 removes it, and the
+        // division by zero is not evaluated on it, in the ON clause or in the WHERE clause.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v AND 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v WHERE 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        // The join with t3 removes the row whose k is 1, so the WHERE clause, which stays above
+        // the join for its subquery, is not evaluated on it.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k
+              |JOIN tb3 t3 ON t1.v = t3.v AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |WHERE 10 / (t1.k - t3.w) > (SELECT max(x.k) FROM tb2 x WHERE x.k = t1.k) - 5
+              |""".stripMargin),
+          Row(2))
+      }
+    }
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite
