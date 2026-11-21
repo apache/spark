@@ -95,11 +95,10 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   protected void releaseMemory() {
-    Platform.freeMemory(nulls);
+    releaseNullBits();
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
     Platform.freeMemory(offsetData);
-    nulls = 0;
     data = 0;
     lengthData = 0;
     offsetData = 0;
@@ -121,11 +120,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNull(int rowId) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     Platform.putByte(null, nulls + rowId, (byte) 0);
   }
 
   @Override
   public void putNull(int rowId) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
@@ -133,6 +134,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
     if (count < SET_MEMORY_THRESHOLD) {
       long offset = nulls + rowId;
@@ -147,6 +149,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     if (!hasNull()) return;
     if (count < SET_MEMORY_THRESHOLD) {
       long offset = nulls + rowId;
@@ -160,7 +163,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull() || Platform.getByte(null, nulls + rowId) == 1;
+    return tracksNulls && (isAllNull() || Platform.getByte(null, nulls + rowId) == 1);
   }
 
   //
@@ -674,7 +677,10 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   protected void reserveInternal(int newCapacity) {
     if (isAllNull()) return; // Skip allocation for all-null vector.
 
-    int oldCapacity = (nulls == 0L) ? 0 : capacity;
+    // A vector that holds no null bits frees them, so they can not mark the memory it did
+    // allocate; the data itself has to. Only a leaf byte-data child ever stops tracking nulls
+    // (see stopTrackingNulls's call site), so it always holds its own data and never children.
+    int oldCapacity = (tracksNulls ? nulls != 0L : data != 0L) ? capacity : 0;
     if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4L, newCapacity * 4L);
@@ -698,9 +704,17 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
-    this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
-    Platform.setMemory(nulls + oldCapacity, (byte)0, newCapacity - oldCapacity);
+    if (tracksNulls) {
+      this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
+      Platform.setMemory(nulls + oldCapacity, (byte)0, newCapacity - oldCapacity);
+    }
     capacity = newCapacity;
+  }
+
+  @Override
+  protected void releaseNullBits() {
+    Platform.freeMemory(nulls);
+    nulls = 0L;
   }
 
   @Override

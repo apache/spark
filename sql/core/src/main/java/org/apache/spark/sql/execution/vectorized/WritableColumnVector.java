@@ -1027,6 +1027,13 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected int numNulls;
 
   /**
+   * Whether this vector holds null bits at all. The byte child of a string, binary or similar
+   * vector never holds them, since its bytes are never null by themselves (see the constructor),
+   * so it frees them and answers null queries as never-null. Every other vector tracks nulls.
+   */
+  protected boolean tracksNulls = true;
+
+  /**
    * True if this column's values are fixed. This means the column values never change, even
    * across resets.
    */
@@ -1082,6 +1089,24 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
+   * Frees the null bits this vector holds. The base implementation has none, so it has nothing
+   * to free.
+   */
+  protected void releaseNullBits() {
+  }
+
+  /**
+   * Stops holding null bits, and frees any it already allocated. This optimization has no
+   * opt-out: the removed null bits were always meaningless on a byte-data child (a null marks
+   * the whole value, on the parent vector, never a byte of it), so there is no prior behavior
+   * worth preserving behind a config.
+   */
+  private void stopTrackingNulls() {
+    tracksNulls = false;
+    releaseNullBits();
+  }
+
+  /**
    * Expands each bit of a bit-packed boolean byte into a separate byte within a long
    * (little-endian layout). See {@link #BOOL_BYTE_TO_LONG_TABLE} for the byte-order convention.
    */
@@ -1111,6 +1136,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
+      if (!(type instanceof ArrayType)) {
+        // The child holds the bytes of this vector's own values, which are never null by
+        // themselves: a null marks a whole value, on this vector. The per-byte null bits the
+        // child allocated would double the memory a long value column takes for no use.
+        this.childColumns[0].stopTrackingNulls();
+      }
     } else if (type instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
