@@ -270,11 +270,6 @@ object NearestByJoinType {
   }
 }
 
-object AsOfJoinType {
-
-  val supportedDisplay: String = "'INNER', 'LEFT OUTER'"
-}
-
 object NearestByJoinMode {
 
   /** @see [[NearestByJoinValidation.SupportedModes]] */
