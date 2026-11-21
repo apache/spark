@@ -2006,18 +2006,11 @@ FROM subOuter3
 GROUP BY ROLLUP(col1)
 ORDER BY col1 NULLS LAST
 -- !query schema
-struct<>
+struct<col1:int,s:bigint,has_match:boolean>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "sqlState" : "XXKD0",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "Aggregate: Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, exists#x [col1#x && (x#x = col1#x)] AS has_match#x]\n:  +- Project [1 AS 1#x, x#x]\n:     +- Project [cast(x#x as int) AS x#x]\n:        +- Project [x#x]\n:           +- LocalRelation [x#x]\n+- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]\n   +- Project [col1#x, col2#x, col1#x AS col1#x]\n      +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]\n         +- LocalRelation [col1#x, col2#x]\n is not a valid aggregate expression: [MISSING_AGGREGATION] The non-aggregating expression \"x\" is based on columns which are not participating in the GROUP BY clause.\nAdd the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(x)\" if you do not care which of the values within a group is returned. SQLSTATE: 42803\nPrevious schema:col1#x, s#xL, has_match#x\nPrevious plan: Sort [col1#x ASC NULLS LAST], true\n+- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, exists#x [col1#x] AS has_match#x]\n   :  +- Project [1 AS 1#x]\n   :     +- Filter (x#x = outer(col1#x))\n   :        +- Project [cast(x#x as int) AS x#x]\n   :           +- Project [x#x]\n   :              +- LocalRelation [x#x]\n   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]\n      +- Project [col1#x, col2#x, col1#x AS col1#x]\n         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]\n            +- LocalRelation [col1#x, col2#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+1	30	true
+2	30	true
+NULL	60	false
 
 
 -- !query
