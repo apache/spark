@@ -1306,6 +1306,59 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-62195: joins: do not push a condition over a column that can fail through a " +
+    "union, a window, a watermark, a pushdown operator or an aggregate key ahead of a " +
+    "non-deterministic one") {
+    // `q` can fail as the ANSI division does. These operators pass it on, the union from its
+    // second child by position, and so does an aggregation that groups by it, also as an alias.
+    // Below them, a condition over it would be pushed on through the projection. So after
+    // `rand(0) > 0.1`, `q > 0` stays above the join, while `a > 0`, which can not fail, is
+    // pushed. `q = d` over both sides is only evaluated at the join. A window, a watermark, a
+    // repartition and an aggregation compute `q` on every row they get, so it goes into the join
+    // condition through them, while a union can pass `q` on to the join as it is.
+    val relation = LocalRelation(attrA, attrB, $"t".timestamp)
+    def project(child: LogicalPlan): LogicalPlan =
+      child.select($"a", $"t", Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)).as("q"))
+    val projected = project(relation)
+    val winExpr = windowExpr(count($"a"), windowSpec($"q" :: Nil, Nil, UnspecifiedFrame))
+    val streaming = LocalRelation(Seq(attrA, attrB, $"t".timestamp), Nil, isStreaming = true)
+    val interval = new CalendarInterval(0, 0, 1000L)
+    Seq(
+      relation.select($"a", $"t", Cast($"b", DoubleType).as("q")).union(projected) -> false,
+      projected.window(winExpr.as("w") :: Nil, $"q" :: Nil, Nil) -> true,
+      EventTimeWatermark(UUID.randomUUID(), $"t", interval, project(streaming)) -> true,
+      projected.distribute($"q")(2) -> true,
+      projected.rebalance($"q") -> true,
+      projected.groupBy($"a", $"q")($"a", $"q") -> true,
+      projected.groupBy($"a", $"q")($"a", $"q".as("q")) -> true
+    ).foreach { case (side, atJoin) =>
+      val originalQuery = side.join(testRelation1)
+        .where(Rand(0) > 0.1 && $"q" > 0 && $"q" === $"d" && $"a" > 0)
+      val correctAnswer = if (atJoin) {
+        side.where($"a" > 0).join(testRelation1, condition = Some($"q" === $"d"))
+          .where(Rand(0) > 0.1 && $"q" > 0)
+      } else {
+        side.where($"a" > 0).join(testRelation1)
+          .where(Rand(0) > 0.1 && $"q" > 0 && $"q" === $"d")
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+
+    // The event time of a watermark, read on every row it gets, and an aggregate function over
+    // `q`, computed on every row the aggregation gets, can not fail, so conditions over them are
+    // pushed.
+    val watermarked = EventTimeWatermark(UUID.randomUUID(), $"s", interval,
+      LocalRelation(Seq(attrA, attrE), Nil, isStreaming = true)
+        .select($"a", Cast($"e", TimestampType, evalMode = EvalMode.ANSI).as("s")))
+    val aggregated = projected.groupBy($"a", $"q")($"a", $"q", max($"q").as("m"))
+    Seq(watermarked -> ($"s" > new java.sql.Timestamp(0)), aggregated -> ($"m" > 0)).foreach {
+      case (side, cond) =>
+        comparePlans(
+          PushPredicateThroughJoin(side.join(testRelation1).where(Rand(0) > 0.1 && cond).analyze),
+          side.where(cond).join(testRelation1).where(Rand(0) > 0.1).analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")

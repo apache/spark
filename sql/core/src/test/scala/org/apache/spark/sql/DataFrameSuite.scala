@@ -3591,6 +3591,36 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62195: a filter condition over a column that can fail is not evaluated ahead of " +
+    "the condition through a union, a window, a repartition or an aggregate key") {
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        // The join keeps the ids 0 to 2, where neither the cast of `id * 1000000000` nor the
+        // division by `id - 3` fails, but a condition over `k` or `q` pushed through the
+        // projection into the left side would be evaluated on the other ids too.
+        val joined = spark.range(0, 10, 1, 1).toDF()
+          .join(spark.range(0, 3, 1, 1).toDF("r"), $"id" === $"r")
+        val k = joined.select(($"id" * 1000000000).cast("int").as("k"))
+        // `rand(10) * 10 > 100` is false on every row, so `k > 0` is never evaluated.
+        def withRand(child: DataFrame): DataFrame =
+          child.join(spark.range(1).toDF("j")).where(rand(10) * 10 > 100 && $"k" > 0)
+        checkAnswer(withRand(k.union(spark.range(10).select($"id".cast("int").as("k")))), Nil)
+        checkAnswer(withRand(k.select($"k", count(lit(1)).over(Window.partitionBy($"k")))), Nil)
+        checkAnswer(withRand(k.repartition($"k")), Nil)
+        checkAnswer(withRand(k.groupBy($"k").count()), Nil)
+        // `w > 5` is false on every row, so `q > 0`, inferred from `q = d AND d > 0`, must not
+        // be evaluated ahead of it.
+        val qd = joined.select((lit(10L) / ($"id" - 3)).as("q"), $"id".cast("double").as("d"))
+        checkAnswer(
+          qd.select($"q", $"d", count(lit(1)).over(Window.partitionBy($"q")).as("w"))
+            .where($"w" > 5 && $"q" === $"d" && $"d" > 0),
+          Nil)
+      }
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))

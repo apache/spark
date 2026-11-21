@@ -489,6 +489,26 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         condition).analyze)
   }
 
+  test("SPARK-62195: a constraint over a column that can fail through a window or an " +
+    "aggregate key is not inferred as a filter") {
+    // `i` can fail as the cast does. A window partitioned by it and an aggregation grouped by it
+    // pass it on, and a filter over it is pushed below them and on through the projection. So no
+    // constraint over it, e.g. `i > 0` from `i = k AND k > 0`, goes ahead of the condition, while
+    // one over `k` does.
+    val projected = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"))
+    val winExpr = windowExpr(count($"k"), windowSpec($"i" :: Nil, Nil, UnspecifiedFrame))
+    Seq(
+      projected.window(winExpr.as("w") :: Nil, $"i" :: Nil, Nil),
+      projected.groupBy($"i")($"i", max($"k").as("k"))
+    ).foreach { child =>
+      val condition = $"i" === $"k" && $"k" > 0
+      comparePlans(
+        InferFiltersFromConstraints(child.where(condition).analyze),
+        child.where(IsNotNull($"k") && condition).analyze)
+    }
+  }
+
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
     "instead of the root level nested type") {
     val structTestRelation = LocalRelation($"a".struct(StructType(
