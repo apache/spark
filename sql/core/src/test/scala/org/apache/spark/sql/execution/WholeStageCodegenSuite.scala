@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregat
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1769,6 +1770,44 @@ class WholeStageCodegenSuite extends SharedSparkSession
         checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
       }
     }
+  }
+
+  // A codegen stage over a local scan, run through its evaluator factory with a metric of the
+  // test's own, and the rows that the scan feeds it.
+  private def pipelineEvaluatorFactory(
+      metric: SQLMetric): (WholeStageCodegenEvaluatorFactory, Seq[InternalRow]) = {
+    val plan = Seq(1, 2, 3).toDF("a").filter($"a" > 0).queryExecution.executedPlan
+    val stage = plan.collectFirst { case s: WholeStageCodegenExec => s }.get
+    val rows = stage.child.asInstanceOf[CodegenSupport].inputRDDs().head.collect()
+      .map(_.copy()).toSeq
+    val (ctx, code) = stage.doCodeGen()
+    (new WholeStageCodegenEvaluatorFactory(Right(code), metric, ctx.references.toArray), rows)
+  }
+
+  test("SPARK-44793: pipelineTime does not grow when hasNext is called again after the end") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, "pipeline time")
+    val (factory, rows) = pipelineEvaluatorFactory(metric)
+    val it = factory.createEvaluator().eval(0, rows.iterator)
+    Thread.sleep(20)
+    while (it.hasNext) it.next()
+    val atEnd = metric.value
+    assert(atEnd >= 20)
+    Thread.sleep(20)
+    (1 to 3).foreach(_ => assert(!it.hasNext))
+    assert(metric.value === atEnd)
+  }
+
+  test("SPARK-44793: pipelineTime adds up the partitions that one task reads") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, "pipeline time")
+    val (factory, rows) = pipelineEvaluatorFactory(metric)
+    val first = factory.createEvaluator().eval(0, rows.iterator)
+    Thread.sleep(100)
+    while (first.hasNext) first.next()
+    val afterFirst = metric.value
+    val second = factory.createEvaluator().eval(1, rows.iterator)
+    Thread.sleep(20)
+    while (second.hasNext) second.next()
+    assert(metric.value >= afterFirst + 20)
   }
 
   test("SPARK-56032: subexpression elimination in FilterExec codegen") {
