@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{DataOutput, Externalizable, ObjectInput, ObjectOutput}
 import java.util.Arrays
 
 import scala.collection.mutable
@@ -65,6 +65,15 @@ private[spark] sealed trait MapStatus extends ShuffleOutputStatus {
    * output data has changed across different map task retries.
    */
   def checksumValue: Long = 0
+
+  /**
+   * Integrity checksum over the metadata this status carries. 0 when the feature is disabled.
+   * See [[MapStatusChecksum]].
+   */
+  def metadataChecksum: Int = 0
+
+  /** Write out the metadata [[MapStatusChecksum]] checksums. The encoding must be stable. */
+  def writeForChecksum(out: DataOutput): Unit
 }
 
 
@@ -136,6 +145,10 @@ private[spark] class CompressedMapStatus(
     private[this] var _checksumVal: Long = 0)
   extends MapStatus with Externalizable {
 
+  // Null sizes mean the deserialization constructor, which reads the mapper's value off the wire.
+  private[this] var _metadataChecksum: Int =
+    if (compressedSizes == null) 0 else MapStatusChecksum.compute(this)
+
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1, 0)
 
@@ -161,12 +174,22 @@ private[spark] class CompressedMapStatus(
 
   override def checksumValue: Long = _checksumVal
 
+  override def metadataChecksum: Int = _metadataChecksum
+
+  override def writeForChecksum(out: DataOutput): Unit = {
+    out.writeLong(_mapTaskId)
+    out.writeLong(_checksumVal)
+    out.writeInt(compressedSizes.length)
+    out.write(compressedSizes)
+  }
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
     out.writeLong(_mapTaskId)
     out.writeLong(_checksumVal)
+    out.writeInt(_metadataChecksum)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -176,6 +199,7 @@ private[spark] class CompressedMapStatus(
     in.readFully(compressedSizes)
     _mapTaskId = in.readLong()
     _checksumVal = in.readLong()
+    _metadataChecksum = in.readInt()
   }
 }
 
@@ -221,6 +245,11 @@ private[spark] class HighlyCompressedMapStatus private (
     || numNonEmptyBlocks == 0 || _mapTaskId > 0,
     "Average size can only be zero for map stages that produced no output")
 
+  // Null emptyBlocks means the deserialization constructor, which reads the mapper's value
+  // off the wire.
+  private[this] var _metadataChecksum: Int =
+    if (emptyBlocks == null) 0 else MapStatusChecksum.compute(this)
+
   // For deserialization only
   protected def this() = this(null, -1, null, -1, null, null, null, 0, -1, 0)
 
@@ -250,6 +279,39 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def checksumValue: Long = _checksumVal
 
+  override def metadataChecksum: Int = _metadataChecksum
+
+  override def writeForChecksum(out: DataOutput): Unit = {
+    require(avgSize >= 0, "Negative MapStatus average size")
+    out.writeLong(_mapTaskId)
+    out.writeLong(_checksumVal)
+    out.writeLong(avgSize)
+    out.writeInt(emptyBlocks.serializedSizeInBytes())
+    emptyBlocks.serialize(out)
+    // Both writeExternal and readExternal keep the ids in increasing order, so the encoding is
+    // already stable without sorting here.
+    require(hugeBlockIds.length == hugeBlockSizes.length, "Misaligned huge block arrays")
+    out.writeInt(hugeBlockIds.length)
+    var i = 0
+    while (i < hugeBlockIds.length) {
+      val id = hugeBlockIds(i)
+      val size = hugeBlockSizes(i)
+      require(id >= 0 && !emptyBlocks.contains(id),
+        "Huge block has a negative index or is also marked empty")
+      require(size != 0, "Huge block has zero size")
+      require(i == 0 || id > hugeBlockIds(i - 1), "Huge block ids are not in increasing order")
+      out.writeInt(id)
+      out.writeByte(size)
+      i += 1
+    }
+    // The skewed blocks all share one size, so only their membership is recorded; both decide
+    // what getSizeForBlock returns, so both are covered here.
+    require(skewedBlocks.isEmpty || skewedBlockSize != 0, "Skewed blocks have zero size")
+    out.writeInt(skewedBlocks.serializedSizeInBytes())
+    skewedBlocks.serialize(out)
+    out.writeByte(skewedBlockSize)
+  }
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     emptyBlocks.serialize(out)
@@ -265,6 +327,7 @@ private[spark] class HighlyCompressedMapStatus private (
     out.writeByte(skewedBlockSize)
     out.writeLong(_mapTaskId)
     out.writeLong(_checksumVal)
+    out.writeInt(_metadataChecksum)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -302,6 +365,7 @@ private[spark] class HighlyCompressedMapStatus private (
     skewedBlockSize = in.readByte()
     _mapTaskId = in.readLong()
     _checksumVal = in.readLong()
+    _metadataChecksum = in.readInt()
   }
 }
 
