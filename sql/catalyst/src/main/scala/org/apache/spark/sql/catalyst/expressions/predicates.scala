@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
+import org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EventTimeWatermark, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, UnaryNode, Union, Window}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -243,6 +244,8 @@ trait PredicateHelper extends AliasHelper with Logging {
    *    as its value, is deterministic and rejected by it. Only an aggregation with grouping keys
    *    under whole-stage codegen computes it lazily, so this is conservative for the others,
    *    e.g. a global aggregation or an `ObjectHashAggregateExec`.
+   *  - A result column of an [[Aggregate]] whose expression, taken that way, is deterministic and
+   *    reads such a column of its child, which is then a grouping key, e.g. the key itself.
    *
    * These operators pass such columns of their children through:
    *  - [[Filter]] and [[Sample]].
@@ -255,12 +258,21 @@ trait PredicateHelper extends AliasHelper with Logging {
    *  - [[Join]], from both sides. Only the streamed side of a broadcast hash join passes them
    *    through; a build side, a shuffled hash join or a sort-merge join computes every column, so
    *    this is conservative for them.
+   *  - [[Union]], by position: an output column is one when the column of some child at its
+   *    position is.
+   *  - [[Window]], [[EventTimeWatermark]] and the operators of
+   *    `PushPredicateThroughNonJoin.canPushThrough`, e.g. `Repartition` and `Generate`.
+   * A union outside whole-stage codegen, these other operators and an aggregation, for a grouping
+   * key, may compute such a column on every row they get, but `PushPredicateThroughNonJoin`
+   * pushes a condition over it below them, and on through the projection that computes it with
+   * its expression substituted, e.g. into one side of a join there, where it is evaluated on the
+   * rows that the join drops.
    *
    * Other columns and operators do not count:
-   *  - A non-deterministic column, computed for every row the operator outputs, and the grouping
-   *    keys and aggregate functions of an aggregation, computed on every row it gets.
-   *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
-   *    `Window` or `Repartition`, whose input rows get every column computed.
+   *  - A non-deterministic column, computed for every row the operator outputs, and the
+   *    aggregate functions of an aggregation, computed on every row it gets.
+   *  - The columns through any other operator, e.g. a `Deduplicate` or `CollectMetrics`, whose
+   *    input rows get every column computed and that no condition is pushed through.
    *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
    *    this run, and a `Tail` is only at the top of a plan.
    */
@@ -274,19 +286,32 @@ trait PredicateHelper extends AliasHelper with Logging {
         case a: Attribute if below.contains(a) => a
       })
     case agg: Aggregate =>
+      val below = failableOutput(agg.child)
       AttributeSet(agg.aggregateExpressions.flatMap {
         case a: Alias =>
           val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
-          if (result.deterministic && !ExprUtils.canEvaluateUnconditionally(result)) {
+          if (result.deterministic && (!ExprUtils.canEvaluateUnconditionally(result) ||
+              result.references.exists(below.contains))) {
             Some(a.toAttribute)
           } else {
             None
           }
+        case a: Attribute if below.contains(a) => Some(a)
         case _ => None
       })
     case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
-    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
+    case u: Union =>
+      val children = u.children.map(c => (c.output, failableOutput(c)))
+      AttributeSet(u.output.zipWithIndex.collect {
+        case (a, i) if children.exists { case (output, failable) =>
+          failable.contains(output(i))
+        } => a
+      })
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort |
+         _: Window | _: EventTimeWatermark =>
       failableOutput(plan.children.head)
+    case u: UnaryNode if PushPredicateThroughNonJoin.canPushThrough(u) =>
+      failableOutput(u.child)
     case _ => AttributeSet.empty
   }
 
