@@ -3441,6 +3441,27 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-62137: a filter conjunct that can fail is not pushed below an inner, left semi or " +
+    "left anti lookup join ahead of a throwing conjunct of its condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      val left = streamOf(Seq(1, 2, 3).toDF("id"))
+      // The CASE WHEN of the condition rejects id 2, so the inner and left semi joins drop it,
+      // and the left anti join drops id 1, which has a match. The filter divides by zero only on
+      // the stream row that the join drops.
+      val condition = left("id") === lookup("id") &&
+        when(left("id") < 0, raise_error(lit("neg"))).otherwise(left("id") =!= 2)
+      Seq(
+        ("inner", 2, Seq(Row(1, 1, "engineering"), Row(1, 1, "research"))),
+        ("left_semi", 2, Seq(Row(1))),
+        ("left_anti", 1, Seq(Row(2), Row(3)))).foreach { case (joinType, dropped, expected) =>
+        checkStream(
+          left.join(lookup, condition, joinType).where(lit(10) / (left("id") - dropped) > -100),
+          expected)
+      }
+    }
+  }
+
   test("a comparison with a constant leaves a lookup join's requests batched and cached") {
     // The source selects every offered comparison on `id`. `id >= 2` goes onto the lookup side as a
     // filter, as for an ordinary join, and is offered from there. Its parameter reads no stream
