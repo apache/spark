@@ -124,6 +124,7 @@ ignored_file_patterns = (
     "/dev/merge_spark_pr.py",
     "/dev/next_version_candidates.py",
     "/dev/pr_merge_status.py",
+    "/dev/prmerge/",
     "/dev/protobuf-breaking-changes-check.sh",
     "/dev/py-cleanup",
     "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml

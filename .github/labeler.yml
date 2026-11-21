@@ -45,6 +45,7 @@ BUILD:
         '!dev/merge_spark_pr.py',
         '!dev/next_version_candidates.py',
         '!dev/pr_merge_status.py',
+        '!dev/prmerge/**/*',
         '!dev/spark_jira_utils.py',
         '!dev/spark_merge_footer.py',
         ]
@@ -169,6 +170,7 @@ INFRA:
         'dev/merge_spark_pr.py',
         'dev/next_version_candidates.py',
         'dev/pr_merge_status.py',
+        'dev/prmerge/**/*',
         'dev/spark_jira_utils.py',
         'dev/spark_merge_footer.py',
         'tools/**/*',
