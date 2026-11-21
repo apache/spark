@@ -136,9 +136,10 @@ abstract class QueryStageExec extends LeafExecNode {
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
+    val output = SparkPlan.subqueryPlanString(append)
     super.generateTreeString(depth,
       lastChildren,
-      append,
+      output,
       verbose,
       prefix,
       addSuffix,
@@ -148,7 +149,7 @@ abstract class QueryStageExec extends LeafExecNode {
       indent)
     lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+      depth + 1, lastChildren, output, verbose, "", false, maxFields, printNodeId,
       printOutputColumns, indent)
     lastChildren.remove(lastChildren.size() - 1)
   }

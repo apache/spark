@@ -19,20 +19,22 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, ListQuery, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryExec}
+import org.apache.spark.sql.execution.dynamicpruning.DynamicPruningSubqueryCache.CompiledQuery
 
 case class PlanAdaptiveSubqueries(
-    subqueryMap: Map[Long, SparkPlan]) extends Rule[SparkPlan] {
+    subqueryMap: Map[Long, (LogicalPlan, SparkPlan)]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
       _.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*)) {
       case expressions.ScalarSubquery(_, _, exprId, _, _, _, _) =>
         val subquery = SubqueryExec.createForScalarSubquery(
-          s"subquery#${exprId.id}", subqueryMap(exprId.id))
+          s"subquery#${exprId.id}", subqueryMap(exprId.id)._2)
         execution.ScalarSubquery(subquery, exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _, _, _)) =>
         val expr = if (values.length == 1) {
@@ -44,18 +46,20 @@ case class PlanAdaptiveSubqueries(
             }
           )
         }
-        val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
+        val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id)._2)
         InSubqueryExec(expr, subquery, exprId, isDynamicPruning = false)
       case pruning @ expressions.DynamicPruningSubquery(value, buildPlan,
           buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
         val name = s"dynamicpruning#${exprId.id}"
+        val (query, compiledPlan) = subqueryMap(exprId.id)
+        val keys = CompiledQuery(query, compiledPlan).bindKeys(buildPlan, buildKeys)
         val subquery = SubqueryAdaptiveBroadcastExec(
           name,
           broadcastKeyIndices,
           onlyInBroadcast,
-          buildPlan,
-          buildKeys,
-          subqueryMap(exprId.id))(pruning.usableBroadcastValueProjection)
+          query,
+          keys,
+          compiledPlan)(pruning.usableBroadcastValueProjection)
         DynamicPruningExpression(InSubqueryExec(value, subquery, exprId))
     }
   }

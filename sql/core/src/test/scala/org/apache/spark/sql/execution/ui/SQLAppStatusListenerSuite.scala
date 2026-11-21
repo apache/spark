@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningExpression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.quietly
@@ -47,10 +47,10 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution, SubqueryExec, UnionExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetricInfo, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
@@ -831,6 +831,342 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       executionId, System.currentTimeMillis()))
   }
 
+  private def replayPlanInfo(
+      planInfo: SparkPlanInfo,
+      adaptive: Boolean): (SQLAppStatusStore, SparkPlanInfo) = {
+    val store = createStatusStore()
+    val listener = store.listener.get
+    val executionId = 0L
+    val bus = new ReplayListenerBus
+    bus.addListener(listener)
+    def roundTrip(event: SparkListenerEvent): SparkListenerEvent = {
+      val json = JsonProtocol.sparkEventToJsonString(event)
+      assert(bus.replay(Iterator(json), "DPP SQL event log", maybeTruncated = false, _ => true))
+      JsonProtocol.sparkEventFromJson(json)
+    }
+    val initial = if (adaptive) {
+      new SparkPlanInfo("Initial", "initial plan", Nil, Map.empty, Nil)
+    } else {
+      planInfo
+    }
+    val start = roundTrip(SparkListenerSQLExecutionStart(
+      executionId, Some(executionId), "DPP replay", "", "", initial, 0L, Map.empty))
+      .asInstanceOf[SparkListenerSQLExecutionStart]
+    val restored = if (adaptive) {
+      val update = roundTrip(SparkListenerSQLAdaptiveExecutionUpdate(executionId, "", planInfo))
+        .asInstanceOf[SparkListenerSQLAdaptiveExecutionUpdate]
+      update.sparkPlanInfo
+    } else {
+      start.sparkPlanInfo
+    }
+    (store, restored)
+  }
+
+  protected def assertReplayGraphEndpoints(graph: SparkPlanGraph): Unit = {
+    val visibleIds = graph.allNodes.filterNot(_.isInstanceOf[SparkPlanGraphCluster]).map(_.id).toSet
+    assert(graph.edges.forall(e => visibleIds(e.fromId) && visibleIds(e.toId)))
+    assert(!graph.allNodes.exists(_.name == "DPPSharedPlanReference"))
+    val dotEdges = "(\\d+)->(\\d+);".r
+      .findAllMatchIn(graph.makeDotFile(Map.empty))
+      .map(m => (m.group(1).toLong, m.group(2).toLong)).toSeq
+    assert(dotEdges.size == graph.edges.size)
+    assert(dotEdges.forall { case (from, to) => visibleIds(from) && visibleIds(to) })
+  }
+
+  private def assertReplayNodeMetrics(
+      node: SparkPlanGraphNode,
+      expectedIds: Seq[Long],
+      metricValues: Map[Long, String]): Unit = {
+    assert(node.metrics.map(_.accumulatorId).sorted == expectedIds.sorted,
+      s"Unexpected metric ownership on ${node.name} (${node.id})")
+    // Mainline displays metrics in the node details panel rather than the DOT node label.
+    val details = parse(SparkPlanGraph(Seq(node), Seq.empty).makeNodeDetailsJson(metricValues))
+    val key = node match {
+      case _: SparkPlanGraphCluster => s"cluster${node.id}"
+      case _ => s"node${node.id}"
+    }
+    val displayed = (details \ key \ "metrics").children
+    assert(displayed.size == expectedIds.size)
+    node.metrics.foreach { metric =>
+      val value = metricValues(metric.accumulatorId)
+      assert(displayed.exists { entry =>
+        (entry \ "name").values == metric.name &&
+          (entry \ "value").values == value &&
+          (entry \ "type").values == metric.metricType
+      }, s"Missing metric ${metric.accumulatorId} on ${node.name}")
+    }
+  }
+
+  for (adaptive <- Seq(false, true)) {
+    val eventName = if (adaptive) "SQLAdaptiveExecutionUpdate" else "SQLExecutionStart"
+
+    test(s"SPARK-48486: $eventName replays a captured physical DPP graph after JSON roundtrip") {
+      // Build physical expressions directly: this exercises fromSparkPlan without preparing or
+      // executing the subquery, and does not depend on optimizer choices for a small SQL query.
+      val source = WholeStageCodegenExec(spark.range(2).queryExecution.sparkPlan)(7)
+      val producer = SubqueryExec("dpp-event-source", source)
+      val consumers = Seq(1L, 2L).map { value =>
+        FilterExec(DynamicPruningExpression(InSubqueryExec(
+          Literal(value), producer, NamedExpression.newExprId)),
+          spark.range(3).queryExecution.sparkPlan)
+      }
+      val info = SparkPlanInfo.fromSparkPlan(UnionExec(consumers))
+      val (store, restored) = replayPlanInfo(info, adaptive)
+      def flatten(plan: SparkPlanInfo): Seq[SparkPlanInfo] = {
+        plan +: plan.children.flatMap(flatten)
+      }
+      val descriptions = flatten(restored)
+      val details = descriptions.filter(_.metadata.contains("spark.sql.dpp.planInfo.id"))
+      val refs = descriptions.filter(_.nodeName == "DPPSharedPlanReference")
+      assert(details.nonEmpty)
+      assert(refs.nonEmpty)
+      val ids = details.map(_.metadata("spark.sql.dpp.planInfo.id"))
+      assert(ids.distinct.size == ids.size)
+      refs.foreach { ref =>
+        assert(ref.children.isEmpty && ref.metrics.isEmpty)
+        assert(ref.metadata("spark.sql.dpp.planInfo.version") == "1")
+        assert(ids.contains(ref.metadata("spark.sql.dpp.planInfo.ref")))
+      }
+      val graph = store.planGraph(0L)
+      val subqueries = graph.allNodes.filter(_.name == "Subquery")
+      val filters = graph.allNodes.filter(_.name == "Filter")
+      assert(subqueries.size == 1)
+      assert(filters.size == 2)
+      assert(graph.edges.filter(_.fromId == subqueries.head.id).map(_.toId).toSet ==
+        filters.map(_.id).toSet)
+      val producerMetricIds = (producer.metrics.values ++ source.metrics.values ++
+        source.child.metrics.values).map(_.id).toSeq
+      assert(producerMetricIds.nonEmpty)
+      producerMetricIds.foreach { id =>
+        assert(graph.allNodes.flatMap(_.metrics).count(_.accumulatorId == id) == 1)
+        assert(store.execution(0L).get.metrics.count(_.accumulatorId == id) == 1)
+      }
+      val sourceClusters = graph.allNodes.collect {
+        case cluster: SparkPlanGraphCluster if cluster.name == source.nodeName => cluster
+      }
+      assert(sourceClusters.size == 1)
+      val sourceChildren = graph.edges.filter(_.toId == subqueries.head.id).map(_.fromId)
+      assert(sourceChildren.size == 1)
+      val sourceChild = graph.allNodes.find(_.id == sourceChildren.head).get
+      assert(sourceChild.name == source.child.nodeName)
+      val metricUpdates = producerMetricIds.map(_ -> 123L)
+      store.listener.get.onOtherEvent(SparkListenerDriverAccumUpdates(0L, metricUpdates))
+      val physicalMetrics = producer.metrics.values ++ source.metrics.values ++
+        source.child.metrics.values
+      val expectedMetricValues = physicalMetrics.map { metric =>
+        metric.id -> MetricUtils.stringValue(metric.metricType, Array(123L), Array.empty[Long])
+      }.toMap
+      assert(store.executionMetrics(0L) == expectedMetricValues)
+      assertReplayNodeMetrics(subqueries.head, producer.metrics.values.map(_.id).toSeq,
+        expectedMetricValues)
+      assertReplayNodeMetrics(sourceClusters.head, source.metrics.values.map(_.id).toSeq,
+        expectedMetricValues)
+      assertReplayNodeMetrics(sourceChild, source.child.metrics.values.map(_.id).toSeq,
+        expectedMetricValues)
+      assertReplayGraphEndpoints(graph)
+    }
+
+    test(s"SPARK-48486: $eventName replays DPP aliases and legacy reuse after JSON roundtrip") {
+      val prefix = "spark.sql.dpp.planInfo."
+      def node(
+          name: String,
+          children: Seq[SparkPlanInfo] = Nil,
+          id: String = "",
+          metric: Option[Long] = None): SparkPlanInfo = {
+        val metadata = if (id.isEmpty) Map.empty[String, String] else {
+          Map(s"${prefix}version" -> "1", s"${prefix}id" -> id)
+        }
+        new SparkPlanInfo(name, name, children, metadata, metric.toSeq.map { m =>
+          val metricName = if (m == 901L) "duration" else s"metric-$m"
+          new SQLMetricInfo(metricName, m, "sum")
+        })
+      }
+      def ref(id: String): SparkPlanInfo = new SparkPlanInfo(
+        "DPPSharedPlanReference", s"ref=$id", Nil,
+        Map(s"${prefix}version" -> "1", s"${prefix}ref" -> id), Nil)
+      val deep = node("DeepProducer", id = "deep", metric = Some(902L))
+      val leafA = node("Producer", Seq(deep), "leaf-a", Some(900L))
+      val leafB = node("Producer", Seq(ref("deep")), "leaf-b", Some(900L))
+      val stageA = node("WholeStageCodegen (1)", Seq(leafA), "stage-a", Some(901L))
+      val stageB = node("WholeStageCodegen (1)", Seq(leafB), "stage-b", Some(901L))
+      val exchangeA = node("Exchange", Seq(stageA), "exchange-a", Some(903L))
+      val exchangeB = node("Exchange", Seq(stageB), "exchange-b", Some(903L))
+      val subqueryA = node("Subquery", Seq(ref("leaf-a")), "subquery-a", Some(904L))
+      val subqueryB = node("Subquery", Seq(ref("leaf-b")), "subquery-b", Some(904L))
+      val info = node("Root", Seq(
+        node("Forward", Seq(ref("stage-b"))),
+        node("ExchangeConsumerA", Seq(exchangeA)),
+        node("ExchangeConsumerB", Seq(node("ReusedExchange", Seq(exchangeB)))),
+        node("StageConsumer", Seq(ref("stage-b"))),
+        node("LeafConsumer", Seq(ref("leaf-b"))),
+        node("DeepConsumer", Seq(ref("deep"))),
+        node("SubqueryConsumerA", Seq(subqueryA)),
+        node("SubqueryConsumerB", Seq(node("ReusedSubquery", Seq(subqueryB))))))
+      val (store, restored) = replayPlanInfo(info, adaptive)
+      assert(restored.children.head.children.head.metadata(s"${prefix}ref") == "stage-b")
+      val graph = store.planGraph(0L)
+      def only(name: String): SparkPlanGraphNode = {
+        val matches = graph.allNodes.filter(_.name == name)
+        assert(matches.size == 1, s"Expected one $name, found ${matches.size}")
+        matches.head
+      }
+      val consumerNames = Seq("Forward", "ExchangeConsumerA", "ExchangeConsumerB",
+        "StageConsumer", "LeafConsumer", "DeepConsumer", "SubqueryConsumerA",
+        "SubqueryConsumerB")
+      val expectedNames = consumerNames.map(_ -> "Root") ++ Seq(
+        "Exchange" -> "ExchangeConsumerA", "Exchange" -> "ExchangeConsumerB",
+        "Producer" -> "Exchange", "DeepProducer" -> "Producer",
+        "Producer" -> "Forward", "Producer" -> "StageConsumer",
+        "Producer" -> "LeafConsumer", "DeepProducer" -> "DeepConsumer",
+        "Subquery" -> "SubqueryConsumerA", "Subquery" -> "SubqueryConsumerB",
+        "Producer" -> "Subquery")
+      val expected = expectedNames.map { case (from, to) => (only(from).id, only(to).id) }
+      val actual = graph.edges.map(e => (e.fromId, e.toId))
+      assert(actual.size == expected.size)
+      assert(actual.toSet == expected.toSet)
+      assert(graph.allNodes.count(_.isInstanceOf[SparkPlanGraphCluster]) == 1)
+      val metricIds = Seq(900L, 901L, 902L, 903L, 904L)
+      assert(graph.allNodes.flatMap(_.metrics).map(_.accumulatorId).sorted == metricIds)
+      assert(store.execution(0L).get.metrics.map(_.accumulatorId).sorted == metricIds)
+      store.listener.get.onOtherEvent(SparkListenerDriverAccumUpdates(
+        0L, metricIds.map(_ -> 3L)))
+      assert(store.executionMetrics(0L) == metricIds.map(_ -> "3").toMap)
+      Seq("Producer" -> 900L, "WholeStageCodegen (1)" -> 901L,
+        "DeepProducer" -> 902L, "Exchange" -> 903L, "Subquery" -> 904L).foreach {
+        case (name, id) =>
+          assertReplayNodeMetrics(only(name), Seq(id), store.executionMetrics(0L))
+      }
+      assertReplayGraphEndpoints(graph)
+    }
+  }
+
+  for {
+    adaptive <- Seq(false, true)
+    reuse <- Seq("Subquery", "ReusedExchange", "ShuffleQueryStage")
+  } {
+    val eventName = if (adaptive) "SQLAdaptiveExecutionUpdate" else "SQLExecutionStart"
+    test(s"SPARK-48486: $eventName materializes details skipped by $reuse reuse") {
+      val prefix = "spark.sql.dpp.planInfo."
+      def node(
+          name: String,
+          children: Seq[SparkPlanInfo] = Nil,
+          id: String = "",
+          metric: Option[Long] = None): SparkPlanInfo = {
+        val metadata = if (id.isEmpty) Map.empty[String, String] else {
+          Map(s"${prefix}version" -> "1", s"${prefix}id" -> id)
+        }
+        new SparkPlanInfo(name, name, children, metadata, metric.toSeq.map { m =>
+          val metricName = if (m == 1000L) "duration" else s"metric-$m"
+          new SQLMetricInfo(metricName, m, "sum")
+        })
+      }
+      def ref(id: String): SparkPlanInfo = new SparkPlanInfo(
+        "DPPSharedPlanReference", s"ref=$id", Nil,
+        Map(s"${prefix}version" -> "1", s"${prefix}ref" -> id), Nil)
+
+      val deep = node("Deep", Seq(ref("pending")), metric = Some(1005L))
+      val middle = node("Middle", Seq(deep), metric = Some(1004L))
+      val anchor = node("Anchor", Seq(middle), "anchor", Some(1003L))
+      val pending = node("PendingProducer", id = "pending", metric = Some(1006L))
+      val producerName = if (reuse == "Subquery") "Subquery" else "Exchange"
+      val canonical = node(producerName, Seq(ref("anchor"), ref("pending")),
+        metric = Some(1002L))
+      // Both unique details are in the subtree that legacy semantic reuse skips. Materializing
+      // anchor also adds a pending edge from PendingProducer to the non-ID Deep descendant.
+      val duplicate = node(producerName, Seq(anchor, pending), metric = Some(1002L))
+      val reused = if (reuse == "Subquery") duplicate else node(reuse, Seq(duplicate))
+      val info = node("Root", Seq(
+        node("WholeStageCodegen (17)", Seq(
+          node("Host", Seq(canonical), metric = Some(1001L))), metric = Some(1000L)),
+        node("SecondConsumer", Seq(reused)),
+        node("LateConsumer", Seq(ref("anchor"), ref("anchor"), ref("pending")))))
+      val (store, restored) = replayPlanInfo(info, adaptive)
+      val restoredCanonical = restored.children.head.children.head.children.head
+      assert(restoredCanonical.children.forall(_.nodeName == "DPPSharedPlanReference"))
+      val graph = store.planGraph(0L)
+      def only(name: String): SparkPlanGraphNode = {
+        val matches = graph.allNodes.filter(_.name == name)
+        assert(matches.size == 1, s"Expected one $name, found ${matches.size}")
+        matches.head
+      }
+      val expectedNames = Seq(
+        "Host" -> "Root", producerName -> "Host",
+        "Anchor" -> producerName, "PendingProducer" -> producerName,
+        "Middle" -> "Anchor", "Deep" -> "Middle", "PendingProducer" -> "Deep",
+        "SecondConsumer" -> "Root", producerName -> "SecondConsumer",
+        "LateConsumer" -> "Root", "Anchor" -> "LateConsumer",
+        "Anchor" -> "LateConsumer", "PendingProducer" -> "LateConsumer")
+      val expected = expectedNames.map { case (from, to) => (only(from).id, only(to).id) }
+      val actual = graph.edges.map(e => (e.fromId, e.toId))
+      // Preserve repeated requests from the same consumer as well as the edges added while
+      // materializing the missing anchor; a set comparison alone cannot prove this contract.
+      assert(actual.groupBy(identity).map { case (edge, occurrences) =>
+        edge -> occurrences.size
+      } == expected.groupBy(identity).map { case (edge, occurrences) =>
+        edge -> occurrences.size
+      })
+      val clusters = graph.allNodes.collect { case c: SparkPlanGraphCluster => c }
+      assert(clusters.size == 1)
+      val expectedClusterNames = if (reuse == "Subquery") {
+        Set("Host")
+      } else {
+        Set("Host", "Exchange", "Anchor", "Middle", "Deep", "PendingProducer")
+      }
+      assert(clusters.head.nodes.map(_.name).toSet == expectedClusterNames)
+      val metricIds = 1000L to 1006L
+      assert(graph.allNodes.flatMap(_.metrics).map(_.accumulatorId).sorted == metricIds)
+      assert(store.execution(0L).get.metrics.map(_.accumulatorId).sorted == metricIds)
+      val metricUpdates = metricIds.map(id => id -> (id - 990L))
+      val driverUpdate = JsonProtocol.sparkEventFromJson(JsonProtocol.sparkEventToJsonString(
+        SparkListenerDriverAccumUpdates(0L, metricUpdates)))
+      store.listener.get.onOtherEvent(driverUpdate)
+      val expectedMetrics = metricUpdates.map { case (id, value) => id -> value.toString }.toMap
+      assert(store.executionMetrics(0L) == expectedMetrics)
+      assertReplayNodeMetrics(clusters.head, Seq(1000L), expectedMetrics)
+      Seq("Host" -> 1001L, producerName -> 1002L, "Anchor" -> 1003L,
+        "Middle" -> 1004L, "Deep" -> 1005L, "PendingProducer" -> 1006L).foreach {
+        case (name, id) => assertReplayNodeMetrics(only(name), Seq(id), expectedMetrics)
+      }
+      val details = parse(graph.makeNodeDetailsJson(store.executionMetrics(0L)))
+      val displayedMetrics = details.children.flatMap(node => (node \ "metrics").children)
+      metricUpdates.foreach { case (id, value) =>
+        val metricName = if (id == 1000L) "duration" else s"metric-$id"
+        assert(displayedMetrics.exists { metric =>
+          (metric \ "name").values == metricName &&
+            (metric \ "value").values == value.toString
+        })
+      }
+      assertReplayGraphEndpoints(graph)
+    }
+  }
+
+  test("SPARK-48486: SQL events without DPP metadata retain legacy reuse after JSON roundtrip") {
+    def node(name: String, children: SparkPlanInfo*): SparkPlanInfo = {
+      new SparkPlanInfo(name, name, children, Map.empty, Nil)
+    }
+    val producer = node("Exchange", node("Scan"))
+    val subquery = node("Subquery", node("SubqueryScan"))
+    val info = node("Root", node("ConsumerA", producer, subquery),
+      node("ConsumerB", node("ReusedExchange", producer), node("ReusedSubquery", subquery)))
+    val (store, restored) = replayPlanInfo(info, adaptive = false)
+    assert(restored.metadata.isEmpty)
+    val initialGraph = store.planGraph(0L)
+    val update = JsonProtocol.sparkEventFromJson(JsonProtocol.sparkEventToJsonString(
+      SparkListenerSQLAdaptiveExecutionUpdate(0L, "", info)))
+    store.listener.get.onOtherEvent(update)
+    val graph = store.planGraph(0L)
+    assert(graph.allNodes.map(n => (n.id, n.name)) ==
+      initialGraph.allNodes.map(n => (n.id, n.name)))
+    assert(graph.edges == initialGraph.edges)
+    Seq("Exchange", "Subquery").foreach { name =>
+      val producers = graph.allNodes.filter(_.name == name)
+      assert(producers.size == 1)
+      val targets = graph.edges.filter(_.fromId == producers.head.id).map(_.toId).toSet
+      assert(targets == graph.allNodes.filter(_.name.startsWith("Consumer")).map(_.id).toSet)
+    }
+    assertReplayGraphEndpoints(graph)
+  }
+
 
   test("SPARK-34338: Report metrics from Datasource v2 scan") {
     val statusStore = spark.sharedState.statusStore
@@ -989,6 +1325,55 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
     kvstore = new ElementTrackingStore(new InMemoryStore, conf)
     val listener = new SQLAppStatusListener(conf, kvstore, live = true)
     new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  test("SPARK-48486: History Server replays legacy and shared SQL plans in one log") {
+    val prefix = "spark.sql.dpp.planInfo."
+    val metric = new SQLMetricInfo("rows", 7L, "sum")
+    val source = new SparkPlanInfo("Source", "source output=[k]", Nil, Map.empty, Seq(metric))
+    val legacyProducer = new SparkPlanInfo("Subquery", "producer", Seq(source), Map.empty, Nil)
+    val producer = new SparkPlanInfo("Subquery", "producer", Seq(source),
+      Map(prefix + "version" -> "1", prefix + "id" -> "p"), Nil)
+    val ref = new SparkPlanInfo("DPPSharedPlanReference", "reference p", Nil,
+      Map(prefix + "version" -> "1", prefix + "ref" -> "p"), Nil)
+    def root(first: SparkPlanInfo, second: SparkPlanInfo): SparkPlanInfo = {
+      val consumers = Seq(first, second).zipWithIndex.map { case (child, index) =>
+        new SparkPlanInfo(s"Consumer$index", s"consumer $index", Seq(child), Map.empty, Nil)
+      }
+      new SparkPlanInfo("Root", "root", consumers, Map.empty, Nil)
+    }
+    val legacy = root(legacyProducer, legacyProducer)
+    val shared = root(producer, ref)
+    val events = (0L to 2L).flatMap { id =>
+      val start = SparkListenerSQLExecutionStart(id, Some(id), "history", "", "initial",
+        if (id == 1L) shared else legacy, 0L)
+      val update = if (id == 2L) {
+        Seq(SparkListenerSQLAdaptiveExecutionUpdate(id, "final", shared))
+      } else {
+        Nil
+      }
+      Seq(start) ++ update ++ Seq(
+        SparkListenerDriverAccumUpdates(id, Seq(7L -> 42L)),
+        SparkListenerSQLExecutionEnd(id, 1L))
+    }
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val bus = new ReplayListenerBus
+    new SQLHistoryServerPlugin().createListeners(conf, kvstore).foreach(bus.addListener)
+    val jsonLines = events.iterator.map(JsonProtocol.sparkEventToJsonString)
+    assert(bus.replay(jsonLines, "mixed SQL history", maybeTruncated = false, _ => true))
+    val store = new SQLAppStatusStore(kvstore)
+    for (id <- 0L to 2L) {
+      val graph = store.planGraph(id)
+      assert(graph.allNodes.size == 5)
+      assert(graph.edges.size == 5)
+      assert(graph.allNodes.flatMap(_.metrics).map(_.accumulatorId) == Seq(7L))
+      assert(store.executionMetrics(id) == Map(7L -> "42"))
+      assert(store.execution(id).get.completionTime.isDefined)
+      assert(store.execution(id).get.physicalPlanDescription ==
+        (if (id == 2L) "final" else "initial"))
+      assertReplayGraphEndpoints(graph)
+    }
   }
 }
 

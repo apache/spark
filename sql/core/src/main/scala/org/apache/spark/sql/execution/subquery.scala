@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.dynamicpruning.DynamicPruningSubqueryCache
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
@@ -463,11 +464,13 @@ private[execution] object InSubqueryExecResultState {
 /**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */
-case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
+case class PlanSubqueries(
+    sparkSession: SparkSession,
+    dppCache: DynamicPruningSubqueryCache) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan, dppCache)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
@@ -482,7 +485,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
             }
           )
         }
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query, dppCache)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
           exprId, isDynamicPruning = false)
     }

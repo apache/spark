@@ -533,8 +533,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   protected def formattedNodeName: String = {
     val opId = Option(QueryPlan.localIdMap.get().get(this)).map(id => s"$id")
       .getOrElse("unknown")
-    val codegenId =
-      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
+    val codegenIds = QueryPlan.localCodegenIdMap.get()
+    val id = if (codegenIds == null) {
+      getTagValue(QueryPlan.CODEGEN_ID_TAG)
+    } else if (codegenIds.containsKey(this)) {
+      Some(codegenIds.get(this))
+    } else {
+      None
+    }
+    val codegenId = id.map(id => s" [codegen id : $id]").getOrElse("")
     s"($opId) $nodeName$codegenId"
   }
 
@@ -828,6 +835,10 @@ object QueryPlan extends PredicateHelper {
    */
   val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = ThreadLocal.withInitial(() =>
     new IdentityHashMap[QueryPlan[_], Int]())
+
+  // Null outside formatted explain so callers can still read an explicitly assigned tag.
+  private[spark] val localCodegenIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] =
+    new ThreadLocal[java.util.Map[QueryPlan[_], Int]]()
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

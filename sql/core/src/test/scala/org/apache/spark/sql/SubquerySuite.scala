@@ -1616,6 +1616,9 @@ class SubquerySuite extends SharedSparkSession
           assert(countReuseSubqueryExec == 0,
             "expect 0 ReusedSubqueryExec when not reusing")
         }
+        val tree = df.queryExecution.executedPlan.treeString
+        assert(tree.contains("ReusedSubquery") == reuse, tree)
+        assert(!tree.contains("Shared subquery plan"), tree)
       }
     }
   }
