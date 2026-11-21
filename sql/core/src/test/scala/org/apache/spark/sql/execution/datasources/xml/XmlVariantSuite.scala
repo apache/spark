@@ -179,31 +179,29 @@ class XmlVariantSuite extends SharedSparkSession with TestXmlData {
   }
 
   test("Parser: variantPrimitivesAsString keeps primitive values as strings") {
-    val asString = Map("variantPrimitivesAsString" -> "true")
-    // inferSchema defaults to true for XML; the option does not depend on it.
-    for (extra <- Seq(Map.empty[String, String], Map("inferSchema" -> "true"))) {
-      val opts = asString ++ extra
-      testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":"true"}""", opts)
-      testParser("<ROW><id>007</id></ROW>", """{"id":"007"}""", opts)
-      testParser("<ROW><amount>5.0</amount></ROW>", """{"amount":"5.0"}""", opts)
-      testParser("<ROW><price>37,77</price></ROW>", """{"price":"37,77"}""", opts)
-      // Attribute values and value tags are kept as strings too.
-      testParser(
-        "<ROW id=\"2\">93<amount>7</amount></ROW>",
-        """{"_VALUE":"93","_id":"2","amount":"7"}""",
-        opts)
-      // Arrays of repeated elements keep their structure.
-      testParser(
-        "<ROW><n>1</n><n>2</n></ROW>",
-        """{"n":["1","2"]}""",
-        opts)
-      // Surrounding spaces are still trimmed, and null / nullValue handling is unchanged.
-      testParser("<ROW><id> 2 </id></ROW>", """{"id":"2"}""", opts)
-      testParser(
-        "<ROW><name></name><amount>n/a</amount></ROW>",
-        """{"amount":null,"name":null}""",
-        opts ++ Map("nullValue" -> "n/a"))
-    }
+    // inferSchema=false, where the option overrides the conf fallback, is covered by the
+    // precedence test below.
+    val opts = Map("variantPrimitivesAsString" -> "true")
+    testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":"true"}""", opts)
+    testParser("<ROW><id>007</id></ROW>", """{"id":"007"}""", opts)
+    testParser("<ROW><amount>5.0</amount></ROW>", """{"amount":"5.0"}""", opts)
+    testParser("<ROW><price>37,77</price></ROW>", """{"price":"37,77"}""", opts)
+    // Attribute values and value tags are kept as strings too.
+    testParser(
+      "<ROW id=\"2\">93<amount>7</amount></ROW>",
+      """{"_VALUE":"93","_id":"2","amount":"7"}""",
+      opts)
+    // Arrays of repeated elements keep their structure.
+    testParser(
+      "<ROW><n>1</n><n>2</n></ROW>",
+      """{"n":["1","2"]}""",
+      opts)
+    // Surrounding spaces are still trimmed, and null / nullValue handling is unchanged.
+    testParser("<ROW><id> 2 </id></ROW>", """{"id":"2"}""", opts)
+    testParser(
+      "<ROW><name></name><amount>n/a</amount></ROW>",
+      """{"amount":null,"name":null}""",
+      opts ++ Map("nullValue" -> "n/a"))
   }
 
   test("variantPrimitivesAsString records whether the user set it") {

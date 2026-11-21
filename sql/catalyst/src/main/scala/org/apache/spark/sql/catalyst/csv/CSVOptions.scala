@@ -356,14 +356,9 @@ class CSVOptions(
   // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
-  // The value of the `variantPrimitivesAsString` option, or None if the user did not set it.
-  val variantPrimitivesAsStringOpt: Option[Boolean] =
-    parameters.get(VARIANT_PRIMITIVES_AS_STRING).flatMap(Option(_))
-      .map(_ => getBool(VARIANT_PRIMITIVES_AS_STRING))
-
   // When true, CSV values read into a VARIANT are stored as strings instead of a type inferred
   // from their text. See `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`.
-  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(false)
+  val variantPrimitivesAsString: Boolean = getBool(VARIANT_PRIMITIVES_AS_STRING)
 
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag

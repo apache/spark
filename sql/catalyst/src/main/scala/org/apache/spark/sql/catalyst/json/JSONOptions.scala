@@ -225,11 +225,9 @@ class JSONOptions(
   // numbers that do not fit a variant decimal. The one exception is leading zeros accepted via
   // `allowNumericLeadingZeros`, which the JSON parser drops before the text is read. See
   // `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. Unlike `primitivesAsString`, which applies
-  // to non-variant columns, it has no effect on schema inference. `variantPrimitivesAsStringOpt` is
-  // None if the user did not set the option.
-  val variantPrimitivesAsStringOpt: Option[Boolean] =
-    parameters.get(VARIANT_PRIMITIVES_AS_STRING).map(_.toBoolean)
-  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(false)
+  // to non-variant columns, it has no effect on schema inference.
+  val variantPrimitivesAsString: Boolean =
+    parameters.get(VARIANT_PRIMITIVES_AS_STRING).exists(_.toBoolean)
 
   // This option takes in a field name and specifies that the input JSON files are object
   // documents with a top-level array-valued field of that name, i.e.

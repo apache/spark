@@ -4865,17 +4865,6 @@ abstract class JsonSuite
     }
   }
 
-  test("json variantPrimitivesAsString records whether the user set it") {
-    val unset = new JSONOptions(Map.empty[String, String], "UTC")
-    assert(unset.variantPrimitivesAsStringOpt.isEmpty)
-    assert(!unset.variantPrimitivesAsString)
-    for (value <- Seq(true, false)) {
-      val opts = new JSONOptions(Map("variantPrimitivesAsString" -> value.toString), "UTC")
-      assert(opts.variantPrimitivesAsStringOpt.contains(value))
-      assert(opts.variantPrimitivesAsString == value)
-    }
-  }
-
   test("json variantPrimitivesAsString with allowNumericLeadingZeros drops the leading zeros") {
     // Jackson strips the leading zeros it accepts under ALLOW_LEADING_ZEROS_FOR_NUMBERS before
     // exposing the token text, so the option cannot preserve them; the docs state this.

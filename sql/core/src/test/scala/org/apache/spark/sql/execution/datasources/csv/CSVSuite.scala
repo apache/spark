@@ -4029,27 +4029,30 @@ abstract class CSVSuite
       val asStrings = Seq(
         """{"_c0":"0001","_c1":"+5","_c2":"1e9","_c3":"True"}""",
         """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03","_c2":null,"_c3":null}""")
-      val inferred = Seq(
-        """{"_c0":1,"_c1":5,"_c2":1000000000,"_c3":true}""",
-        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00","_c2":null,"_c3":null}""")
-
       // A small partition size ensures each value is parsed independently and would otherwise get
-      // its type inferred. The time parser policy is pinned because the inferred timestamp is
-      // rendered differently under LEGACY (see CSVLegacyTimeParserSuite).
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
-        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
-        // The option keeps every non-null value as a string regardless of inferSchema. Null and
-        // nullValue tokens remain variant nulls.
-        for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
-          checkSingleVariant(
-            Map("variantPrimitivesAsString" -> "true") ++ inferSchema.map("inferSchema" -> _),
-            asStrings: _*)
-        }
+      // its type inferred. The time parser policy is set explicitly because the inferred
+      // timestamp is rendered differently under CORRECTED and LEGACY.
+      for ((policy, timestamp) <- Seq(
+          "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
+          "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
+        val inferred = Seq(
+          """{"_c0":1,"_c1":5,"_c2":1000000000,"_c3":true}""",
+          s"""{"_c0":"2000-01-01","_c1":$timestamp,"_c2":null,"_c3":null}""")
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          // The option keeps every non-null value as a string regardless of inferSchema. Null and
+          // nullValue tokens remain variant nulls.
+          for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
+            checkSingleVariant(
+              Map("variantPrimitivesAsString" -> "true") ++ inferSchema.map("inferSchema" -> _),
+              asStrings: _*)
+          }
 
-        // Without the option, values are inferred regardless of inferSchema.
-        for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
-          checkSingleVariant(inferSchema.map("inferSchema" -> _).toMap, inferred: _*)
+          // Without the option, values are inferred regardless of inferSchema.
+          for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
+            checkSingleVariant(inferSchema.map("inferSchema" -> _).toMap, inferred: _*)
+          }
         }
       }
 
@@ -4078,22 +4081,6 @@ abstract class CSVSuite
         .option("variantPrimitivesAsString", "false")
         .csv(path.getCanonicalPath)
       checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "BOOLEAN", "VOID"))
-    }
-  }
-
-  test("csv variantPrimitivesAsString records whether the user set it") {
-    def options(params: (String, String)*): CSVOptions =
-      new CSVOptions(params.toMap, columnPruning = false, "UTC")
-
-    // Not set: no user value, and the effective value is false.
-    assert(options().variantPrimitivesAsStringOpt.isEmpty)
-    assert(!options().variantPrimitivesAsString)
-
-    // Set: the user value is kept, including an explicit false.
-    for (value <- Seq(true, false)) {
-      val opts = options("variantPrimitivesAsString" -> value.toString)
-      assert(opts.variantPrimitivesAsStringOpt.contains(value))
-      assert(opts.variantPrimitivesAsString == value)
     }
   }
 
