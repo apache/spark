@@ -65,7 +65,9 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
           .mkString(", ")
       }
 
-      val (scan, output) = PushDownUtils.pruneColumns(scanBuilder, relation, relation.output, Nil)
+      val requiredAttrs =
+        if (V2Writes.hasNarrowRows(rd)) readAttrs(rd.query, relation) else relation.output
+      val (scan, output) = PushDownUtils.pruneColumns(scanBuilder, relation, requiredAttrs, Nil)
 
       // scalastyle:off line.size.limit
       logInfo(
@@ -90,6 +92,30 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
         case r: DataSourceV2Relation if r.table eq table =>
           DataSourceV2ScanRelation(r, scan, PushDownUtils.toOutputAttrs(scan.readSchema(), r))
       }
+  }
+
+  /**
+   * Returns the columns of `relation` that the projections and filters directly above each read
+   * of the table use, as the rest of the query sees only their output. Only whole columns are
+   * pruned, as the query is not rewritten for a pruned nested schema.
+   *
+   * An UPDATE with a subquery in its condition reads the table twice, once per Union child, and
+   * the analyzer gives the second read new expr IDs. Both reads share one scan, so the columns
+   * are matched to `relation` by name.
+   */
+  private def readAttrs(
+      plan: LogicalPlan,
+      relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    def readNames(node: LogicalPlan): Seq[String] = node match {
+      case PhysicalOperation(projects, filters, r: DataSourceV2Relation)
+          if r.table eq relation.table =>
+        val references = AttributeSet((projects ++ filters).flatMap(_.references))
+        r.output.filter(references.contains).map(_.name)
+      case _ =>
+        node.children.flatMap(readNames)
+    }
+    val names = readNames(plan).toSet
+    relation.output.filter(attr => names.contains(attr.name))
   }
 
   // pushes down the operation condition and returns the following information:

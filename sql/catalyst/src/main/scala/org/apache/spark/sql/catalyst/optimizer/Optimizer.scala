@@ -1613,6 +1613,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
+    // prune unused columns from the query of ReplaceData/WriteDelta whose write relation's data
+    // column names differ from the table's, which a column update can cause; a column update that
+    // declares every data column in table order keeps its query, like a full-width write
+    case w: RowLevelWrite
+      if RowLevelWrite.dataColumnNames(w.table) != RowLevelWrite.dataColumnNames(w.originalTable) &&
+        !w.query.outputSet.subsetOf(w.references) =>
+      w.withPrunedQuery(prunedChild(w.query, w.references))
+
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references

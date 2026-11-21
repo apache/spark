@@ -38,6 +38,14 @@ case class ProjectingInternalRow(schema: StructType,
     this.row = row
   }
 
+  /**
+   * Returns a projection with the same schema whose field `i` reads input ordinal
+   * `ordinalMap(colOrdinals(i))` instead of `colOrdinals(i)`.
+   */
+  def remapOrdinals(ordinalMap: Int => Int): ProjectingInternalRow = {
+    ProjectingInternalRow(schema, colOrdinals.map(ordinalMap))
+  }
+
   override def setNullAt(i: Int): Unit = throw SparkUnsupportedOperationException()
 
   override def update(i: Int, value: Any): Unit = throw SparkUnsupportedOperationException()
