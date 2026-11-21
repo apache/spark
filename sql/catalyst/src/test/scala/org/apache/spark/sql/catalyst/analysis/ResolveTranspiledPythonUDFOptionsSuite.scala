@@ -23,7 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   Add, Alias, AttributeReference, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, LongType}
+import org.apache.spark.sql.types.{
+  ArrayType, BinaryType, BooleanType, DataType, DecimalType, DoubleType, FloatType,
+  IntegerType, LongType, MapType, StringType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -84,6 +86,74 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       List(Concat(Seq(a, a))), List(List("string")))
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions.isEmpty)
+  }
+
+  test("keeps a map/array option only for a matching map/array column") {
+    // `def f(x: dict, y: int): return y + 1` (SPARK-55219). AttributeReference directly
+    // because the `$"a".map(...)` DSL collides with TreeNode.map.
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val mapT = MapType(StringType, StringType)
+    val arrT = ArrayType(StringType)
+    Seq(("map", mapT, arrT), ("array", arrT, mapT)).foreach {
+      case (category, dt, otherDt) =>
+        def node(first: AttributeReference): TranspiledPythonUDF = TranspiledPythonUDF(
+          "udf", pyUDF(Seq(first, n)), List(opt), List(List(category, "numeric")))
+        val c = AttributeReference("a", dt)()
+        val pruned = prune(node(c), LocalRelation(c, n))
+        assert(pruned.transpiledOptions == List(opt))
+        assert(pruned.optionInputCategories.isEmpty)
+        Seq($"a".string, AttributeReference("a", otherDt)()).foreach { wrong =>
+          assert(prune(node(wrong), LocalRelation(wrong, n)).transpiledOptions.isEmpty)
+        }
+    }
+  }
+
+  test("matches an element-aware array category only by its element type") {
+    // `def f(x: list[int], y: int): return y + 1`: "array<c>" matches an ArrayType whose
+    // element type matches c, recursively, under the same rules as a top-level c.
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val lcase = StringType("UTF8_LCASE")
+    val cases: Seq[(String, Seq[DataType], Seq[DataType])] = Seq(
+      ("array<integer>",
+        Seq(ArrayType(IntegerType), ArrayType(LongType, containsNull = false)),
+        Seq(ArrayType(DoubleType), ArrayType(DecimalType(10, 2)), ArrayType(StringType),
+          ArrayType(ArrayType(LongType)), LongType)),
+      ("array<float>",
+        Seq(ArrayType(DoubleType), ArrayType(FloatType)),
+        Seq(ArrayType(LongType), ArrayType(DecimalType(10, 2)))),
+      ("array<string>",
+        Seq(ArrayType(StringType)),
+        Seq(ArrayType(lcase), ArrayType(BinaryType), StringType)),
+      ("array<bool>", Seq(ArrayType(BooleanType)), Seq(ArrayType(LongType))),
+      ("array<binary>", Seq(ArrayType(BinaryType)), Seq(ArrayType(StringType))),
+      ("array<map>",
+        Seq(ArrayType(MapType(StringType, LongType))),
+        Seq(ArrayType(ArrayType(StringType)))),
+      ("array<array<integer>>",
+        Seq(ArrayType(ArrayType(LongType))),
+        Seq(ArrayType(LongType), ArrayType(ArrayType(StringType)),
+          ArrayType(ArrayType(ArrayType(LongType))))),
+      ("array<array>",
+        Seq(ArrayType(ArrayType(StringType)), ArrayType(ArrayType(ArrayType(LongType)))),
+        Seq(ArrayType(LongType))),
+      ("array<array<string>>",
+        Seq(ArrayType(ArrayType(StringType))),
+        Seq(ArrayType(ArrayType(lcase)))),
+      // A malformed category matches nothing rather than throwing.
+      ("array<integer", Nil, Seq(ArrayType(LongType))),
+      ("array<>", Nil, Seq(ArrayType(LongType))))
+    cases.foreach { case (category, matching, other) =>
+      def keeps(dt: DataType): Boolean = {
+        val c = AttributeReference("a", dt)()
+        val node = TranspiledPythonUDF(
+          "udf", pyUDF(Seq(c, n)), List(opt), List(List(category, "numeric")))
+        prune(node, LocalRelation(c, n)).transpiledOptions == List(opt)
+      }
+      matching.foreach(dt => assert(keeps(dt), s"$category should match $dt"))
+      other.foreach(dt => assert(!keeps(dt), s"$category should not match $dt"))
+    }
   }
 
   test("leaves options untouched when categories are empty (no restriction)") {

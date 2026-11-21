@@ -2850,6 +2850,738 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         for combo in combos:
             self.assertEqual(combo[0], "string")
 
+    def test_annotation_category_map_and_array(self):
+        # dict/Dict/Mapping -> "map", list/List -> "array": bare, subscripted,
+        # typing.-qualified or stringized (SPARK-55219). Sequence pins nothing.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category
+
+        for ann, expected in [
+            ("dict", "map"),
+            ("Dict", "map"),
+            ("Mapping", "map"),
+            ("dict[str, str]", "map"),
+            ("Mapping[str, str]", "map"),
+            ("typing.Dict[str, str]", "map"),
+            ('"dict"', "map"),
+            ('"dict[str, str]"', "map"),
+            ('"typing.Dict[str, str]"', "map"),
+            ("list", "array"),
+            ("List", "array"),
+            ("Sequence", None),
+            ("list[int]", "array<integer>"),
+            ("Sequence[int]", None),
+            ("typing.List[int]", "array<integer>"),
+            ('"list"', "array"),
+            ('"list[int]"', "array<integer>"),
+            ('"the input value"', None),  # unparseable text is untyped, not an error
+            ("set", None),
+            ("torch.float", None),
+        ]:
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
+                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
+
+    def test_param_category_combos_pins_map_and_array(self):
+        # A pinned map/array param contributes one candidate; an untyped one contributes three.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        fn = _ast.parse("def f(a: dict, b): return b").body[0]
+        self.assertEqual(
+            _param_category_combos(fn, ["a", "b"]),
+            [
+                {0: "map", 1: "integer"},
+                {0: "map", 1: "float"},
+                {0: "map", 1: "string"},
+            ],
+        )
+        fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
+        self.assertEqual(_param_category_combos(fn, ["a", "b"]), [{0: "array", 1: "map"}])
+
+    def test_param_category_combos_sequence_is_array_or_string(self):
+        # A str is a Sequence too, so a Sequence param is tried as both array and
+        # string rather than pinned to array alone (SPARK-55219).
+        import ast as _ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        for ann, array_cat in (
+            ("Sequence", "array"),
+            ("Sequence[str]", "array<string>"),
+            ("typing.Sequence", "array"),
+            ("typing.Sequence[str]", "array<string>"),
+            ('"Sequence"', "array"),
+            ('"Sequence[str]"', "array<string>"),
+            ('"typing.Sequence[str]"', "array<string>"),
+            ("Optional[Sequence[str]]", "array<string>"),
+        ):
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}, b: dict): return b").body[0]
+                self.assertEqual(
+                    _param_category_combos(fn, ["a", "b"]),
+                    [{0: array_cat, 1: "map"}, {0: "string", 1: "map"}],
+                )
+        # At the cap boundary: three unpinned params (one a Sequence) get the product.
+        fn = _ast.parse("def f(s: Sequence, b, c): return b").body[0]
+        self.assertEqual(len(_param_category_combos(fn, ["s", "b", "c"])), 2 * 3 * 3)
+        # Past it a Sequence param counts as unpinned and gets the collapsed fills,
+        # as an untyped param does, while dict/list stay pinned.
+        fn = _ast.parse("def f(s: Sequence, a: dict, b, c, d): return b").body[0]
+        self.assertEqual(
+            _param_category_combos(fn, ["s", "a", "b", "c", "d"]),
+            [
+                {0: fill, 1: "map", 2: fill, 3: fill, 4: fill}
+                for fill in ("integer", "float", "string")
+            ],
+        )
+
+    def test_udf_transpile_sequence_annotation_string_and_array(self):
+        # A Sequence-annotated param bound to a string column keeps lowering under
+        # the string variant, and bound to an array column lowers its null test
+        # under the array variant (SPARK-55219).
+        from typing import Sequence
+
+        def seq_len(s: Sequence):
+            return len(s)
+
+        def seq_concat(s: Sequence[str]):
+            return s + s
+
+        def seq_eq(s: "Sequence[str]"):
+            return s == "ab"
+
+        def seq_is_none(s: Sequence[str]):
+            return s is None
+
+        str_rows = [("ab",), ("",), ("xyz",)]
+        for func, return_type, schema, rows, expected in (
+            (seq_len, LongType(), "a string", str_rows, [2, 0, 3]),
+            (seq_concat, StringType(), "a string", str_rows, ["abab", "", "xyzxyz"]),
+            (seq_eq, BooleanType(), "a string", str_rows, [True, False, False]),
+            (seq_is_none, BooleanType(), "a string", [("ab",), (None,)], [False, True]),
+            (seq_is_none, BooleanType(), "a array<string>", [(["x"],), (None,)], [False, True]),
+        ):
+            with self.subTest(func=func.__name__, schema=schema):
+                self.assertEqual(self._vals(func, return_type, schema, rows), expected)
+
+    def test_udf_transpile_map_and_array_input_categories(self):
+        # The option lowers against a matching MapType/ArrayType column and is pruned
+        # to interpreted Python against anything else.
+        def map_plus(x: dict, y: int):
+            return y + 1
+
+        def array_plus(x: list, y: int):
+            return y + 1
+
+        for func, schema, rows, other_schema, other_rows in (
+            (
+                map_plus,
+                "a map<string,string>, b long",
+                [({"k": "v"}, 1), ({}, 2), (None, 3)],
+                "a string, b long",
+                [("z", 1)],
+            ),
+            (
+                array_plus,
+                "a array<string>, b long",
+                [(["x"], 1), ([], 2), (None, 3)],
+                "a long, b long",
+                [(1, 1)],
+            ),
+        ):
+            self.assertEqual(self._vals(func, LongType(), schema, rows), [2, 3, 4])
+            with self.sql_conf(_TRANSPILE_ON):
+                u = self._transpiled_udf(func, LongType())
+                projected = self.spark.createDataFrame(other_rows, other_schema).select(u("a", "b"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual([r[0] for r in projected.collect()], [2], str(func))
+
+    def test_udf_transpile_map_and_array_comparison_falls_back(self):
+        # A lowered `=`/`<` fails analysis on a map (even vs None), while the array
+        # category permits unorderable map elements, so refuse and let Python answer
+        # (SPARK-55219).
+        def map_eq(a: dict, b: dict):
+            return a == b
+
+        def array_eq(a: list, b: list):
+            return a == b
+
+        def array_lt(a: list, b: list):
+            return a < b
+
+        def map_eq_none(a: dict):
+            return a == None  # noqa: E711
+
+        def map_ne_none(a: dict):
+            return a != None  # noqa: E711
+
+        def map_lt_unreached(a: dict, b: dict, c: bool):
+            # Python never orders the maps (c is False); a lowered map `<` fails analysis.
+            return (a < b) if c else False
+
+        def array_eq_none(a: list):
+            return a == None  # noqa: E711
+
+        def none_eq_map(a: dict):
+            return None == a  # noqa: E711
+
+        maps = "a map<string,string>, b map<string,string>"
+        arrays = "a array<string>, b array<string>"
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected, needle in (
+                (
+                    map_eq,
+                    maps,
+                    [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})],
+                    [True, False],
+                    "has a `map`/`array` operand",
+                ),
+                (
+                    array_eq,
+                    arrays,
+                    [(["x"], ["x"]), (["x"], ["y"])],
+                    [True, False],
+                    "has a `map`/`array` operand",
+                ),
+                (
+                    array_lt,
+                    arrays,
+                    [(["x"], ["y"]), (["y"], ["x"])],
+                    [True, False],
+                    "operands are both",
+                ),
+                (
+                    map_lt_unreached,
+                    maps + ", c boolean",
+                    [({"k": "v"}, {"k": "x"}, False), (None, {"k": "x"}, False)],
+                    [False, False],
+                    "operands are both `map`",
+                ),
+                (
+                    map_eq_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [False, True],
+                    "has a `map`/`array` operand",
+                ),
+                (
+                    map_ne_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [True, False],
+                    "has a `map`/`array` operand",
+                ),
+                (
+                    array_eq_none,
+                    "a array<string>",
+                    [(["x"],), (None,)],
+                    [False, True],
+                    "has a `map`/`array` operand",
+                ),
+                (
+                    none_eq_map,
+                    "a map<string,string>",
+                    [(None,), ({"k": "v"},)],
+                    [True, False],
+                    "has a `map`/`array` operand",
+                ),
+            ):
+                with self.subTest(func=func.__name__):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    # Assert the REASON names the map/array guard, so a fallback
+                    # for some new and unrelated cause fails here loudly.
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+    def test_udf_transpile_complex_conditional_branches_fall_back(self):
+        def array_null(a: list, b: list, c: bool):
+            return (a if c else b) is None
+
+        def map_null(a: dict, b: dict, c: bool):
+            return 1 if (a if c else b) is None else 0
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, return_type, schema, rows, expected in (
+                (
+                    array_null,
+                    BooleanType(),
+                    "a array<string>, b array<string>, c boolean",
+                    [(["x"], ["y"], True), (None, ["y"], True)],
+                    [False, True],
+                ),
+                (
+                    array_null,
+                    BooleanType(),
+                    "a array<int>, b array<binary>, c boolean",
+                    [([1], [bytearray(b"x")], True)],
+                    [False],
+                ),
+                (
+                    map_null,
+                    LongType(),
+                    "a map<string,string>, b map<string,int>, c boolean",
+                    [({"x": "y"}, {"x": 1}, True), (None, {"x": 1}, True)],
+                    [0, 1],
+                ),
+            ):
+                with self.subTest(schema=schema):
+                    u, reasons = self._fallback_reason(func, return_type)
+                    self.assertIn("if/else branches have a `map`/`array` operand", reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+    def test_udf_transpile_ternary_comparison_is_boolean(self):
+        # A comparison on a ternary is a bool. Classified numeric, it passed the
+        # return-type check for LongType and lowered to cast(bool as bigint) = 0/1,
+        # where the interpreted UDF returns NULL for a bool result.
+        def ternary_is_none(a: int, b: int, c: bool):
+            return (a if c else b) is None
+
+        rows = [(1, 2, True), (None, 2, True), (1, None, False)]
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(ternary_is_none, LongType())
+            self.assertIn("a bool-typed lowering does not match", reasons)
+            df = self.spark.createDataFrame(rows, "a long, b long, c boolean")
+            self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], [None] * 3)
+        self.assertEqual(
+            self._vals(ternary_is_none, BooleanType(), "a long, b long, c boolean", rows),
+            [False, True, True],
+        )
+
+    def test_udf_transpile_comparison_of_comparisons_is_boolean(self):
+        # A comparison whose operands are comparisons or `and` / `or` is a bool.
+        # Classified numeric, it passed the return-type check for LongType and
+        # lowered to cast(bool as bigint) = 0/1 where the interpreted UDF returns
+        # NULL, and as an if test or arithmetic operand it failed ANSI analysis
+        # instead of falling back. Covered on map, array and scalar columns.
+        def map_nulls_differ(a: dict, b: dict):
+            return (a is None) != (b is None)
+
+        def array_nulls_differ(a: list, b: list):
+            return (a is None) != (b is None)
+
+        def scalar_nulls_differ(a: int, b: int):
+            return (a is None) != (b is None)
+
+        def map_is_none_is_none(a: dict):
+            return (a is None) is None
+
+        def map_nulls_differ_times_two(a: dict, b: dict):
+            return ((a is None) != (b is None)) * 2
+
+        def signs_match(a: list, b: int, c: int):
+            return (b > 0) == (c > 0)
+
+        def both_positive_matches(a: list, b: int, c: int):
+            return (b > 0 and c > 0) == (b < 10)
+
+        map_schema = "a map<string,int>, b map<string,int>"
+        map_rows = [({"x": 1}, {"y": 2}), (None, {"y": 2}), (None, None)]
+        array_schema = "a array<string>, b array<string>"
+        array_rows = [(["x"], ["y"]), (["x"], None), (None, None)]
+        scalar_schema = "a long, b long"
+        scalar_rows = [(1, 2), (None, 2), (None, None)]
+        mixed_schema = "a array<int>, b long, c long"
+        mixed_rows = [([1], 1, 2), ([1], 1, -2), (None, 20, 30)]
+        # The interpreted LongType converter nulls a bool; `bool * int` is an int.
+        bool_typed = "a bool-typed lowering"
+        nulls = [None, None, None]
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, needle, expected in (
+                (map_nulls_differ, map_schema, map_rows, bool_typed, nulls),
+                (array_nulls_differ, array_schema, array_rows, bool_typed, nulls),
+                (scalar_nulls_differ, scalar_schema, scalar_rows, bool_typed, nulls),
+                (map_is_none_is_none, "a map<string,int>", [({"x": 1},)], bool_typed, [None]),
+                (map_nulls_differ_times_two, map_schema, map_rows, "Mult", [0, 2, 0]),
+                (signs_match, mixed_schema, mixed_rows, bool_typed, nulls),
+                (both_positive_matches, mixed_schema, mixed_rows, bool_typed, nulls),
+            ):
+                with self.subTest(func=func.__name__, schema=schema):
+                    u, reasons = self._fallback_reason(func, LongType())
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+        for func, schema, rows, expected in (
+            (map_nulls_differ, map_schema, map_rows, [False, True, False]),
+            (array_nulls_differ, array_schema, array_rows, [False, True, False]),
+            (scalar_nulls_differ, scalar_schema, scalar_rows, [False, True, False]),
+            (signs_match, mixed_schema, mixed_rows, [True, False, True]),
+            (both_positive_matches, mixed_schema, mixed_rows, [True, False, False]),
+        ):
+            with self.subTest(func=func.__name__, schema=schema, return_type="boolean"):
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_udf_transpile_comparison_of_comparisons_as_if_test(self):
+        # An if test comparing two null checks is a bool, so it lowers to
+        # `when(coalesce(test, false), ...)` instead of being read as a number
+        # whose truthiness is `test != 0`, which fails ANSI analysis on a bool.
+        def map_same(a: dict, b: dict):
+            if (a is None) == (b is None):
+                return "same"
+            return "diff"
+
+        def array_same(a: list, b: list):
+            return "same" if (a is None) == (b is None) else "diff"
+
+        def scalar_same(a: int, b: int):
+            if (a is None) == (b is None):
+                return "same"
+            return "diff"
+
+        for func, schema, rows in (
+            (map_same, "a map<string,int>, b map<string,int>", [({"x": 1}, None), (None, None)]),
+            (array_same, "a array<int>, b array<int>", [([1], None), ([1], [2])]),
+            (scalar_same, "a long, b long", [(1, None), (None, None)]),
+        ):
+            with self.subTest(func=func.__name__):
+                self.assertEqual(self._vals(func, StringType(), schema, rows), ["diff", "same"])
+
+    def test_quoted_container_annotation_suppresses_syntax_warnings(self):
+        import ast
+        import warnings
+
+        from pyspark.sql.transpile import _annotation_category
+
+        annotation = ast.Constant(value=r"dict['\d', int]")
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            self.assertEqual(_annotation_category(annotation), "map")
+        self.assertEqual(recorded, [])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            self.assertEqual(_annotation_category(annotation), "map")
+            nested = ast.Constant(value=repr("dict[str, int]"))
+            self.assertEqual(_annotation_category(nested), "map")
+
+    def test_udf_transpile_map_and_array_is_none_lowers(self):
+        # `is None`/`is not None` lower to isNull/isNotNull: the one lowered shape
+        # that references the map/array column itself, both analysis-valid and
+        # Python-faithful, so these must stay lowered (SPARK-55219).
+        def map_is_none(a: dict):
+            return a is None
+
+        def array_is_not_none(a: list):
+            return a is not None
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected in (
+                (map_is_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
+                (array_is_not_none, "a array<string>", [(["x"],), (None,)], [True, False]),
+            ):
+                with self.subTest(func=func.__name__):
+                    self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_annotation_category_element_aware_array(self):
+        # A list annotation naming its element type pins an element-aware category,
+        # recursively; Optional[X] / X | None pin what X does.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category
+
+        for ann, expected in [
+            ("list[int]", "array<integer>"),
+            ("List[str]", "array<string>"),
+            ("typing.List[float]", "array<float>"),
+            ("list[bool]", "array<bool>"),
+            ("list[bytes]", "array<binary>"),
+            ("list[list[int]]", "array<array<integer>>"),
+            ("list[dict]", "array<map>"),
+            ("list[list]", "array<array>"),
+            ("list[Any]", "array"),
+            ("list[Sequence[int]]", "array"),  # an element that pins nothing
+            ("list[int, str]", "array"),
+            ("list[Optional[int]]", "array<integer>"),
+            ("list[int | None]", "array<integer>"),
+            ("list['int']", "array<integer>"),
+            ("\"list[list['str']]\"", "array<array<string>>"),
+            ("Optional[list[int]]", "array<integer>"),
+            ("typing.Optional[list[int]]", "array<integer>"),
+            ("list[int] | None", "array<integer>"),
+            ("Optional[int]", "integer"),
+            ("None | str", "string"),
+            ('"Optional[bytes]"', "binary"),
+            ("Optional", None),
+            ("int | str", None),
+            ("Optional[Sequence[int]]", None),
+        ]:
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
+                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
+
+    def test_element_aware_array_category_predicates(self):
+        from pyspark.sql.transpile import (
+            _array_element_cat,
+            _is_complex_cat,
+            _is_equatable_array_cat,
+            _is_fully_known_array_cat,
+        )
+
+        self.assertEqual(_array_element_cat("array<array<integer>>"), "array<integer>")
+        self.assertIsNone(_array_element_cat("array"))
+        self.assertIsNone(_array_element_cat(None))
+        for cat in ("map", "array", "array<integer>", "array<map>"):
+            self.assertTrue(_is_complex_cat(cat), cat)
+        for cat in ("integer", "string", None):
+            self.assertFalse(_is_complex_cat(cat), cat)
+        for cat, known, equatable in [
+            ("array<integer>", True, True),
+            ("array<string>", True, True),
+            ("array<bool>", True, True),
+            ("array<binary>", True, True),
+            ("array<array<integer>>", True, True),
+            ("array<float>", True, False),
+            ("array<array<float>>", True, False),
+            ("array<map>", False, False),
+            ("array<array>", False, False),
+            ("array", False, False),
+            ("map", False, False),
+            ("integer", False, False),
+        ]:
+            with self.subTest(cat=cat):
+                self.assertEqual(_is_fully_known_array_cat(cat), known)
+                self.assertEqual(_is_equatable_array_cat(cat), equatable)
+
+    def test_udf_transpile_element_aware_array_input_categories(self):
+        # An element-aware option is kept only for an array column whose elements
+        # match, string elements only under UTF8_BINARY; anything else runs the
+        # interpreted Python UDF.
+        from typing import List
+
+        def int_array_plus(x: list[int], y: int):
+            return y + 1
+
+        def str_array_plus(x: "List[str]", y: int):
+            return y + 1
+
+        rows_by_schema = {
+            "array<int>": [([1, None], 1), ([], 2), (None, 3)],
+            "array<bigint>": [([1, None], 1), ([], 2), (None, 3)],
+            "array<string>": [(["x", None], 1), ([], 2), (None, 3)],
+            "array<double>": [([1.0], 1), ([], 2), (None, 3)],
+            "array<decimal(10,2)>": [(None, 1), (None, 2), (None, 3)],
+            "array<array<int>>": [([[1]], 1), ([], 2), (None, 3)],
+        }
+        for func, lowered in (
+            (int_array_plus, {"array<int>", "array<bigint>"}),
+            (str_array_plus, {"array<string>"}),
+        ):
+            for element_schema, rows in rows_by_schema.items():
+                with self.subTest(func=func.__name__, schema=element_schema):
+                    with self.sql_conf(_TRANSPILE_ON):
+                        u = self._transpiled_udf(func, LongType())
+                        df = self.spark.createDataFrame(rows, f"a {element_schema}, b long")
+                        projected = df.select(u("a", "b"))
+                        self.assertEqual(
+                            self._eval_python_count(projected) == 0,
+                            element_schema in lowered,
+                        )
+                        self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
+        # A collated element type does not match "array<string>".
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(str_array_plus, LongType())
+            df = self.spark.createDataFrame(
+                rows_by_schema["array<string>"], "a array<string>, b long"
+            ).selectExpr("cast(a as array<string collate UTF8_LCASE>) as a", "b")
+            projected = df.select(u("a", "b"))
+            self.assertGreater(self._eval_python_count(projected), 0)
+            self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
+
+    def test_udf_transpile_element_aware_array_equality_lowers(self):
+        # `==`/`!=` on element-aware arrays lowers to Spark's `=`, which agrees
+        # with Python element-wise, None elements and None arrays included.
+        from typing import List, Optional
+
+        def int_eq(a: list[int], b: list[int]):
+            return a == b
+
+        def int_ne(a: List[Optional[int]], b: "list[int]"):
+            return a != b
+
+        def str_eq(a: list[str], b: list[str]):
+            return a == b
+
+        def bool_ne(a: list[bool], b: list[bool]):
+            return a != b
+
+        def bytes_eq(a: list[bytes], b: list[bytes]):
+            return a == b
+
+        def nested_eq(a: list[list[int]], b: list[list[int]]):
+            return a == b
+
+        def eq_none(a: list[int]):
+            return a == None  # noqa: E711
+
+        def none_ne(a: Optional[list[str]]):
+            return None != a  # noqa: E711
+
+        def guarded_eq(a: list[int], b: list[int]):
+            return a == b if a is not None else False
+
+        int_rows = [
+            ([1, 2], [1, 2]),
+            ([1, 2], [1, 3]),
+            ([1, 2], [1]),
+            ([], []),
+            ([1, None], [1, None]),
+            ([None], [1]),
+            ([None], [None]),
+            (None, [1]),
+            ([1], None),
+            (None, None),
+        ]
+        str_rows = [
+            (["a", "b"], ["a", "b"]),
+            (["a"], ["A"]),
+            (["a", None], ["a", None]),
+            (None, []),
+        ]
+        bool_rows = [([True], [True]), ([True], [False]), ([None], [False]), (None, None)]
+        bytes_rows = [([b"x"], [b"x"]), ([b"x"], [b"y"]), ([None], [None]), ([b""], None)]
+        nested_rows = [
+            ([[1], [2, None]], [[1], [2, None]]),
+            ([[1], None], [[1], None]),
+            ([[1], None], [[1], []]),
+            ([[1]], [[1, 2]]),
+            (None, [[1]]),
+        ]
+        for func, schema, rows in (
+            (int_eq, "a array<int>, b array<int>", int_rows),
+            (int_eq, "a array<int>, b array<bigint>", int_rows),
+            (int_ne, "a array<bigint>, b array<tinyint>", int_rows),
+            (str_eq, "a array<string>, b array<string>", str_rows),
+            (bool_ne, "a array<boolean>, b array<boolean>", bool_rows),
+            (bytes_eq, "a array<binary>, b array<binary>", bytes_rows),
+            (nested_eq, "a array<array<int>>, b array<array<bigint>>", nested_rows),
+            (eq_none, "a array<int>", [([1],), ([None],), (None,)]),
+            (none_ne, "a array<string>", [(["x"],), ([],), (None,)]),
+            (guarded_eq, "a array<int>, b array<int>", int_rows),
+        ):
+            with self.subTest(func=func.__name__, schema=schema):
+                expected = [func(*row) for row in rows]
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_udf_transpile_element_aware_array_comparison_falls_back(self):
+        # What `==` still refuses on element-aware arrays, and array ordering,
+        # each with the reason it gives.
+        def float_eq(a: list[float], b: list[float]):
+            return a == b
+
+        def nested_float_ne(a: list[list[float]], b: list[list[float]]):
+            return a != b
+
+        def mixed_eq(a: list[int], b: list[str]):
+            return a == b
+
+        def array_vs_untyped(a: list[int], b: list):
+            return a == b
+
+        def int_lt(a: list[int], b: list[int]):
+            return a < b
+
+        def array_eq_scalar(a: list[int], b: int):
+            return a == b
+
+        # No NaN rows: whether Python's `[nan] == [nan]` is True depends on the two
+        # NaNs being one object, which is exactly why float elements are refused.
+        for func, schema, rows, needle in (
+            (
+                float_eq,
+                "a array<double>, b array<double>",
+                [([1.0], [1.0]), ([1.0], [2.0]), ([None], [None])],
+                "(array<float> vs array<float>)",
+            ),
+            (
+                nested_float_ne,
+                "a array<array<double>>, b array<array<double>>",
+                [([[1.0]], [[1.0]]), ([[1.0]], [[1.5]])],
+                "(array<array<float>> vs array<array<float>>)",
+            ),
+            (
+                mixed_eq,
+                "a array<int>, b array<string>",
+                [([1], ["1"]), ([], [])],
+                "incompatible categories (array<integer> vs array<string>)",
+            ),
+            (
+                array_vs_untyped,
+                "a array<int>, b array<int>",
+                [([1], [1]), ([1], [2])],
+                "incompatible categories (array<integer> vs array)",
+            ),
+            (
+                int_lt,
+                "a array<int>, b array<int>",
+                [([1], [2]), ([2], [1]), ([1, None], [2, None])],
+                "operands are both `array<integer>`",
+            ),
+            (
+                array_eq_scalar,
+                "a array<int>, b int",
+                [([1], 1), (None, None)],
+                "incompatible categories (array<integer> vs integer)",
+            ),
+        ):
+            with self.subTest(func=func.__name__):
+                with self.sql_conf(_TRANSPILE_ON):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual(
+                        [r[0] for r in df.select(u(*df.columns)).collect()],
+                        [func(*row) for row in rows],
+                    )
+
+    def test_udf_transpile_element_aware_array_branches(self):
+        # Two branches of one element-aware array category (or one and None) have
+        # a common type, so the if/else lowers; mismatched element types still fall
+        # back rather than fail analysis.
+        def pick_is_none(a: list[int], b: list[int], c: bool):
+            return (a if c else b) is None
+
+        def pick_or_none_eq(a: list[str], b: list[str], c: bool):
+            return (a if c else None) == b
+
+        def if_stmt_eq(a: list[int], b: list[int], c: bool):
+            if c:
+                return a == b
+            return a != b
+
+        def mismatched(a: list[int], b: list[str], c: bool):
+            return (a if c else b) is None
+
+        def unknown_element(a: list[int], b: list, c: bool):
+            return (a if c else b) is None
+
+        int_rows = [([1], [2], True), (None, [2], True), ([1], None, False), ([1], [1], False)]
+        str_rows = [(["x"], ["x"], True), (["x"], ["x"], False), (None, None, True)]
+        for func, schema, rows in (
+            (pick_is_none, "a array<int>, b array<bigint>, c boolean", int_rows),
+            (pick_or_none_eq, "a array<string>, b array<string>, c boolean", str_rows),
+            (if_stmt_eq, "a array<int>, b array<int>, c boolean", int_rows),
+        ):
+            with self.subTest(func=func.__name__):
+                expected = [func(*row) for row in rows]
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+        for func, schema, rows in (
+            (mismatched, "a array<int>, b array<string>, c boolean", [([1], ["x"], True)]),
+            (unknown_element, "a array<int>, b array<binary>, c boolean", [([1], None, False)]),
+        ):
+            with self.subTest(func=func.__name__):
+                with self.sql_conf(_TRANSPILE_ON):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    self.assertIn("if/else branches have a `map`/`array` operand", reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual(
+                        [r[0] for r in df.select(u(*df.columns)).collect()],
+                        [func(*row) for row in rows],
+                    )
+
     def test_udf_transpile_integer_eq_no_nan_guard(self):
         # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never
         # be NaN, so emitting `isnan(cast(bigint as double))` is unnecessary dead
