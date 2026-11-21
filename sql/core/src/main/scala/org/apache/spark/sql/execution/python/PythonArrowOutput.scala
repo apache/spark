@@ -66,10 +66,11 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[OUT] = {
+      context: TaskContext,
+      readerInput: Option[ReaderInputStream]): ReaderIterator = {
 
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, handle, releasedOrClosed, context, readerInput) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for $pythonExec", 0, Long.MaxValue)
