@@ -87,9 +87,7 @@ private[sql] object AvroUtils extends Logging {
     val avroSchema = parsedOptions.schema
       .getOrElse {
         val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(options))
-        // Tar archives are inferred by reading each entry's writer schema from its Avro header
-        // (streamed, never unpacked to disk), then any loose files. Avro has no DSv2 reader and
-        // does not merge schemas, so this is V1-only and uses the first readable writer schema.
+        // Avro does not merge schemas; the first readable writer schema wins, archives first.
         val (archives, nonArchives) = if (fileSourceOptions.archiveFormatEnabled) {
           files.partition(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         } else {
@@ -238,7 +236,7 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading the writer schema
+   * Infers an Avro schema from archives by reading the writer schema
    * from the first readable archive entry's Avro header via a forward-only [[DataFileStream]] --
    * the archive is streamed, never unpacked to disk, and records are never scanned. Mirrors
    * [[inferAvroSchemaFromFiles]]: schema evolution is not supported, so the first readable writer
@@ -260,8 +258,7 @@ private[sql] object AvroUtils extends Logging {
       }
       .nextOption()
       .getOrElse {
-        // No readable schema in any archive; fall back to the loose files. With none readable
-        // there either, `inferAvroSchemaFromFiles` raises the standard "no Avro files found" error.
+        // With no readable loose file either, this raises the standard "no Avro files found" error.
         inferAvroSchemaFromFiles(nonArchives, conf, ignoreExtension, ignoreCorruptFiles)
       }
   }
@@ -280,8 +277,7 @@ private[sql] object AvroUtils extends Logging {
       ignoreMissingFiles: Boolean,
       archivePathFilter: Option[GlobPattern]): Option[Schema] = {
     try {
-      // `readArchiveEntries` returns a Closeable iterator; take the first entry's schema and close
-      // it so the archive stream is released without draining the remaining entries.
+      // The iterator is closed below to release the archive without draining the other entries.
       val entries = SupportsArchiveFormat.readArchiveEntries(
           path, conf, archivePathFilter = archivePathFilter) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())

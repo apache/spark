@@ -330,10 +330,9 @@ object SupportsArchiveFormat {
         try current.close() catch { case NonFatal(_) => }
         current = null
       }
-      // Open each entry's stream lazily, on first read. An entry the engine skips (directory or
-      // dotfile) is never read, so it is never opened and its readability never checked -- else a
-      // skipped-but-encrypted entry would throw CANNOT_READ_ZIP_ENTRY, unlike the streaming reader
-      // ZipFile replaced. Opening an entry releases the previous one's inflater.
+      // Open each entry's stream lazily, on first read, so a skipped entry (directory or dotfile)
+      // is never opened and cannot fail the read with CANNOT_READ_ZIP_ENTRY. Opening an entry
+      // releases the previous one's inflater.
       val entries = zipFile.getEntries.asScala.map { entry =>
         val stream = new InputStream {
           private var delegate: InputStream = _
@@ -424,9 +423,8 @@ object SupportsArchiveFormat {
       private var currentIter: Iterator[T] = Iterator.empty
       private var done = false
 
-      // Move to the next entry with elements (releasing the exhausted one), or mark done. Advancing
-      // on `hasNext` rather than eagerly in `next` matters for parsers that reuse a mutable row: an
-      // early probe would overwrite the returned row before the caller copies it.
+      // Advance on `hasNext`, not eagerly in `next`: a parser that reuses a mutable row would have
+      // an early probe overwrite the returned row before the caller copies it.
       private def advance(): Unit = {
         while (!done && !currentIter.hasNext) {
           currentIter match {
@@ -444,7 +442,7 @@ object SupportsArchiveFormat {
             done = true
             cleanup()
           } else {
-            // Parse the entry stream; any unread remainder is skipped when the archive advances.
+            // Any unread remainder of the entry is skipped when the archive advances.
             currentIter = parseEntry(next._1, CloseShieldInputStream.wrap(next._2))
           }
         }

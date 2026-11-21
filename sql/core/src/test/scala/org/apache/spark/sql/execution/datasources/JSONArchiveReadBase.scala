@@ -74,8 +74,6 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("JSON: multiline inference merges archive entries with loose files") {
-    // multiLine + mixed inputs: inference reads every archive entry and loose file as one whole
-    // document and infers a single schema, matching a directory read of the same files.
     val opts = Map("multiLine" -> "true")
     withTempDir { dir =>
       writeArchive(new File(dir, s"data.${archiveExtensions.head}"),
@@ -98,8 +96,7 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   test("JSON: a field typed in the archive but null in a loose file is not collapsed to string") {
     // One inference pass over all inputs keeps the loose file's null `v` as NullType until the end,
     // so it widens with the archive's int. Inferring the loose file alone and merging two finished
-    // schemas would have canonicalized `v` to string first and yielded string here -- diverging
-    // from a directory read of the same files.
+    // schemas would have canonicalized `v` to string first and yielded string here.
     val archived = jsonBytes("{\"k\":1,\"v\":10}\n{\"k\":2,\"v\":20}\n")
     val loose = jsonBytes("{\"k\":3,\"v\":null}\n")
     withTempDir { dir =>
@@ -118,10 +115,8 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("JSON: archive inference honors the encoding option like a directory") {
-    // A non-UTF-8 (UTF-16) archive: inference must decode each entry with `encoding`, exactly as
-    // the scan and a directory read do. Reading the bytes as UTF-8 would mis-parse them, diverging
-    // from a directory read of the same files. multiLine makes the whole document one record, so
-    // line-separator handling does not enter the test.
+    // multiLine makes the whole document one record, so line-separator handling does not enter
+    // the test.
     val opts = Map("encoding" -> "UTF-16", "multiLine" -> "true")
     val bytes = "{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}".getBytes(StandardCharsets.UTF_16)
     withTempDir { dir =>
@@ -139,10 +134,8 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("JSON: archive inference auto-detects a non-UTF-8 charset with no encoding option") {
-    // With no `encoding` set, inference parses each record from its raw bytes, so Jackson
-    // auto-detects the charset (here UTF-16, carrying a BOM) exactly as the scan and a directory
-    // read do. Forcing the bytes through UTF-8 would mis-parse them into a corrupt-record-only
-    // schema, diverging from a directory read of the same files.
+    // With no `encoding` set, Jackson auto-detects the charset (here UTF-16, carrying a BOM) from
+    // the raw bytes; forcing them through UTF-8 would infer a corrupt-record-only schema.
     val opts = Map("multiLine" -> "true")
     val bytes = "{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}".getBytes(StandardCharsets.UTF_16)
     withTempDir { dir =>
@@ -237,11 +230,9 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("JSON: a malformed record in an archive entry matches a directory read (both modes)") {
-    // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
-    // into `_corrupt_record`. The archive path wires its own FailureSafeParser in `readStream` --
-    // and in multiLine it echoes the entry's pre-buffered bytes rather than re-reading the file --
-    // so assert the corrupt-record column matches a directory read of the same files in both the
-    // line-delimited and whole-document modes.
+    // The archive path wires its own FailureSafeParser in `readStream`, and in multiLine echoes the
+    // entry's buffered bytes rather than re-reading the file, so check `_corrupt_record` in both
+    // modes.
     val corruptSchema = s"$readSchema, _corrupt_record STRING"
     // Line-delimited: a good record, then a malformed one on the next line.
     assertArchiveMatchesDir(
