@@ -850,6 +850,15 @@ trait CharVarcharTestSuite extends QueryTest {
         checkColType(sql(query).schema(0), CharType(5))
       }
 
+      // A position is padded on its own when the positions that share a column can't have one raw
+      // type, as long as it doesn't pad the shared column.
+      withTable("t3s") {
+        sql(s"CREATE TABLE t3s(c3 CHAR(3), s STRING) USING $format")
+        sql("INSERT INTO t3s VALUES ('a', 'a    ')")
+        val shared = sql("SELECT c, c FROM t5 INTERSECT SELECT c3, s FROM t3s")
+        checkAnswer(shared, Row(padded, padded))
+        checkColType(shared.schema(0), CharType(5))
+      }
       // A repeated column of a UNION ALL keeps its own lengths when another column needs its
       // type widened too, as the output is deduplicated before the padding.
       val widened = sql("SELECT c, c, 1 FROM t3 UNION ALL SELECT c3, c5, 1L FROM t35")

@@ -553,7 +553,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * [[widerCharRawType]] for each position of the outputs of the children of a set operation. A
    * child can output a column at more than one position, and a reference to the column can't tell
    * them apart, so the positions that share a column in any child get one raw type: the widest of
-   * all of them. Returns None for every position if the outputs have different lengths.
+   * all of them. If they can't, a position gets its own if it doesn't pad the shared column.
+   * Returns None for every position if the outputs have different lengths.
    */
   def widerCharRawTypes(childOutputs: Seq[Seq[Attribute]]): Seq[Option[DataType]] = {
     val width = childOutputs.head.length
@@ -569,10 +570,31 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           positions.tail.foreach(i => group(find(i)) = find(positions.head))
         }
       }
-      val rawTypes = columns.indices.groupBy(find).map { case (first, positions) =>
+      val groupRawTypes = columns.indices.groupBy(find).map { case (first, positions) =>
         first -> widerCharRawType(positions.flatMap(columns))
       }
-      columns.indices.map(i => rawTypes(find(i)))
+      // The columns that a child outputs at more than one position.
+      val sharedColumns = childOutputs.map { output =>
+        output.groupBy(_.exprId).collect { case (exprId, attrs) if attrs.length > 1 => exprId }
+          .toSet
+      }
+      val alwaysPad = !SQLConf.get.readSideCharPadding
+      // Whether the raw type at a position pads a column that other positions share.
+      def padsSharedColumn(position: Int, rawType: DataType): Boolean = {
+        columns(position).zip(sharedColumns).exists { case (attr, shared) =>
+          shared.contains(attr.exprId) && getRawType(attr.metadata).exists { attrRawType =>
+            alwaysPad || !widerCharType(attrRawType, rawType).contains(attrRawType)
+          }
+        }
+      }
+      columns.indices.map { i =>
+        // Without one raw type for the positions that share a column, such as when another of
+        // them has a child without a raw type, a position still gets its own if that doesn't pad
+        // the column that they share.
+        groupRawTypes(find(i)).orElse {
+          widerCharRawType(columns(i)).filterNot(padsSharedColumn(i, _))
+        }
+      }
     }
   }
 

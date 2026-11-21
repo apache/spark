@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.Try
-
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
   BinaryComparison,
   Expression,
+  ExprUtils,
   In,
   InSubquery,
   Literal,
@@ -116,14 +115,14 @@ object ApplyCharTypePaddingHelper {
       // String literal is treated as char type when it's compared to a char type column.
       // We should pad the shorter one to the longer length.
       case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
-        padAttrLitCmp(e, attr.metadata, padCharCol, lit)
+        padAttrLitCmp(e, attr.metadata, padCharCol, lit, lit.eval())
           .map { newChildren =>
             b.withNewChildren(newChildren)
           }
           .getOrElse(b)
 
       case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
-        padAttrLitCmp(e, attr.metadata, padCharCol, lit)
+        padAttrLitCmp(e, attr.metadata, padCharCol, lit, lit.eval())
           .map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }
@@ -131,30 +130,9 @@ object ApplyCharTypePaddingHelper {
 
       case i @ In(e @ AttrOrOuterRef(attr), list)
           if i.resolved && attr.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
-        CharVarcharUtils
-          .getRawType(attr.metadata)
-          .flatMap {
-            case c: CharType =>
-              // Compute the length of every list element in place, so that each length stays
-              // aligned with the element it came from. NULL elements have no length: they can
-              // never match, so they are left untouched instead of being padded.
-              val literalCharLengths = list.map { lit =>
-                Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
-              }
-              val targetLen = (c.length +: literalCharLengths.flatten).max
-              Some(
-                i.copy(
-                  value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-                  list = list.zip(literalCharLengths).map {
-                    case (lit, Some(charLength)) =>
-                      addPadding(lit, charLength, targetLen, alwaysPad = false)
-                    case (lit, None) => lit
-                  }
-                )
-              )
-            case _ => None
-          }
-          .getOrElse(i)
+        CharVarcharUtils.getRawType(attr.metadata).collect {
+          case c: CharType => padInList(i, c, list.map(_.eval()), padCharCol)
+        }.getOrElse(i)
 
       // For char type column or inner field comparison, pad the shorter one to the longer length.
       case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
@@ -193,15 +171,19 @@ object ApplyCharTypePaddingHelper {
       // literal, a column, or another scalar subquery.
       // Unlike the cases above, these don't truncate values longer than their CHAR length.
       // A comparison of types that don't match is left to CheckAnalysis.
+      // As in ConstantFolding, a constant that fails to evaluate, such as one in a branch that is
+      // never evaluated, is left to the evaluation of the query.
       case b @ BinaryComparison(e @ CharScalarSubquery(metadata), lit)
-          if b.resolved && canEvaluate(lit) =>
-        padAttrLitCmp(e, metadata, padCharCol, lit, truncate = false)
+          if b.resolved && lit.foldable =>
+        ExprUtils.tryEvalFoldable(lit)
+          .flatMap(padAttrLitCmp(e, metadata, padCharCol, lit, _, truncate = false))
           .map(b.withNewChildren)
           .getOrElse(b)
 
       case b @ BinaryComparison(lit, e @ CharScalarSubquery(metadata))
-          if b.resolved && canEvaluate(lit) =>
-        padAttrLitCmp(e, metadata, padCharCol, lit, truncate = false)
+          if b.resolved && lit.foldable =>
+        ExprUtils.tryEvalFoldable(lit)
+          .flatMap(padAttrLitCmp(e, metadata, padCharCol, lit, _, truncate = false))
           .map(newChildren => b.withNewChildren(newChildren.reverse))
           .getOrElse(b)
 
@@ -210,10 +192,11 @@ object ApplyCharTypePaddingHelper {
         b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(
           Seq(e1, e2), Seq(m1, m2).map(CharVarcharUtils.getRawType), padCharCol, truncate = false))
 
-      case i @ In(e @ CharScalarSubquery(metadata), list)
-          if i.resolved && list.forall(canEvaluate) =>
+      case i @ In(CharScalarSubquery(metadata), list) if i.resolved && list.forall(_.foldable) =>
+        val values = list.map(ExprUtils.tryEvalFoldable)
         CharVarcharUtils.getRawType(metadata).collect {
-          case c: CharType => padInList(i, e, c, padCharCol)
+          case c: CharType if values.forall(_.isDefined) =>
+            padInList(i, c, values.map(_.get), padCharCol, truncate = false)
         }.getOrElse(i)
 
       case i: InSubquery if i.resolved => padInSubquery(i, padCharCol)
@@ -236,10 +219,11 @@ object ApplyCharTypePaddingHelper {
           padCharCol,
           truncate = false)
         (newValue, Some(newCol).filterNot(_ eq col))
-      case (lit, col) if lit.dataType.isInstanceOf[StringType] && canEvaluate(lit) =>
-        padAttrLitCmp(col, col.metadata, padCharCol, lit, truncate = false).map {
-          case Seq(newCol, newLit) => (newLit, Some(newCol).filterNot(_ eq col))
-        }.getOrElse((lit, None))
+      case (lit, col) if lit.dataType.isInstanceOf[StringType] && lit.foldable =>
+        ExprUtils.tryEvalFoldable(lit)
+          .flatMap(padAttrLitCmp(col, col.metadata, padCharCol, lit, _, truncate = false))
+          .map { case Seq(newCol, newLit) => (newLit, Some(newCol).filterNot(_ eq col)) }
+          .getOrElse((lit, None))
       case (value, _) => (value, None)
     }
     if (padded.forall(_._2.isEmpty)) {
@@ -259,17 +243,26 @@ object ApplyCharTypePaddingHelper {
   }
 
   /**
-   * Like the IN case of a column, for a scalar subquery of a CHAR column compared with a list of
-   * constants, but without truncating the value of the subquery.
+   * Pads a CHAR value compared with a list of constants with the given values, and the constants,
+   * to the longest of their lengths. The length of every list element is computed in place, so
+   * that each length stays aligned with the element it came from. NULL elements have no length:
+   * they can never match, so they are left untouched instead of being padded. With `truncate =
+   * false`, the value is padded like read-side padding, which keeps longer values.
    */
-  private def padInList(i: In, e: Expression, c: CharType, padCharCol: Boolean): In = {
-    val literalCharLengths =
-      i.list.map(lit => Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars()))
+  private def padInList(
+      i: In,
+      c: CharType,
+      values: Seq[Any],
+      padCharCol: Boolean,
+      truncate: Boolean = true): In = {
+    val literalCharLengths = values.map(v => Option(v.asInstanceOf[UTF8String]).map(_.numChars()))
     val targetLen = (c.length +: literalCharLengths.flatten).max
-    val newValue = if (targetLen > c.length || padCharCol) {
-      CharVarcharUtils.createReadSidePadding(e, CharType(targetLen, c.collation))
+    val newValue = if (truncate) {
+      addPadding(i.value, c.length, targetLen, alwaysPad = padCharCol)
+    } else if (targetLen > c.length || padCharCol) {
+      CharVarcharUtils.createReadSidePadding(i.value, CharType(targetLen, c.collation))
     } else {
-      e
+      i.value
     }
     i.copy(
       value = newValue,
@@ -279,18 +272,13 @@ object ApplyCharTypePaddingHelper {
       })
   }
 
-  /**
-   * Whether a constant evaluates. As in ConstantFolding, a constant that fails, such as one in a
-   * branch that is never evaluated, is left to the evaluation of the query.
-   */
-  private def canEvaluate(e: Expression): Boolean =
-    e.foldable && Try(e.eval()).isSuccess
-
+  // `value` is the value of the constant `lit`.
   private def padAttrLitCmp(
       expr: Expression,
       metadata: Metadata,
       padCharCol: Boolean,
       lit: Expression,
+      value: Any,
       truncate: Boolean = true): Option[Seq[Expression]] = {
     if (expr.dataType.isInstanceOf[StringType]) {
       CharVarcharUtils.getRawType(metadata).flatMap {
@@ -301,7 +289,7 @@ object ApplyCharTypePaddingHelper {
           } else {
             CharVarcharUtils.createReadSidePadding(expr, CharType(length, c.collation))
           }
-          val str = lit.eval().asInstanceOf[UTF8String]
+          val str = value.asInstanceOf[UTF8String]
           if (str == null) {
             None
           } else {
