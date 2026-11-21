@@ -333,6 +333,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteExceptAll.ruleName,
       RewriteIntersectAll.ruleName,
       ReplaceDistinctWithAggregate.ruleName,
+      PullOutNestedDataOuterRefExpressions.ruleName,
       PullupCorrelatedPredicates.ruleName,
       RewriteCorrelatedScalarSubquery.ruleName,
       RewritePredicateSubquery.ruleName,
