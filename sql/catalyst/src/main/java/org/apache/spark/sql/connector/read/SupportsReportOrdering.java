@@ -41,9 +41,11 @@ public interface SupportsReportOrdering extends Scan {
    * ignores the whole reported ordering and logs a warning.
    * <p>
    * Spark currently does not rely on a sort order over a transform such as {@code days(ts)} to
-   * avoid a sort, whether or not it is a partition key. Nor does it rely on the sort orders after
-   * it. The exception is a sort order on a partition key that is not a transform, when Spark uses
-   * the reported {@code KeyGroupedPartitioning}.
+   * avoid a sort, whether or not it is a partition key. When the transform is a partition key and
+   * Spark uses the reported {@code KeyGroupedPartitioning}, the sort order is constant within each
+   * partition, so Spark skips it and may rely on the sort orders after it. After any other
+   * transform, Spark relies only on a sort order on a partition key that is not a transform, when
+   * it uses the reported {@code KeyGroupedPartitioning}.
    * <p>
    * If Spark relies on none of the reported sort orders, for example when this returns an empty
    * array, it may treat each partition as sorted by the partition keys that are not transforms.

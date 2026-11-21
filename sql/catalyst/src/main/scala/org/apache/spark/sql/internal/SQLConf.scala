@@ -3000,7 +3000,8 @@ object SQLConf {
         "a V2 data source that reports a KeyedPartitioning and no ordering that Spark keeps for " +
         "the scan output. For example, the source reports none, an empty one, or one that " +
         "starts with a sort order on a column pruned from the scan output or on a partition " +
-        "transform and has no later sort order on a partition key other than a transform. " +
+        "transform that is not a partition key, and has no later sort order on a partition key " +
+        "other than a transform. " +
         "Within a single partition all rows share the same key value, so the data is trivially " +
         "sorted by those expressions. Partition transforms such as `days(ts)` or `bucket(8, id)` " +
         "are left out of the ordering. Requires " +

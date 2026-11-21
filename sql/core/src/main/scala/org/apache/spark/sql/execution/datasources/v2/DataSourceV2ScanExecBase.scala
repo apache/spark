@@ -163,7 +163,9 @@ trait DataSourceV2ScanExecBase
    *
    * In both the reported and the derived ordering, a sort order that holds a partition transform
    * is dropped, even on a partition key. In a reported ordering it also ends the leading run, like
-   * a sort order over a pruned column. Dropping it loses nothing today when Spark can call the
+   * a sort order over a pruned column, unless the transform is itself a partition key. Such a
+   * sort order is constant within each partition, like any partition key, so it is skipped and the
+   * sort orders after it still hold. Dropping it loses nothing today when Spark can call the
    * transform's function, since no operator then requires an ordering over the transform. The
    * write path sorts by the function call instead. Keeping such a sort order would add
    * comparisons nobody uses. Dropping it also handles a transform Spark cannot evaluate. Revisit
@@ -183,9 +185,25 @@ trait DataSourceV2ScanExecBase
    */
   @transient private lazy val keptOrdering: Seq[SortOrder] = {
     val (prefix, rest) = ordering.getOrElse(Nil)
+      .filterNot(order => isTransformKey(order.child))
       .span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
     val keyExprs = ExpressionSet(derivedOrdering.map(_.child))
     prefix ++ rest.filter(order => keyExprs.contains(order.child))
+  }
+
+  /**
+   * Whether `e` is a transform that is a key of the output partitioning. The key and the reported
+   * sort order are bound separately, and `BoundFunction.equals` is only a SHOULD, so this compares
+   * the functions by `isSameFunction` rather than by expression equality.
+   */
+  private def isTransformKey(e: Expression): Boolean = (e, outputPartitioning) match {
+    case (t: TransformExpression, k: KeyedPartitioning) =>
+      k.expressions.exists {
+        case key: TransformExpression =>
+          key.isSameFunction(t) && key.children.corresponds(t.children)(_.semanticEquals(_))
+        case _ => false
+      }
+    case _ => false
   }
 
   /** The ordering over the partition keys that `outputOrdering` can derive. */

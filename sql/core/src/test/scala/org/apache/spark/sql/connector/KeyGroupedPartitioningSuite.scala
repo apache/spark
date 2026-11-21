@@ -7685,6 +7685,85 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-60043: a scan's output ordering keeps the sort orders after a transform key") {
+    // Each split holds a single key, so a sort order on a transform that is a partition key is
+    // constant within it, and the sort orders after it still hold. `t1` reports [years(ts), id]
+    // over the key years(ts). `t2` reports [years(ts), id, data] over the keys years(ts) and id.
+    // `t3` reports [years(ts), data] over the same keys and keeps [data], like a report [data]
+    // over the key id: a kept sort order wins over the ordering derived from the keys. The query
+    // selects `ts`, so the transform's column stays in the scan output.
+    val table1 = "transform_key_order_t1"
+    val table2 = "transform_key_order_t2"
+    val table3 = "transform_key_order_t3"
+    def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
+    createTable(table1, columns, Array(years("ts")),
+      Array(asc(years("ts")), asc(FieldReference("id"))))
+    createTable(table2, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts")), asc(FieldReference("id")), asc(FieldReference("data"))))
+    createTable(table3, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts")), asc(FieldReference("data"))))
+    val expectedOrderings = Seq(table1 -> Seq("id"), table2 -> Seq("id", "data"),
+      table3 -> Seq("data"))
+    expectedOrderings.foreach { case (table, expected) =>
+      sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
+      val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
+      val scan = collectScans(df.queryExecution.executedPlan).head
+      assert(scan.outputOrdering.map(_.child.sql) === expected, table)
+      val sorted = df.sortWithinPartitions(expected.map(col): _*).queryExecution.executedPlan
+      assert(collect(sorted) { case s: SortExec => s }.isEmpty, table)
+
+      // The key and the sort order are bound separately, and a bound function need not override
+      // `equals`. Another `years` object, with the same canonical name, stands for such a binding.
+      if (table == table1) {
+        val rebound = scan.copy(ordering = scan.ordering.map(_.map { order =>
+          order.copy(child = order.child.transform {
+            case t: TransformExpression =>
+              t.copy(function = YearsFunctionWithToYearsReducerWithLongResult)
+          })
+        }))
+        assert(rebound.outputOrdering.map(_.child.sql) === expected)
+      }
+    }
+  }
+
+  test("SPARK-60043: k-way merge over a reported ordering that starts with a transform key") {
+    // As in the SPARK-55715 test, but both tables report [years(t), t] over the key years(t).
+    // Two rows share each year, so each scan coalesces two splits per year. With the sort order
+    // on the key skipped, the merge keeps [t], and the join on t needs no sort.
+    def ordering(column: String): Array[SortOrder] = Array(
+      sort(years(column), SortDirection.ASCENDING),
+      sort(FieldReference(column), SortDirection.ASCENDING))
+    createTable(items, itemsColumns, Array(years("arrive_time")), ordering("arrive_time"))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'bb', 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 'dd', 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2023-01-10' as timestamp))")
+    createTable(purchases, purchasesColumns, Array(years("time")), ordering("time"))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 30.0, cast('2023-01-10' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb"), Row(3, "cc"), Row(4, "dd")))
+      val plan = df.queryExecution.executedPlan
+      assert(collectAllShuffles(plan).isEmpty, "should not contain any shuffle")
+      assert(collect(plan) { case s: SortExec => s }.isEmpty, "should not contain any sort")
+      val merging = collectAllGroupPartitions(plan).filter(_.enableSortedMerge)
+      assert(merging.length == 2, "expected a k-way merge on each side")
+      merging.foreach(gp => assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]]))
+    }
+  }
+
   test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
     // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
     // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
