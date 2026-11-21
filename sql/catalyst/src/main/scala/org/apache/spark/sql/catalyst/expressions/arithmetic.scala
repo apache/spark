@@ -531,11 +531,17 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    if (resolved && BinaryArithmetic.isNonAssociative(dataType)) {
-      // SPARK-60178: Floating-point and maximum-precision decimal addition is commutative but not
-      // associative, so only the two direct children can be reordered.
-      orderBinaryCommutative(left, right, Add(_, _, evalContext))
+    // SPARK-60178: Floating-point and maximum-precision decimal addition is commutative but not
+    // associative, so only the two direct children can be reordered.
+    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+      None
     } else {
+      orderBinaryCommutative {
+        case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a.dataType) =>
+          Add(_, _, a.evalContext)
+      }
+    }
+    binaryOrdered.getOrElse {
       val reorderResult = buildCanonicalizedPlan(
         { case Add(l, r, em) if em == evalContext => Seq(l, r) },
         { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
@@ -730,11 +736,17 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    if (resolved && BinaryArithmetic.isNonAssociative(dataType)) {
-      // SPARK-60178: Floating-point and maximum-precision decimal multiplication is commutative
-      // but not associative, so only the two direct children can be reordered.
-      orderBinaryCommutative(left, right, Multiply(_, _, evalContext))
+    // SPARK-60178: Floating-point and maximum-precision decimal multiplication is commutative but
+    // not associative, so only the two direct children can be reordered.
+    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+      None
     } else {
+      orderBinaryCommutative {
+        case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m.dataType) =>
+          Multiply(_, _, m.evalContext)
+      }
+    }
+    binaryOrdered.getOrElse {
       buildCanonicalizedPlan(
         { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
         { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },

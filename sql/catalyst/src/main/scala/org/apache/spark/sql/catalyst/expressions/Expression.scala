@@ -1480,13 +1480,36 @@ trait CommutativeExpression extends Expression {
    * Reorders only the two direct children of a binary commutative operator, without flattening
    * adjacent operators. Used when the operator is commutative but not associative, e.g.
    * floating-point and maximum-precision decimal addition and multiplication.
+   *
+   * `buildBinaryOp` is defined for the operators of this class that are canonicalized this way,
+   * and builds such an operator from its reordered children. This operator and the nested
+   * operators of the same class are checked and canonicalized bottom-up without recursion, so a
+   * deep chain of them does not overflow the stack. Returns None if `buildBinaryOp` is not
+   * defined for this operator.
    */
   protected def orderBinaryCommutative(
-      left: Expression,
-      right: Expression,
-      buildBinaryOp: (Expression, Expression) => Expression): Expression = {
-    val Seq(l, r) = Seq(left.canonicalized, right.canonicalized).sortBy(_.hashCode())
-    buildBinaryOp(l, r)
+      buildBinaryOp: PartialFunction[Expression, (Expression, Expression) => Expression])
+    : Option[Expression] = {
+    val nested = scala.collection.mutable.ArrayBuffer[Expression]()
+    val stack = scala.collection.mutable.Stack[Expression](this)
+    while (stack.nonEmpty) {
+      val current = stack.pop()
+      if (current.getClass == getClass) {
+        nested += current
+        current.children.foreach(stack.push)
+      }
+    }
+    // Pre-order reversed: every operator comes after the operators nested in it.
+    val canonical = new java.util.IdentityHashMap[Expression, Expression]()
+    nested.reverseIterator.foreach { e =>
+      buildBinaryOp.lift(e).foreach { build =>
+        val Seq(l, r) = e.children
+          .map(c => Option(canonical.get(c)).getOrElse(c.canonicalized))
+          .sortBy(_.hashCode())
+        canonical.put(e, build(l, r))
+      }
+    }
+    Option(canonical.get(this))
   }
 
   /**

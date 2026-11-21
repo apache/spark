@@ -3380,7 +3380,8 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-60178: subexpression elimination does not re-associate floating-point arithmetic") {
+  test("SPARK-60178: subexpression elimination does not re-associate floating-point and " +
+    "maximum-precision decimal arithmetic") {
     // Floating-point + and * are not associative: with a = 1.0E16, b = -1.0E16, c = 1.0,
     // (a + b) + c = 1.0 but a + (b + c) = 0.0; with x = y = 1.0E200, z = 1.0E-200, (x * y) * z
     // overflows to Infinity but x * (y * z) does not. Sums and products of DECIMAL(38, 7) and
@@ -3420,7 +3421,8 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-60178: GROUP BY does not match re-associated floating-point arithmetic") {
+  test("SPARK-60178: GROUP BY does not match re-associated floating-point and " +
+    "maximum-precision decimal arithmetic") {
     withTempView("t") {
       sql("SELECT CAST(id AS DOUBLE) AS a, CAST(id AS DOUBLE) AS b, CAST(id AS DOUBLE) AS c, " +
         "id AS i, id AS j, id AS k, CAST(id AS DECIMAL(38, 18)) AS d, " +
@@ -3428,13 +3430,18 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         "CAST(id AS DECIMAL(10, 2)) AS s, CAST(id AS DECIMAL(10, 2)) AS u, " +
         "CAST(id AS DECIMAL(10, 2)) AS v FROM range(0, 2)").createOrReplaceTempView("t")
 
-      Seq(
-        "SELECT a + b + c FROM t GROUP BY c + b + a",
-        "SELECT d + e + f FROM t GROUP BY d + (e + f)").foreach { query =>
+      val reassociated = Seq(
+        "SELECT a + b + c FROM t GROUP BY c + b + a" -> Seq(Row(0.0), Row(3.0)),
+        "SELECT d + e + f FROM t GROUP BY d + (e + f)" ->
+          Seq(Row(BigDecimal("0")), Row(BigDecimal("3"))))
+      reassociated.foreach { case (query, _) =>
         val ex = intercept[AnalysisException] {
           sql(query).collect()
         }
         assert(ex.getCondition === "MISSING_AGGREGATION")
+      }
+      withSQLConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC.key -> "true") {
+        reassociated.foreach { case (query, expected) => checkAnswer(sql(query), expected) }
       }
 
       // Commuting the operands of a single operator is still semantically equal.
@@ -3443,6 +3450,28 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(sql("SELECT i + j + k FROM t GROUP BY k + j + i"), Seq(Row(0L), Row(3L)))
       checkAnswer(sql("SELECT s + u + v FROM t GROUP BY s + (u + v)"),
         Seq(Row(BigDecimal("0.00")), Row(BigDecimal("3.00"))))
+    }
+  }
+
+  test("SPARK-60178: the legacy setting of the reading session applies to a persisted view") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t USING parquet AS SELECT CAST(id AS DOUBLE) AS a, " +
+          "CAST(id AS DOUBLE) AS b, CAST(id AS DOUBLE) AS c FROM range(0, 2)")
+        // A view created before the change, which the new matching rejects.
+        withSQLConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC.key -> "true") {
+          sql("CREATE VIEW v AS SELECT a + b + c AS s FROM t GROUP BY c + b + a")
+        }
+        withSQLConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC.key -> "false") {
+          val ex = intercept[AnalysisException] {
+            sql("SELECT * FROM v").collect()
+          }
+          assert(ex.getCondition === "MISSING_AGGREGATION")
+        }
+        withSQLConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v"), Seq(Row(0.0), Row(3.0)))
+        }
+      }
     }
   }
 
