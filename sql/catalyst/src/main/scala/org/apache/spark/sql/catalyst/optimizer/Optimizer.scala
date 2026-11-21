@@ -3034,6 +3034,22 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
+  /**
+   * Whether `cond` can not fail on the input rows that an operator of [[canDropRows]] drops, so
+   * that it can be pushed below the operator. [[ExprUtils.canEvaluateUnconditionally]] decides
+   * this conservatively, so some conditions that can not fail stay above the operator too, such
+   * as `upper(s) = 'X'`. A dynamic partition pruning or runtime filter, which the optimizer adds
+   * to reach a scan, can only fail through its key, as its subquery or bloom filter is computed
+   * once, wherever the filter is.
+   */
+  private def cannotFailOnDroppedRows(cond: Expression): Boolean = cond match {
+    case d: DynamicPruningSubquery => ExprUtils.canEvaluateUnconditionally(d.pruningKey)
+    case p: PerPartitionRuntimeFilterSubquery => ExprUtils.canEvaluateUnconditionally(p.key)
+    case BloomFilterMightContain(bloomFilter, XxHash64(Seq(key), _))
+        if bloomFilter.references.isEmpty => ExprUtils.canEvaluateUnconditionally(key)
+    case _ => ExprUtils.canEvaluateUnconditionally(cond)
+  }
+
   // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
   // it, rewritten in terms of the aggregate's child, and the ones that stay above it. A conjunct
   // can be pushed if it is deterministic and, after alias expansion, only reads the aggregate's
@@ -3121,14 +3137,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       grandchild: LogicalPlan,
       keepFailableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild. With `keepFailableUp`, a predicate that can fail, i.e. one that
-    // `ExprUtils.canEvaluateUnconditionally` rejects such as a throwable one or an ANSI division,
-    // is not pushed even when it is written first, as the operator in between can drop rows it
-    // would then see.
+    // come from grandchild. With `keepFailableUp`, a predicate that can fail, such as a throwable
+    // one or an ANSI division, is not pushed even when it is written first, as the operator in
+    // between can drop rows it would then see (see `cannotFailOnDroppedRows`).
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
     val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
-      cond.deterministic && (!keepFailableUp || ExprUtils.canEvaluateUnconditionally(cond)) &&
+      cond.deterministic && (!keepFailableUp || cannotFailOnDroppedRows(cond)) &&
         cond.references.subsetOf(grandchild.outputSet)
     }
 
