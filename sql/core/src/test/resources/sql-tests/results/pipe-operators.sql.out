@@ -974,6 +974,451 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
+|> eval x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	abc
+1	def
+
+
+-- !query
+table t
+|> eval z = 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> eval z = x + length(y), x = x * 10, zz = z + x
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	3
+10	def	4	14
+
+
+-- !query
+table t
+|> eval c = 3, a = 1, b = 2
+-- !query schema
+struct<x:int,y:string,c:int,a:int,b:int>
+-- !query output
+0	abc	3	1	2
+1	def	3	1	2
+
+
+-- !query
+values (0), (1) tab(col)
+|> eval col = col * 2, half = col / 2
+-- !query schema
+struct<col:int,half:double>
+-- !query output
+0	0.0
+2	1.0
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> eval duration_s = response_ms / 1000,
+        slow = if(duration_s > 2, 1, 0),
+        uri = lower(uri),
+        is_api = if(uri like '/api/%', 1, 0)
+-- !query schema
+struct<uri:string,response_ms:int,duration_s:double,slow:int,is_api:int>
+-- !query output
+/api/v1/users	1200	1.2	0	1
+/home	3500	3.5	1	0
+
+
+-- !query
+table t
+|> eval z = 1, z = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	true
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,Z:int,z:int>
+-- !query output
+0	abc	0	1
+1	def	1	2
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	false
+
+
+-- !query
+table t
+|> eval z = x + 1
+|> where z > 1
+|> select z
+-- !query schema
+struct<z:int>
+-- !query output
+2
+
+
+-- !query
+table t
+|> eval `x.y z` = x
+-- !query schema
+struct<x:int,y:string,x.y z:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+select col from st
+|> eval i1 = col.i1
+-- !query schema
+struct<col:struct<i1:int,i2:int>,i1:int>
+-- !query output
+{"i1":2,"i2":3}	2
+
+
+-- !query
+table t
+|> eval m = (select max(a) from other)
+-- !query schema
+struct<x:int,y:string,m:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> eval w = sum(x) over (order by x)
+-- !query schema
+struct<x:int,y:string,w:bigint>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> as v
+|> eval z = v.x + 1
+|> select v.x, z
+-- !query schema
+struct<x:int,z:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+table t
+|> eval _metadata = x + 1
+|> select x, _metadata
+-- !query schema
+struct<x:int,_metadata:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+select 1 as eval
+|> eval eval = eval + 1
+-- !query schema
+struct<eval:int>
+-- !query output
+2
+
+
+-- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query schema
+struct<col:struct<s:int>,x:int>
+-- !query output
+{"s":5}	1
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+2	abc	1
+2	def	1
+
+
+-- !query
+create or replace temporary view pipe_eval_view as
+table t
+|> eval z = x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from pipe_eval_view
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+drop view pipe_eval_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select (table t |> eval z = 1 |> select z |> limit 1) as z from values (0) as o(z)
+-- !query schema
+struct<z:int>
+-- !query output
+1
+
+
+-- !query
+select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t
+-- !query schema
+struct<x:int,m:int>
+-- !query output
+0	2
+1	3
+
+
+-- !query
+select 1 as a, 2 as a
+|> eval a = 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 35,
+    "fragment" : "select 1 as a, 2 as a\n|> eval a = 3"
+  } ]
+}
+
+
+-- !query
+select x, x from t
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
+  "messageParameters" : {
+    "number" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "(table t |> eval z = 1 |> limit 1)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval z = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1 as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select col from st
+|> eval col.i1 = 42
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> EVAL operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 38,
+    "fragment" : "col.i1 = 42"
+  } ]
+}
+
+
+-- !query
+table t
 |> drop y
 -- !query schema
 struct<x:int>
@@ -4423,6 +4868,16 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
+table t
+| eval z = x + length(y), x = z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+3	abc	3
+4	def	4
+
+
+-- !query
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
@@ -4541,6 +4996,30 @@ drop temporary variable extend
 struct<>
 -- !query output
 
+
+
+-- !query
+select x | eval from values (1, 2) as v(x, eval)
+-- !query schema
+struct<(x | eval):int>
+-- !query output
+3
+
+
+-- !query
+select x | eval as y from values (1, 2) as v(x, eval)
+-- !query schema
+struct<y:int>
+-- !query output
+3
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query schema
+struct<x:int,eval:int>
+-- !query output
+1	2
 
 
 -- !query

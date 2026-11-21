@@ -2410,12 +2410,17 @@
       },
       "DUPLICATE_SELECTED_PREDICATE" : {
         "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+          "`selectLookupPredicates()` returned the position <position>, of the predicate <predicate>, more than once."
         ]
       },
       "INVALID_INPUT_ORDINAL" : {
         "message" : [
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "INVALID_SELECTED_PREDICATE_POSITION" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the position <position>, but the valid positions are from 0 to <maxPosition>."
         ]
       },
       "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
@@ -2426,6 +2431,11 @@
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "MODIFIED_CANDIDATES" : {
+        "message" : [
+          "`selectLookupPredicates()` modified its input array of candidates at the position <position>, which Spark offered as <predicate>. It must leave the array as Spark offered it, because the returned positions refer to the offered order."
         ]
       },
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
@@ -2446,11 +2456,6 @@
       "UNKNOWN_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field>, which matches no table column by name and data type."
-        ]
-      },
-      "UNOFFERED_SELECTED_PREDICATE" : {
-        "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
         ]
       }
     },
@@ -3341,6 +3346,58 @@
       "Graphite sink requires '<property>' property."
     ],
     "sqlState" : "KD000"
+  },
+  "GRAPH_ID_TYPE_MISMATCH" : {
+    "message" : [
+      "The vertex ID column <idColumn> and the edge columns <srcColumn> and <dstColumn> must have the same data type, but their types are <idType>, <srcType> and <dstType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_INVALID" : {
+    "message" : [
+      "The graph is invalid."
+    ],
+    "subClass" : {
+      "DUPLICATE_VERTICES" : {
+        "message" : [
+          "The vertices DataFrame contains <count> duplicate vertex IDs in the column <idColumn>."
+        ]
+      },
+      "EDGE_VERTEX_NOT_IN_VERTICES" : {
+        "message" : [
+          "The edges DataFrame references <count> vertex IDs in the columns <srcColumn> or <dstColumn> that are not present in the vertices DataFrame."
+        ]
+      },
+      "EDGE_VERTICES_COUNT_MISMATCH" : {
+        "message" : [
+          "The edges DataFrame references <edgeVertexCount> distinct vertex IDs, but the vertices DataFrame contains only <vertexCount>."
+        ]
+      },
+      "NULL_IDS" : {
+        "message" : [
+          "The <dataFrameKind> DataFrame contains NULL values in the columns: <columns>."
+        ]
+      }
+    },
+    "sqlState" : "23000"
+  },
+  "GRAPH_NULL_DATAFRAME" : {
+    "message" : [
+      "The <dataFrameKind> DataFrame must not be null."
+    ],
+    "sqlState" : "22004"
+  },
+  "GRAPH_PROPERTIES_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "The key column <columnName> of the <dataFrameKind> DataFrame has the type <actualType>, but the graph uses the type <expectedType> for this column."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_UNSUPPORTED_ID_TYPE" : {
+    "message" : [
+      "The column <columnName> of the <dataFrameKind> DataFrame has the unsupported type <columnType>. Vertex IDs must have one of the types: <supportedTypes>."
+    ],
+    "sqlState" : "42K09"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
@@ -8729,6 +8786,12 @@
     },
     "sqlState" : "42601"
   },
+  "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE" : {
+    "message" : [
+      "Retrieving tables or views from more than one database is not supported. Requested: <qualifiedTableNames>."
+    ],
+    "sqlState" : "0AKD0"
+  },
   "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
     "message" : [
       "Table <identifier> did not specify locationUri."
@@ -11035,11 +11098,6 @@
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
       "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1072" : {
-    "message" : [
-      "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {

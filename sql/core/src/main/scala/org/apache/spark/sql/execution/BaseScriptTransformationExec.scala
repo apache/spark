@@ -39,7 +39,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, TaskInputThreads, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
@@ -120,6 +120,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     writerThread.taskContext.addTaskCompletionListener[Unit] { context =>
       writerThread.stopOnTaskCompletion(context.isFailed())
     }
+    // The listener does not wait for the thread, which may still read the input rows once the
+    // task completes: the readers that free what they returned when they are closed must know.
+    TaskInputThreads.registerUnawaited(writerThread.taskContext)
     writerThread.start()
   }
 
