@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.types.DataType
@@ -245,7 +245,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
               if (widerType.isDefined && widerType.get == dt) {
                 if (attr.dataType != dt) {
-                  Alias(Cast(attr, dt), attr.name)()
+                  Alias(Cast(attr, dt), attr.name)(
+                    explicitMetadata = CharVarcharUtils.metadataOfCast(attr.metadata, dt))
                 } else {
                   attr
                 }
@@ -294,7 +295,10 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       val casted = plan.output.zip(targetTypes).map {
         case (e, Some(dt)) if e.dataType != dt =>
           changed = true
-          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)()
+          // The cast keeps the CHAR types of the value that it doesn't change, see
+          // SetOperationCharPadding.
+          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)(
+            explicitMetadata = CharVarcharUtils.metadataOfCast(e.metadata, dt))
         case (e, _) => e
       }
       if (changed) {

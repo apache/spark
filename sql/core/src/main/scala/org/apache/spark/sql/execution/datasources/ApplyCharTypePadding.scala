@@ -168,7 +168,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             (for {
               viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
               attr <- queryAttr(child)
+              // The raw type of the query's column after the view's cast to its stored type.
               queryType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
+                .flatMap(CharVarcharUtils.rawTypeOfCast(_, child.dataType))
               narrowed <- narrowToLength(child, queryType, viewType)
             } yield a.withNewChildren(Seq(narrowed)).asInstanceOf[Alias]).getOrElse(a)
           case other => other

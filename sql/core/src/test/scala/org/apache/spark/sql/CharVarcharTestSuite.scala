@@ -662,7 +662,7 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   test("SPARK-61972: union of char columns of different lengths") {
-    withTable("t3", "t5", "s3", "s5", "m3", "m5", "n3") {
+    withTable("t3", "t5", "s3", "s5", "m3", "m5", "n3", "i3", "i5", "b3") {
       sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
       sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
       sql("INSERT INTO t3 VALUES (1, 'a')")
@@ -693,6 +693,18 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(
         nullability, Seq(Row(Row("a" + " ".repeat(4))), Row(Row("a" + " ".repeat(4)))))
       checkColType(nullability.schema(0), new StructType().add("c", CharType(5)))
+
+      // A set operation over a union whose type is widened keeps the CHAR fields of the cast.
+      sql(s"CREATE TABLE i3(s STRUCT<k: INT, c: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE i5(s STRUCT<k: INT, c: CHAR(5)>) USING $format")
+      sql(s"CREATE TABLE b3(s STRUCT<k: BIGINT, c: CHAR(3)>) USING $format")
+      sql("INSERT INTO i3 SELECT named_struct('k', 1, 'c', 'a')")
+      sql("INSERT INTO i5 SELECT named_struct('k', 1, 'c', 'a')")
+      sql("INSERT INTO b3 SELECT named_struct('k', 1L, 'c', 'a')")
+      val inner = "SELECT s FROM i3 UNION ALL SELECT s FROM i5"
+      checkAnswer(
+        sql(s"SELECT s FROM b3 INTERSECT ($inner)"), Row(Row(1L, "a" + " ".repeat(4))))
+      checkAnswer(sql(s"SELECT s FROM b3 EXCEPT ($inner)"), Nil)
 
       // a struct with fields of other types
       sql(s"CREATE TABLE m3(s STRUCT<id: INT, c: CHAR(3)>) USING $format")
@@ -4441,6 +4453,35 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT id FROM (SELECT id, s.c AS c FROM vs) WHERE c = 'a'"),
           Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT s.c FROM vs WHERE id = 3"), Row("abcde"))
+      }
+
+      // a view that casts a field of the struct to its stored type
+      withView("vk") {
+        withTable("k3", "k5") {
+          sql(s"CREATE TABLE k3(k BIGINT, c CHAR(3)) USING $format")
+          sql(s"CREATE TABLE k5(k BIGINT, c CHAR(5)) USING $format")
+          sql("CREATE VIEW vk AS SELECT named_struct('k', k, 'c', c) AS s " +
+            "FROM (SELECT k, c FROM k3 UNION ALL SELECT k, c FROM k5)")
+          val catalog = spark.sessionState.catalog
+          val view = catalog.getTableMetadata(TableIdentifier("vk"))
+          val storedSchema = StructType(view.schema.map {
+            case field @ StructField("s", StructType(Array(k, c)), _, _) =>
+              val metadata = CharVarcharUtils.withRawType(c.metadata, CharType(3))
+              field.copy(dataType = StructType(Array(k, c.copy(metadata = metadata))))
+            case field => field
+          })
+          catalog.alterTable(view.copy(schema = storedSchema))
+        }
+        // The tables are created again with an INT field, which the view casts to BIGINT.
+        withTable("k3", "k5") {
+          sql(s"CREATE TABLE k3(k INT, c CHAR(3)) USING $format")
+          sql(s"CREATE TABLE k5(k INT, c CHAR(5)) USING $format")
+          sql("INSERT INTO k3 VALUES (1, 'a')")
+          sql("INSERT INTO k5 VALUES (2, 'a')")
+          checkAnswer(
+            sql("SELECT k FROM (SELECT s.k AS k, s.c AS c FROM vk) WHERE c = 'a'"),
+            Seq(Row(1L), Row(2L)))
+        }
       }
 
       // a nullable struct with a NOT NULL field

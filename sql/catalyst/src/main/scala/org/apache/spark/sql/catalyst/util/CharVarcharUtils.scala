@@ -614,6 +614,43 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }
   }
 
+  /**
+   * The raw type of a value of the given raw type cast to `dataType`: the CHAR and VARCHAR types
+   * of the raw type where the cast keeps a string of the same collation, and the types of
+   * `dataType` elsewhere, with its field names. None if the types don't have the same shape.
+   */
+  def rawTypeOfCast(rawType: DataType, dataType: DataType): Option[DataType] = {
+    (rawType, dataType) match {
+      case (c: CharType, s: StringType) if c.collationId == s.collationId => Some(c)
+      case (v: VarcharType, s: StringType) if v.collationId == s.collationId => Some(v)
+      case (StructType(rawFields), StructType(fields)) if rawFields.length == fields.length =>
+        val castFields = rawFields.zip(fields).map { case (rawField, field) =>
+          rawTypeOfCast(rawField.dataType, field.dataType).map(dt => field.copy(dataType = dt))
+        }
+        if (castFields.forall(_.isDefined)) Some(StructType(castFields.map(_.get))) else None
+      case (ArrayType(rawElementType, _), ArrayType(elementType, containsNull)) =>
+        rawTypeOfCast(rawElementType, elementType).map(ArrayType(_, containsNull))
+      case (MapType(rawKeyType, rawValueType, _), MapType(keyType, valueType, valueContainsNull)) =>
+        for {
+          k <- rawTypeOfCast(rawKeyType, keyType)
+          v <- rawTypeOfCast(rawValueType, valueType)
+        } yield MapType(k, v, valueContainsNull)
+      case (_: StructType | _: ArrayType | _: MapType, _) => None
+      case (_, other) => Some(other)
+    }
+  }
+
+  /**
+   * The metadata of the alias of a value with the given metadata cast to `dataType`, such as a
+   * widening cast of a child of a set operation, which an alias of a cast would otherwise lose: the
+   * raw type of the cast value, see [[rawTypeOfCast]]. None if the cast keeps no CHAR or VARCHAR
+   * type.
+   */
+  def metadataOfCast(metadata: Metadata, dataType: DataType): Option[Metadata] = {
+    getRawType(metadata).flatMap(rawTypeOfCast(_, dataType)).filter(hasCharVarchar)
+      .map(withRawType(Metadata.empty, _))
+  }
+
   /** The metadata with the given raw type, for a value padded to the CHAR lengths of that type. */
   def withRawType(metadata: Metadata, rawType: DataType): Metadata = {
     new MetadataBuilder()
