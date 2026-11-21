@@ -9124,22 +9124,47 @@ object SQLConf {
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.enabled")
       .internal()
-      .doc("When true, pushes an EnsureRequirements hash shuffle below a union during AQE " +
-        "query stage preparation. Eligible children already reporting the selected layout " +
-        "are retained; other children are retargeted or receive a new exchange. The target " +
-        "partition count must be at least the smaller of the replaced exchange's count and " +
-        "the effective initial shuffle count, including " +
-        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set, and at most a bounded " +
-        "multiple of the larger of the two. Requires " +
-        s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
-        "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
-        "shuffled join's layout can make skew optimization or local reads violate ancestor " +
-        "requirements; AQE may reject the optimization or add a shuffle when skew optimization " +
-        "is forced. Join inputs and join branches are opt-in. Cost compensation applies only " +
-        "to SimpleCostEvaluator. Custom evaluators should account for one union exchange " +
-        "becoming multiple branch exchanges; otherwise AQE may reject a re-plan and its other " +
-        "runtime optimizations due to the increased exchange count.")
+      .doc("When true, pushes an EnsureRequirements shuffle below a union during AQE query " +
+        "stage preparation. The shuffle and the target are hash or V2 keyed layouts. A V2 keyed " +
+        "target additionally requires " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled, " +
+        "which the V2 bucketing settings further gate; it is off by default. Eligible " +
+        "children already reporting the target keep their layouts; under a keyed target so do " +
+        "an unmarked child whose keys are a subset of the domain's and a marked child that " +
+        "declares the domain's list in the same order and still routes by hash. Every other " +
+        "child, including an ineligible one that reports the target, is retargeted or given a " +
+        "new exchange. The target partition count must be at least the smaller of " +
+        "the replaced exchange's count and the effective initial shuffle count, and at most a " +
+        s"bounded multiple of the larger; the initial count includes " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
+        s"${UNION_OUTPUT_PARTITIONING.key}. Removing the union's exchange can reduce AQE skew " +
+        "handling and join conversion opportunities. Keeping a shuffled join child's layout " +
+        "can make skew optimization or local reads violate ancestor requirements; AQE then " +
+        "rejects the optimization or adds a shuffle when skew optimization is forced. Join " +
+        "inputs and join branches are opt-in. Only SimpleCostEvaluator compensates the added " +
+        "exchanges; custom evaluators should account for them, or AQE may reject the re-plan " +
+        "and its other runtime optimizations.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.partialReplay.enabled")
+      .internal()
+      .doc("When the whole-plan check rejects a push-down proposal, the rule plans the same " +
+        "query with keyed targets off, which is the base policy, and keeps that plan when the " +
+        "whole plan holds; otherwise it falls back to the whole-plan retry on the removed " +
+        "layouts. When enabled, the rule also replays the proposal one site at a time: keyed " +
+        "targets on top of the hash-only plan, or the proposal itself over the input plan when " +
+        "that pass changes nothing or fails. In the replay over the input plan a site the whole " +
+        "plan rejects takes the layout of the exchange it removes; the replay visits a site " +
+        "before the sites that contain it, so a nested union can shuffle an inner site's moved " +
+        "legs a second time. A replayed site is kept only while the whole plan still holds. " +
+        "Each attempt re-derives the whole plan, and a site in the replay over the input plan " +
+        "can try two targets, so a rejected proposal costs up to two rewrites and checks per " +
+        "candidate site when enabled.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -9222,6 +9247,39 @@ object SQLConf {
       .checkValue(_ >= 0, "The maximum number of union children must be non-negative.")
       .createWithDefault(10)
 
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled")
+      .internal()
+      .doc("When true, union shuffle push-down may use a V2 keyed layout as the union's " +
+        "output, whether the shuffle it replaces was keyed or hash. A child already reporting " +
+        "the picked domain keeps its layout, and so does an unmarked child reporting a subset " +
+        "of its keys; a marked child has to declare the domain's list in the same order and " +
+        "still route unlisted keys by hash. The " +
+        "other children are shuffled onto the domain, and rows of a key the domain does not " +
+        "declare are routed by hash, which the layout records. The grouping above the rebuilt " +
+        "union keeps the claim to that key set. When false, the rule uses hash layouts only. " +
+        s"Requires ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key}, " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_SHUFFLE_ENABLED.key}, since a child " +
+        s"may be shuffled onto the domain, with " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} disabled. " +
+        "A target naming only part of the consumer's cluster keys needs " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} disabled and " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys." +
+        "enabled on. A target partitioned by a transform over the cluster keys, such as " +
+        "bucket(n, id), needs the subset permission whatever " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} is set to. " +
+        "A source-reported keyed layout is kept only when the consumer's shuffle group cannot " +
+        s"coalesce: ${COALESCE_PARTITIONS_ENABLED.key} off, " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key} on, or " +
+        "a consumer whose inputs do not all reach an exchange, which the rule admits without " +
+        "either setting. A keyed target kept at an inner union site leaves a grouped layout " +
+        "that an enclosing union site cannot take as its target, so a nested union can shuffle " +
+        "the inner site's moved legs a second time.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
     buildConf(
       "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys.enabled"
@@ -9230,7 +9288,11 @@ object SQLConf {
       .doc("When true, shuffle push-down may use partition keys that are a subset of the " +
         s"consumer's clustering keys if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} " +
         "is false and the consumer accepts that distribution. Such targets can concentrate " +
-        "rows in fewer partitions. When false, targets must match all clustering keys.")
+        "rows in fewer partitions. A V2 keyed target partitioned by a transform over the " +
+        "clustering keys, such as bucket(n, id), needs this permission even when it covers " +
+        "every one of them, and a V2 keyed target naming part of the clustering keys also " +
+        s"needs ${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} off. When " +
+        "false, targets must match all clustering keys.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
