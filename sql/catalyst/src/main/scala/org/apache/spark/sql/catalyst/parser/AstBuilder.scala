@@ -4255,10 +4255,11 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a Overlay expression.
    */
   override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
-    val input = expression(ctx.input)
-    val replace = expression(ctx.replace)
-    val position = expression(ctx.position)
-    val lengthOpt = Option(ctx.length).map(expression)
+    val overlay = ctx.overlayExpression
+    val input = expression(overlay.input)
+    val replace = expression(overlay.replace)
+    val position = expression(overlay.position)
+    val lengthOpt = Option(overlay.length).map(expression)
     lengthOpt match {
       case Some(length) => Overlay(input, replace, position, length)
       case None => new Overlay(input, replace, position)
@@ -4775,6 +4776,7 @@ class AstBuilder extends DataTypeAstBuilder
    * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
+    val optionalMarker = ctx.optionalMarker
     // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
     val attr = getIdentifierText(ctx.fieldName)
     expression(ctx.base) match {
@@ -4784,13 +4786,24 @@ class AstBuilder extends DataTypeAstBuilder
           case escapedIdentifier(columnNameRegex)
             if conf.supportQuotedRegexColumnName &&
               isRegex(columnNameRegex) && canApplyRegex(ctx) =>
+            firstOptionalMarker(ctx).foreach { marker =>
+              throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
+            }
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
               conf.caseSensitiveAnalysis)
           case _ =>
-            UnresolvedAttribute(nameParts :+ attr)
+            val dereference = UnresolvedAttribute(nameParts :+ attr)
+            OptionalReferences.markNamePartsOptional(
+              dereference, OptionalReferences.optionalNamePartIndices(unresolved_attr))
+            withOptionalNamePart(dereference, nameParts.length, optionalMarker, ctx)
         }
       case e =>
-        UnresolvedExtractValue(e, Literal(attr))
+        val extractValue = UnresolvedExtractValue(e, Literal(attr))
+        if (optionalMarker != null) {
+          OptionalReferenceValidation.validate(ctx)
+          OptionalReferences.markOptional(extractValue)
+        }
+        extractValue
     }
   }
 
@@ -4825,14 +4838,74 @@ class AstBuilder extends DataTypeAstBuilder
       case escapedIdentifier(columnNameRegex)
         if conf.supportQuotedRegexColumnName &&
           isRegex(columnNameRegex) && canApplyRegex(ctx) =>
+        firstOptionalMarker(ctx).foreach { marker =>
+          throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
+        }
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         // Use getIdentifierParts to handle IDENTIFIER('literal') correctly
         // This allows IDENTIFIER('t').c1 to work like t.c1
-        val parts = getIdentifierParts(ctx.identifier())
-        UnresolvedAttribute(parts)
+        val parts = getIdentifierParts(ctx.identifier)
+        withOptionalNamePart(UnresolvedAttribute(parts), parts.length - 1, ctx.optionalMarker, ctx)
     }
+  }
 
+  /**
+   * Create an [[ExpressionWithUnresolvedIdentifier]] for `IDENTIFIER(expression)?`, an optional
+   * reference to the column that the expression names.
+   */
+  override def visitOptionalIdentifierClause(
+      ctx: OptionalIdentifierClauseContext): Expression = withOrigin(ctx) {
+    OptionalReferenceValidation.validate(ctx)
+    val identifierExpr = withOrigin(ctx.expression) { expression(ctx.expression) }
+    val identifierClause = new ExpressionWithUnresolvedIdentifier(
+      identifierExpr,
+      nameParts => {
+        val attribute = UnresolvedAttribute(nameParts)
+        OptionalReferences.markNamePartsOptional(attribute, Set(nameParts.length - 1))
+        attribute
+      })
+    OptionalReferences.markOptional(identifierClause)
+    identifierClause
+  }
+
+  /**
+   * Returns the first `?` optional-reference marker of the multipart name `ctx`, if any. The name
+   * can be written in parentheses, e.g. `(t?).c`, which `expression` looks through as well.
+   */
+  private def firstOptionalMarker(ctx: PrimaryExpressionContext): Option[Token] = ctx match {
+    case columnReference: ColumnReferenceContext =>
+      Option(columnReference.optionalMarker)
+    case dereference: DereferenceContext =>
+      firstOptionalMarker(dereference.base).orElse(Option(dereference.optionalMarker))
+    case parenthesized: ParenthesizedExpressionContext =>
+      parenthesized.expression.booleanExpression match {
+        case predicated: PredicatedContext if predicated.predicate == null =>
+          predicated.valueExpression match {
+            case valueExpression: ValueExpressionDefaultContext =>
+              firstOptionalMarker(valueExpression.primaryExpression)
+            case _ => None
+          }
+        case _ => None
+      }
+    case _ =>
+      None
+  }
+
+  /**
+   * Marks the name part at `index` of the multipart name `expression` as optional if
+   * `optionalMarker` is defined, after checking that the optional reference is allowed.
+   */
+  private def withOptionalNamePart[T <: Expression](
+      expression: T,
+      index: Int,
+      optionalMarker: Token,
+      ctx: ParserRuleContext): T = {
+    if (optionalMarker != null) {
+      OptionalReferenceValidation.validate(ctx)
+      OptionalReferences.markNamePartsOptional(expression, Set(index))
+    }
+    expression
   }
 
   /**
@@ -8177,7 +8250,12 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
     // Named parameters use simpleIdentifier, so .getText() is correct.
-    NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
+    val namedParameter = NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
+    if (ctx.optionalMarker != null) {
+      OptionalReferenceValidation.validate(ctx)
+      OptionalReferences.markOptional(namedParameter)
+    }
+    namedParameter
   }
 
   /**
@@ -8186,7 +8264,7 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
-    PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
+    PosParameter(ctx.getStart.getStartIndex)
   }
 
   /**
