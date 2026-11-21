@@ -66,13 +66,22 @@ private[pipelines] object Scd1VersionMap {
   def serializeKey(path: Seq[String]): String = QuotingUtils.quoteNameParts(path)
 
   /**
+   * The entry of the leaf at `path` in `versionMap`, or null if the map is null or the entry is
+   * absent or null.
+   *
+   * @param versionMap A version map of type `mapType(sequencingType)`.
+   * @param path The leaf's raw, unquoted name parts.
+   */
+  def entry(versionMap: Column, path: Seq[String]): Column = versionMap(serializeKey(path))
+
+  /**
    * Builds a version map of type `mapType(sequencingType)` with one entry per leaf.
    *
    * @param entries Each leaf's raw, unquoted name parts, paired with its authorship sequence. Keys
    *                are serialized with [[serializeKey]], and the leaf paths must be distinct.
    * @param sequencingType The data type the sequences are cast to.
    */
-  private def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
+  def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
     if (entries.isEmpty) {
       // Without arguments, `map()` is `map<string, string>` under
       // spark.sql.legacy.createEmptyCollectionUsingStringType, which cannot be cast to struct or

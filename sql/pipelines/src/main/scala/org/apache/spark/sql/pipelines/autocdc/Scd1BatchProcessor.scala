@@ -225,6 +225,43 @@ object Scd1BatchProcessor {
   private[autocdc] def upsertSequenceOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(cdcUpsertSequenceFieldName)
 
+  /** Project the version map out of the CDC metadata column. */
+  private[autocdc] def versionMapOf(cdcMetadataCol: Column): Column =
+    cdcMetadataCol.getField(versionMapFieldName)
+
+  /**
+   * When a row last authored any of the user-data leaves at `leafPaths`, according to its CDC
+   * metadata: the greatest sequence at which it authored one of them. A delete authors every leaf
+   * at its delete sequence, and an upsert without a version map authors every leaf at its upsert
+   * sequence.
+   *
+   * @param cdcMetadataCol The row's CDC metadata.
+   * @param leafPaths The name parts of the leaves, as keyed in the version map.
+   * @return The sequence at which the row last authored any of the leaves, or null if it authored
+   *         none of them. With no leaves, such as for an empty struct, this is the row's delete
+   *         sequence for a delete and its upsert sequence otherwise.
+   */
+  private[autocdc] def lastAuthoredIn(
+      cdcMetadataCol: Column,
+      leafPaths: Seq[Seq[String]]): Column = {
+    val deleteSequence = deleteSequenceOf(cdcMetadataCol)
+    val upsertSequence = upsertSequenceOf(cdcMetadataCol)
+    val versionMap = versionMapOf(cdcMetadataCol)
+
+    val leafSequences = leafPaths.map(Scd1VersionMap.entry(versionMap, _))
+    val greatestLeafSequence = leafSequences match {
+      // An empty struct has no leaves, and so no version-map entries.
+      case Seq() => upsertSequence
+      // `greatest` requires at least two arguments. If there's only sequence, trivially return it.
+      case Seq(leafSequence) => leafSequence
+      case _ => F.greatest(leafSequences: _*)
+    }
+
+    F.when(deleteSequence.isNotNull, deleteSequence)
+      .when(versionMap.isNull, upsertSequence)
+      .otherwise(greatestLeafSequence)
+  }
+
   /**
    * Schema of the CDC metadata struct column for SCD1.
    *
