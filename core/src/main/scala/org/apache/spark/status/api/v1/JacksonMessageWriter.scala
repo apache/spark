@@ -35,7 +35,9 @@ import jakarta.ws.rs.ext.{MessageBodyWriter, Provider}
  * with an old version of jersey (since we have it from yarn anyway) and don't want to pull in lots
  * of dependencies from a new plugin.
  *
- * Note that jersey automatically discovers this class based on its package and its annotations.
+ * Note that jersey does not discover this class by package scanning: it is registered explicitly
+ * in `ApiRootResource.getServletHandler`. Any new `@Provider` (e.g. an `ExceptionMapper`) must
+ * be registered there as well.
  */
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))

@@ -16,7 +16,10 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.ServiceLoader
 import java.util.zip.ZipOutputStream
+
+import scala.jdk.CollectionConverters._
 
 import jakarta.servlet.ServletContext
 import jakarta.servlet.http.HttpServletRequest
@@ -24,11 +27,13 @@ import jakarta.ws.rs._
 import jakarta.ws.rs.core.{Context, Response}
 import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.handler.ContextHandler
-import org.glassfish.jersey.server.ServerProperties
+import org.glassfish.jersey.server.ResourceConfig
 import org.glassfish.jersey.servlet.ServletContainer
 
 import org.apache.spark.SecurityManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.util.Utils
 
 /**
  * Main entry point for serving spark application metrics as json, using JAX-RS.
@@ -55,13 +60,50 @@ private[v1] class ApiRootResource extends ApiRequestContext {
 
 }
 
-private[spark] object ApiRootResource {
+private[spark] object ApiRootResource extends Logging {
 
   def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
+    val classes = Seq(classOf[ApiRootResource], classOf[JacksonMessageWriter]) ++
+      registeredRootResources
+    createJerseyHandler("/api", uiRoot, classes: _*)
+  }
+
+  /**
+   * The root resources contributed by other modules (e.g. sql/core, streaming and Spark Connect)
+   * and by downstream jars through [[ApiRootResourceRegistrar]].
+   *
+   * Both the class loader that loaded Spark and the thread context class loader are searched,
+   * so registrars are found when Spark runs in an isolated loader (e.g. an OSGi bundle) as well
+   * as when they come from user jars on the context class loader.
+   */
+  private[v1] def registeredRootResources: Seq[Class[_]] = {
+    val loaders = Seq(Utils.getSparkClassLoader, Utils.getContextOrSparkClassLoader).distinct
+    val resources = loaders
+      .flatMap(loader => ServiceLoader.load(classOf[ApiRootResourceRegistrar], loader).asScala)
+      .flatMap(_.rootResources)
+      .distinctBy(_.getName)
+    logDebug(s"REST API root resources contributed by registrars: " +
+      resources.map(_.getName).mkString(", "))
+    resources
+  }
+
+  /**
+   * Creates a Jersey servlet handler at `contextPath` that serves exactly `classes`.
+   *
+   * The JAX-RS classes are registered explicitly rather than by package scanning
+   * (`ServerProperties.PROVIDER_PACKAGES`). Scanning enumerates the classpath as file and jar
+   * URLs, which fails on classpaths that cannot be enumerated that way, e.g. an OSGi bundle whose
+   * resources are exposed as `bundleresource://` URLs. The classes are passed as `Class` objects
+   * rather than names, so Jersey does not have to load them through the thread context class
+   * loader, which in such environments may not see Spark's classes.
+   */
+  private[v1] def createJerseyHandler(
+      contextPath: String,
+      uiRoot: UIRoot,
+      classes: Class[_]*): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    jerseyContext.setContextPath("/api")
-    val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
+    jerseyContext.setContextPath(contextPath)
+    val holder = new ServletHolder(new ServletContainer(new ResourceConfig(classes: _*)))
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext

@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.4 to 5.0
+
+- Since Spark 5.0, the status REST API registers its JAX-RS resources explicitly instead of scanning the `org.apache.spark.status.api.v1` package, so that it also works when Spark's classes cannot be enumerated from the file system, such as in an OSGi bundle. As a result, each servlet context serves only its own endpoints: the executor metrics in Prometheus format are served only at `/metrics/executors/prometheus`, and are no longer also reachable at `/api/executors/prometheus`; and the REST API is served only under `/api/v1`, no longer also under `/metrics/v1`. Point any scraper or client that uses the old paths at `/metrics/executors/prometheus` or `/api/v1` respectively. A JAX-RS root resource that lives outside spark-core and relied on the package scan to be served under `/api` must now be contributed through `org.apache.spark.status.api.v1.ApiRootResourceRegistrar`, listed in `META-INF/services/org.apache.spark.status.api.v1.ApiRootResourceRegistrar`.
+
 ## Upgrading from Core 4.3 to 4.4
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
