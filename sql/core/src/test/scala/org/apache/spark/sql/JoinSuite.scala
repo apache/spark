@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -1189,6 +1190,77 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-61666: sort merge joins release the sorters of their children early") {
+    // A join that stops reading one side before its end releases that side's sorter once it has
+    // produced its last row, instead of holding its memory until the task completes. Read the
+    // join to its end in a task, and check that the task holds no execution memory afterwards.
+    def memoryAfterJoin(df: DataFrame): Seq[Long] = {
+      df.queryExecution.toRdd.mapPartitions { iter =>
+        iter.foreach(_ => ())
+        Iterator(TaskContext.get().taskMemoryManager().getMemoryConsumptionForThisTask)
+      }.collect().toSeq
+    }
+    def isGenerated(df: DataFrame, nodeName: String): Boolean = {
+      collect(df.queryExecution.executedPlan) {
+        case s: WholeStageCodegenExec => s.collect { case p if p.nodeName == nodeName => p }
+      }.flatten.nonEmpty
+    }
+
+    // The join reads `small` to its end, but not `big`.
+    val small = spark.range(0, 100).select($"id".as("k1"))
+    val big = spark.range(0, 1000).select($"id".as("k2"))
+    withTempView("small", "big") {
+      small.createOrReplaceTempView("small")
+      big.createOrReplaceTempView("big")
+      // Fully generated; generated sorts under an interpreted join (the join output has more
+      // fields than `maxFields`); and no codegen at all. With `maxFields`, only the inner, outer
+      // and existence joins run interpreted: the output of a semi or anti join is the output of
+      // its left side, which the generated sort below it has as well.
+      Seq(
+        (Seq.empty[(String, String)], true, true),
+        (Seq(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "1"), true, false),
+        (Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"), false, false)).foreach {
+        case (codegenConfs, sortGenerated, joinGenerated) =>
+          Seq(false, true).foreach { aqe =>
+            withSQLConf(codegenConfs ++ Seq(
+                SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+                SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+                SQLConf.SHUFFLE_PARTITIONS.key -> "1"): _*) {
+              val joins = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
+                small.join(big, $"k1" === $"k2", joinType)
+              } ++ Seq(
+                big.join(small, $"k1" === $"k2", "right_outer"),
+                spark.sql(
+                  "SELECT * FROM small WHERE EXISTS (SELECT 1 FROM big WHERE k2 = k1) OR k1 < 0"))
+              joins.foreach { df =>
+                // Run it first: with AQE, the plan is final only then.
+                val memory = memoryAfterJoin(df)
+                val clue = s"$codegenConfs, aqe=$aqe\n${df.queryExecution.executedPlan}"
+                assert(isGenerated(df, "Sort") == sortGenerated, clue)
+                if (df.queryExecution.executedPlan.output.length > 1) {
+                  assert(isGenerated(df, "SortMergeJoin") == joinGenerated, clue)
+                }
+                assert(memory.forall(_ == 0L), s"$memory, $clue")
+              }
+            }
+          }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = spark.range(0, 100).select(($"id" % 5).as("k"), $"id".as("ts"))
+      val quotes = spark.range(0, 1000).select(($"id" % 5).as("k"), $"id".as("ts"))
+      val df = trades.joinAsOf(
+        quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+      val memory = memoryAfterJoin(df)
+      assert(isGenerated(df, "SortMergeAsOfJoin"), df.queryExecution.executedPlan)
+      assert(memory.forall(_ == 0L), s"$memory, ${df.queryExecution.executedPlan}")
+    }
+  }
+
   test("SPARK-29850: sort-merge-join an empty table should not memory leak") {
     val df1 = spark.range(10).select($"id", $"id" % 3 as Symbol("p"))
       .repartition($"id").groupBy($"id").agg(Map("p" -> "max"))
@@ -1956,6 +2028,91 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       }.isEmpty, df.queryExecution)
     } finally {
       cached.unpersist()
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a throwable condition into " +
+    "a lower join") {
+    withTable("s") {
+      Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it,
+      // whether the CASE WHEN is in the WHERE clause or in the ON clause of the join with w.
+      val df = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+      val onClause = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |  AND CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(onClause, Row(1))
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a condition that can fail ahead of " +
+    "a non-deterministic or throwable one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `rand(10) * 10 > 100` is false on every row, so the `AND` short-circuit keeps the
+      // division by zero on t.id = 3 from being evaluated.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id
+            |WHERE rand(10) * 10 > 100 AND 10L / (t.id - 3) > 0
+            |""".stripMargin),
+        Nil)
+      // The CASE WHEN removes the row whose id is 3, the only one where the division is by zero.
+      // The division follows the throwable CASE WHEN, so it stays above it.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t
+            |JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |  AND CASE WHEN t.id = 3 THEN false WHEN t.id < 0 THEN raise_error('neg') ELSE true END
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id AND 10L / (t.id + s.id - 6) > 0
+            |""".stripMargin),
+        (4L to 9L).map(i => Row(i, i, i)))
+    }
+  }
+
+  test("SPARK-62069: do not evaluate a join or filter condition on the rows that a lower inner " +
+    "join removes") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("tb1", "tb2", "tb3") {
+        Seq((1, 1, 5), (2, 2, 5)).toDF("k", "v", "f").write.saveAsTable("tb1")
+        Seq[(Int, Option[Int])]((1, None), (2, Some(1))).toDF("k", "g").write.saveAsTable("tb2")
+        Seq((1, 1), (2, 0)).toDF("v", "w").write.saveAsTable("tb3")
+        // The CASE WHEN is NULL on the row whose k is 1, so the join with t2 removes it, and the
+        // division by zero is not evaluated on it, in the ON clause or in the WHERE clause.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v AND 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v WHERE 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        // The join with t3 removes the row whose k is 1, so the WHERE clause, which stays above
+        // the join for its subquery, is not evaluated on it.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k
+              |JOIN tb3 t3 ON t1.v = t3.v AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |WHERE 10 / (t1.k - t3.w) > (SELECT max(x.k) FROM tb2 x WHERE x.k = t1.k) - 5
+              |""".stripMargin),
+          Row(2))
+      }
     }
   }
 }

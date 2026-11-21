@@ -49,9 +49,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-// `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
+// `View` is excluded to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
-import org.apache.spark.sql.connector.catalog.{View => V2View, _}
+import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
@@ -714,7 +714,12 @@ class Analyzer(
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
       Seq(ResolveHints.ResolveJoinStrategyHints,
-        ResolveHints.ResolveCoalesceHints) ++
+        ResolveHints.ResolveCoalesceHints,
+        // Must run after Disable Hints, which removes it when hints are disabled, and before
+        // Remove Unresolved Hints, which would drop it as unrecognized. Its order relative to the
+        // other hint rules does not matter: a strategy hint and this hint on the same relation
+        // resolve to separate nodes either way.
+        ResolveExternalLookupHint) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
@@ -750,6 +755,7 @@ class Analyzer(
       ResolvePivot ::
       ResolveUnpivot ::
       ResolveBinBy ::
+      ResolveGapFill ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
@@ -815,11 +821,12 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("ScalaUDF Null Handling", fixedPoint,
-      // `HandleNullInputsForUDF` may wrap the `ScalaUDF` with `If` expression to return null for
-      // null inputs, so the result can be null even if `ScalaUDF#nullable` is false. We need to
-      // run `UpdateAttributeNullability` to update nullability of the UDF output attribute in
-      // downstream operators. After updating attribute nullability, `ScalaUDF`s in downstream
-      // operators may need null handling as well, so we should run these two rules repeatedly.
+      // `HandleNullInputsForUDF` wraps the `ScalaUDF` with `If` expression to return null for null
+      // inputs of primitive parameters. An attribute can become nullable after resolution, e.g. a
+      // resolved column of the null-supplying side of an outer join, so we need to run
+      // `UpdateAttributeNullability` to update nullability of the attributes. After updating
+      // attribute nullability, `ScalaUDF`s reading them may need null handling as well, so we
+      // should run these two rules repeatedly.
       HandleNullInputsForUDF,
       UpdateAttributeNullability),
     Batch("UDF", Once,
@@ -1398,7 +1405,7 @@ class Analyzer(
         relationResolution.resolveChangelog(u, ctx).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
-        lookupTableOrView(identifier).map {
+        relationResolution.lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectTableNotViewError(
@@ -1419,7 +1426,7 @@ class Analyzer(
           m.metadata.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
-        lookupTableOrView(identifier, viewOnly = true).map {
+        relationResolution.lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
@@ -1431,95 +1438,12 @@ class Analyzer(
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView, _) =>
-        lookupTableOrView(identifier).map {
+        relationResolution.lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
           case other => other
         }.getOrElse(u)
-    }
-
-    /**
-     * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
-     * for resolving DDL and misc commands. UnresolvedView callers reject non-view results
-     * downstream via `expectViewNotTableError`.
-     *
-     * When `viewOnly=true`, non-session catalogs that do not implement [[ViewCatalog]] are
-     * rejected up front with MISSING_CATALOG_ABILITY.VIEWS -- they cannot host views at all,
-     * so surfacing a downstream "view not found" would hide the real reason.
-     *
-     * Lookup order against a non-session catalog:
-     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
-     *      once. A returned [[org.apache.spark.sql.connector.catalog.View]] is interpreted as a
-     *      view; a [[Table]] is a table.
-     *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
-     *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
-     */
-    private def lookupTableOrView(
-        identifier: Seq[String],
-        viewOnly: Boolean = false): Option[LogicalPlan] = {
-      relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
-      }.orElse {
-        relationResolution.expandIdentifier(identifier) match {
-          case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
-                !catalog.isInstanceOf[ViewCatalog]) {
-              throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-            }
-            catalog match {
-              case mc: RelationCatalog =>
-                // Single-RPC perf path: loadRelation returns a Table for a table or a View
-                // for a view. NoSuchTable means neither exists.
-                try {
-                  Some(mc.loadRelation(ident) match {
-                    case v: V2View =>
-                      ResolvedPersistentView(catalog, ident, v)
-                    case table: Table =>
-                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
-                    case other => throw SparkException.internalError(
-                      s"Catalog ${catalog.name} returned an unexpected relation type for " +
-                        s"$ident: ${other.getClass.getName}. Expected a Table or a View.")
-                  })
-                } catch {
-                  case _: NoSuchTableException => None
-                }
-              case _ =>
-                // Skip the table-side lookup entirely for view-only catalogs (no
-                // `TableCatalog` mixin): `CatalogV2Util.loadTable` would call `asTableCatalog`
-                // and throw MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-
-                // resolution path.
-                val tableResolved: Option[LogicalPlan] = if (
-                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
-                ) {
-                  CatalogV2Util.loadTable(catalog, ident).map {
-                    case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                      v1Table.v1Table.isViewLike =>
-                      val v1Ident = v1Table.catalogTable.identifier
-                      val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                      ResolvedPersistentView(
-                        catalog, v2Ident, new V1View(v1Table.catalogTable))
-                    case table =>
-                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
-                  }
-                } else {
-                  None
-                }
-                tableResolved.orElse {
-                  catalog match {
-                    case vc: ViewCatalog =>
-                      try {
-                        Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
-                      } catch {
-                        case _: NoSuchViewException => None
-                      }
-                    case _ => None
-                  }
-                }
-            }
-          case _ => None
-        }
-      }
     }
 
     def resolveRelation(
@@ -2644,18 +2568,25 @@ class Analyzer(
   }
 
   /**
-   * A rule that binds procedures to the input types and rearranges arguments as needed.
+   * A rule that binds procedures to the input types and rearranges arguments as needed, and
+   * records the bound procedure in a [[ResolvedBoundProcedure]].
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute)
+      case c @ Call(ResolvedProcedure(catalog, ident, procedure), args, _)
           if args.forall(_.resolved) =>
-        val inputType = extractInputType(args)
-        val bound = unbound.bind(inputType)
-        validateParameterModes(bound)
+        val boundProcedure = procedure match {
+          case unbound: UnboundProcedure => unbound.bind(extractInputType(args))
+          case bound: BoundProcedure => bound
+          case other =>
+            throw SparkException.internalError(s"Unsupported procedure: ${other.getClass.getName}")
+        }
+        validateParameterModes(boundProcedure)
         val rearrangedArgs =
-          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
-        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
+          NamedParametersSupport.defaultRearrange(boundProcedure, args, SQLConf.get.resolver)
+        c.copy(
+          procedure = ResolvedBoundProcedure(catalog, ident, boundProcedure),
+          args = rearrangedArgs)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {

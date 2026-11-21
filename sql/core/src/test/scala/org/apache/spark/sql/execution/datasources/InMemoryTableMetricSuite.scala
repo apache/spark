@@ -25,7 +25,9 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class InMemoryTableMetricSuite extends SharedSparkSession with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

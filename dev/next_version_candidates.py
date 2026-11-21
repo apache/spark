@@ -19,7 +19,7 @@
 
 """
 Prints the two candidate first-release versions for a change, so the caller can pick
-one per the "Versioning and Branch Policy" section of AGENTS.md (numbers below are
+one per the versioning policy that `AGENTS.md` points to (numbers below are
 illustrative; the actual versions advance as branches are cut):
 
     master       5.0.0        <- use for master-only changes

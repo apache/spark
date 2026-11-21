@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.{col, first}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -179,6 +181,77 @@ class ReuseExchangeAndSubquerySuite extends SharedSparkSession with AdaptiveSpar
 
         assert(reusedExchangeIds.forall(exchangeIds.contains(_)),
           "ReusedExchangeExec should reuse an existing exchange")
+      }
+    }
+  }
+
+  test("SPARK-61574: A scan copied by ReuseExchangeAndSubquery keeps its columnar decision") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), (col("id") % 10).as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .saveAsTable("df1")
+
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .saveAsTable("df2")
+
+        // The broadcast side comes first, so the dynamic pruning subquery of the `df1` scan reuses
+        // its exchange, and the scan is copied after the columnar transitions are in place.
+        val df = sql(
+          """
+            |SELECT /*+ BROADCAST(df2) */ df1.id
+            |FROM df2 JOIN df1 ON df2.k = df1.k
+            |WHERE df2.id = 3
+            |""".stripMargin)
+
+        val copiedScans = df.queryExecution.executedPlan.collect {
+          case s: FileSourceScanExec if s.partitionFilters.exists(_.exists {
+            case e: ExecSubqueryExpression => e.plan.exists(_.isInstanceOf[ReusedExchangeExec])
+            case _ => false
+          }) => s
+        }
+        assert(copiedScans.size == 1)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          assert(df.collect().map(_.getLong(0)).sorted.toSeq === (3L until 100L by 10))
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { aqeEnabled =>
+    test(s"SPARK-61818: exchange reuse across identical existence joins (AQE: $aqeEnabled)") {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withTempView("t", "s") {
+          spark.range(100).selectExpr("id % 10 AS k", "id AS x").createOrReplaceTempView("t")
+          spark.range(5).selectExpr("id AS k").createOrReplaceTempView("s")
+          // `InlineCTE` inlines the CTE once per reference, and `RewritePredicateSubquery` then
+          // builds an `ExistenceJoin` with a fresh `exists` attribute in each copy.
+          val df = sql(
+            """
+              |WITH cte AS (
+              |  SELECT k, x FROM t WHERE x > 50 OR EXISTS (SELECT 1 FROM s WHERE s.k = t.k)
+              |)
+              |SELECT * FROM cte c1 JOIN cte c2 ON c1.x = c2.x
+              |""".stripMargin)
+
+          checkAnswer(df, (0L until 100L).filter(x => x > 50 || x % 10 < 5)
+            .map(x => Row(x % 10, x, x % 10, x)))
+          val plan = df.queryExecution.executedPlan
+          val reused = collectWithSubqueries(plan) { case r: ReusedExchangeExec => r }
+          assert(reused.exists(_.child.exists {
+            case j: BaseJoinExec => j.joinType.isInstanceOf[ExistenceJoin]
+            case _ => false
+          }), s"expected the exchange over the existence join to be reused:\n$plan")
+        }
       }
     }
   }

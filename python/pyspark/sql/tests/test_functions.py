@@ -1746,6 +1746,35 @@ class FunctionsTestsMixin:
             },
         )
 
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, 0.5, 0.9], float("nan"))
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={"arg_name": "relativeError", "arg_value": "nan"},
+        )
+
+        for relative_error in (True, False):
+            with self.subTest(relative_error=relative_error):
+                with self.assertRaises(PySparkTypeError) as pe:
+                    df.stat.approxQuantile("a", [0.5], relative_error)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "float or int",
+                        "arg_name": "relativeError",
+                        "arg_type": "bool",
+                    },
+                )
+
+        self.assertEqual(df.stat.approxQuantile("a", [0.5], 0), [4.0])
+
+        quantiles = df.stat.approxQuantile("a", [0.5], 1)
+        self.assertEqual(len(quantiles), 1)
+        self.assertEqual(quantiles, df.stat.approxQuantile("a", [0.5], 1.0))
+
     def test_sorting_functions_with_column(self):
         self.check_sorting_functions_with_column(Column)
 
@@ -4421,6 +4450,24 @@ class FunctionsTestsMixin:
         result_128 = df.select(F.xxh3_128(F.col("a").cast("binary"))).collect()
         # Value from DataFrameFunctionsSuite.scala
         self.assertEqual(result_128[0][0], "9e947f00ecd6acb2244da40f405c870e")
+
+    def test_farm_fingerprint(self):
+        """Test farm_fingerprint function"""
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.farm_fingerprint("data")).collect()
+
+        # Values from HashExpressionsSuite.scala
+        self.assertEqual(result[0][0], -2743780590904673122)  # "Spark"
+        self.assertEqual(result[1][0], -7286425919675154353)  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.farm_fingerprint("data")).collect()
+        self.assertEqual(result_binary[0][0], 8673355959317488908)
+
+        # Matches BigQuery FARM_FINGERPRINT('1footrue').
+        df_bq = self.spark.createDataFrame([("1footrue",)], ["data"])
+        self.assertEqual(df_bq.select(F.farm_fingerprint("data")).first()[0], -1541654101129638711)
 
 
 class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):

@@ -60,6 +60,7 @@ import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   val singleArgLoads = new AtomicInteger(0)
@@ -214,6 +215,7 @@ class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
@@ -346,8 +348,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
       collected = df.queryExecution.executedPlan.collect {
-        case BatchScanExec(
-            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _) =>
+        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)
@@ -382,8 +383,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
       collected = df.queryExecution.executedPlan.collect {
-        case BatchScanExec(
-            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _) =>
+        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)
