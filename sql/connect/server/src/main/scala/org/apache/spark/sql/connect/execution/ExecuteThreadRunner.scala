@@ -65,6 +65,36 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     }
   }
 
+  /** Whether the execution has neither been started nor interrupted yet. */
+  private[connect] def isNotStarted: Boolean = state.getAcquire() == ThreadState.notStarted
+
+  /**
+   * Fails the execution with `error` if it has not been started yet, e.g. because it did not get
+   * an execution slot in time. The execution will not be started anymore afterwards.
+   *
+   * @return
+   *   true if the execution was failed by this call.
+   */
+  private[connect] def failBeforeStart(error: Throwable): Boolean = {
+    if (state.compareAndExchangeRelease(ThreadState.notStarted, ThreadState.interrupted) ==
+        ThreadState.notStarted) {
+      try {
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          false)(error)
+      } finally {
+        executeHolder.cleanup()
+      }
+      true
+    } else {
+      false
+    }
+  }
+
   /**
    * Checks if the thread is alive.
    *
