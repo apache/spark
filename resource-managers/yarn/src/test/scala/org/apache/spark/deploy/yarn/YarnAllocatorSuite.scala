@@ -881,6 +881,56 @@ class YarnAllocatorSuite extends SparkFunSuite
       send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
   }
 
+  test("SPARK-60914: node recommissioned and decommissioned again should be " +
+    "decommissioned again") {
+    sparkConf.set(DECOMMISSION_ENABLED.key, "true")
+    val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
+    val allocateResponse = mock(classOf[AllocateResponse])
+    val (handler, _) = createAllocator(1, rmClientSpy)
+
+    val container1 = createContainer("host1")
+    when(allocateResponse.getAllocatedContainers)
+      .thenReturn(new util.ArrayList[Container](Seq(container1).asJava))
+    when(allocateResponse.getUpdatedNodes).thenReturn(new util.ArrayList[NodeReport]())
+    doAnswer(new Answer[AnyRef]() {
+      override def answer(invocationOnMock: InvocationOnMock): AllocateResponse = allocateResponse
+    }).when(rmClientSpy).allocate(org.mockito.ArgumentMatchers.anyFloat())
+
+    // Heartbeat 1: one container allocated on host1, no node updates.
+    handler.allocateResources()
+    verify(rpcEndPoint, times(0)).send(DecommissionExecutorsOnHost("host1"))
+
+    def nodeReportWithState(state: NodeState): util.List[NodeReport] = {
+      val nodeReport = mock(classOf[NodeReport])
+      val nodeId = mock(classOf[NodeId])
+      when(nodeReport.getNodeState).thenReturn(state)
+      when(nodeReport.getNodeId).thenReturn(nodeId)
+      when(nodeId.getHost).thenReturn("host1")
+      new util.ArrayList[NodeReport](Seq(nodeReport).asJava)
+    }
+
+    // Heartbeat 2: host1 goes DECOMMISSIONING, executors on it must be decommissioned.
+    when(allocateResponse.getAllocatedContainers).thenReturn(new util.ArrayList[Container]())
+    val decommissioning1 = nodeReportWithState(NodeState.DECOMMISSIONING)
+    when(allocateResponse.getUpdatedNodes).thenReturn(decommissioning1)
+    handler.allocateResources()
+    verify(rpcEndPoint, times(1)).send(DecommissionExecutorsOnHost("host1"))
+
+    // Heartbeat 3: host1 is recommissioned, YARN reports it as RUNNING again.
+    val running = nodeReportWithState(NodeState.RUNNING)
+    when(allocateResponse.getUpdatedNodes).thenReturn(running)
+    handler.allocateResources()
+    verify(rpcEndPoint, times(1)).send(DecommissionExecutorsOnHost("host1"))
+
+    // Heartbeat 4: host1 goes DECOMMISSIONING a second time. Executors launched on host1
+    // after the recommission must be decommissioned as well.
+    val decommissioning2 = nodeReportWithState(NodeState.DECOMMISSIONING)
+    when(allocateResponse.getUpdatedNodes).thenReturn(decommissioning2)
+    handler.allocateResources()
+    verify(rpcEndPoint, times(2)).send(DecommissionExecutorsOnHost("host1"))
+  }
+
   test("SPARK-43510: Running executors should be none when YarnAllocator adds running executors " +
     "after processing completed containers") {
     val (handler, _) = createAllocator(1)
