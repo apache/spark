@@ -136,6 +136,21 @@ public class RowBasedKeyValueBatchSuite {
   }
 
   @Test
+  public void closeDropsKeyOffsets() {
+    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
+    VariableLengthRowBasedKeyValueBatch variableLength =
+        (VariableLengthRowBasedKeyValueBatch) batch;
+    Assertions.assertEquals(DEFAULT_CAPACITY, variableLength.keyOffsets.length);
+    // A closed batch can stay reachable until the task ends, as from the task-completion hook
+    // that closes an aggregate's fast hash map, where a task can run many partitions.
+    batch.close();
+    Assertions.assertNull(variableLength.keyOffsets);
+    // The hook closes the map, and so the batch, again after its output has closed it.
+    batch.close();
+  }
+
+  @Test
   public void batchType() {
     try (RowBasedKeyValueBatch batch1 = RowBasedKeyValueBatch.allocate(keySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY);

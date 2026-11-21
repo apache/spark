@@ -27,6 +27,10 @@ import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{FixedLengthRowBasedKeyValueBatch, Literal, RowBasedKeyValueBatch, VariableLengthRowBasedKeyValueBatch}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -134,4 +138,80 @@ class HashAggregateExecSuite extends SparkFunSuite with SharedSparkSession {
       assert(drainKeys(merged) === (firstKeys ++ secondKeys).sorted)
     }
   }
+
+  test("SPARK-61647: closing a fast hash map drops its buckets") {
+    val conf = new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false")
+    // A fixed-length key, and a string key, whose batch also keeps key offsets.
+    Seq(IntegerType -> classOf[FixedLengthRowBasedKeyValueBatch],
+        StringType -> classOf[VariableLengthRowBasedKeyValueBatch]).foreach {
+      case (keyType, batchClass) =>
+        val taskMemoryManager = new TaskMemoryManager(new TestMemoryManager(conf), 0)
+        val keySchema = StructType(StructField("k", keyType) :: Nil)
+        val map = new TestFastHashMap(keySchema, aggBufferSchema, taskMemoryManager)
+        assert(map.currentBuckets.length === 2048)
+        assert(map.currentBatch.getClass === batchClass)
+        // The task-completion hook that also closes the map keeps it reachable until the task
+        // ends, where a task can run many partitions, each with its own map.
+        map.close()
+        assert(map.currentBuckets === null)
+        assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0L)
+        // The hook closes the map again after its output has closed it.
+        map.close()
+    }
+  }
+
+  test("SPARK-61647: closing a generated vectorized fast hash map drops its buckets") {
+    val ctx = new CodegenContext
+    val count = Count(Literal(1)).toAggregateExpression()
+    val mapCode = new VectorizedHashMapGenerator(ctx, Seq(count), "FastHashMap",
+      StructType(StructField("k", IntegerType) :: Nil),
+      DataTypeUtils.fromAttributes(count.aggregateFunction.aggBufferAttributes),
+      bitMaxCapacity = 10).generate()
+    val code = new CodeAndComment(
+      s"""
+         |public Object generate(Object[] references) {
+         |  return new Maps(references);
+         |}
+         |
+         |class Maps {
+         |  private Object[] references;
+         |  ${ctx.declareMutableStates()}
+         |
+         |  public Maps(Object[] references) {
+         |    this.references = references;
+         |    ${ctx.initMutableStates()}
+         |  }
+         |
+         |  public java.lang.AutoCloseable newMap() {
+         |    return new FastHashMap();
+         |  }
+         |
+         |  ${ctx.declareAddedFunctions()}
+         |
+         |  $mapCode
+         |}
+       """.stripMargin, ctx.getPlaceHolderToComments())
+    val maps = CodeGenerator.compile(code)._1.generate(ctx.references.toArray)
+    val newMap = maps.getClass.getMethod("newMap")
+    newMap.setAccessible(true)
+    val map = newMap.invoke(maps).asInstanceOf[AutoCloseable]
+    val buckets = map.getClass.getDeclaredField("buckets")
+    buckets.setAccessible(true)
+    assert(buckets.get(map).asInstanceOf[Array[Int]].length === 2048)
+    map.close()
+    assert(buckets.get(map) === null)
+    // The hook closes the map again after its output has closed it.
+    map.close()
+  }
+}
+
+/** A fast hash map of 1,024 rows that exposes its buckets and batch. */
+private class TestFastHashMap(
+    keySchema: StructType,
+    valueSchema: StructType,
+    taskMemoryManager: TaskMemoryManager)
+  extends RowBasedAggregateHashMap(
+    keySchema, valueSchema, taskMemoryManager, InternalRow(0), 1024, keySchema.length, 0) {
+  def currentBuckets: Array[Int] = buckets
+  def currentBatch: RowBasedKeyValueBatch = batch
 }
