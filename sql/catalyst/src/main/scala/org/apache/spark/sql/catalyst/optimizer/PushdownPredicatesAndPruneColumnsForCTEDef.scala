@@ -38,8 +38,9 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = new CTEMap
-      gatherPredicatesAndAttributes(plan, cteMap)
-      pushdownPredicatesAndAttributes(plan, cteMap)
+      val duplicated = mutable.Set.empty[Long]
+      gatherPredicatesAndAttributes(plan, cteMap, duplicated)
+      pushdownPredicatesAndAttributes(plan, cteMap, duplicated)
     } else {
       plan
     }
@@ -62,14 +63,29 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * combined predicate will be a TRUE literal, which means there will be no predicate push-down
    * for that definition at all, including for its other references.
    */
-  private def gatherPredicatesAndAttributes(plan: LogicalPlan, cteMap: CTEMap): Unit = {
+  private def gatherPredicatesAndAttributes(
+      plan: LogicalPlan, cteMap: CTEMap, duplicated: mutable.Set[Long]): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        cteDefs.zipWithIndex.foreach { case (cteDef, precedence) =>
-          gatherPredicatesAndAttributes(cteDef.child, cteMap)
+        cteDefs.foreach { cteDef =>
+          gatherPredicatesAndAttributes(cteDef.child, cteMap, duplicated)
+          // InlineCTE can copy a definition with the same ID but different attributes. Such
+          // copies cannot share gathered state, unlike repeated visits to the same instance.
+          cteMap.get(cteDef.id).foreach { case (seen, _, _, _) =>
+            if (!(seen eq cteDef)) duplicated += cteDef.id
+          }
+          // The precedence is the visiting order across all scopes, not the index within
+          // this WithCTE: a definition visited later is either a later sibling (a real
+          // forward reference) or lives in a nested scope, and an earlier definition
+          // cannot see either. (A definition nested in an earlier sibling sorts lower
+          // yet is also invisible, but no reference site can see both it and the
+          // current definition, so that case never reaches the guard.)
+          // Keep the original precedence when repeated subquery traversal revisits a definition:
+          // replacing an existing id does not increase cteMap.size.
+          val precedence = cteMap.get(cteDef.id).map(_._2).getOrElse(cteMap.size)
           cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, AttributeSet.empty))
         }
-        gatherPredicatesAndAttributes(child, cteMap)
+        gatherPredicatesAndAttributes(child, cteMap, duplicated)
 
       case PhysicalOperation(projects, predicates, ref: CTERelationRef) =>
         val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
@@ -82,14 +98,15 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
           // shared definition as well would be evaluated a second time.
           val deterministicPredicates = predicates.filter(_.deterministic)
           val filteredPredicates = restoreCTEDefAttrs(deterministicPredicates.filter(_.find {
-            case s: SubqueryExpression => s.plan.find {
-              case r: CTERelationRef =>
-                // If the ref's ID does not exist in the map or if ref's corresponding precedence
-                // is bigger than that of the current CTE we are pushing predicates for, it
-                // indicates a forward reference and we should exclude this predicate.
-                !cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence
-              case _ => false
-            }.nonEmpty
+            case s: SubqueryExpression =>
+              // Definitions the subquery brings along travel with the predicate.
+              val definedInside = s.plan.collectWithSubqueries {
+                case WithCTE(_, defs) => defs.map(_.id)
+              }.flatten.toSet
+              s.plan.collectFirstWithSubqueries {
+                case r: CTERelationRef if !definedInside.contains(r.cteId) &&
+                    (!cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence) => r
+              }.nonEmpty
             case _ => false
           }.isEmpty), attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
           if (filteredPredicates.isEmpty) {
@@ -103,11 +120,11 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
           AttributeSet(restoreCTEDefAttrs(predicates.flatMap(_.references), attrMapping))
 
         cteMap.update(ref.cteId, (cteDef, precedence, newPredicates, newAttributes))
-        plan.subqueriesAll.foreach(s => gatherPredicatesAndAttributes(s, cteMap))
+        plan.subqueriesAll.foreach(s => gatherPredicatesAndAttributes(s, cteMap, duplicated))
 
       case _ =>
-        plan.children.foreach(c => gatherPredicatesAndAttributes(c, cteMap))
-        plan.subqueries.foreach(s => gatherPredicatesAndAttributes(s, cteMap))
+        plan.children.foreach(c => gatherPredicatesAndAttributes(c, cteMap, duplicated))
+        plan.subqueries.foreach(s => gatherPredicatesAndAttributes(s, cteMap, duplicated))
     }
   }
 
@@ -130,8 +147,10 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    */
   private def pushdownPredicatesAndAttributes(
       plan: LogicalPlan,
-      cteMap: CTEMap): LogicalPlan = plan.transformWithSubqueries {
-    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _) =>
+      cteMap: CTEMap,
+      duplicated: mutable.Set[Long]): LogicalPlan = plan.transformWithSubqueries {
+    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _)
+        if !duplicated.contains(id) =>
       val (_, _, newPreds, newAttrSet) = cteMap(id)
       val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
       if (!isTruePredicate(newPreds) &&
@@ -167,7 +186,8 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
         cteDef
       }
 
-    case cteRef @ CTERelationRef(cteId, _, output, _, _, _, _, _) =>
+    case cteRef @ CTERelationRef(cteId, _, output, _, _, _, _, _)
+        if !duplicated.contains(cteId) =>
       val (cteDef, _, _, newAttrSet) = cteMap(cteId)
       if (needsPruning(cteDef.child, newAttrSet)) {
         val indices = newAttrSet.toSeq.map(cteDef.output.indexOf)

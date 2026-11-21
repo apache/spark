@@ -18,7 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{Rand, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.adaptive._
@@ -31,6 +32,23 @@ abstract class CTEInlineSuiteBase
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
+
+  // ReplaceCTERefWithRepartition has replaced each materialized CTE definition with its body
+  // under a RepartitionOperation by the time optimizedPlan is available.
+  private def cteDefBodiesWithSubquery(df: DataFrame): Seq[RepartitionOperation] = {
+    df.queryExecution.optimizedPlan.collectWithSubqueries {
+      case r: RepartitionOperation
+        if r.child.collect {
+          case p if p.expressions.exists(_.exists(_.isInstanceOf[ScalarSubquery])) => p
+        }.nonEmpty => r
+    }
+  }
+
+  private def assertNoSubqueryInCTEDef(df: DataFrame): Unit = {
+    val defsWithSubquery = cteDefBodiesWithSubquery(df)
+    assert(defsWithSubquery.isEmpty,
+      s"a CTE definition absorbed a predicate with a subquery: $defsWithSubquery")
+  }
 
   test("SPARK-36447: non-deterministic CTE dedup") {
     withTempView("t") {
@@ -1101,6 +1119,145 @@ abstract class CTEInlineSuiteBase
           case r: RepartitionOperation => r
         }.nonEmpty,
         "MATERIALIZED CTE in subquery should not be inlined.")
+    }
+  }
+
+  test("SPARK-61957: predicate referencing a nested MATERIALIZED CTE stays in its scope") {
+    withTempView("t2", "small") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // Each scalar subquery keeps `c` in its own nested WithCTE, which the outer `u`
+      // cannot see. The predicate on the reference to `u` mentions `c` only inside that
+      // nested scope, so PushdownPredicatesAndPruneColumnsForCTEDef must keep it at the
+      // reference; pushing it into `u`'s definition plants a reference to `c` outside
+      // `c`'s scope, which used to crash the rule's next pass with a key-not-found error.
+      val df = sql(
+        s"""with
+           |u0 as materialized (select id from t2),
+           |u as materialized (select id, k from t2 where k < 6)
+           |select (with c as materialized (select id from small)
+           |        select count(*) from u where id > (select min(id) from c)) x,
+           |       (with c as materialized (select id from small)
+           |        select max(id) from u where id > (select min(id) from c)) y
+           |from u0 limit 1
+         """.stripMargin)
+      checkAnswer(df, Row(59, 95) :: Nil)
+
+      assertNoSubqueryInCTEDef(df)
+    }
+  }
+
+  test("SPARK-61957: nested non-deterministic CTE reference stays in its scope") {
+    withTempView("t2", "small") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // Non-deterministic CTEs referenced more than once are kept in place. This produces the
+      // nested scopes without MATERIALIZED, so the regression can run on branches before that
+      // syntax was introduced.
+      val df = sql(
+        """with u0 as (select id, rand() r from t2),
+          |     u as (select id, k, rand() r from t2 where k < 6)
+          |select (with c as (select id, rand() r from small)
+          |        select count(*) from u
+          |        where id > (select min(id) from c) and id > (select max(id) - 4 from c)) x,
+          |       (with c as (select id, rand() r from small)
+          |        select max(id) from u
+          |        where id > (select min(id) from c) and id > (select max(id) - 4 from c)) y
+          |from u0 a join u0 b on a.id = b.id limit 1
+          |""".stripMargin)
+      checkAnswer(df, Row(59, 95))
+      assertNoSubqueryInCTEDef(df)
+    }
+  }
+
+  test("SPARK-61957: reference to a later CTE in a nested subquery stays in its scope") {
+    withTempView("t2", "small") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // The scan of c1's predicate sees u in the outer scalar subquery, but must also find
+      // the later sibling c2 in the nested scalar subquery and reject the pushdown.
+      val df = sql(
+        """with u as materialized (select id, k from t2 where k < 6)
+          |select (with c1 as materialized (select id from small),
+          |             c2 as materialized (select id from small where id > 0)
+          |        select min(id) from c1
+          |        where id >= (select min(u.id) from u
+          |                     where u.id >= (select min(id) from c2))) x
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+      assertNoSubqueryInCTEDef(df)
+    }
+  }
+
+  test("SPARK-61957: deeply nested CTE reference stays in its scope") {
+    withTempView("t2", "small") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // The reference to c is one scalar subquery deeper than the small scan. It must keep
+      // the predicate on u from being pushed into u's definition, outside c's scope.
+      val df = sql(
+        """with
+          |u0 as materialized (select id from t2),
+          |u as materialized (select id, k from t2 where k < 6)
+          |select (with c as materialized (select id from small)
+          |        select count(*) from u where id > (
+          |          select min(id) from small where id >= (select min(id) from c))) x,
+          |       (with c as materialized (select id from small)
+          |        select max(id) from u where id > (
+          |          select min(id) from small where id >= (select min(id) from c))) y
+          |from u0 limit 1
+          |""".stripMargin)
+      checkAnswer(df, Row(59, 95))
+      assertNoSubqueryInCTEDef(df)
+    }
+  }
+
+  test("SPARK-61957: repeated WithCTE traversal preserves sibling predicate pushdown") {
+    withTempView("t2", "small") {
+      spark.range(100).createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // The outer reference's subqueriesAll and the recursive subquery traversal both visit
+      // the nested WithCTE. Its definitions must retain their first-visit order so that c2
+      // can accept a predicate referring to its earlier sibling c1.
+      val df = sql(
+        """with x as materialized (select id from t2)
+          |select count(*) from x
+          |where id > (select max(id) - 60 from t2 where id < (
+          |  with c1 as materialized (select id from small),
+          |       c2 as materialized (select id from t2)
+          |  select count(*) from c2 where id > (select min(id) + 50 from c1)))
+          |""".stripMargin)
+      checkAnswer(df, Row(100))
+
+      // x once, and c2 twice: the predicate stays on the reference to x and is
+      // copied into x, and both copies contain c2. c1 has no filter to push.
+      val defsWithSubquery = cteDefBodiesWithSubquery(df)
+      assert(defsWithSubquery.length == 3,
+        s"Expected x and two visits of c2: $defsWithSubquery")
+    }
+  }
+
+  test("SPARK-61957: nested CTE accepts a predicate referencing an outer CTE") {
+    withTempView("t2", "small") {
+      spark.range(100).createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // The outer x is visible where the nested n is defined, so n can accept this predicate.
+      val df = sql(
+        """with x as materialized (select id from small)
+          |select (with n as materialized (select id from t2)
+          |        select count(*) from n where id > (select min(id) + 50 from x)) z
+          |""".stripMargin)
+      checkAnswer(df, Row(49))
+
+      val defsWithSubquery = cteDefBodiesWithSubquery(df)
+      assert(defsWithSubquery.length == 1,
+        s"Expected the nested CTE definition to absorb the subquery predicate: $defsWithSubquery")
     }
   }
 
