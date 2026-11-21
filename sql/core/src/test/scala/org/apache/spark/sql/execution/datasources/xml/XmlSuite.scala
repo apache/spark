@@ -3679,7 +3679,7 @@ class XmlSuite
   }
 
   test("validate XML Options") {
-    assert(XmlOptions.getAllOptions.size == 33)
+    assert(XmlOptions.getAllOptions.size == 34)
     // Please add validation on any new XML options here
     assert(XmlOptions.isValidOption("rowTag"))
     assert(XmlOptions.isValidOption("rootTag"))
@@ -3711,6 +3711,7 @@ class XmlSuite
     assert(XmlOptions.isValidOption("prefersDecimal"))
     assert(XmlOptions.isValidOption("validateName"))
     assert(XmlOptions.isValidOption("singleVariantColumn"))
+    assert(XmlOptions.isValidOption("variantPrimitivesAsString"))
     assert(XmlOptions.isValidOption("useLegacyXMLParser"))
     // Alternative options
     assert(XmlOptions.isValidOption("encoding"))

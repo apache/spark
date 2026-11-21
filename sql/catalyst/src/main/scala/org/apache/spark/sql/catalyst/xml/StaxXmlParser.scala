@@ -1400,7 +1400,8 @@ object StaxXmlParser {
   /**
    * Convert an XML Character value `s` into a variant value and append the result to `builder`.
    * The result can only be one of a variant boolean/long/decimal/string. Anything other than
-   * the supported types will be appended to the Variant builder as a string.
+   * the supported types will be appended to the Variant builder as a string. When
+   * `variantPrimitivesAsString` is enabled, every non-null value is appended as a string.
    *
    * Floating point types (double, float) are not considered to avoid precision loss.
    */
@@ -1421,9 +1422,9 @@ object StaxXmlParser {
       return
     }
 
-    // Skip type inference when the user has disabled it via inferSchema=false, gated by
-    // spark.sql.xml.variant.respectInferSchema so existing workloads keep inferring by default.
-    if (!options.inferSchema && options.respectVariantInferSchema) {
+    // Skip type inference when `variantPrimitivesAsString` is enabled. See
+    // `XmlOptions.variantPrimitivesAsString` for how it defaults when the option is not set.
+    if (options.variantPrimitivesAsString) {
       builder.appendString(value)
       return
     }

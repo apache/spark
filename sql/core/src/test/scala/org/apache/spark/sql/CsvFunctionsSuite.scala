@@ -980,44 +980,35 @@ class CsvFunctionsSuite extends SharedSparkSession {
       Seq(Row(s"""{null, $largeInput}""")))
   }
 
-  test("from_csv with variant: variantRespectInferSchema controls scalar inference") {
-    // from_csv shares the CSV parser, so it observes inferSchema only when
-    // variantRespectInferSchema is enabled: with inferSchema off the variant scalar stays a
-    // string, otherwise it is inferred. Without the flag, from_csv ignores inferSchema entirely.
-    val df = Seq("100").toDF("value")
+  test("from_csv with variant: variantPrimitivesAsString keeps primitives as strings") {
+    val df = Seq("0001,true,").toDF("value")
+    val schema = StructType.fromDDL("v variant")
 
-    // With variantRespectInferSchema enabled and inferSchema off the scalar is preserved as a
-    // string. inferSchema defaults to false, so setting the flag alone behaves the same.
-    for (options <- Seq(
-        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
-          "inferSchema" -> "false"),
-        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true"))) {
+    // The option keeps every non-null value as a string regardless of inferSchema.
+    for (extra <- Seq(Map.empty[String, String], Map("inferSchema" -> "true"))) {
+      val options = Map("singleVariantColumn" -> "v", "variantPrimitivesAsString" -> "true") ++
+        extra
       checkAnswer(
-        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
-        Seq(Row("""{{"_c0":"100"}}""")))
+        df.select(from_csv($"value", schema, options).cast("string")),
+        Seq(Row("""{{"_c0":"0001","_c1":"true","_c2":null}}""")))
+    }
+    // Without it, values are inferred regardless of inferSchema.
+    for (extra <- Seq(Map.empty[String, String], Map("inferSchema" -> "false"))) {
+      checkAnswer(
+        df.select(from_csv($"value", schema, Map("singleVariantColumn" -> "v") ++ extra)
+          .cast("string")),
+        Seq(Row("""{{"_c0":1,"_c1":true,"_c2":null}}""")))
     }
 
-    // Without variantRespectInferSchema, the scalar is inferred regardless of inferSchema.
-    // Both the default and explicitly configured inferSchema setting should result in inferred
-    // scalar values. Values should also be inferred when both options are enabled.
-    for (options <- Seq(
-        Map("singleVariantColumn" -> "v"),
-        Map("singleVariantColumn" -> "v", "inferSchema" -> "true"),
-        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
-          "inferSchema" -> "true"))) {
-      checkAnswer(
-        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
-        Seq(Row("""{{"_c0":100}}""")))
-    }
-
-    // Explicit VariantType columns should behave the same. schema_of_variant tells the string
-    // "100" from the inferred long.
+    // Explicit VariantType columns behave the same. The schema matches the record's three
+    // fields so that the parse takes the normal path rather than malformed-record recovery.
     checkAnswer(
-      df.selectExpr("schema_of_variant(from_csv(value, 'a variant', " +
-        "map('variantRespectInferSchema', 'true', 'inferSchema', 'false')).a)"),
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant, b variant, c variant', " +
+        "map('variantPrimitivesAsString', 'true')).a)"),
       Seq(Row("STRING")))
     checkAnswer(
-      df.selectExpr("schema_of_variant(from_csv(value, 'a variant').a)"),
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant, b variant, c variant', " +
+        "map('variantPrimitivesAsString', 'false')).a)"),
       Seq(Row("BIGINT")))
   }
 

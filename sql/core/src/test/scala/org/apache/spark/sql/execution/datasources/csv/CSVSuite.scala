@@ -3498,7 +3498,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
-    assert(CSVOptions.isValidOption("variantRespectInferSchema"))
+    assert(CSVOptions.isValidOption("variantPrimitivesAsString"))
     // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -4011,122 +4011,90 @@ abstract class CSVSuite
     }
   }
 
-  test("csv variant retains scalars as strings when inferSchema is disabled") {
+  test("csv variant keeps primitives as strings with variantPrimitivesAsString") {
     withTempPath { path =>
       val data =
-        """field 1,field2
-          |100,1.1
-          |2000-01-01,2000-01-01 01:02:03
-          |,true
-          |1e9,hello,extra
-          |missing
+        """0001,+5,1e9,True
+          |2000-01-01,2000-01-01 01:02:03,n/a,
           |""".stripMargin
       Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
 
       def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
-        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        val allOptions = options ++ Map("singleVariantColumn" -> "v", "nullValue" -> "n/a")
         checkAnswer(
           spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
-          expected.map(Row(_))
-        )
+          expected.map(Row(_)))
       }
 
+      val asStrings = Seq(
+        """{"_c0":"0001","_c1":"+5","_c2":"1e9","_c3":"True"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03","_c2":null,"_c3":null}""")
       // A small partition size ensures each value is parsed independently and would otherwise get
-      // its type inferred.
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        // With variantRespectInferSchema on and inferSchema off, scalar values parse as string,
-        // while the null value (empty token) parses as a variant null. inferSchema defaults to
-        // false, so passing it explicitly and omitting it behave the same.
-        for (opts <- Seq(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
-            Map("variantRespectInferSchema" -> "true"))) {
-          checkSingleVariant(opts,
-            """{"_c0":"field 1","_c1":"field2"}""",
-            """{"_c0":"100","_c1":"1.1"}""",
-            """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
-            """{"_c0":null,"_c1":"true"}""",
-            """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
-            """{"_c0":"missing"}""")
-        }
+      // its type inferred. The time parser policy is set explicitly because the inferred
+      // timestamp is rendered differently under CORRECTED and LEGACY.
+      for ((policy, timestamp) <- Seq(
+          "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
+          "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
+        val inferred = Seq(
+          """{"_c0":1,"_c1":5,"_c2":1000000000,"_c3":true}""",
+          s"""{"_c0":"2000-01-01","_c1":$timestamp,"_c2":null,"_c3":null}""")
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          // The option keeps every non-null value as a string regardless of inferSchema. Null and
+          // nullValue tokens remain variant nulls.
+          for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
+            checkSingleVariant(
+              Map("variantPrimitivesAsString" -> "true") ++ inferSchema.map("inferSchema" -> _),
+              asStrings: _*)
+          }
 
-        // Explicitly enabling inference or disabling variantRespectInferSchema causes types
-        // to be inferred. Timestamps should be inferred correctly for all parsing modes.
-        for ((policy, timestampField) <- Seq(
-            "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
-            "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
-          withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-            // Explicitly enabling inference infers types even with variantRespectInferSchema on.
-            checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
-              """{"_c0":"field 1","_c1":"field2"}""",
-              """{"_c0":100,"_c1":1.1}""",
-              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
-              """{"_c0":null,"_c1":true}""",
-              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
-              """{"_c0":"missing"}""")
-
-            // variantRespectInferSchema defaults to false, so scalar types are inferred regardless
-            // of inferSchema.
-            checkSingleVariant(Map("inferSchema" -> "false"),
-              """{"_c0":"field 1","_c1":"field2"}""",
-              """{"_c0":100,"_c1":1.1}""",
-              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
-              """{"_c0":null,"_c1":true}""",
-              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
-              """{"_c0":"missing"}""")
+          // Without the option, values are inferred regardless of inferSchema.
+          for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
+            checkSingleVariant(inferSchema.map("inferSchema" -> _).toMap, inferred: _*)
           }
         }
       }
 
-      // Works with a header too: field names come from the header, values stay strings.
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        checkSingleVariant(
-          Map("header" -> "true", "variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
-          """{"field 1":"100","field2":"1.1"}""",
-          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03"}""",
-          """{"field 1":null,"field2":"true"}""",
-          """{"field 1":"1e9","field2":"hello"}""",
-          """{"field 1":"missing"}""")
-      }
-
-      // Values whose textual form is lost by type inference: leading zeros ("0001" -> 1), a leading
-      // sign ("+5" -> 5), and boolean case ("True" -> true). With retention on they are kept
-      // verbatim as strings; with it off they are inferred (the surprising default behavior).
-      val lossyData =
-        """0001,+5
-          |True,007
-          |""".stripMargin
-      Files.write(path.toPath, lossyData.getBytes(StandardCharsets.UTF_8))
-
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10") {
-        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
-          """{"_c0":"0001","_c1":"+5"}""",
-          """{"_c0":"True","_c1":"007"}""")
-
-        checkSingleVariant(Map("inferSchema" -> "false"),
-          """{"_c0":1,"_c1":5}""",
-          """{"_c0":true,"_c1":7}""")
-      }
+      // Field names from the header are not affected; values stay strings.
+      Files.write(path.toPath, "id,flag\n0001,true\n".getBytes(StandardCharsets.UTF_8))
+      checkSingleVariant(Map("header" -> "true", "variantPrimitivesAsString" -> "true"),
+        """{"flag":"true","id":"0001"}""")
     }
   }
 
-  test("csv variant retains explicit schema with variantRespectInferSchema") {
-    // Explicit schemas with VariantType columns share a converter with singleVariantColumn,
-    // so retention applies there too. Check and assert the type using schema_of_variant.
+  test("csv variant columns keep primitives as strings with variantPrimitivesAsString") {
+    // Explicit schemas with VariantType columns share a converter with singleVariantColumn, so
+    // the option applies there too. Check the type using schema_of_variant.
     withTempPath { path =>
-      Files.write(path.toPath, "1000,0001,'0001'\n".getBytes(StandardCharsets.UTF_8))
-      val schema = "c1 variant, c2 variant, c3 variant"
-      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)")
+      Files.write(path.toPath, "1000,0001,true,\n".getBytes(StandardCharsets.UTF_8))
+      val schema = "c1 variant, c2 variant, c3 variant, c4 variant"
+      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)",
+        "schema_of_variant(c4)")
 
-      // With variantRespectInferSchema values should be treated as string
       val retained = spark.read.schema(schema)
-        .options(Map("inferSchema" -> "false", "variantRespectInferSchema" -> "true"))
+        .option("variantPrimitivesAsString", "true")
         .csv(path.getCanonicalPath)
-      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING"))
+      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING", "VOID"))
 
-      // Without variantRespectInferSchema values should be inferred. Integral values are
-      // inferred as BIGINT by default.
-      val inferred = spark.read.schema(schema).csv(path.getCanonicalPath)
-      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "STRING"))
+      val inferred = spark.read.schema(schema)
+        .option("variantPrimitivesAsString", "false")
+        .csv(path.getCanonicalPath)
+      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "BOOLEAN", "VOID"))
+    }
+  }
+
+  test("csv variantPrimitivesAsString must be a boolean") {
+    withTempPath { path =>
+      Files.write(path.toPath, "1\n".getBytes(StandardCharsets.UTF_8))
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read
+            .options(Map("singleVariantColumn" -> "v", "variantPrimitivesAsString" -> "yes"))
+            .csv(path.getCanonicalPath).collect()
+        },
+        condition = "_LEGACY_ERROR_TEMP_2147",
+        parameters = Map("paramName" -> "variantPrimitivesAsString"))
     }
   }
 

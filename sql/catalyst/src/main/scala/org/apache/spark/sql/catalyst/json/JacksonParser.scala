@@ -158,7 +158,10 @@ class JacksonParser(
     }
     try {
       val v = VariantBuilder.parseJson(
-        parser, variantAllowDuplicateKeys, variantValidateUnicodeInJsonParsing)
+        parser,
+        variantAllowDuplicateKeys,
+        variantValidateUnicodeInJsonParsing,
+        options.variantPrimitivesAsString)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
