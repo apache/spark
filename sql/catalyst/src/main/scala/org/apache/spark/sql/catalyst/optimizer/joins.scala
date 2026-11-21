@@ -97,6 +97,10 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
+    // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
+    // They stay in a filter above all the joins, which takes the place of the top join or filter.
+    // `CombineFilters` does not combine a condition that can fail from a filter above into it.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       // The first join that covers the references of a condition can be below the filter or the
