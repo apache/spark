@@ -147,6 +147,49 @@ def _validate_approx_quantile_relative_error(relativeError: Any) -> float:
     return float(relativeError)
 
 
+def _validate_random_split_weights(weights: Any) -> List[float]:
+    """
+    Validate the ``weights`` argument of ``DataFrame.randomSplit``, shared by the classic and
+    Connect implementations so both stay in sync. Returns it as a ``list`` of ``float``, since
+    classic passes it to a JVM method that expects ``Double`` elements.
+    """
+    import numbers
+
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    # Read the weights once, so that a one-shot iterable is not exhausted by the checks below.
+    weights = list(weights)
+    for w in weights:
+        # numbers.Real also covers the NumPy scalars, which Connect has always accepted.
+        if isinstance(w, bool) or not isinstance(w, numbers.Real):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "weights",
+                    "expected_type": "list[float, int]",
+                    "arg_type": type(w).__name__,
+                },
+            )
+    for w in weights:
+        if w < 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "weights", "arg_value": str(w)},
+            )
+    total = sum(weights)
+    if total <= 0:
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "sum(weights)", "arg_value": str(total)},
+        )
+    try:
+        return [float(w) for w in weights]
+    except OverflowError:
+        # An int beyond the range of a double. The weights are normalized anyway, so dividing
+        # them by their exact sum first keeps their proportions, as Connect always did.
+        return [w / total for w in weights]
+
+
 class DataFrame:
     """A distributed collection of data grouped into named columns.
 
@@ -2335,7 +2378,7 @@ class DataFrame:
         Parameters
         ----------
         weights : list
-            list of doubles as weights with which to split the :class:`DataFrame`.
+            list of floats or ints as weights with which to split the :class:`DataFrame`.
             Weights will be normalized if they don't sum up to 1.0.
         seed : int, optional
             The seed for sampling.

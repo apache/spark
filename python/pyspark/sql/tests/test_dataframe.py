@@ -24,6 +24,7 @@ import tempfile
 import unittest
 import warnings
 from contextlib import redirect_stdout
+from decimal import Decimal
 
 from pyspark.errors import (
     AnalysisException,
@@ -819,16 +820,53 @@ class DataFrameTestsMixin:
         self.assertEqual(1, len(set(cnts)))
 
     def test_random_split_int_weights(self):
-        # SPARK-62073: integer weights split the rows like the equal float weights.
+        # SPARK-62073: int weights, including ones that Py4J sends as a java.lang.Long, and a mix
+        # of int and float weights split the rows like the equal float weights.
         df = self.spark.range(100)
-        int_splits = df.randomSplit([1, 2], 24)
-        float_splits = df.randomSplit([1.0, 2.0], 24)
-        self.assertEqual(len(int_splits), 2)
-        self.assertEqual(
-            [sorted(row.id for row in split.collect()) for split in int_splits],
-            [sorted(row.id for row in split.collect()) for split in float_splits],
+
+        def split_ids(weights):
+            return [sorted(row.id for row in s.collect()) for s in df.randomSplit(weights, 24)]
+
+        expected = split_ids([1.0, 2.0])
+        self.assertEqual(len(expected), 2)
+        self.assertEqual(sum(len(ids) for ids in expected), 100)
+        for weights in ([1, 2], [2**40, 2**41], [1, 2.0]):
+            self.assertEqual(split_ids(weights), expected)
+        # An int beyond the range of a double keeps its proportion.
+        self.assertEqual(split_ids([10**400, 10**400]), split_ids([1.0, 1.0]))
+
+    def test_random_split_invalid_weights(self):
+        # SPARK-62073: classic and Spark Connect validate the weights in one place.
+        df = self.spark.range(10)
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.randomSplit([-1, 2], 24)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "weights", "arg_value": "-1"},
         )
-        self.assertEqual(sum(split.count() for split in int_splits), 100)
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.randomSplit([0, 0], 24)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_POSITIVE",
+            messageParameters={"arg_name": "sum(weights)", "arg_value": "0"},
+        )
+
+        for weights, arg_type in (([Decimal(1), Decimal(2)], "Decimal"), ([True, 1.0], "bool")):
+            with self.assertRaises(PySparkTypeError) as pe:
+                df.randomSplit(weights, 24)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "weights",
+                    "expected_type": "list[float, int]",
+                    "arg_type": arg_type,
+                },
+            )
 
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
