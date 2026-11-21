@@ -220,6 +220,10 @@ private[spark] class TaskSchedulerImpl(
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
 
+  // Group exclusion recovery candidates by resource profile to avoid rebuilding host maps.
+  private val resourceProfileIdToHostToExecutors =
+    new HashMap[Int, HashMap[String, HashSet[String]]]
+
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   protected val executorIdToHost = new HashMap[String, String]
@@ -582,6 +586,9 @@ private[spark] class TaskSchedulerImpl(
       }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
+        val executorsByHost = resourceProfileIdToHostToExecutors
+          .getOrElseUpdate(o.resourceProfileId, new HashMap[String, HashSet[String]])
+        executorsByHost.getOrElseUpdate(o.host, new HashSet[String]) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
@@ -679,7 +686,15 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
+          val taskRpId = taskSet.taskSet.resourceProfileId
+          val defaultRpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+          // Task-only profiles can reuse default executors without dynamic allocation.
+          val executorRpId =
+            if (sc.resourceProfileManager.canBeScheduled(taskRpId, defaultRpId)) defaultRpId
+            else taskRpId
+          val hostToExecutorsForTaskSet = resourceProfileIdToHostToExecutors
+            .getOrElse(executorRpId, new HashMap[String, HashSet[String]])
+          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutorsForTaskSet).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
               // schedule a task within the timeout will abort the taskSet if we were unable to
@@ -695,8 +710,9 @@ private[spark] class TaskSchedulerImpl(
               // If there are no idle executors and dynamic allocation is enabled, then we would
               // notify ExecutorAllocationManager to allocate more executors to schedule the
               // unschedulable tasks else we will abort immediately.
-              executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
-                case Some ((executorId, _)) =>
+              hostToExecutorsForTaskSet.valuesIterator.flatMap(_.iterator)
+                .find(exec => !isExecutorBusy(exec)) match {
+                case Some(executorId) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     healthTrackerOpt.foreach(blt => blt.killExcludedIdleExecutor(executorId))
                     updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
@@ -1176,6 +1192,16 @@ private[spark] class TaskSchedulerImpl(
         if (hosts.isEmpty) {
           hostsByRack -= rack
         }
+      }
+    }
+
+    for {
+      executorsByHost <- resourceProfileIdToHostToExecutors.values
+      executors <- executorsByHost.get(host)
+    } {
+      executors -= executorId
+      if (executors.isEmpty) {
+        executorsByHost -= host
       }
     }
 
