@@ -698,4 +698,51 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
   }
+
+  test("SPARK-60843: roundTo* bound the integral digits before expanding a decimal") {
+    val roundings = Seq(
+      ("TINYINT", (d: Decimal) => d.roundToByte().toLong),
+      ("SMALLINT", (d: Decimal) => d.roundToShort().toLong),
+      ("INT", (d: Decimal) => d.roundToInt().toLong),
+      ("BIGINT", (d: Decimal) => d.roundToLong()))
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // 1 - (-2147483647) integral digits overflows Int.
+      Seq(
+        ("1E+2147483647", "DECIMAL(1,-2147483647)"),
+        ("-1E+2147483647", "DECIMAL(1,-2147483647)")).foreach { case (str, sourceType) =>
+        val d = Decimal(BigDecimal(str))
+        checkCompact(d, false)
+        roundings.foreach { case (targetType, round) =>
+          checkError(
+            exception = intercept[SparkArithmeticException](round(d)),
+            condition = "CAST_OVERFLOW",
+            parameters = Map(
+              "value" -> s"${str}BD",
+              "sourceType" -> s"\"${sourceType}\"",
+              "targetType" -> s"\"${targetType}\"",
+              "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+        }
+      }
+      // Zero has no integral digits whatever its scale.
+      val zero = Decimal(BigDecimal("0E+100"))
+      checkCompact(zero, false)
+      assert(zero.scale === -100)
+      roundings.foreach { case (targetType, round) =>
+        assert(round(zero) === 0L, targetType)
+      }
+      // 19 integral digits still fit in a Long.
+      Seq(("9.22E+18", 9220000000000000000L), ("-9.22E+18", -9220000000000000000L))
+        .foreach { case (str, expected) =>
+          val d = Decimal(BigDecimal(str))
+          checkCompact(d, false)
+          assert(d.roundToLong() === expected, str)
+        }
+    }
+    Seq(("9223372036854775807.9", Long.MaxValue), ("-9223372036854775808.9", Long.MinValue))
+      .foreach { case (str, expected) =>
+        val d = Decimal(BigDecimal(str))
+        checkCompact(d, false)
+        assert(d.roundToLong() === expected, str)
+      }
+  }
 }
