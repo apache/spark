@@ -24,6 +24,8 @@ import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 
+import org.roaringbitmap.RoaringBitmap
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
@@ -33,7 +35,6 @@ import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AccumulatorContext, Utils}
 import org.apache.spark.util.Utils.weakIntern
-import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A mutable representation of a live entity in Spark (jobs, stages, tasks, et al). Every live
@@ -74,8 +75,9 @@ private class LiveJob(
   var completedTasks = 0
   var failedTasks = 0
 
-  // Holds both the stage ID and the task index, packed into a single long value.
-  val completedIndices = new OpenHashSet[Long]()
+  // Keep task indices exact across retries without retaining one hash-table slot per task.
+  private val completedIndices = new HashMap[Int, RoaringBitmap]()
+  private var numCompletedIndices = 0
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -89,6 +91,13 @@ private class LiveJob(
   var completedStages: Set[Int] = Set()
   var activeStages = 0
   var failedStages = 0
+
+  def addCompletedIndex(stageId: Int, taskIndex: Int): Unit = {
+    val indices = completedIndices.getOrElseUpdate(stageId, new RoaringBitmap())
+    if (indices.checkedAdd(taskIndex)) {
+      numCompletedIndices += 1
+    }
+  }
 
   override protected def doUpdate(): Any = {
     val info = new v1.JobData(
@@ -107,7 +116,7 @@ private class LiveJob(
       skippedTasks,
       failedTasks,
       killedTasks,
-      completedIndices.size,
+      numCompletedIndices,
       activeStages,
       completedStages.size,
       skippedStages.size,
@@ -452,7 +461,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
   var activeTasks = 0
   var completedTasks = 0
   var failedTasks = 0
-  val completedIndices = new OpenHashSet[Int]()
+  val completedIndices = new RoaringBitmap()
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -493,7 +502,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       numCompleteTasks = completedTasks,
       numFailedTasks = failedTasks,
       numKilledTasks = killedTasks,
-      numCompletedIndices = completedIndices.size,
+      numCompletedIndices = completedIndices.getCardinality,
 
       submissionTime = info.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime =

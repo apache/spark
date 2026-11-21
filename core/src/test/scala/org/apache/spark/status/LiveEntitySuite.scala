@@ -19,11 +19,30 @@ package org.apache.spark.status
 
 import java.util.Arrays
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorMetadata, CollectionAccumulator}
+import org.apache.spark.util.kvstore.InMemoryStore
 
 class LiveEntitySuite extends SparkFunSuite {
+
+  test("job completed task indices deduplicate retries independently for each stage") {
+    val store = new ElementTrackingStore(new InMemoryStore(), new SparkConf(false))
+    try {
+      val job = new LiveJob(1, "job", None, None, Seq(1, 2), None, Seq.empty, 100000, None)
+      (0 until 50000).foreach { index =>
+        job.addCompletedIndex(1, index)
+        job.addCompletedIndex(1, index)
+      }
+      job.addCompletedIndex(2, 0)
+      job.addCompletedIndex(2, Int.MaxValue)
+      job.addCompletedIndex(2, Int.MaxValue)
+      job.write(store, 1L)
+      assert(store.read(classOf[JobDataWrapper], 1).info.numCompletedIndices == 50002)
+    } finally {
+      store.close()
+    }
+  }
 
   test("partition seq") {
     val seq = new RDDPartitionSeq()
