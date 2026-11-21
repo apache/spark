@@ -867,7 +867,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             where N represents the number of elements.
 
             .. versionchanged:: 3.4.0
-               Supported including arbitary integers.
+               Supported including arbitrary integers.
 
         Examples
         --------
@@ -1002,7 +1002,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             where N represents the number of elements.
 
             .. versionchanged:: 3.4.0
-               Supported including arbitary integers.
+               Supported including arbitrary integers.
 
         numeric_only : bool, default False
              Include only float, int, boolean columns.
