@@ -266,6 +266,52 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(result, correctAnswer)
   }
 
+  test("SPARK-58383: ReplaceExceptWithFilter should not bind the right condition by name") {
+    val table = LocalRelation(Seq($"id".int, $"val".int))
+    // The left side aliases `val` to `id`, which collides with the name of the base column that
+    // the right side's filter references. The filter is not expressible over the left output, so
+    // the rewrite must be skipped instead of binding the condition to the alias.
+    val basePlan = table.select($"val".as("id"))
+    val otherPlan = table.where($"id" === 1).select($"val".as("v"))
+    val except = Except(basePlan, otherPlan, false)
+    val result = Optimize.execute(except.analyze)
+    val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
+      a1 <=> a2 }.reduce( _ && _)
+    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
+    comparePlans(result, correctAnswer)
+  }
+
+  test("SPARK-58383: ReplaceExceptWithFilter should not bind to a same-named left alias") {
+    val table = LocalRelation(Seq($"a".int, $"b".int))
+    // The right filter reads the base column `b`, which the left output does not carry. The left
+    // output only has an unrelated alias named `b`, so the anti-join must be kept.
+    val basePlan = table.where($"b" >= 0).select(($"a" % 10).as("b"))
+    val otherPlan = table.where($"b" > 3).select(($"a" % 10).as("c"))
+    val except = Except(basePlan, otherPlan, false)
+    val result = Optimize.execute(except.analyze)
+    val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
+      a1 <=> a2 }.reduce( _ && _)
+    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
+    comparePlans(result, correctAnswer)
+  }
+
+  test("SPARK-58383: ReplaceExceptWithFilter binds the right condition through left aliases") {
+    val attributeA = $"a".int
+    val attributeB = $"b".int
+    val table = LocalRelation(Seq(attributeA, attributeB))
+    // The aliases swap the column names, so the base column `a` reaches the output named `b`.
+    val basePlan = table.select(attributeA.as("b"), attributeB.as("a"))
+    val otherPlan = table.where(attributeA > 1).select(attributeA.as("b"), attributeB.as("a"))
+    val except = Except(basePlan, otherPlan, false)
+    val result = Optimize.execute(except.analyze)
+    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+      Filter(Not(Coalesce(Seq(basePlan.output.head > 1, Literal.FalseLiteral))),
+        basePlan)).analyze
+    comparePlans(result, correctAnswer)
+  }
+
   test("SPARK-46763: ReplaceDeduplicateWithAggregate non-grouping keys with duplicate attributes") {
     val a = $"a".int
     val b = $"b".int

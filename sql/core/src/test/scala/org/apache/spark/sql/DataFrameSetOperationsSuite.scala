@@ -91,6 +91,26 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     checkAnswer(df1.select("b").except(df2.select("c")), Row(2) :: Nil)
   }
 
+  test("SPARK-58383: except under a correlated scalar subquery") {
+    withTempView("orders", "products") {
+      Seq((1, 10), (2, 20), (3, 35)).toDF("order_id", "price").createOrReplaceTempView("orders")
+      Seq(15, 25, 40, 41).toDF("price").createOrReplaceTempView("products")
+      // Decorrelation appends the outer `o.price` to both EXCEPT branches, and the inner `p.price`
+      // that the right filter reads shares its name, so ReplaceExceptWithFilter must not bind it.
+      val query =
+        """
+          |SELECT o.order_id, (SELECT count(*) FROM (
+          |  (SELECT p.price % 10 FROM products p WHERE p.price > o.price)
+          |  EXCEPT
+          |  (SELECT p.price % 10 FROM products p WHERE p.price > o.price + 5))) AS n
+          |FROM orders o
+        """.stripMargin
+      withSQLConf(SQLConf.DECORRELATE_SET_OPS_ENABLED.key -> "true") {
+        checkAnswer(sql(query), Row(1, 0L) :: Row(2, 1L) :: Row(3, 1L) :: Nil)
+      }
+    }
+  }
+
   test("except distinct - SQL compliance") {
     val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
     val df_right = Seq(1, 3).toDF("id")
