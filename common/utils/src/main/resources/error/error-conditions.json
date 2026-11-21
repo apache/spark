@@ -2410,12 +2410,17 @@
       },
       "DUPLICATE_SELECTED_PREDICATE" : {
         "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+          "`selectLookupPredicates()` returned the position <position>, of the predicate <predicate>, more than once."
         ]
       },
       "INVALID_INPUT_ORDINAL" : {
         "message" : [
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "INVALID_SELECTED_PREDICATE_POSITION" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the position <position>, but the valid positions are from 0 to <maxPosition>."
         ]
       },
       "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
@@ -2426,6 +2431,11 @@
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "MODIFIED_CANDIDATES" : {
+        "message" : [
+          "`selectLookupPredicates()` modified its input array of candidates at the position <position>, which Spark offered as <predicate>. It must leave the array as Spark offered it, because the returned positions refer to the offered order."
         ]
       },
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
@@ -2446,11 +2456,6 @@
       "UNKNOWN_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field>, which matches no table column by name and data type."
-        ]
-      },
-      "UNOFFERED_SELECTED_PREDICATE" : {
-        "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
         ]
       }
     },
