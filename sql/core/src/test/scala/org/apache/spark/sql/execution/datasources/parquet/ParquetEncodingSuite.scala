@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -26,8 +27,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.simple.SimpleGroup
-import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.MessageTypeParser
@@ -204,6 +206,54 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
           val actual = spark.read.parquet(path).collect()
           assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
+        }
+      }
+    }
+  }
+
+  test("SPARK-60320: DELTA_BYTE_ARRAY values in uncompressed pages") {
+    // With vectored IO, a column chunk is read into a slice of a larger buffer, so the pages of an
+    // uncompressed column chunk start at a non-zero array offset. A compressed page is
+    // decompressed into a buffer of its own.
+    withMemoryModes { offHeapMode =>
+      withSQLConf(
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+          SQLConf.PARQUET_COMPRESSION.key -> "uncompressed",
+          ParquetInputFormat.HADOOP_VECTORED_IO_ENABLED -> "true") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.range(0, 2000, 1, 1)
+            .selectExpr("id", "CAST(id AS DOUBLE) AS x", "CAST(id AS STRING) AS s",
+              "CAST(id AS DECIMAL(38, 2)) AS d")
+          df.write
+            .option(ParquetOutputFormat.WRITER_VERSION, "PARQUET_2_0")
+            .option(ParquetOutputFormat.ENABLE_DICTIONARY, "false")
+            // Small pages, checked often: `x` takes 8 bytes a value and `s` and `d` far fewer, so
+            // the pages of `x` hold fewer rows, and a filter on `x` skips rows inside their pages.
+            .option(ParquetOutputFormat.PAGE_SIZE, "256")
+            .option("parquet.page.size.row.check.min", "4")
+            .option("parquet.page.size.row.check.max", "4")
+            .parquet(path)
+
+          val file = new File(path).listFiles().filter(_.getName.endsWith(".parquet")).head
+          val in = HadoopInputFile.fromPath(new Path(file.getCanonicalPath),
+            spark.sessionState.newHadoopConf())
+          Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+            val chunks = reader.getFooter.getBlocks.asScala.flatMap(_.getColumns.asScala)
+              .filter(c => Set("s", "d").contains(c.getPath.toDotString))
+            assert(chunks.nonEmpty)
+            chunks.foreach { chunk =>
+              assert(chunk.getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+              assert(chunk.getCodec == CompressionCodecName.UNCOMPRESSED)
+            }
+          }
+
+          checkAnswer(spark.read.parquet(path), df)
+          // Skips the first rows of a page of `s`, then reads values whose prefix is taken from
+          // the last skipped one.
+          checkAnswer(spark.read.parquet(path).where("x >= 1050 AND x < 1060"),
+            df.where("x >= 1050 AND x < 1060"))
         }
       }
     }

@@ -123,7 +123,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       if (prefixLength != 0) {
         arrayData.appendBytes(prefixLength, previous.array(), previous.position());
       }
-      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
+      arrayData.appendBytes(suffixLength, suffixArray, suffix.arrayOffset() + suffix.position());
       c.putArray(rowId + i, offset, length);
       previous = arrayData.getByteBuffer(offset, length);
       currentRow++;
@@ -212,7 +212,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       if (prefixLength != 0) {
         arrayData.appendBytes(prefixLength, previous.array(), previous.position());
       }
-      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
+      arrayData.appendBytes(suffixLength, suffixArray, suffix.arrayOffset() + suffix.position());
       previous = arrayData.getByteBuffer(0, length);
       currentRow++;
 
