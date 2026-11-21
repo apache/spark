@@ -1015,6 +1015,22 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
   }
 
+  test("SPARK-61970: update with a condition on a CHAR field of a struct") {
+    createTable("pk INT NOT NULL, s STRUCT<c: CHAR(3)>, id INT, dep STRING")
+
+    append("pk INT NOT NULL, s STRUCT<c: STRING>, id INT, dep STRING",
+      """{ "pk": 1, "s": { "c": "a" }, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "s": { "c": "x" }, "id": 2, "dep": "software" }
+        |{ "pk": 3, "s": { "c": "b" }, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE s.c = 'a' OR s.c IN ('b', 'c')")
+
+    checkAnswer(
+      sql(s"SELECT pk, id FROM $tableNameAsString"),
+      Row(1, -1) :: Row(2, 2) :: Row(3, -1) :: Nil)
+  }
+
   test("SPARK-61462: update with a condition on a CHAR column") {
     createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
 
