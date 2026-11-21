@@ -16,10 +16,12 @@
 #
 
 import array
+import calendar
 import datetime
 import decimal
 import functools
 import math
+import time
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -876,7 +878,17 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
-                    return value.astimezone(datetime.timezone.utc)
+                    try:
+                        return value.astimezone(datetime.timezone.utc)
+                    except (ValueError, OverflowError):
+                        if value.tzinfo is not None:
+                            raise
+                    # astimezone() probes up to a day away, past datetime.min/max (SPARK-61648).
+                    tt = value.timetuple()
+                    offset = calendar.timegm(tt) - int(time.mktime(tt))
+                    return value.replace(
+                        tzinfo=datetime.timezone(datetime.timedelta(seconds=offset))
+                    )
 
             return convert_timestamp
 
