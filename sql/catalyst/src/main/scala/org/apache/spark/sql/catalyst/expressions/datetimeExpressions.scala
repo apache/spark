@@ -25,7 +25,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -507,10 +507,33 @@ case class CurrentBatchTimestamp(
 }
 
 /**
+ * A date arithmetic expression that raises its overflow error in every evaluation mode, so it
+ * keeps its own query context when it replaces an expression without one. For example, with ANSI
+ * mode off, `d + 1` and `d1 - d2` are first analyzed into an `Add` and a `Subtract`, which have no
+ * query context as they cannot fail, and the expressions that replace them should still point to
+ * them in their errors.
+ */
+trait DateArithmeticQueryContext extends SupportQueryContext {
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
+
+  override def copyTagsFrom(other: Expression): Unit = {
+    val ownContext = queryContext
+    super.copyTagsFrom(other)
+    if (queryContext.isEmpty) {
+      queryContext = ownContext
+    }
+  }
+}
+
+/**
  * Adds a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
+  usage = """_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.
+      If the result is earlier than the minimum DATE `-5877641-06-23` or later than the maximum
+      DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of
+      `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * start_date - The starting date.
@@ -526,7 +549,7 @@ case class CurrentBatchTimestamp(
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateAdd(startDate: Expression, days: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with DateArithmeticQueryContext {
   override def nullIntolerant: Boolean = true
   override def left: Expression = startDate
   override def right: Expression = days
@@ -538,13 +561,14 @@ case class DateAdd(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] + d.asInstanceOf[Number].intValue()
+    DateTimeUtils.dateAddDays(
+      start.asInstanceOf[Int], d.asInstanceOf[Number].intValue(), getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd + $d;"""
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val errorContext = getContextOrNullCode(ctx)
+    defineCodeGen(ctx, ev, (sd, d) => s"$dtu.dateAddDays($sd, $d, $errorContext)")
   }
 
   override def prettyName: String = "date_add"
@@ -557,7 +581,11 @@ case class DateAdd(startDate: Expression, days: Expression)
  * Subtracts a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
+  usage = """_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.
+      If the result is earlier than the minimum DATE `-5877641-06-23` or later than the maximum
+      DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of
+      `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * start_date - The starting date.
@@ -573,7 +601,7 @@ case class DateAdd(startDate: Expression, days: Expression)
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateSub(startDate: Expression, days: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with DateArithmeticQueryContext {
   override def nullIntolerant: Boolean = true
   override def left: Expression = startDate
   override def right: Expression = days
@@ -585,13 +613,14 @@ case class DateSub(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] - d.asInstanceOf[Number].intValue()
+    DateTimeUtils.dateSubtractDays(
+      start.asInstanceOf[Int], d.asInstanceOf[Number].intValue(), getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd - $d;"""
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val errorContext = getContextOrNullCode(ctx)
+    defineCodeGen(ctx, ev, (sd, d) => s"$dtu.dateSubtractDays($sd, $d, $errorContext)")
   }
 
   override def prettyName: String = "date_sub"

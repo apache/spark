@@ -487,6 +487,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // The DATETIME_OVERFLOW error of an expression built in a test carries the empty query context
+  // of its origin, which `checkErrorInExpression` cannot match, so the whole message is checked.
+  private def checkDateTimeOverflow(
+      expr: Expression,
+      inputRow: InternalRow,
+      operation: String): Unit = {
+    checkExceptionInExpression[SparkArithmeticException](expr, inputRow,
+      s"[DATETIME_OVERFLOW] Datetime operation overflow: $operation. SQLSTATE: 22008")
+  }
+
+  private def checkDateTimeOverflow(expr: Expression, operation: String): Unit = {
+    checkDateTimeOverflow(expr, EmptyRow, operation)
+  }
+
   test("date_add") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toByte)),
@@ -511,7 +525,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ByteType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ShortType)
-    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateAdd, DateType, IntegerType)
+  }
+
+  test("SPARK-59859: date_add fails on overflow instead of wrapping around") {
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("1970-01-01")), Literal(Int.MaxValue)), Int.MaxValue)
+    checkDateTimeOverflow(
+      DateAdd(Literal(Date.valueOf("2020-01-01")), Literal(Int.MaxValue)),
+      "add 2147483647 days to DATE '2020-01-01'")
+    checkDateTimeOverflow(
+      DateAdd(Literal(Date.valueOf("1900-01-01")), Literal(Int.MinValue)),
+      "add -2147483648 days to DATE '1900-01-01'")
   }
 
   test("date add interval") {
@@ -572,7 +597,43 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ByteType)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ShortType)
-    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateSub, DateType, IntegerType)
+  }
+
+  test("SPARK-59859: date_sub fails on overflow instead of wrapping around") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("1969-12-31")), Literal(Int.MinValue)), Int.MaxValue)
+    checkDateTimeOverflow(
+      DateSub(Literal(Date.valueOf("2020-01-01")), Literal(Int.MinValue)),
+      "subtract -2147483648 days from DATE '2020-01-01'")
+    checkDateTimeOverflow(
+      DateSub(Literal(Date.valueOf("1900-01-01")), Literal(Int.MaxValue)),
+      "subtract 2147483647 days from DATE '1900-01-01'")
+  }
+
+  test("SPARK-59859: DATETIME_OVERFLOW of date_add and date_sub formats the date the same way " +
+      "under every parser policy") {
+    // The legacy formatter rebases a date to the Julian calendar, which overflows for the dates
+    // within about 44,500 days of the minimum DATE. The dates come from the input row: the legacy
+    // formatter would also fail on the `toString` of a DATE literal of them.
+    val start = BoundReference(0, DateType, nullable = false)
+    val days = BoundReference(1, IntegerType, nullable = false)
+    Seq("legacy", "corrected", "exception").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+        checkDateTimeOverflow(
+          DateAdd(start, days),
+          InternalRow(Int.MinValue, -1),
+          "add -1 days to DATE '-5877641-06-23'")
+        checkDateTimeOverflow(
+          DateAdd(start, days),
+          InternalRow(Int.MaxValue, 1),
+          "add 1 days to DATE '+5881580-07-11'")
+        checkDateTimeOverflow(
+          DateSub(start, days),
+          InternalRow(Int.MinValue, 1),
+          "subtract 1 days from DATE '-5877641-06-23'")
+      }
+    }
   }
 
   test("time_add") {
