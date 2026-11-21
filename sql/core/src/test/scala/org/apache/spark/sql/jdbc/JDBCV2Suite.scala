@@ -1290,8 +1290,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "[(CASE WHEN SALARY > 10000.00 THEN SALARY ELSE LEAST(SALARY, 1000.00) END) > 1200.00]")
     checkAnswer(df12, Seq(Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    // One filter, as a filter over `LN(BONUS) > 7.0`, which can be NULL, is not pushed down when
-    // it can fail.
+    // One filter, as a filter over `LN(BONUS) > 7.0`, which can be NULL, is combined with it in a
+    // `CASE WHEN` when it can fail.
     val df13 = spark.table("h2.test.employee")
       .filter(logarithm($"bonus") > 7 && exp($"bonus") > 0 && pow($"bonus", 2) === 1440000 &&
         sqrt($"bonus") > 34 && floor($"bonus") === 1200 && ceil($"bonus") === 1200)

@@ -2625,21 +2625,172 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
     // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
-    // inner condition must be deterministic. When it is throwable, e.g. one that `ReorderJoin`
-    // keeps in a filter in place of the top join, or can be NULL (see `canBeNull`), only the outer
-    // conjuncts that can not fail are combined: the inner filter drops a row on which its
-    // condition is NULL, but `NULL AND x` evaluates `x`.
+    // inner condition must be deterministic. The inner filter drops a row on which its condition
+    // is NULL, but `NULL AND x` evaluates `x`. So when the inner condition can be NULL (see
+    // `canBeNull`), the conjuncts that can fail (see `canFail`) are combined as
+    // `If(<inner condition>, <them>, false)`, which evaluates them only where it is TRUE, also
+    // after a later rule moves them, e.g. into a join condition (see `guard`). These are combined
+    // as before instead:
+    //  - All of them, when the inner condition has a subquery or a Python or external UDF, which
+    //    the `If` would evaluate again.
+    //  - A conjunct with a subquery: `RewritePredicateSubquery` plans an IN subquery as a join,
+    //    and a filter that `PartitionPruning` or `InjectRuntimeFilter` adds prunes the scan,
+    //    only outside the `If`.
+    //  - An equality between expressions over different columns when there is a join below,
+    //    which is a join key only outside the `If`.
+    // With a throwable inner condition, e.g. one that `ReorderJoin` keeps in a filter in place of
+    // the top join, the ones of these that can fail stay above it instead.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
+      val evaluatedAgain =
+        SubqueryExpression.hasSubquery(nc) || nc.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)
       val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild),
-        afterBarrier = nc.throwable || canBeNull(nc))
-      val mergedFilter = (ExpressionSet(movable) --
-        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
-        case Some(ac) =>
-          Filter(And(nc, ac), grandChild)
-        case None =>
-          nf
+        afterBarrier = evaluatedAgain && nc.throwable)
+      lazy val failable = failableOutput(grandChild)
+      lazy val belowJoin = grandChild.containsPattern(JOIN)
+      def notUnderIf(cond: Expression): Boolean =
+        SubqueryExpression.hasSubquery(cond) || (belowJoin && isPossibleJoinKey(cond))
+      val canGuard = !evaluatedAgain && canBeNull(nc)
+      val (stayUp, combined) = if (canGuard && nc.throwable) {
+        movable.partition(cond => canFail(cond, failable) && notUnderIf(cond))
+      } else {
+        (Nil, movable)
       }
-      rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+      val ncConjuncts = splitConjunctivePredicates(nc)
+      val newConjuncts = (ExpressionSet(combined) -- ExpressionSet(ncConjuncts)).toSeq
+      val (guarded, plain) = if (canGuard) {
+        newConjuncts.partition(cond => canFail(cond, failable) && !notUnderIf(cond))
+      } else {
+        (Nil, newConjuncts)
+      }
+      val mergedFilter = if (newConjuncts.isEmpty) {
+        nf
+      } else {
+        val conjuncts = guarded.reduceOption(And) match {
+          case Some(x) => guard(ncConjuncts, plain, x)
+          case None => ncConjuncts ++ plain
+        }
+        Filter(conjuncts.reduce(And), grandChild)
+      }
+      (stayUp ++ rest).reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+
+    // Removes an `If(p, x, false)` of the case above once `x` can not fail, e.g. after
+    // `ConstantFolding`, or once the conjuncts before it make `p` TRUE where they are TRUE and can
+    // not be NULL, e.g. after `InferFiltersFromConstraints` adds `IS NOT NULL` checks for the
+    // columns of a comparison, also when the `If` is in an inner join condition. As a filter or a
+    // join condition drops a row on which it is NULL, `p AND x` then keeps the same rows, and
+    // evaluates `x` only where it can.
+    case GuardsRemoved(plan) => plan
+  }
+
+  /**
+   * Returns true if the conjunct `cond` can fail on a row: [[ExprUtils.canEvaluateUnconditionally]]
+   * rejects it, or it reads a column in `failable`. The check is conservative: it also rejects
+   * many expressions that can not fail in fact, e.g. `exp(x) > 0` or a `CASE WHEN`. Constant
+   * parts count as what they evaluate to, as `ConstantFolding` folds them, e.g. `1 + 1` in
+   * `d_moy = 1 + 1`, unless they fail to.
+   */
+  private def canFail(cond: Expression, failable: => AttributeSet): Boolean = {
+    // `failed` keeps a part that fails to fold from being tagged, as it may be shared with a plan.
+    val folded = ConstantFolding.constantFolding(cond, isConditionalBranch = true,
+      failed = java.util.Collections.newSetFromMap(
+        new java.util.IdentityHashMap[Expression, java.lang.Boolean]()))
+    !ExprUtils.canEvaluateUnconditionally(folded) || folded.references.exists(failable.contains)
+  }
+
+  /**
+   * Returns true if `condition` can be NULL. A column that a conjunct `IS NOT NULL` checks, also
+   * through a null-intolerant expression, is not NULL when the condition is, so it is taken as not
+   * nullable in the other conjuncts, as `FilterExec` does, and so are the columns in `notNull`,
+   * e.g. the ones that the input of the filter never has NULL in.
+   */
+  private def canBeNull(
+      condition: Expression,
+      notNull: AttributeSet = AttributeSet.empty): Boolean = {
+    val conjuncts = splitConjunctivePredicates(condition)
+    val checked = notNull ++ AttributeSet(conjuncts.flatMap {
+      case IsNotNull(e) if isNullIntolerant(e) => e.references
+      case _ => Nil
+    })
+    conjuncts.exists(_.transform {
+      case a: Attribute if checked.contains(a) => a.withNullability(false)
+    }.nullable)
+  }
+
+  /**
+   * Returns `nc ++ plain` and an `If` that evaluates `x` only where `nc`, the conjuncts of the
+   * inner condition, is TRUE. When `nc` ends with such an `If(p, y, false)` and its other
+   * conjuncts are in `p` or can not be NULL, `x` goes into that `If` instead (see `nest`), so that
+   * a chain of filters does not repeat the conditions below in each `If`.
+   */
+  private def guard(
+      nc: Seq[Expression],
+      plain: Seq[Expression],
+      x: Expression): Seq[Expression] = nc.last match {
+    case last @ If(p, _, Literal.FalseLiteral)
+        if !nc.init.filterNot(ExpressionSet(splitConjunctivePredicates(p)).contains)
+          .reduceOption(And).exists(canBeNull(_)) =>
+      nc.init ++ plain :+ nest(last, x)
+    case _ =>
+      nc ++ plain :+ If(nc.reduce(And), x, Literal.FalseLiteral)
+  }
+
+  // `If(y, x, false)`, with `x` put in the innermost `If(_, _, false)` of `y` instead, if any.
+  private def nest(y: Expression, x: Expression): Expression = y match {
+    case If(p, y2, Literal.FalseLiteral) => If(p, nest(y2, x), Literal.FalseLiteral)
+    case _ => If(y, x, Literal.FalseLiteral)
+  }
+
+  // An equality between expressions over different columns, as a join key is.
+  private def isPossibleJoinKey(cond: Expression): Boolean = cond match {
+    case EqualTo(l, r) => overDifferentColumns(l, r)
+    case EqualNullSafe(l, r) => overDifferentColumns(l, r)
+    case _ => false
+  }
+
+  private def overDifferentColumns(l: Expression, r: Expression): Boolean =
+    l.references.nonEmpty && r.references.nonEmpty && l.references.intersect(r.references).isEmpty
+
+  private object GuardsRemoved {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case Filter(condition, child) if condition.containsPattern(IF) =>
+        removeGuards(condition, Seq(child)).map(Filter(_, child))
+      case j @ Join(left, right, _: InnerLike, Some(condition), _)
+          if condition.containsPattern(IF) =>
+        removeGuards(condition, Seq(left, right)).map(c => j.copy(condition = Some(c)))
+      case _ => None
+    }
+  }
+
+  // The columns that the inputs of the filter or the join never have NULL in also count as not
+  // NULL in the conjuncts before an `If`.
+  private def removeGuards(condition: Expression, inputs: Seq[LogicalPlan]): Option[Expression] = {
+    lazy val failable = AttributeSet.fromAttributeSets(inputs.map(failableOutput))
+    lazy val notNull = AttributeSet(inputs.flatMap(_.constraints.collect {
+      case IsNotNull(a: Attribute) => a
+    }))
+    // The conjuncts of `x`, whose `If` is removed after `before`. An `If(y, x2, false)` that
+    // `nest` put in it is removed too where `before` and `y` can not be NULL.
+    def unguarded(before: Seq[Expression], x: Expression): Seq[Expression] = x match {
+      case If(y, x2, Literal.FalseLiteral)
+          if !canBeNull((before ++ splitConjunctivePredicates(y)).reduce(And), notNull) =>
+        splitConjunctivePredicates(y) ++ unguarded(before ++ splitConjunctivePredicates(y), x2)
+      case _ => splitConjunctivePredicates(x)
+    }
+    val conjuncts = splitConjunctivePredicates(condition)
+    val newConjuncts = conjuncts.foldLeft(Seq.empty[Expression]) {
+      case (before, If(p, x, Literal.FalseLiteral))
+          if splitConjunctivePredicates(x).forall(!canFail(_, failable)) =>
+        before ++ (ExpressionSet(splitConjunctivePredicates(p)) -- ExpressionSet(before)).toSeq ++
+          splitConjunctivePredicates(x)
+      case (before, If(p, x, Literal.FalseLiteral)) if before.nonEmpty &&
+          splitConjunctivePredicates(p).forall(ExpressionSet(before).contains) &&
+          !canBeNull(before.reduce(And), notNull) =>
+        before ++ unguarded(before, x)
+      case (before, cond) => before :+ cond
+    }
+    val unchanged = newConjuncts.length == conjuncts.length &&
+      newConjuncts.zip(conjuncts).forall { case (a, b) => a.fastEquals(b) }
+    if (unchanged) None else Some(newConjuncts.reduce(And))
   }
 }
 

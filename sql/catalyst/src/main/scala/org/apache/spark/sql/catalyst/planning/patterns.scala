@@ -84,12 +84,13 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
         val canPushFilterThroughProject = fields.forall(_.forall(_.deterministic)) &&
           canCollapseExpressions(Seq(condition), aliases, alwaysInline) && !usesPythonUDF
         if (canPushFilterThroughProject) {
-          val replaced = replaceAlias(condition, aliases)
           // Ideally we can't combine non-deterministic filters, but if `collectAllFilters` is true,
           // we relax this restriction and assume the caller will take care of it.
-          val canIncludeThisFilter = filters.isEmpty || canCombine(filters, replaced)
+          val canIncludeThisFilter = filters.isEmpty || {
+            filters.last.deterministic && condition.deterministic
+          }
           if (canIncludeThisFilter || collectAllFilters) {
-            (fields, filters :+ replaced, other, aliases)
+            (fields, filters :+ replaceAlias(condition, aliases), other, aliases)
           } else {
             empty
           }
@@ -101,20 +102,6 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
 
       case _ => empty
     }
-  }
-
-  /**
-   * Returns true if a filter with `condition` can be combined with the `filters` collected below
-   * it into one condition, with its conjuncts after theirs. Both must be deterministic. As in
-   * `CombineFilters`, if the filters below can be NULL on a row (see `canBeNull`), which they
-   * drop, no conjunct of `condition` may fail on it (see `canFail`), as `NULL AND x` evaluates
-   * `x`. The aliases of the collected projects are replaced in `condition`, so a conjunct also
-   * fails as such an alias does.
-   */
-  protected def canCombine(filters: Seq[Expression], condition: Expression): Boolean = {
-    filters.last.deterministic && condition.deterministic &&
-      (!splitConjunctivePredicates(condition).exists(canFail(_, AttributeSet.empty)) ||
-        !canBeNull(filters.reduce(And)))
   }
 }
 
@@ -161,16 +148,13 @@ object ScanOperation extends OperationHelper {
     // placed at the beginning of `filters` list. According to the SQL semantic, we cannot merge
     // Filters if one or more of them are nondeterministic. This means we can only push down the
     // bottom-most Filter, or more following deterministic Filters if the bottom-most Filter is
-    // also deterministic, up to the first one that can fail on a row that the Filters below it
-    // drop as NULL (see `canCombine`).
+    // also deterministic.
     if (filters.isEmpty) {
       Some((fields.getOrElse(child.output), Nil, Nil, child))
     } else if (filters.head.deterministic) {
-      val numCanPushDown = (1 until filters.length)
-        .find(i => !canCombine(filters.take(i), filters(i)))
-        .getOrElse(filters.length)
-      val filtersCanPushDown = filters.take(numCanPushDown).flatMap(splitConjunctivePredicates)
-      val filtersStayUp = filters.drop(numCanPushDown)
+      val filtersCanPushDown = filters.takeWhile(_.deterministic)
+        .flatMap(splitConjunctivePredicates)
+      val filtersStayUp = filters.dropWhile(_.deterministic)
       Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
     } else {
       val filtersCanPushDown = splitConjunctivePredicates(filters.head)

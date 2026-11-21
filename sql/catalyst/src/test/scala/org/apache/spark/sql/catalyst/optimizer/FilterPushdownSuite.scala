@@ -210,38 +210,154 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
   }
 
-  test("SPARK-62069: a condition that can fail is not combined after a throwable one") {
+  test("SPARK-62069: a condition that can fail is combined after a throwable one only where it " +
+    "is TRUE") {
     // The inner filter drops a row on which its condition is NULL, but `NULL AND x` evaluates
-    // `x`, so a condition that can fail stays above a throwable one, while one that can not fail
-    // is combined.
+    // `x`, so a condition that can fail is combined under an `If` of the throwable one, which
+    // can be NULL, while one that can not fail is combined as it is.
     val throwing = If($"a" > 0, $"b" > $"c", IsNull(RaiseError(Literal("boom"))))
     val canFail = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
     val originalQuery = testRelation.where(throwing).where(canFail && $"a" > 1)
-    val correctAnswer = testRelation.where(throwing && $"a" > 1).where(canFail).analyze
+    val correctAnswer =
+      testRelation.where(throwing && $"a" > 1 && If(throwing, canFail, false)).analyze
 
     comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
   }
 
-  test("SPARK-62187: a condition that can fail is not combined into a filter whose condition " +
-    "can be NULL") {
+  test("SPARK-62187: a condition that can fail is combined into a filter whose condition can be " +
+    "NULL only where that condition is TRUE") {
     // The division is built in ANSI mode, where it can fail, whatever the session's mode is.
     val divide = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
     // `c = 1` is NULL where `c` is NULL, and the filter below drops that row, but `NULL AND x`
-    // would evaluate the division on it. `a = 1` can not fail, so it is combined.
+    // would evaluate the division on it. So it is combined under an `If`, while `a = 1`, which
+    // can not fail, is combined as it is.
     val originalQuery = testRelation
       .where($"c" === 1)
       .where(divide && $"a" === 1)
     val correctAnswer = testRelation
-      .where($"c" === 1 && $"a" === 1)
-      .where(divide)
+      .where($"c" === 1 && $"a" === 1 && If($"c" === 1, divide, false))
       .analyze
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
 
-    // With `c IS NOT NULL`, `c = 1` is not NULL, so the division is combined.
+    // With `c IS NOT NULL`, `c = 1` is not NULL, so the division is combined as it is, and an
+    // `If` that the conjuncts before it make TRUE is removed.
     val notNull = testRelation.where($"c".isNotNull && $"c" === 1)
+    val combined = testRelation.where($"c".isNotNull && $"c" === 1 && divide).analyze
+    comparePlans(Optimize.execute(notNull.where(divide).analyze), combined)
+    // `coalesce(c, b) IS NOT NULL` does not make `c` not NULL, so `c = 1 OR b = 2` can be NULL.
+    val notNullCoalesce = Coalesce(Seq($"c", $"b")).isNotNull && ($"c" === 1 || $"b" === 2)
     comparePlans(
-      Optimize.execute(notNull.where(divide).analyze),
-      testRelation.where($"c".isNotNull && $"c" === 1 && divide).analyze)
+      Optimize.execute(testRelation.where(notNullCoalesce).where(divide).analyze),
+      testRelation.where(notNullCoalesce && If(notNullCoalesce, divide, false)).analyze)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where($"c".isNotNull && $"c" === 1 && If($"c" === 1, divide, false)).analyze),
+      combined)
+    // An `If` over conjuncts that can not fail is removed too.
+    comparePlans(
+      Optimize.execute(testRelation.where($"c" === 1 && If($"c" === 1, $"a" === 1, false)).analyze),
+      testRelation.where($"c" === 1 && $"a" === 1).analyze)
+
+    // A constant part counts as what it folds to, so `a = 1 + 1` can not fail. A subquery of the
+    // filter below would be computed again in an `If`, so the division is combined as it is.
+    val folds = $"a" === Add(Literal(1), Literal(1), NumericEvalContext(EvalMode.ANSI))
+    val subquery = $"c" === ScalarSubquery(testRelation1.select($"d"))
+    Seq(($"c" === 1, folds), (subquery, divide)).foreach { case (lower, upper) =>
+      comparePlans(
+        Optimize.execute(testRelation.where(lower).where(upper).analyze),
+        testRelation.where(lower && upper).analyze)
+    }
+  }
+
+  test("SPARK-62187: a condition is combined into a filter whose condition can be NULL as it " +
+    "is where an If would change how it is planned") {
+    // `RewritePredicateSubquery` plans an IN subquery as a join, and the filters that
+    // `PartitionPruning` and `InjectRuntimeFilter` add, also after `MergeSubplans` merges them,
+    // prune the scan, only outside an `If`.
+    val Seq(a, _, c) = testRelation.output
+    val bloom = ScalarSubquery(LocalRelation($"bloom".binary))
+    val merged = GetStructField(ScalarSubquery(LocalRelation(
+      $"merged".struct(StructType(Seq(StructField("bloom", BinaryType)))))), 0)
+    Seq(
+      InSubquery(Seq(a), ListQuery(testRelation1)),
+      DynamicPruningSubquery(a, testRelation1, testRelation1.output, Seq(0), false)(),
+      BloomFilterMightContain(bloom, new XxHash64(Seq(a))),
+      BloomFilterMightContain(merged, new XxHash64(Seq(a))),
+      PerPartitionRuntimeFilterSubquery(a, testRelation1, PerPartitionSizing(1L, None, 1L))
+    ).foreach { filter =>
+      val lower = EqualTo(c, Literal(1))
+      comparePlans(
+        CombineFilters(Filter(filter, Filter(lower, testRelation))),
+        Filter(And(lower, filter), testRelation),
+        checkAnalysis = false)
+    }
+    // Over a join, an equality between columns of the two sides is a join key only outside an
+    // `If`, while another condition that can fail is still combined under it, and so is the
+    // equality over one relation.
+    val divide = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
+    val joined = testRelation.join(testRelation1)
+    val key = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"d"
+    comparePlans(
+      CombineFilters(joined.where($"c" > $"d").where(key && divide).analyze),
+      joined.where($"c" > $"d" && key && If($"c" > $"d", divide, false)).analyze)
+    val equality = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"b"
+    comparePlans(
+      CombineFilters(testRelation.where($"c" > $"b").where(equality).analyze),
+      testRelation.where($"c" > $"b" && If($"c" > $"b", equality, false)).analyze)
+    // An `If` would evaluate a Python UDF of the filter below again.
+    val pythonUDF = PythonUDF("pythonUDF", null, BooleanType, Seq(attrC),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    comparePlans(
+      CombineFilters(testRelation.where(pythonUDF).where(divide).analyze),
+      testRelation.where(pythonUDF && divide).analyze)
+    // Over a throwable condition, e.g. one that `ReorderJoin` keeps in a filter in place of the
+    // top join, such a condition that can fail stays above it instead.
+    val throwing = If($"a" > 0, $"b" > $"c", IsNull(RaiseError(Literal("boom"))))
+    val subquery = $"a" > ScalarSubquery(testRelation1.groupBy()(max($"d").as("m")))
+    comparePlans(
+      CombineFilters(testRelation.where(throwing).where(subquery && divide).analyze),
+      testRelation.where(throwing && If(throwing, divide, false)).where(subquery).analyze)
+  }
+
+  test("SPARK-62187: the conditions that can fail of a chain of filters are nested in one If, " +
+    "which is removed where the columns are not NULL") {
+    def canFail(l: Expression, r: Expression): Expression =
+      Add(l, r, NumericEvalContext(EvalMode.ANSI)) > 1
+    val Seq(f2, f3, f4) = Seq(canFail($"a", $"b"), canFail($"b", $"c"), canFail($"c", $"a"))
+    // The top two filters and the bottom two are combined first, and then the top pair goes
+    // into the `If` of the bottom one, after `f2`, so `c = 1` is not repeated.
+    val nested = $"c" === 1 && If($"c" === 1, If(f2, f3 && If(f3, f4, false), false), false)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where($"c" === 1).where(f2).where(f3).where(f4).analyze),
+      testRelation.where(nested).analyze)
+    // Not when another conjunct below, `b = 2`, can be NULL where `c = 1` is TRUE.
+    val below = $"c" === 1 && $"b" === 2 && If($"c" === 1, f2, false)
+    comparePlans(
+      CombineFilters(testRelation.where(below).where(f3).analyze),
+      testRelation.where(below && If(below, f3, false)).analyze)
+    // With `IS NOT NULL` checks before them, all the `If`s are removed, but not the one of `f2`,
+    // which can be NULL, when `a` and `b` are not checked.
+    val notNull = $"a".isNotNull && $"b".isNotNull && $"c".isNotNull
+    comparePlans(
+      Optimize.execute(testRelation.where(notNull && nested).analyze),
+      testRelation.where(notNull && $"c" === 1 && f2 && f3 && f4).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"c".isNotNull && nested).analyze),
+      testRelation.where($"c".isNotNull && $"c" === 1 &&
+        If(f2, f3 && If(f3, f4, false), false)).analyze)
+    // Also with the checks below a projection, or in the inputs of an inner join whose condition
+    // has an `If`.
+    val projected = testRelation.where(notNull).select($"a", $"b", $"c")
+    comparePlans(
+      CombineFilters(projected.where($"c" === 1 && If($"c" === 1, f2, false)).analyze),
+      projected.where($"c" === 1 && f2).analyze)
+    val left = testRelation.where($"c".isNotNull)
+    val right = testRelation1.where($"d".isNotNull)
+    comparePlans(
+      CombineFilters(left.join(right,
+        condition = Some($"c" === $"d" && If($"c" === $"d", f2, false))).analyze),
+      left.join(right, condition = Some($"c" === $"d" && f2)).analyze)
   }
 
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
