@@ -23,6 +23,16 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 5.0
+
+- Since Spark 5.0, `try_add` and `try_multiply` combined with regular `+` or `*` follow each
+  operator's own overflow behavior (see the SQL migration guide), so such an expression can be
+  nullable where the optimizer previously rewrote it into a non-nullable one. For example,
+  `try_add(coalesce(value, 0), 1) + 1` was rewritten to `coalesce(value, 0) + 2`. A stateful
+  query started before Spark 4.3 that keys its state on such an expression fails the state
+  schema compatibility check when it restarts. To recover, restart the query with a new
+  checkpoint location.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
