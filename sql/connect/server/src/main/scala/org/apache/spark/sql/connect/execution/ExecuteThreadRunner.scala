@@ -219,6 +219,12 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
 
+      val sessionUser = executeHolder.sessionHolder.userId
+      if (sessionUser != null && sessionUser.nonEmpty) {
+        session.sparkContext.setLocalProperty(
+          SparkConnectService.SPARK_CONNECT_SESSION_USER_KEY, sessionUser)
+      }
+
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(
         "callSite.short",
