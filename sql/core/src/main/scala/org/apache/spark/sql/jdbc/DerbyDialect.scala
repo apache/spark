@@ -69,8 +69,10 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefexcept71493.html
+  // Only 42X01 (syntax error) and 42X02 (lexical error) are syntax errors. Other class 42
+  // states, e.g. 42X05 (table not found) and 42502 (missing privilege), are not.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    Set("42X01", "42X02").contains(exception.getSQLState)
   }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
