@@ -4430,11 +4430,11 @@ object SQLConf {
     buildConf("spark.sql.streaming.join.preserveEventTimeColumns.enabled")
       .internal()
       .doc("When true, column pruning preserves an unambiguous watermark timestamp for " +
-        "late-event filtering in a single stream-stream equality join without residual " +
-        "predicates, CTEs, or other stateful operators. Other plan shapes keep legacy " +
-        "pruning even when this value is true. The timestamp is stored in the ordinary " +
-        "input row. The value is pinned in the checkpoint and cannot be changed across " +
-        "restarts. Existing checkpoints without this setting use false to preserve their " +
+        "late-event filtering in plans without unexpanded CTE references whose only stateful " +
+        "operator is a stream-stream join with no residual condition after predicate pushdown. " +
+        "Other plan shapes keep legacy pruning even when this value is true. The timestamp " +
+        "is stored in the ordinary input row. The checkpoint pins the value across restarts. " +
+        "Existing checkpoints without this setting use false to preserve their " +
         "state schemas and pruning behavior.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

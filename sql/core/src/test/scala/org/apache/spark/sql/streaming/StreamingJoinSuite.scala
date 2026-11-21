@@ -415,6 +415,86 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     }
   }
 
+  Seq("left", "right").foreach { side =>
+    test(s"SPARK-60850: reject a timestamp replacement in $side join state on restart") {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Int, Int)]
+        val rightInput = MemoryStream[(Int, Int, Int)]
+        def watermarked(input: MemoryStream[(Int, Int, Int)], prefix: String): DataFrame = {
+          input.toDF().toDF(s"${prefix}Key", "eventSeconds", "joinSeconds")
+            .select(col(s"${prefix}Key"), timestamp_seconds($"eventSeconds").as(s"${prefix}Time"),
+              timestamp_seconds($"joinSeconds").as(s"${prefix}JoinTime"))
+            .withWatermark(s"${prefix}Time", "5 seconds")
+        }
+        val left = watermarked(leftInput, "left")
+        val right = watermarked(rightInput, "right")
+        val keysEqual = left("leftKey") === right("rightKey")
+        val equalityJoin = left.join(right, keysEqual)
+        val replacesLeft = side == "left"
+        val changedJoin = if (replacesLeft) {
+          equalityJoin.where(left("leftJoinTime") > right("rightTime"))
+        } else {
+          left.join(right, keysEqual && right("rightJoinTime") > left("leftTime"))
+        }
+        val start = StartStream(checkpointLocation = checkpoint.getCanonicalPath)
+        val buffer = if (replacesLeft) leftInput else rightInput
+        val probe = if (replacesLeft) rightInput else leftInput
+
+        testStream(equalityJoin.select("leftKey"))(
+          start,
+          AddData(buffer, (1, 20, 200)),
+          CheckAnswer(),
+          StopStream)
+
+        testStream(changedJoin.select("leftKey"))(
+          start,
+          AddData(probe, (1, 150, 150)),
+          ExpectFailure[SparkUnsupportedOperationException] { cause =>
+            val error = cause.asInstanceOf[SparkUnsupportedOperationException]
+            assert(error.getCondition == "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED")
+            assert(error.getMessageParameters.get("storeName").startsWith(s"$side-"))
+            assert(error.getMessageParameters.get("storedColumn") == s"${side}Time")
+            assert(error.getMessageParameters.get("newColumn") == s"${side}JoinTime")
+          })
+
+        testStream(equalityJoin.select("leftKey"))(
+          start,
+          ProcessAllAvailable(),
+          CheckAnswer(1))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { oneSidedPredicate =>
+    test(s"SPARK-60850: retention after predicate pushdown (one-sided=$oneSidedPredicate)") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "leftValue")
+        .withColumn("leftTime", timestamp_seconds($"leftValue"))
+        .withWatermark("leftTime", "5 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "rightValue")
+        .withColumn("rightTime", timestamp_seconds($"rightValue"))
+        .withWatermark("rightTime", "5 seconds")
+      val keysEqual = left("leftKey") === right("rightKey")
+      val joined = if (oneSidedPredicate) {
+        left.join(right, keysEqual && left("leftValue") > 0)
+      } else {
+        left.join(right, keysEqual).where(left("leftValue") > right("rightValue"))
+      }
+
+      testStream(joined.select("leftKey"))(
+        MultiAddData((leftInput, Seq((1, 30))), (rightInput, Seq((1, 20)))),
+        CheckAnswer(1),
+        Execute { query =>
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.get
+          assert(join.left.output.exists(_.name == "leftTime") == oneSidedPredicate)
+          assert(join.right.output.exists(_.name == "rightTime") == oneSidedPredicate)
+        })
+    }
+  }
+
   test("SPARK-60850: range join keeps legacy event-time pruning") {
     withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
       val leftInput = MemoryStream[(Int, Int, Int)]

@@ -25,13 +25,18 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
-- Since Spark 4.4, a new stream-stream equality join with a single stateful operator may retain
-  watermarked timestamp columns even when they are not selected. Eligible joins drop late input
-  rows and store the timestamps in join state. Existing checkpoints keep their previous behavior.
+- Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join
+  can retain watermarked timestamp columns even when they are not selected. This applies when
+  the optimizer sees no unexpanded CTEs, the join condition contains only equality keys after
+  predicate pushdown, and each input has at most one watermarked column, which must be a
+  timestamp. Eligible joins use the timestamps to filter late input rows and store them in join
+  state. Checkpoints from earlier Spark versions keep their previous behavior.
   To keep the previous behavior for a new query, set
   `spark.sql.streaming.join.preserveEventTimeColumns.enabled` to `false` before starting it.
-  Changing a query so that its join becomes eligible or ineligible on restart may change the state
-  schema and cause `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`.
+  On restart, editing the join condition or a filter that compares the two inputs can change
+  whether the join qualifies and which columns it stores. An incompatible schema can fail
+  with `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE` or
+  `STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED`.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
