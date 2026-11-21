@@ -8646,6 +8646,13 @@
     },
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED" : {
+    "message" : [
+      "Cannot restart the stream-stream join because the state store <storeName> would read the stored timestamp column <storedColumn> as <newColumn>.",
+      "Revert the changes to the join or start the query with a new checkpoint."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."

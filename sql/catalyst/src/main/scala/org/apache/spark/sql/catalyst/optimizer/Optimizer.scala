@@ -1535,11 +1535,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
           case _ => false
         })
 
-    // Retain event time only for one equality join with unambiguous timestamp watermarks.
-    // Multiple joins, other stateful operators, CTEs, and joins with extra predicates keep legacy
-    // pruning. Eligibility determines the stored join row schema. Changing which plans qualify,
-    // including through earlier optimizer rules, requires a separately pinned mode or a state
-    // migration.
+    // Retain event time when the plan's only stateful operator is a stream-stream join with
+    // unambiguous timestamp watermarks and no residual condition after predicate pushdown.
+    // Eligibility determines the stored join row schema. Changing which plans qualify, including
+    // through earlier optimizer rules, requires a separately pinned mode or a state migration.
     removeProjectBeforeFilter(plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
