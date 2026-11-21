@@ -2718,6 +2718,38 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_SCAN_BYTES = buildConf("spark.sql.execution.maxScanBytes")
+    .doc("The maximum number of bytes a query may read from its data sources, including in " +
+      "its subqueries. Once Spark learns that a query has read more, it cancels the jobs of the " +
+      "query, which then fails with SCAN_BYTES_LIMIT_EXCEEDED unless it has already finished " +
+      "or it fails with another error. This is a best-effort guard against mistakes rather " +
+      "than a hard cap or an enforced policy: a session can change it. Spark learns how much " +
+      "the tasks of a query have read from the executor heartbeats " +
+      "(spark.executor.heartbeatInterval) and when a task ends, so a query can read more " +
+      "than the limit before it is cancelled: about what all its running tasks read in one " +
+      "heartbeat interval, which grows with the size of the cluster. Only the bytes that a " +
+      "task reads through a Hadoop FileSystem count, as its statistics report them. The " +
+      "built-in file sources read through it, while sources such as JDBC, or connectors " +
+      "with a storage client of their own, report none, and reads on threads that a source " +
+      "starts itself can be missed. Reading cached data counts the size of the cached " +
+      "blocks, although it reads no storage. Jobs that run outside the execution of a query " +
+      "are not limited, such as the jobs that infer the schema of a file source while the " +
+      "query is analyzed, the jobs that run on the RDD that Dataset.rdd returns, and the " +
+      "jobs that Dataset.toLocalIterator runs as the iterator it returns is consumed. " +
+      "Streaming queries are not limited, but under Spark Connect the queries that a Python " +
+      "foreachBatch function runs are queries of their own, which are limited. A thread " +
+      "inherits the local properties of the thread that starts it, so the queries that run on " +
+      "a thread started while a query runs are taken as part of that query: while it runs, " +
+      "what they read counts against its limit and they are cancelled with it, and after it " +
+      "ends they are not limited. The queries on a thread started while a streaming query " +
+      "runs, such as a thread that a foreachBatch function starts, are not limited. -1 (the " +
+      "default) means no limit.")
+    .version("4.5.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(_ >= -1, "The maximum scan bytes must be -1 (no limit) or non-negative.")
+    .createWithDefault(-1L)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")

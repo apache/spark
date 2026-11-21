@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
+
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
@@ -30,10 +32,12 @@ import org.apache.spark.internal.LogKeys.{EXECUTION_ID, SHUFFLE_ID}
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -198,6 +202,16 @@ object SQLExecution extends Logging {
     }
   }
 
+  /** Whether `e`, or one of its causes, is the failure of a job that was cancelled for `reason`. */
+  private def isCausedByJobCancellation(e: Throwable, reason: String): Boolean = {
+    ExceptionUtils.getThrowableList(e).asScala.exists {
+      case st: SparkThrowable =>
+        st.getCondition == "SPARK_JOB_CANCELLED" &&
+          st.getMessageParameters.get("reason") == reason
+      case _ => false
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -237,7 +251,20 @@ object SQLExecution extends Logging {
       val interruptOnCancel = sparkSession.sessionState.conf.getConf(SQLConf.INTERRUPT_ON_CANCEL)
       sc.setInterruptOnCancel(interruptOnCancel)
     }
+    val maxScanBytes = sparkSession.sessionState.conf.getConf(SQLConf.MAX_SCAN_BYTES)
+    var scanLimitListener: Option[ScanLimitListener] = None
     try {
+      // A root execution with a scan limit is tracked by the listener that enforces the limit.
+      // The jobs of its nested executions have its root execution ID and its job tag, so they
+      // count towards the same limit. Streaming queries are not limited: neither their batches
+      // nor the queries that their sources run on the thread of the stream while they plan a
+      // batch, with whichever session they hold. The thread of a stream has its query ID for as
+      // long as it runs. A thread inherits both local properties from the thread that starts it,
+      // so the queries on a thread started during a stream are not limited either. The ones on
+      // a thread started during a query are nested in it: they count towards its limit while it
+      // runs, and are not limited after it ends.
+      val hasScanLimit = existingRootId == null && maxScanBytes >= 0 &&
+        sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
@@ -287,6 +314,15 @@ object SQLExecution extends Logging {
                   sc.listenerBus.post(startEvent)
                   throw e
                 case Right(f) =>
+                  // Creating the listener fails once the listener bus is stopped, so it is done
+                  // in this `try`: its `finally` still posts the end event and completes the
+                  // observations, and a query that fails before it runs keeps its own error.
+                  if (hasScanLimit) {
+                    val listener = sparkSession.sharedState.scanLimitListener
+                    listener.register(
+                      executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
+                    scanLimitListener = Some(listener)
+                  }
                   val planDesc = planDescription(
                     queryExecution, sparkSession.sessionState.conf.uiExplainMode)
                   val planInfo = try {
@@ -306,8 +342,18 @@ object SQLExecution extends Logging {
               }
             } catch {
               case e: Throwable =>
-                ex = Some(e)
-                throw e
+                // A query that went over its scan limit fails with the error of a job that the
+                // listener cancelled. Fail it with the error that names the limit instead. Any
+                // other error is kept, such as a cancellation by the user: the query may have
+                // failed for another reason after it went over the limit.
+                val error = scanLimitListener
+                  .flatMap(_.bytesReadOverLimit(executionId))
+                  .filter(bytesRead => NonFatal(e) && isCausedByJobCancellation(
+                    e, ScanLimitListener.cancelReason(bytesRead, maxScanBytes)))
+                  .map(QueryExecutionErrors.scanBytesLimitExceededError(_, maxScanBytes, e))
+                  .getOrElse(e)
+                ex = Some(error)
+                throw error
             } finally {
               // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so the
               // end event may still be posted after the scheduler is unavailable. Keep observation
@@ -383,6 +429,7 @@ object SQLExecution extends Logging {
         }
       }
     } finally {
+      scanLimitListener.foreach(_.unregister(executionId))
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
       sc.setLocalProperty(QUERY_ID_KEY, oldQueryId)
