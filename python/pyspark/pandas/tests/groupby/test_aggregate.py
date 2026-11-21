@@ -232,6 +232,19 @@ class GroupbyAggregateMixin:
         )
         self.assert_eq(agg_psdf, agg_pdf)
 
+    def test_aggregate_relabel_size(self):
+        pdf = pd.DataFrame({"group": ["a", "a", "b"], "B": [10.0, None, 30.0]})
+        psdf = ps.from_pandas(pdf)
+
+        expected = (
+            pdf.groupby("group").agg(b_size=("B", "size"), b_count=("B", "count")).sort_index()
+        )
+        actual = (
+            psdf.groupby("group").agg(b_size=("B", "size"), b_count=("B", "count")).sort_index()
+        )
+
+        self.assert_eq(actual, expected)
+
     def test_aggregate_relabel_multiindex(self):
         pdf = pd.DataFrame({"A": [0, 1, 2, 3], "B": [5, 6, 7, 8], "group": ["a", "a", "b", "b"]})
         pdf.columns = pd.MultiIndex.from_tuples([("y", "A"), ("y", "B"), ("x", "group")])
