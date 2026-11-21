@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.metricview.logical
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand, UnaryNode}
@@ -90,8 +89,13 @@ case class MetricViewPlaceholder(
   override def producedAttributes: AttributeSet = AttributeSet(outputMetrics)
 }
 
+/**
+ * A metric view read by a query, after its dimensions are resolved.
+ *
+ * @param identifier the metric view's fully qualified multi-part name.
+ */
 case class ResolvedMetricView(
-    identifier: TableIdentifier,
+    identifier: Seq[String],
     child: LogicalPlan) extends UnaryNode {
   override def output: scala.Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
