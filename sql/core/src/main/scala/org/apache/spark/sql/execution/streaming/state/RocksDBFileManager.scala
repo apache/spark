@@ -330,13 +330,9 @@ class RocksDBFileManager(
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
     val (_, zipFilesTimeMs) = Utils.timeTakenMs {
-      if (version <= 1 && numKeys <= 0) {
-        // If we're writing the initial version and there's no data, we have to initialize
-        // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
-        // when there's no data that method won't write any files, and zipToDfsFile uses the
-        // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
-        // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
-        // still need to create the initial dfs root directory anyway.
+      if (rocksDBFiles.isEmpty) {
+        // Without immutable files, saveImmutableFilesToDfs won't create the root directory.
+        // Create it before zipToDfsFile, which uses createAtomic and does not create parent dirs.
         createDfsRootDirIfNotExist()
       }
       zipToDfsFile(localOtherFiles :+ metadataFile,
@@ -373,7 +369,6 @@ class RocksDBFileManager(
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       Utils.createDirectory(localDir)
-      createDfsRootDirIfNotExist()
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
       // Set empty metrics since we're not loading any files from DFS
