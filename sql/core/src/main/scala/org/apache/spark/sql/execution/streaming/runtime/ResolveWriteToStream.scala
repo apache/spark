@@ -162,12 +162,11 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
    * This validation always runs regardless of source evolution enforcement.
    */
   private def checkDuplicateSourceNames(plan: LogicalPlan): Unit = {
+    // should use the same relation equality as the source reuse in MicroBatchExecution
     val allSourceNames = plan.collect {
-      case StreamingRelation(
-        _, _, _, sourceIdentifyingName) => sourceIdentifyingName
-      case StreamingRelationV2(
-        _, _, _, _, _, _, _, _, sourceIdentifyingName) => sourceIdentifyingName
-    }
+      case s: StreamingRelation => s -> s.sourceIdentifyingName
+      case s: StreamingRelationV2 => s -> s.sourceIdentifyingName
+    }.distinct.map(_._2)
 
     // Extract actual name strings only from named sources (ignore Unassigned)
     val namedSources = allSourceNames.collect {
@@ -183,4 +182,3 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
     }
   }
 }
-
