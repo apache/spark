@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
 
 /**
@@ -500,6 +501,8 @@ case class KllSketchAggDouble(
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
+ * @param lowestCompactingK
+ *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -529,7 +532,8 @@ case class KllMergeAggBigint(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
     extends KllMergeAggBase[KllLongsSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
@@ -581,6 +585,8 @@ case class KllMergeAggBigint(
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
+ * @param lowestCompactingK
+ *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -610,7 +616,8 @@ case class KllMergeAggFloat(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
     extends KllMergeAggBase[KllFloatsSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
@@ -662,6 +669,8 @@ case class KllMergeAggFloat(
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
+ * @param lowestCompactingK
+ *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -691,7 +700,8 @@ case class KllMergeAggDouble(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
     extends KllMergeAggBase[KllDoublesSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
@@ -734,6 +744,12 @@ abstract class KllMergeAggBase[T <: KllSketch]
     with ExpectsInputTypes {
 
   def child: Expression
+
+  def lowestCompactingK: Boolean
+
+  // Leaves out `lowestCompactingK`, so plan strings do not change.
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(child, kExpr, mutableAggBufferOffset, inputAggBufferOffset)
 
   // Abstract factory methods for sketch-specific instantiation
   protected def newHeapInstance(k: Int): T
@@ -792,9 +808,12 @@ abstract class KllMergeAggBase[T <: KllSketch]
       try {
         val sketchBytes = v.asInstanceOf[Array[Byte]]
         val inputSketch = wrapSketch(sketchBytes)
-        val sketch = sketchOption.getOrElse(newHeapInstance(inputSketch.getK()))
-        sketch.merge(inputSketch)
-        Some(sketch)
+        // The k rule counts an empty input as absent, like a NULL.
+        if (takesLowestCompactingK && inputSketch.isEmpty()) {
+          sketchOption
+        } else {
+          Some(mergeSketch(sketchOption, inputSketch, heapifySketch(sketchBytes)))
+        }
       } catch {
         case _: Exception =>
           throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -802,13 +821,40 @@ abstract class KllMergeAggBase[T <: KllSketch]
     }
   }
 
+  /**
+   * Merges `input` into the buffer, which is created with the k of `input` if absent. Without k
+   * and with `lowestCompactingK`, the result takes the lowest k among the first non-empty input
+   * and the compacting inputs. `heapInput` returns `input` as a heap sketch that can change.
+   */
+  private def mergeSketch(sketchOption: Option[T], input: T, heapInput: => T): T =
+    sketchOption match {
+      case Some(buffer) if rebuildsAtInputK(buffer, input) =>
+        // A merge keeps the k of its target, so the buffer goes into the input.
+        val sketch = heapInput
+        sketch.merge(buffer)
+        sketch
+      case _ =>
+        val sketch = sketchOption.getOrElse(newHeapInstance(input.getK()))
+        sketch.merge(input)
+        sketch
+    }
+
+  private def takesLowestCompactingK: Boolean = kExpr.isEmpty && lowestCompactingK
+
+  // A compacting input already has the error of its k. An exact input has no error, so its k
+  // counts only when it is the first non-empty input.
+  private def rebuildsAtInputK(buffer: T, input: T): Boolean =
+    takesLowestCompactingK && input.isEstimationMode() && input.getK() < buffer.getK()
+
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBufferOption: Option[T], inputOption: Option[T]): Option[T] = {
     (updateBufferOption, inputOption) match {
-      case (Some(updateBuffer), Some(input)) =>
+      // An empty partial result, for example of an empty partition, is absent too.
+      case (_, Some(input)) if takesLowestCompactingK && input.isEmpty() => updateBufferOption
+      case (Some(_), Some(input)) =>
         try {
-          updateBuffer.merge(input)
-          Some(updateBuffer)
+          // `deserialize` gives a new heap sketch, so the input can change.
+          Some(mergeSketch(updateBufferOption, input, input))
         } catch {
           case _: Exception =>
             throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)

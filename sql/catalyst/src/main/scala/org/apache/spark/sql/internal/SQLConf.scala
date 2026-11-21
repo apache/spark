@@ -6451,6 +6451,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val KLL_MERGE_AGG_LOWEST_COMPACTING_K =
+    buildConf("spark.sql.function.kllMergeAgg.lowestCompactingK.enabled")
+      .internal()
+      .doc("When true, kll_merge_agg_* without k returns a sketch with the lowest k among its " +
+        "first non-empty input sketch and the input sketches that have started compacting " +
+        "(estimation mode), or the default k if every input is empty. When false, it takes " +
+        "the k of its first input sketch.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
@@ -10843,6 +10855,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def kllMergeAggLowestCompactingK: Boolean = getConf(KLL_MERGE_AGG_LOWEST_COMPACTING_K)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
