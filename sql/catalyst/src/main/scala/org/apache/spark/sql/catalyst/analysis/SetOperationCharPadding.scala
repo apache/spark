@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationRef, Except, Intersect, LogicalPlan, Project, SetOperation, Union, UnionLoop, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, CTERelationRef, Except, Intersect, LogicalPlan, Project, SetOperation, Union, UnionLoop, UnionLoopRef}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -45,11 +45,13 @@ object SetOperationCharPadding {
 
   /**
    * Whether the CHAR lengths of the children of a set operation are the same at each position, so
-   * that it needs no padding. As their types, the CHAR types of the children of a set operation
-   * stay the same after analysis, which optimizer rules keep. True if the children are not
-   * resolved yet.
+   * that it needs no padding. Only analysis pads the children, so outside of it, see
+   * [[AnalysisHelper.isInAnalyzer]], this is true: an optimizer rule can make the metadata of the
+   * children differ, such as one that simplifies an expression into a column, whose alias then
+   * has the column's raw type. True if the children are not resolved yet.
    */
-  def isAligned(children: Seq[LogicalPlan]): Boolean = !needsPadding(children)
+  def isAligned(children: Seq[LogicalPlan]): Boolean =
+    !AnalysisHelper.isInAnalyzer || !needsPadding(children)
 
   /** Whether the resolved children of a set operation have CHAR lengths to pad. */
   def needsPadding(children: Seq[LogicalPlan]): Boolean = {

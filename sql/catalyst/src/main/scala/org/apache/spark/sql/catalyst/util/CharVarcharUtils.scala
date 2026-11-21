@@ -416,8 +416,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   /**
    * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
    * standard semantics are off) and extracts the padded expression and the CHAR length. A padding
-   * over another one to a length that is not longer, or a narrowing to a length that is not longer,
-   * matches as one padding of its value.
+   * over another one to a length that is not longer matches as one padding of its value.
    */
   private[sql] object ReadSidePadding {
     def unapply(e: Expression): Option[(Expression, Int)] = e match {
@@ -429,13 +428,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           case ReadSidePadding(grandChild, m) if m <= n => Some((grandChild, n))
           case _ => Some((child, n))
         }
-      // The narrowing of a view or a recursive CTE over the padding to a longer length: for a value
-      // that fits in the shorter length, which is all a string of that length can be equal to, it
-      // is the padding of the value to that length.
-      case s @ StaticInvoke(_, _, CHAR_TYPE_NARROWING,
-          Seq(ReadSidePadding(child, m), Literal(n: Int, _)), _, _, _, _, None)
-          if s.staticObject == classOf[CharVarcharCodegenUtils] && n <= m =>
-        Some((child, n))
       case _ => None
     }
   }

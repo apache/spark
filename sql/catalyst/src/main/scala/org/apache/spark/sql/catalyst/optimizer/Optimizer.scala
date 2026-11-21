@@ -51,6 +51,12 @@ import org.apache.spark.util.Utils
 abstract class Optimizer(catalogManager: CatalogManager)
   extends RuleExecutor[LogicalPlan] with SQLConfHelper {
 
+  // The optimizer is not part of the analysis phase, also when a rule of the analyzer runs it on
+  // another query, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan =
+    AnalysisHelper.markOutsideAnalyzer(super.execute(plan))
+
+
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Option[String] = {
@@ -1519,13 +1525,8 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     val result = e transform {
       case a: Attribute => rewrites(a)
     } match {
-      // Make sure exprId is unique in each child of Union. The alias keeps its explicit metadata,
-      // as in the first child, so that the CHAR types of the children stay the same, see
-      // SetOperationCharPadding.
-      case a @ Alias(child, alias) =>
-        Alias(child, alias)(
-          explicitMetadata = a.explicitMetadata,
-          nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
+      // Make sure exprId is unique in each child of Union.
+      case Alias(child, alias) => Alias(child, alias)()
       case other => other
     }
 

@@ -546,7 +546,8 @@ class Analyzer(
     }
   }
 
-  override def execute(plan: LogicalPlan): LogicalPlan = {
+  // Every run of the analyzer is part of the analysis phase, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
     AnalysisContext.withNewAnalysisContext {
       executeSameContext(plan)
     }

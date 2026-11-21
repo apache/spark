@@ -839,12 +839,17 @@ trait CharVarcharTestSuite extends QueryTest {
                |SELECT n FROM r WHERE c = 'a'""".stripMargin),
         Seq(Row(0), Row(1), Row(2)))
 
-      // An optimizer rule can give the children different metadata again, such as one that
-      // pushes an alias with explicit metadata through the union.
+      // An optimizer rule can give the children different metadata, such as one that pushes an
+      // alias with explicit metadata through the union, or one that simplifies an expression of
+      // no raw type into a column of one.
       val metadata = CharVarcharUtils.withRawType(Metadata.empty, CharType(10))
       checkAnswer(
         spark.table("t5").union(spark.table("t5")).select(functions.col("c").as("c", metadata)),
         Seq(Row(padded), Row(padded)))
+      checkAnswer(
+        sql("SELECT IF(true, c3, c5) AS x, c3, c5 FROM t35 " +
+          "UNION ALL SELECT IF(false, c3, c5) AS x, c3, c5 FROM t35"),
+        Seq(Row("a  ", "a  ", padded), Row(padded, "a  ", padded)))
 
       // In the legacy mode, CHAR is a STRING and nothing is padded.
       withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
@@ -4415,16 +4420,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           Seq(Row(1, "a" + " ".repeat(2)), Row(2, "a" + " ".repeat(2)), Row(3, "abcde")))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'abcde'"), Row(3))
-        // The narrowing of the first child back to its own length matches as the padding of its
-        // scan, which a source can be given.
-        val plan = sql("SELECT id FROM v WHERE c = 'a'").queryExecution.optimizedPlan
-        val comparisons = plan.collect { case f: Filter => f.condition }.flatMap(_.collect {
-          case e: EqualTo => e.left
-        })
-        assert(comparisons.nonEmpty && comparisons.forall {
-          case CharVarcharUtils.ReadSidePadding(_: Attribute, 3) => true
-          case _ => false
-        })
       }
 
       // a struct built from the columns has the raw types in the metadata of its fields
