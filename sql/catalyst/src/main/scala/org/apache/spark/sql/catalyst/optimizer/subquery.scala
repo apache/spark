@@ -1324,21 +1324,21 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * which Aggregates have no grouping expressions, so that a lower one returns one row on empty
    * input, and computes the Aggregates above over that row.
    *
-   * `plan` must be an Aggregate over a chain of Projects, SubqueryAliases and Aggregates down to
-   * the first other node, the correlated input. After decorrelation, which groups each correlated
-   * Aggregate of the chain by the outer (domain) columns, each node of the chain returns a row for
-   * an outer row if its child does, so the decorrelated subquery returns no row for an outer row
-   * only if the correlated input is empty for it. That holds if the correlated input has no
-   * correlated Aggregate without grouping expressions, whose row decorrelation loses, and if the
-   * domain joins that decorrelation adds there anyway, e.g. for a non-equality correlation, have
-   * every outer row (they compute the outer input again, as on master; PullupCorrelatedPredicates
-   * does not use the result where they are known not to). So for such an outer row
-   * the correlated input is taken as empty, and the chain is evaluated over it as before
-   * decorrelation: an Aggregate without grouping expressions returns one row on empty input. An
-   * outer reference in the chain does not change which rows it returns; a value or grouping key
-   * that depends on one is not a literal, and is not taken (see below). A NULL result is a NULL
-   * Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that the result cannot be
-   * computed.
+   * Returns None unless `plan` is an Aggregate over a chain of Projects, SubqueryAliases and
+   * Aggregates down to the first other node, the correlated input. After decorrelation, which
+   * groups each correlated Aggregate of the chain by the outer (domain) columns, each node of the
+   * chain returns a row for an outer row if its child does, so the decorrelated subquery returns no
+   * row for an outer row only if the correlated input is empty for it. That holds if the correlated
+   * input has no correlated Aggregate without grouping expressions, whose row decorrelation loses,
+   * and if the domain joins that decorrelation adds there anyway, e.g. for a non-equality
+   * correlation, have every outer row (they compute the outer input again, as on master;
+   * PullupCorrelatedPredicates does not use the result where they are known not to and that
+   * matters, see rewriteSubQueries). So for such an outer row the correlated input is taken as
+   * empty, and the chain is evaluated over it as before decorrelation: an Aggregate without
+   * grouping expressions returns one row on empty input. An outer reference in the chain does not
+   * change which rows it returns; a value or grouping key that depends on one is not a literal, and
+   * is not taken (see below). A NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`,
+   * since None here means that the result cannot be computed.
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
       plan: LogicalPlan): Option[Literal] = {
@@ -1388,11 +1388,12 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case _ => None
     }
     // Only a value is taken. An expression that failed to evaluate (see tryEvalExpr) is left to
-    // DecorrelateInnerQuery, which evaluates it in the aggregate itself: optimizer rules can
-    // simplify such an expression in a conditional branch until the failure is gone, e.g. a FILTER
-    // condition that fails on the NULL row in `If(cond, update, initial)` where both update and
-    // initial are NULL. So is an expression that cannot be evaluated statically, such as a Python
-    // UDF, which would also run for every outer row in the branch (see constructLeftJoins).
+    // DecorrelateInnerQuery where its domain joins work, which evaluates it in the aggregate
+    // itself: optimizer rules can simplify such an expression in a conditional branch until the
+    // failure is gone, e.g. a FILTER condition that fails on the NULL row in `If(cond, update,
+    // initial)` where both update and initial are NULL. So is an expression that cannot be
+    // evaluated statically, such as a Python UDF, which would also run for every outer row in the
+    // branch (see constructLeftJoins).
     result.collect { case l: Literal => l }
   }
 

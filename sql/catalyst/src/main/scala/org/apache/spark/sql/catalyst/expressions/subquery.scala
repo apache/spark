@@ -423,11 +423,11 @@ object SubExprUtils extends PredicateHelper {
  *
  * `countBugResult` is the result of the subquery for an outer row for which the decorrelated
  * subquery returns no row, if PullupCorrelatedPredicates computed it from the subquery before
- * decorrelation. RewriteCorrelatedScalarSubquery uses it instead of evaluating the decorrelated
- * subquery on zero tuples, which cannot tell that a lower Aggregate without grouping expressions
- * returned one row on empty input. When it is set, `mayHaveCountBug` is true, also for a top
- * Aggregate with a GROUP BY clause over such a lower Aggregate, which returns a row for the row of
- * the lower Aggregate.
+ * decorrelation and kept it (see rewriteSubQueries). RewriteCorrelatedScalarSubquery uses it
+ * instead of evaluating the decorrelated subquery on zero tuples, which cannot tell that a lower
+ * Aggregate without grouping expressions returned one row on empty input. When it is set,
+ * `mayHaveCountBug` is true, also for a top Aggregate with a GROUP BY clause over such a lower
+ * Aggregate, which returns a row for the row of the lower Aggregate.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
