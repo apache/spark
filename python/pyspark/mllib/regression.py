@@ -162,7 +162,7 @@ class LinearRegressionModelBase(LinearModel):
         if isinstance(x, RDD):
             return x.map(self.predict)
         x = _convert_to_vector(x)
-        return self.weights.dot(x) + self.intercept  # type: ignore[attr-defined]
+        return self.weights.dot(x) + self.intercept
 
 
 @inherit_doc
