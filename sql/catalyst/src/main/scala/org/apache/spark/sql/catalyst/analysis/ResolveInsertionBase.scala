@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   def resolver: Resolver = conf.resolver
@@ -27,6 +28,10 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   protected def createProjectForByNameQuery(
       tblName: String,
       i: InsertIntoStatement): LogicalPlan = {
-    InsertionResolution.createProjectForByNameQuery(tblName, i, resolver)
+    InsertionResolution.createProjectForByNameQuery(
+      tblName,
+      i,
+      resolver,
+      conf.getConf(SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION))
   }
 }
