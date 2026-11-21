@@ -338,6 +338,9 @@ abstract class Expression extends TreeNode[Expression] {
    *   2. Reorder the canonicalized child expressions by their hashcode.
    * This means that the lazy `cannonicalized` is called and computed only on the root of the
    * adjacent expressions.
+   * Resolved `Add` and `Multiply` with a FLOAT, DOUBLE or maximum-precision DECIMAL result are the
+   * exception: as they are not associative, each node only reorders its two direct children (see
+   * `orderBinaryCommutative` and `BinaryArithmetic.isNonAssociative`).
    */
   lazy val canonicalized: Expression = withCanonicalizedChildren
 
@@ -1474,6 +1477,42 @@ trait CommutativeExpression extends Expression {
     gatherCommutative(this, f).sortBy(_.hashCode())
 
   /**
+   * Reorders only the two direct children of a binary commutative operator, without flattening
+   * adjacent operators. Used when the operator is commutative but not associative, e.g.
+   * floating-point and maximum-precision decimal addition and multiplication.
+   *
+   * `buildBinaryOp` is defined for the operators of this class that are canonicalized this way,
+   * and builds such an operator from its reordered children. This operator and the nested
+   * operators of the same class are checked and canonicalized bottom-up without recursion, so a
+   * deep chain of them does not overflow the stack. Returns None if `buildBinaryOp` is not
+   * defined for this operator.
+   */
+  protected def orderBinaryCommutative(
+      buildBinaryOp: PartialFunction[Expression, (Expression, Expression) => Expression])
+    : Option[Expression] = {
+    val nested = scala.collection.mutable.ArrayBuffer[Expression]()
+    val stack = scala.collection.mutable.Stack[Expression](this)
+    while (stack.nonEmpty) {
+      val current = stack.pop()
+      if (current.getClass == getClass) {
+        nested += current
+        current.children.foreach(stack.push)
+      }
+    }
+    // Pre-order reversed: every operator comes after the operators nested in it.
+    val canonical = new java.util.IdentityHashMap[Expression, Expression]()
+    nested.reverseIterator.foreach { e =>
+      buildBinaryOp.lift(e).foreach { build =>
+        val Seq(l, r) = e.children
+          .map(c => Option(canonical.get(c)).getOrElse(c.canonicalized))
+          .sortBy(_.hashCode())
+        canonical.put(e, build(l, r))
+      }
+    }
+    Option(canonical.get(this))
+  }
+
+  /**
    * Helper method to generated a canonicalized plan. If the number of operands are
    * greater than the MULTI_COMMUTATIVE_OP_OPT_THRESHOLD, this method creates a
    * [[MultiCommutativeOp]] as the canonicalized plan.
@@ -1502,6 +1541,8 @@ trait CommutativeExpression extends Expression {
  * The MultiCommutativeOp memory optimization is applied to the following commutative
  * expressions:
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
+ * Resolved Add and Multiply with a FLOAT, DOUBLE or maximum-precision DECIMAL result never build
+ * it, as they are canonicalized per operator (see `CommutativeExpression.orderBinaryCommutative`).
  * @param operands A sequence of operands that produces a commutative expression tree.
  * @param opCls The class of the root operator of the expression tree.
  * @param evalContext The optional expression evaluation context.

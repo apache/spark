@@ -642,6 +642,19 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val LEGACY_REASSOCIATE_INEXACT_ARITHMETIC =
+    buildConf("spark.sql.legacy.canonicalization.reassociateInexactArithmetic")
+      .internal()
+      .doc("When true, canonicalization re-associates chains of FLOAT or DOUBLE addition or " +
+        "multiplication, and chains of DECIMAL addition or multiplication whose result has the " +
+        "maximum precision, so differently associated chains are semantically equal although " +
+        "they can evaluate to different values, as before Spark 4.5. When false, only the two " +
+        "operands of each such operator are reordered.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS =
     buildConf("spark.sql.optimizer.preserveAliasMetadataWhenCollapsingProjects")
     .internal()

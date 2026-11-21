@@ -432,6 +432,18 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
 
 object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
+
+  /**
+   * Whether re-associating an `Add` or `Multiply` chain with this result type can change its
+   * value. Floating-point steps round, and a decimal step at the maximum precision rounds or
+   * overflows. Below that precision every decimal step is exact, and precision only grows toward
+   * the root, so such chains can still be re-associated.
+   */
+  private[expressions] def isNonAssociative(dataType: DataType): Boolean = dataType match {
+    case FloatType | DoubleType => true
+    case d: DecimalType => d.precision == DecimalType.MAX_PRECISION
+    case _ => false
+  }
 }
 
 @ExpressionDescription(
@@ -519,17 +531,29 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, em) if em == evalContext => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
-      Some(evalContext)
-    )
-    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
-      reorderResult
+    // SPARK-60178: Floating-point and maximum-precision decimal addition is commutative but not
+    // associative, so only the two direct children can be reordered.
+    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+      None
     } else {
-      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
-      // changed, which may cause data checking error within ComplexTypeMergingExpression.
-      withCanonicalizedChildren
+      orderBinaryCommutative {
+        case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a.dataType) =>
+          Add(_, _, a.evalContext)
+      }
+    }
+    binaryOrdered.getOrElse {
+      val reorderResult = buildCanonicalizedPlan(
+        { case Add(l, r, em) if em == evalContext => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
+        Some(evalContext)
+      )
+      if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+        reorderResult
+      } else {
+        // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type
+        // is changed, which may cause data checking error within ComplexTypeMergingExpression.
+        withCanonicalizedChildren
+      }
     }
   }
 }
@@ -712,11 +736,23 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    buildCanonicalizedPlan(
-      { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
-      Some(evalContext)
-    )
+    // SPARK-60178: Floating-point and maximum-precision decimal multiplication is commutative but
+    // not associative, so only the two direct children can be reordered.
+    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+      None
+    } else {
+      orderBinaryCommutative {
+        case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m.dataType) =>
+          Multiply(_, _, m.evalContext)
+      }
+    }
+    binaryOrdered.getOrElse {
+      buildCanonicalizedPlan(
+        { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
+        Some(evalContext)
+      )
+    }
   }
 }
 
