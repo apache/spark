@@ -985,16 +985,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // which keeps the results of master, also the wrong ones for outer rows without matching
         // rows, and keeps a LIMIT above it otherwise (see DomainJoin.keepLimitAbove). This is
         // decided the first time, as mayHaveCountBug.
+        // With countBugResult, the top Aggregate is over exactly one row for every outer row, that
+        // of the Aggregates of the chain below it (see evalSubqueryOnEmptyCorrelatedInput).
         lazy val countBugResultForEveryRow = sub match {
-          case agg: Aggregate =>
-            def oneRow(p: LogicalPlan): Boolean = p match {
-              case Project(_, child) => oneRow(child)
-              case SubqueryAlias(_, child) => oneRow(child)
-              case a: Aggregate => a.groupingExpressions.isEmpty
-              case _ => false
-            }
-            agg.groupingExpressions.isEmpty &&
-              agg.aggregateExpressions.forall(_.references.isEmpty) && oneRow(agg.child)
+          case agg: Aggregate => agg.groupingExpressions.isEmpty &&
+            agg.aggregateExpressions.forall(_.references.isEmpty)
           case _ => false
         }
         lazy val countBugResultAsOnMaster = {

@@ -586,6 +586,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(keepLimitAbove(nonEquality.groupBy()(isNullCount.as("r")),
       outer = nonDeterministicOuter).toSet == Set(false))
     assert(countBugResult(nonEquality, Seq(isNullCount), above = _.where(Rand(0) > 0.5)).isEmpty)
+    assert(countBugResult(nonEquality, Seq(isNullCount), outer = testRelation.limit(10)).isEmpty)
+    assert(countBugResult(nonEquality, Seq(isNullCount), outer = streamingOuter).isEmpty)
+    assert(countBugResult(nonEquality, outer = streamingOuter) == Some("1"))
     val belowUnion = testRelation2.where($"a" === $"c").select($"d")
       .union(testRelation2.where($"a" === $"c").select($"d")).groupBy()(max($"d").as("s"))
     assert(countBugResult(belowUnion, Seq(isNullCount)) == Some("1"))
