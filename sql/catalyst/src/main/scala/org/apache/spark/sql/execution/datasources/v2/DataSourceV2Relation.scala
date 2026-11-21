@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
-import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream, SupportsReportMicroBatchStatistics}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
@@ -609,12 +609,18 @@ case class StreamingDataSourceV2ScanRelation(
       }))
   }
 
-  override def computeStats(): Statistics = scan match {
-    case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
-    case _ =>
-      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  override def computeStats(): Statistics = {
+    // A micro-batch reads only its own offset range, which the scan, built once when the query
+    // starts, cannot describe. When the stream does not know the statistics of the range, use the
+    // statistics of the scan.
+    val microBatchStats = (stream, startOffset, endOffset) match {
+      case (microBatch: SupportsReportMicroBatchStatistics, Some(start), Some(end)) =>
+        Some(microBatch.estimateStatistics(start, end)).filter(V2StatisticsUtils.isNotEmpty)
+      case _ => None
+    }
+    microBatchStats.orElse(V2StatisticsUtils.computeStats(scan))
+      .map(DataSourceV2Relation.transformV2Stats(_, conf.defaultSizeInBytes, output))
+      .getOrElse(Statistics(sizeInBytes = conf.defaultSizeInBytes))
   }
 
   private val stringArgsVal: Seq[Any] = {

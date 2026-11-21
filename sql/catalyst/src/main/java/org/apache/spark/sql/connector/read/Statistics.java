@@ -27,7 +27,8 @@ import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 
 /**
  * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics()}.
+ * {@link SupportsReportStatistics#estimateStatistics()} and
+ * {@link org.apache.spark.sql.connector.read.streaming.SupportsReportMicroBatchStatistics}.
  *
  * @since 3.0.0
  */
