@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.Transform
 
 class InMemoryTableWithTableSampleCatalog extends InMemoryTableCatalog {
@@ -30,6 +31,15 @@ class InMemoryTableWithTableSampleCatalog extends InMemoryTableCatalog {
       columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
+    createTable(ident, columns, partitions, properties, Array.empty)
+  }
+
+  private def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
@@ -37,14 +47,16 @@ class InMemoryTableWithTableSampleCatalog extends InMemoryTableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTableWithTableSample(tableName, columns, partitions, properties)
+    val table =
+      new InMemoryTableWithTableSample(tableName, columns, partitions, properties, constraints)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties,
+      tableInfo.constraints())
   }
 }
 

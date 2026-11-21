@@ -1065,6 +1065,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder),
+        propagatesTableDistinctKeys = sHolder.pushedSample.forall(!_.withReplacement),
         onlyRowWisePushdowns = !hasRowSelectingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
