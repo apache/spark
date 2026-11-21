@@ -44,6 +44,16 @@ private[spark] object BlockManagerMessages {
   // Remove all blocks belonging to a specific shuffle.
   case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerMasterStorageEndpoint
 
+  // Driver-side entry point for removing a shuffle, sent only by BlockManagerMaster.removeShuffle.
+  // Distinct from RemoveShuffle, which is what the master then fans out to the storage endpoints,
+  // because these two payloads are of no use to an executor. They are snapshotted by the caller
+  // rather than read on the master's dispatcher thread; see BlockManagerMaster.removeShuffle for
+  // why that matters. Both are empty unless the corresponding feature is on.
+  case class RemoveShuffleFromMaster(
+      shuffleId: Int,
+      mapOutputLocations: Seq[(BlockManagerId, Long)],
+      shuffleMergerLocations: Seq[BlockManagerId]) extends ToBlockManagerMaster
+
   // Remove all blocks belonging to a specific broadcast.
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerMasterStorageEndpoint
