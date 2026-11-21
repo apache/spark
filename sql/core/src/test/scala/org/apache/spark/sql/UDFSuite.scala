@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Project, UnionLoopRef}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
@@ -478,6 +478,205 @@ class UDFSuite extends SharedSparkSession {
       comparePlans(df.logicalPlan, plan)
       checkAnswer(df, Seq(Row("12"), Row("24"), Row("3null"), Row(null)))
     }
+  }
+
+  test("SPARK-60875: NULLs from a primitive Scala UDF in a recursive CTE are read back as NULL") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    // Steps of 200 rows are materialized, so the recursion reads them through generated code.
+    def nullsPerLevel(anchor: String, recursion: String): DataFrame = sql(
+      s"""WITH RECURSIVE t(lvl, arr, was_null) AS (
+         |  $anchor
+         |  UNION ALL
+         |  $recursion
+         |)
+         |SELECT lvl, count_if(was_null) FROM t GROUP BY lvl ORDER BY lvl""".stripMargin)
+
+    // The anchor writes the NULLs, and the recursion passes them through.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))), false FROM range(200)",
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
+      Seq(Row(0, 0L), Row(1, 100L)))
+
+    // Same, with the array built in a subquery of the anchor.
+    checkAnswer(
+      nullsPerLevel(
+        """SELECT 0, a, false
+          |FROM (SELECT ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))) AS a FROM range(200))
+          |""".stripMargin,
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
+      Seq(Row(0, 0L), Row(1, 100L)))
+
+    // The recursion writes the NULLs into an array built in a subquery.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, a, arr[0] IS NULL
+          |FROM (SELECT lvl, arr, ARRAY(f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0]))) AS a FROM t)
+          |WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+
+    // The recursion writes the NULLs.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, ARRAY(f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0]))), arr[0] IS NULL
+          |FROM t WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+
+    // The UDF that writes the NULLs is fed by another UDF, which becomes nullable first.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, ARRAY(f(y)), x IS NULL
+          |FROM (SELECT lvl, arr[0] AS x, f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0])) AS y FROM t)
+          |WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+  }
+
+  test("SPARK-60875: NULLs from a primitive Scala UDF in a CTE that a recursive CTE reads") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    val v = "f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))"
+    val x = s"SELECT id, $v AS v, ARRAY($v) AS a FROM range(200)"
+    val anchor = "SELECT 0, v, a, false FROM x"
+    // Counts the rows that read both NULLs back.
+    val recursion = "SELECT lvl + 1, v, a, v IS NULL AND a[0] IS NULL FROM t WHERE lvl < 1"
+    val result = "SELECT lvl, count_if(was_null) FROM t GROUP BY lvl ORDER BY lvl"
+    val expected = Seq(Row(0, 0L), Row(1, 100L))
+
+    // A sibling of the recursive CTE.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE x AS ($x), t(lvl, v, a, was_null) AS ($anchor UNION ALL $recursion)
+             |$result""".stripMargin),
+      expected)
+    // The recursive CTE's inner WITH.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE t(lvl, v, a, was_null) AS (
+             |  WITH x AS ($x) $anchor UNION ALL $recursion
+             |) $result""".stripMargin),
+      expected)
+    // A WITH that encloses the recursive CTE.
+    checkAnswer(
+      sql(s"""WITH x AS ($x)
+             |SELECT * FROM (
+             |  WITH RECURSIVE t(lvl, v, a, was_null) AS ($anchor UNION ALL $recursion) $result
+             |)""".stripMargin),
+      expected)
+    // The recursion reads the CTE.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE x AS ($x), t(lvl, id, v, a, was_null) AS (
+             |  SELECT 0, id, id, ARRAY(id), false FROM range(200)
+             |  UNION ALL
+             |  SELECT t.lvl + 1, t.id, IF(t.lvl = 0, x.v, t.v), IF(t.lvl = 0, x.a, t.a),
+             |    t.v IS NULL AND t.a[0] IS NULL
+             |  FROM t JOIN x ON t.id = x.id WHERE t.lvl < 2
+             |) $result""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 100L)))
+  }
+
+  test("SPARK-60875: UDF NULLs read by a recursive CTE in a subquery expression") {
+    spark.udf.register("f", (v: Long) => v + 1)
+    withTempView("edges") {
+      sql("CREATE TEMPORARY VIEW edges(a, b) AS VALUES (1L, CAST(NULL AS BIGINT)), (0L, 5L)")
+      // Level 1 writes the NULL. Read back as 0, it joins the (0, 5) edge and adds a row.
+      def t(join: String): String =
+        s"""WITH RECURSIVE t(id, arr) AS (
+           |  SELECT id, ARRAY(id) FROM range(1, 2)
+           |  UNION ALL
+           |  SELECT x.dst, ARRAY(x.dst) FROM t JOIN x ON $join)
+           |SELECT id FROM t""".stripMargin
+      val x = "WITH x AS (SELECT a AS src, f(b) AS dst FROM edges)"
+      for (join <- Seq("t.id = x.src", "t.arr[0] = x.src")) {
+        checkAnswer(sql(s"$x SELECT (SELECT count(*) FROM (${t(join)}))"), Row(2L))
+        checkAnswer(sql(s"$x SELECT 2 IN (SELECT count(*) FROM (${t(join)}))"), Row(true))
+        checkAnswer(
+          sql(s"$x SELECT c FROM range(1), LATERAL (SELECT count(*) AS c FROM (${t(join)}))"),
+          Row(2L))
+      }
+    }
+  }
+
+  test("SPARK-60875: a recursive CTE in a subquery expression is read with its rebuilt types") {
+    spark.udf.register("f", (v: Long) => v + 1)
+    val x = "WITH x AS (SELECT f(CAST(NULL AS BIGINT)) AS v)"
+    val t = """WITH RECURSIVE t(lvl, v, prev) AS (
+              |  SELECT 0, 0L, 0L
+              |  UNION ALL
+              |  SELECT t.lvl + 1, x.v, t.v FROM t, x WHERE t.lvl < 2)""".stripMargin
+    val lateral = sql(
+      s"$x SELECT l.lvl, l.prev FROM range(1), LATERAL ($t SELECT lvl, prev FROM t) l")
+    assert(lateral.schema("prev").nullable)
+    checkAnswer(lateral, Seq(Row(0, 0L), Row(1, 0L), Row(2, null)))
+    checkAnswer(
+      sql(s"$x SELECT (SELECT count_if(prev IS NULL) FROM ($t SELECT prev FROM t))"),
+      Row(1L))
+    checkAnswer(
+      sql(s"$x SELECT 1 IN (SELECT count_if(prev IS NULL) FROM ($t SELECT prev FROM t))"),
+      Row(true))
+  }
+
+  test("SPARK-60875: UDF null handling runs in a subquery whose recursive CTE reads an outer CTE") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    val x = "WITH x AS (SELECT 1L AS v)"
+    val t = "WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)"
+    checkAnswer(
+      sql(s"""$x SELECT r.id FROM range(3) r
+             |WHERE EXISTS ($t SELECT 1 AS c FROM t WHERE f(CAST(NULL AS BIGINT)) IS NULL)
+             |""".stripMargin),
+      Seq(Row(0L), Row(1L), Row(2L)))
+    checkAnswer(
+      sql(s"$x SELECT ($t SELECT max(f(CAST(NULL AS BIGINT))) AS m FROM t)"),
+      Row(null))
+    checkAnswer(
+      sql(s"""$x SELECT count(*), count(l.c) FROM range(3) r,
+             |LATERAL ($t SELECT f(CAST(NULL AS BIGINT)) AS c FROM t) l""".stripMargin),
+      Row(9L, 0L))
+  }
+
+  test("SPARK-60875: UDF NULLs that a recursion reads from a CTE through a subquery") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    def nullsPerLevel(read: String): DataFrame = sql(
+      s"""WITH RECURSIVE x AS (SELECT f(CAST(NULL AS BIGINT)) AS v, ARRAY(f(NULL)) AS a),
+         |t(lvl, v, a) AS (
+         |  SELECT 0, id, ARRAY(id) FROM range(200)
+         |  UNION ALL
+         |  SELECT t.lvl + 1, IF(t.lvl = 0, l.v, t.v), IF(t.lvl = 0, l.a, t.a)
+         |  FROM t, $read WHERE t.lvl < 2)
+         |SELECT lvl, count_if(v IS NULL AND a[0] IS NULL) FROM t GROUP BY lvl ORDER BY lvl
+         |""".stripMargin)
+    val expected = Seq(Row(0, 0L), Row(1, 200L), Row(2, 200L))
+    checkAnswer(nullsPerLevel("LATERAL (SELECT v, a FROM x) l"), expected)
+    checkAnswer(
+      nullsPerLevel("LATERAL (SELECT (SELECT v FROM x) AS v, (SELECT a FROM x) AS a) l"),
+      expected)
+  }
+
+  test("SPARK-60875: recursive CTEs that cast values built by a primitive Scala UDF analyze") {
+    spark.udf.register("g", (x: Int) => x + 1)
+    // Analysis only: as for a plain UNION ALL, the optimizer later folds the UDF into the cast,
+    // which plan validation then rejects.
+    def selfReferenceTypes(query: String): Seq[DataType] =
+      sql(query).queryExecution.analyzed.collectFirst {
+        case r: UnionLoopRef => r.output.map(_.dataType)
+      }.get
+
+    // The recursion's ARRAY<INT> is cast to the anchor's ARRAY<BIGINT>.
+    assert(selfReferenceTypes(
+      """WITH RECURSIVE t(lvl, arr) AS (
+        |  SELECT 0, ARRAY(CAST(1 AS BIGINT))
+        |  UNION ALL
+        |  SELECT lvl + 1, ARRAY(g(IF(lvl < 0, NULL, lvl))) FROM t WHERE lvl < 2
+        |) SELECT * FROM t""".stripMargin) ===
+      Seq(IntegerType, ArrayType(LongType, containsNull = true)))
+    // The anchor casts a struct built in a subquery to a struct with a NOT NULL field.
+    assert(selfReferenceTypes(
+      """WITH RECURSIVE t(lvl, s) AS (
+        |  SELECT 0, CAST(s AS STRUCT<a: INT NOT NULL>)
+        |  FROM (SELECT named_struct('a', g(IF(id < 0, NULL, CAST(id AS INT)))) AS s FROM range(2))
+        |  UNION ALL
+        |  SELECT lvl + 1, s FROM t WHERE lvl < 1
+        |) SELECT * FROM t""".stripMargin) ===
+      Seq(IntegerType, new StructType().add("a", IntegerType, nullable = true)))
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf()") {

@@ -1601,4 +1601,32 @@ abstract class SQLViewSuite extends QueryTest {
       }
     }
   }
+
+  test("SPARK-60875: a view stored with the previous recursive CTE types reads") {
+    withView("v") {
+      // Stores the types Spark 4.3 derived: copies keep the anchor's non-null elements.
+      withSQLConf(LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> "true") {
+        sql("""CREATE VIEW v AS WITH RECURSIVE t AS (
+              |  SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head,
+              |    ARRAY(1) AS prev_head, ARRAY(1) AS ins, ARRAY(1) AS prev_ins
+              |  UNION ALL
+              |  SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path,
+              |    ARRAY(element_at(path, 1)), head,
+              |    array_insert(array_insert(ins, 1, 0), -1, n), ins
+              |  FROM t WHERE n < 3)
+              |SELECT n, prev, prev_head, prev_ins FROM t""".stripMargin)
+      }
+      // A view created by Spark 4.3 captured no such setting, so it reads with the new types.
+      val catalog = spark.sessionState.catalog
+      val view = catalog.getTableMetadata(TableIdentifier("v"))
+      val legacyKey =
+        CatalogTable.VIEW_SQL_CONFIG_PREFIX + LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key
+      assert(view.properties.contains(legacyKey))
+      catalog.alterTable(view.copy(properties = view.properties - legacyKey))
+      checkAnswer(
+        sql("SELECT * FROM v"),
+        Seq(Row(1, Seq(1), Seq(1), Seq(1)), Row(2, Seq(1), Seq(1), Seq(1)),
+          Row(3, Seq(0, 1, 2), Seq(1), Seq(0, 1, 1))))
+    }
+  }
 }
