@@ -227,6 +227,9 @@ trait PredicateHelper extends AliasHelper with Logging {
     // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
+    // The same holds for a columnar UDF: `ExtractColumnarUDFs` evaluates it below the join, or
+    // pulls it out of the condition when it reads both sides.
+    case _: ColumnarUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }

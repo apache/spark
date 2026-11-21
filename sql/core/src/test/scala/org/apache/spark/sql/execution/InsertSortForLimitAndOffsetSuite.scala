@@ -19,15 +19,20 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.IntegratedUDFTestUtils._
+import org.apache.spark.sql.columnar.ColumnarUserDefinedFunction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.columnar.udf.AddOneFunction
 import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class InsertSortForLimitAndOffsetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  private val columnarTestUDF =
+    ColumnarUserDefinedFunction.create("add_one", Seq(LongType), LongType, new AddOneFunction)
 
   private def assertHasTopKSort(plan: SparkPlan): Unit = {
     assert(find(plan) {
@@ -99,6 +104,8 @@ class InsertSortForLimitAndOffsetSuite extends SharedSparkSession
       verifySortAdded(df.filter($"c2" > rand()).limit(2))
       verifySortAdded(df.select($"c2").limit(2))
       verifySortAdded(df.filter($"c2" > rand()).select($"c2").limit(2))
+      verifySortAdded(df.filter(columnarTestUDF($"c2") > rand()).limit(2))
+      verifySortAdded(df.select(columnarTestUDF($"c2")).limit(2))
 
       assume(shouldTestPythonUDFs)
       val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(IntegerType))
@@ -122,6 +129,8 @@ class InsertSortForLimitAndOffsetSuite extends SharedSparkSession
     verifySortAdded(df.filter($"c2" > rand()).offset(2))
     verifySortAdded(df.select($"c2").offset(2))
     verifySortAdded(df.filter($"c2" > rand()).select($"c2").offset(2))
+    verifySortAdded(df.filter(columnarTestUDF($"c2") > rand()).offset(2))
+    verifySortAdded(df.select(columnarTestUDF($"c2")).offset(2))
 
     assume(shouldTestPythonUDFs)
     val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(IntegerType))

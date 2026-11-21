@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassExcep
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FileTypeColumnUsage, ParseMode}
@@ -3116,6 +3116,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
+  def useColumnarUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    // The join can also come from a correlated EXISTS or IN subquery, as a semi, anti or
+    // existence join, or from a correlated scalar subquery, as a left single join. An
+    // existence join has no SQL form.
+    val joinTypeName = joinType match {
+      case _: ExistenceJoin => "EXISTENCE"
+      case other => other.sql
+    }
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
+      messageParameters = Map("joinType" -> toSQLStmt(joinTypeName)))
+  }
+
+  def columnarUDFNoImplementationError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMNAR_UDF_NO_IMPLEMENTATION",
+      messageParameters = Map("name" -> toSQLId(name)))
+  }
+
   def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
@@ -4389,6 +4408,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       defaultValue: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue))
+  }
+
+  def defaultValuesMayNotContainColumnarUDFs(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.COLUMNAR_UDF",
       messageParameters = Map(
         "statement" -> toSQLStmt(statement),
         "colName" -> toSQLId(colName),

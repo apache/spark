@@ -949,7 +949,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Returns the number of child vectors.
    */
   public int getNumChildren() {
-    return childColumns.length;
+    return childColumns == null ? 0 : childColumns.length;
   }
 
   /**
@@ -1005,6 +1005,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
+
+  /**
+   * Returns the maximum number of rows that can be stored in this column.
+   */
+  public final int getCapacity() { return capacity; }
 
   /**
    * The default number of rows that can be stored in this column.

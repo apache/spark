@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StoredExpressionText, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Check
@@ -619,6 +619,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
 
+          // A columnar UDF is evaluated by an operator of its own, over the columns of its
+          // child, so it cannot be evaluated for the elements that a lambda function iterates.
+          case hof: HigherOrderFunction
+              if hof.containsPattern(COLUMNAR_UDF) && hof.resolved &&
+                hof.functions.exists(_.exists(_.isInstanceOf[ColumnarUDF])) =>
+            val udf = hof.functions.flatMap(_.collectFirst { case u: ColumnarUDF => u }).head
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_COLUMNAR_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
+
           case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
@@ -1045,16 +1055,25 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case alter: AlterTableCommand =>
             AlterTableValidation.validate(alter, this)
 
-          case c: CreateVariable
-              if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
+          // A columnar UDF is evaluated by a node below the operator that calls it, and the
+          // command has no such child.
+          case c: CreateVariable if c.resolved &&
+              c.defaultExpr.child.containsAnyPattern(PLAN_EXPRESSION, COLUMNAR_UDF) =>
             val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
               (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
                 .toImmutableArraySeq)
-            throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-              "DECLARE VARIABLE",
-              varName,
-              c.defaultExpr.originalSQL)
+            if (c.defaultExpr.child.containsPattern(PLAN_EXPRESSION)) {
+              throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+                "DECLARE VARIABLE",
+                varName,
+                c.defaultExpr.originalSQL)
+            } else {
+              throw QueryCompilationErrors.defaultValuesMayNotContainColumnarUDFs(
+                "DECLARE VARIABLE",
+                varName,
+                c.defaultExpr.originalSQL)
+            }
 
           case c: Call if c.resolved =>
             if (!c.bound) {

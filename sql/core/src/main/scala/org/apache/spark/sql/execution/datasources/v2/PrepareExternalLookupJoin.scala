@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap,
-  AttributeSet, Coalesce, EqualNullSafe, EqualTo, Expression, ExprUtils,
+  AttributeSet, Coalesce, ColumnarUDF, EqualNullSafe, EqualTo, Expression, ExprUtils,
   ExternalUserDefinedFunction, Literal, NamedExpression, PredicateHelper, PythonUDF}
 import org.apache.spark.sql.catalyst.optimizer.ReplaceUpdateFieldsExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -114,13 +114,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           "TABLE", Map("table" -> toSQLFreeFormId(tableName)))
     }
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
-    // A Python or external UDF over lookup columns cannot run in the residual. The rules that move
-    // one out of a join condition match only Join and run later, so this rule does it: an inner
-    // join evaluates the conjunct in a filter above the join, and other join types are rejected.
+    // A Python, columnar or external UDF over lookup columns cannot run in the residual. The rules
+    // that move one out of a join condition match only Join and run later, so this rule does it:
+    // an inner join evaluates the conjunct in a filter above the join, and other join types are
+    // rejected.
     if (join.joinType != Inner) {
       conjuncts.flatMap(lookupSideUDF(join, _)).headOption.foreach {
         case _: ExternalUserDefinedFunction =>
           throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(join.joinType)
+        case _: ColumnarUDF =>
+          throw QueryCompilationErrors.useColumnarUDFInJoinConditionUnsupportedError(join.joinType)
         case _ =>
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
       }
@@ -218,8 +221,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     // their analyzed order; execution projects the lookup results into them. It keeps only those
     // required above the join: the ones that a parent projection reads, to which ColumnPruning has
     // narrowed `requiredLookupOutput` during operator optimization, and the ones that `joinFilter`
-    // reads. `joinFilter` holds the conjuncts with a Python or external UDF over lookup columns,
-    // which an inner join evaluates in a filter above it; other join types reject them above.
+    // reads. `joinFilter` holds the conjuncts with a Python, columnar or external UDF over lookup
+    // columns, which an inner join evaluates in a filter above it; other join types reject them
+    // above.
     val requiredAbove = join.joinType match {
       case LeftSemi | LeftAnti => AttributeSet.empty
       case _ => AttributeSet(join.requiredLookupOutput ++ joinFilter.flatMap(_.references))
@@ -351,10 +355,11 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case _ => readType
     }
 
-  /** A Python or external UDF in the conjunct that reads lookup columns. */
+  /** A Python, columnar or external UDF in the conjunct that reads lookup columns. */
   private def lookupSideUDF(join: ExternalLookupJoin, conjunct: Expression): Option[Expression] =
     conjunct.find { e =>
-      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ExternalUserDefinedFunction]) &&
+      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ColumnarUDF] ||
+        e.isInstanceOf[ExternalUserDefinedFunction]) &&
         !e.references.subsetOf(join.left.outputSet)
     }
 

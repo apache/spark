@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, ColumnarUDF, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -654,7 +654,7 @@ object PushDownUtils extends Logging {
       f: Expression,
       includeSubquery: Boolean = false): Boolean =
     f.deterministic &&
-      !f.exists(_.isInstanceOf[PythonUDF]) &&
+      !f.exists(e => e.isInstanceOf[PythonUDF] || e.isInstanceOf[ColumnarUDF]) &&
       (includeSubquery || !SubqueryExpression.hasSubquery(f))
 
   /**

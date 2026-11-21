@@ -66,6 +66,8 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
    * step, so single-task plans must never be assumed safe for them.
    */
   val unsupportedPatterns: Seq[TreePattern] = Seq(
+    COLUMNAR_UDF,
+    EVAL_COLUMNAR_UDF,
     EVAL_PYTHON_UDF,
     EVAL_PYTHON_UDTF,
     EXISTS_SUBQUERY,

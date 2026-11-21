@@ -1046,6 +1046,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ExecuteExternalUDF)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+    // A limit is not pushed through `EvalColumnarUDFs`. A local limit is a row-based operator,
+    // so below a columnar child it would add transitions to rows and back for every batch that
+    // it lets through, while the limit above already stops the node after at most one batch
+    // more than needed.
   }
 }
 
@@ -3018,6 +3022,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: ExecuteExternalUDF => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: EvalColumnarUDFs => true
     case _: Expand => true
     case _: BinBy => true
     case _ => false

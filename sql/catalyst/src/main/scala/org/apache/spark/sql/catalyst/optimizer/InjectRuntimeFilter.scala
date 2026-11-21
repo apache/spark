@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.PerPartitionRuntimeFilterSubquery
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PER_PARTITION_RUNTIME_FILTER_SUBQUERY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, EXTERNAL_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PER_PARTITION_RUNTIME_FILTER_SUBQUERY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -161,8 +161,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
   // over the partition transform `creation` of the creation side. The aggregate of its semi join
   // reads the creation side again, apart from the join. So a creation side gives none when:
-  //  - it has a Python or external UDF, or is not deterministic, as for the bloom filter of the
-  //    whole creation side;
+  //  - it has a Python, external or columnar UDF, or is not deterministic, as for the bloom
+  //    filter of the whole creation side;
   //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
   //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
   // A creation side also gives none when it needs more partition keys than a `bucket` transform
@@ -177,7 +177,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     lazy val creationSide = ConstantFolding(ColumnPruning(
       Project(Seq(Alias(filterCreationSide.key, "key")()), filterCreationSide.plan)))
     if (creation.numBucketsOpt.exists(sizing.minPartitionKeys > _ + 1L) ||
-        creationSide.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || !creationSide.deterministic ||
+        creationSide.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF, COLUMNAR_UDF) ||
+        !creationSide.deterministic ||
         creationSide.exists {
           case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
           case _ => false
@@ -228,9 +229,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    // Runtime filters are introduced after subquery optimization, so Python and external UDFs in
-    // a new creation-side subquery cannot be extracted into their evaluation operators.
-    if (aggregate.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
+    // Runtime filters are introduced after subquery optimization, so Python, external and
+    // columnar UDFs in a new creation-side subquery cannot be extracted into their evaluation
+    // operators.
+    if (aggregate.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF, COLUMNAR_UDF)) {
       return filterApplicationSidePlan
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
@@ -403,7 +405,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   private def isSimpleExpression(e: Expression): Boolean = {
     !e.containsAnyPattern(PYTHON_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
-      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, EXTERNAL_UDF)
+      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, EXTERNAL_UDF, COLUMNAR_UDF)
   }
 
   // A broadcast hash join can build only a side that its join type allows, and a hint can rule it

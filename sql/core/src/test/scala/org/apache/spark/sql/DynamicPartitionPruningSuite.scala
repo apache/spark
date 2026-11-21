@@ -33,10 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.columnar.ColumnarUserDefinedFunction
 import org.apache.spark.sql.connector.RotatingLimitDataSourceV2
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
+import org.apache.spark.sql.execution.columnar.udf.{AddOneFunction, EvalColumnarUDFsExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec,
@@ -49,7 +51,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -2035,6 +2037,27 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
+  test("no DPP filter on a pruning key with a columnar UDF") {
+    val addOne = ColumnarUserDefinedFunction.create(
+      "dpp_add_one", Seq(LongType), LongType, new AddOneFunction)
+    try {
+      spark.udf.asInstanceOf[classic.UDFRegistration].registerColumnar(addOne)
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON dpp_add_one(f.store_id) - 1 = s.store_id
+          |WHERE s.country = 'NL'
+        """.stripMargin)
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      // As for a Python UDF, the node of the call would be between a DPP filter and the scan.
+      assert(!checkUnpushedFilters(df), df.queryExecution)
+      val evals = collect(df.queryExecution.executedPlan) { case e: EvalColumnarUDFsExec => e }
+      assert(evals.size === 1, df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS dpp_add_one")
+    }
+  }
+
   test("SPARK-62052: keep DPP on a pruning key with a Python UDF only through an alias") {
     import IntegratedUDFTestUtils._
     assume(shouldTestPythonUDFs)
@@ -2633,6 +2656,24 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
       }
     } finally {
       conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
+    }
+  }
+
+  test("no standalone DPP subquery for a filtering side with a columnar UDF") {
+    val addOne = ColumnarUserDefinedFunction.create(
+      "dpp_add_one", Seq(LongType), LongType, new AddOneFunction)
+    withUserDefinedFunction("dpp_add_one" -> true) {
+      spark.udf.registerColumnar(addOne)
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        Seq(
+          "f.store_id = s.store_id AND dpp_add_one(s.store_id) = 2",
+          "f.store_id = dpp_add_one(s.store_id) - 1 AND s.store_id = 1").foreach { condition =>
+          val df = sql(
+            s"SELECT f.date_id, f.store_id FROM fact_sk f JOIN dim_store s ON $condition")
+          checkPartitionPruningPredicate(df, false, false)
+          checkAnswer(df, Row(1000, 1) :: Nil)
+        }
+      }
     }
   }
 

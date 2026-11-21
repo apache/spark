@@ -149,14 +149,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
   /**
    * Returns whether the expressions have a UDF that only the "Extract UDFs" batch, which runs
-   * after this rule, plans for evaluation: a scalar Python UDF, a Python UDTF or an external
-   * UDF. That batch does not rewrite the plan of a [[DynamicPruningSubquery]], so a standalone
-   * DPP subquery, which evaluates the filtering keys over the filtering plan, would fail on such
-   * a UDF.
+   * after this rule, plans for evaluation: a scalar Python UDF, a Python UDTF, an external UDF
+   * or a columnar UDF. That batch does not rewrite the plan of a [[DynamicPruningSubquery]], so
+   * a standalone DPP subquery, which evaluates the filtering keys over the filtering plan, would
+   * fail on such a UDF.
    */
   private def needsUDFExtraction(exprs: Seq[Expression]): Boolean = {
     exprs.exists(_.exists {
-      case _: PythonUDTF | _: ExternalUserDefinedFunction => true
+      case _: PythonUDTF | _: ExternalUserDefinedFunction | _: ColumnarUDF => true
       case e => PythonUDF.isScalarPythonUDF(e)
     })
   }

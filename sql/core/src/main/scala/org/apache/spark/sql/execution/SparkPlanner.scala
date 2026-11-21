@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
+import org.apache.spark.sql.execution.columnar.udf.ColumnarUDFEvals
 import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
@@ -41,6 +42,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       extraPlanningStrategies ++ (
       LogicalQueryStageStrategy ::
       PythonEvals ::
+      ColumnarUDFEvals ::
       ExternalLookupJoinStrategy ::
       new DataSourceV2Strategy(session) ::
       V2CommandStrategy ::
