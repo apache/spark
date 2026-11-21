@@ -2498,7 +2498,6 @@ ansiNonReserved
     | ARRAY
     | ASC
     | ASENSITIVE
-    | ASOF
     | AT
     | ATOMIC
     | AUTO
@@ -2892,6 +2891,7 @@ ansiNonReserved
 // These 2 together contain all the keywords.
 strictNonReserved
     : ANTI
+    | ASOF
     | CROSS
     | EXCEPT
     | FULL
@@ -2930,7 +2930,6 @@ nonReserved
     | AS
     | ASC
     | ASENSITIVE
-    | ASOF
     | AT
     | ATOMIC
     | AUTHORIZATION
