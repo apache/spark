@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
@@ -288,7 +289,12 @@ private object RowToColumnConverter {
     }
   }
 
-  private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter = {
+  private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter =
+    // A framework type stored as a struct, such as FileType, is converted as its representation.
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(getConverterForType(_, nullable))
+      .getOrElse(getConverterForTypeDefault(dataType, nullable))
+
+  private def getConverterForTypeDefault(dataType: DataType, nullable: Boolean): TypeConverter = {
     val core = dataType match {
       case BinaryType => BinaryConverter
       case BooleanType => BooleanConverter

@@ -177,6 +177,14 @@ object Encoders {
   def GEOGRAPHY(dt: GeographyType): Encoder[Geography] = GeographyEncoder(dt)
 
   /**
+   * An encoder for `org.apache.spark.sql.types.FileRef`, the value of the FILE data type. It
+   * serializes to a FILE of unknown mode.
+   *
+   * @since 4.4.0
+   */
+  def FILE: Encoder[FileRef] = FileRefEncoder()
+
+  /**
    * Creates an encoder that serializes instances of the `java.time.Duration` class to the
    * internal representation of nullable Catalyst's DayTimeIntervalType.
    *

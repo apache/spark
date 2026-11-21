@@ -26,6 +26,7 @@ import java.util.Optional;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.internal.SQLConf;
@@ -585,7 +586,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * In all these cases, the return value is the rowId for the first appended element.
    */
   public final int appendNull() {
-    assert (!(dataType() instanceof StructType)); // Use appendStruct()
+    assert (!isStruct); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNull(elementsAppended);
     return elementsAppended++;
@@ -598,7 +599,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct);
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNulls(elementsAppended, count);
@@ -607,7 +608,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNotNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct);
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNotNulls(elementsAppended, count);
@@ -802,7 +803,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType
+        if (c.isStruct || c.type instanceof VariantType
             || c.type instanceof CalendarIntervalType
             || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
@@ -1022,6 +1023,13 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected double hugeVectorReserveRatio;
 
   /**
+   * True if this column stores its values as a struct, with one child column per field: a
+   * StructType, or a framework type whose row representation is one, such as FileType. Set once
+   * at construction, so that appending values does not look the type up.
+   */
+  private final boolean isStruct;
+
+  /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
    */
   protected int numNulls;
@@ -1099,6 +1107,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     this.defaultCapacity = capacity;
     this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
     this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
+    this.isStruct = TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType;
 
     if (isArray()) {
       DataType childType;
@@ -1111,7 +1120,8 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
-    } else if (type instanceof StructType st) {
+    } else if (isStruct) {
+      StructType st = (StructType) TypeOps$.MODULE$.rowRepresentationOrSelf(type);
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewInternalColumn(capacity, st.fields()[i].dataType());

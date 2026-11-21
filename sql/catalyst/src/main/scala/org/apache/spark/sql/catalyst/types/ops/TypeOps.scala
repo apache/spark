@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalFloatType, PhysicalIntegerType, PhysicalMapType, PhysicalShortType, PhysicalStructType}
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
+import org.apache.spark.sql.types.{ArrayType, DataType, FileType, MapType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
@@ -73,8 +73,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, Tim
  *      declaring its layout again.
  *   3. Register it in TypeOps.apply() below - single registration point
  *
- * Column vectors (WritableColumnVector, ConstantColumnVector) do not yet build child vectors
- * for a struct-, array- or map-backed framework type.
+ * Column vectors (WritableColumnVector, ConstantColumnVector) build one child vector per field
+ * for a struct-backed framework type, but not yet child vectors for an array- or map-backed one.
  *
  * @see
  *   TimeTypeOps for a reference implementation
@@ -329,10 +329,18 @@ object TypeOps {
     case tt: TimeType => Some(TimeTypeOps(tt))
     case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
     case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
+    case ft: FileType => Some(FileTypeOps(ft))
     // Add new types here - single registration point
     case ft: TestableFrameworkType => Some(ft.createTypeOps())
     case _ => None
   }
+
+  /**
+   * Returns the row representation of `dt` (see [[TypeOps.rowRepresentationType]]), or `dt`
+   * itself when it has none. For callers in Java, such as the column vectors.
+   */
+  def rowRepresentationOrSelf(dt: DataType): DataType =
+    apply(dt).flatMap(_.rowRepresentationType).getOrElse(dt)
 }
 
 /**

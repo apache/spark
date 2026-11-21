@@ -22,7 +22,7 @@ import java.time.{ZoneId, ZoneOffset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
+import org.apache.spark.sql.catalyst.types.ops.{TypeApiOps, TypeOps}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
@@ -86,9 +86,15 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // nanos renders in it; zone-independent types (TimeType, TIMESTAMP_NTZ nanos) ignore it
   // (SPARK-57285).
   private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from, zoneId)
+    frameworkOps(from)
       .map(ops => acceptAny[Any](ops.formatUTF8))
       .getOrElse(castToStringDefault(from))
+
+  // The internal value of a type stored as a struct, such as FileType, is an InternalRow, which
+  // only its catalyst-side ops can format. Other framework types use their client-side ops, which
+  // carry the cast's zone.
+  private def frameworkOps(from: DataType): Option[TypeApiOps] =
+    TypeOps(from).filter(_.rowRepresentationType.isDefined).orElse(TypeApiOps(from, zoneId))
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -241,6 +247,13 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   private def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
+      case _ if TypeOps(from).exists(_.rowRepresentationType.isDefined) =>
+        // A type stored as a struct, such as FileType, is formatted by its catalyst-side ops, as
+        // in `frameworkOps`.
+        val opsRef = JavaCode.global(
+          ctx.addReferenceObj("typeOps", TypeOps(from).get, classOf[TypeApiOps].getName),
+          classOf[TypeApiOps])
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case BinaryType =>
         // Pass the public BinaryFormatter trait as the reference's cast type.
         // `binaryFormatter` is a lambda (UTF8String.fromBytes); its runtime class is a
