@@ -321,6 +321,29 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-59968: RLIKE and LIKE with a literal pattern reuse the matcher across rows") {
+    val input = BoundReference(0, StringType, nullable = true)
+    val projection = GenerateUnsafeProjection.generate(Seq(
+      RLike(input, Literal("^ab")),
+      RLike(input, Literal("(?<![a-z0-9])word(?![a-z0-9])")),
+      Like(input, Literal("a%b%c"), '\\')))
+    // All rows go through one generated projection, so each expression's matcher is reused;
+    // a result must not depend on the rows evaluated before it.
+    Seq[(String, Seq[Any])](
+      "abc" -> Seq(true, false, true),
+      "xab word" -> Seq(false, true, false),
+      (null, Seq(null, null, null)),
+      "" -> Seq(false, false, false),
+      "ab word, abbc" -> Seq(true, true, true),
+      "a" -> Seq(false, false, false),
+      "words" -> Seq(false, false, false)
+    ).foreach { case (s, expected) =>
+      val row = projection(create_row(s))
+      val actual = expected.indices.map(i => if (row.isNullAt(i)) null else row.getBoolean(i))
+      assert(actual === expected, s"input: $s")
+    }
+  }
+
   test("RegexReplace") {
     val row1 = create_row("100-200", "(\\d+)", "num")
     val row2 = create_row("100-200", "(\\d+)", "###")
