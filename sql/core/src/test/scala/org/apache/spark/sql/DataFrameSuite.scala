@@ -3114,6 +3114,40 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62187: a filter condition that can fail is not evaluated on a row that the " +
+    "filter below drops as NULL") {
+    withTempPath { dir =>
+      Seq[(Int, Int, Integer, Int)]((1, 5, null, 1), (2, 5, 1, 0)).toDF("k", "f", "g", "w")
+        .write.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // `f > g OR k > 5` is NULL on k = 1, so the inner filter drops that row before the outer
+        // one divides by zero on it.
+        val df = spark.read.parquet(dir.getCanonicalPath)
+          .where($"f" > $"g" || $"k" > 5)
+          .where(lit(10) / ($"k" - $"w") > 0)
+          .select($"k")
+        Seq("true", "false").foreach { codegen =>
+          withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen) {
+            checkAnswer(df, Row(2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-62187: a filter condition that can fail is not evaluated on a joined row that the " +
+    "filter below drops as NULL") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `a.f > b.g OR a.x > 5` is NULL on the joined row, so the filter below, which goes into the
+      // join condition, drops it before the outer one divides by zero on it.
+      val a = Seq((1, 5, 1, 1)).toDF("k", "f", "x", "v")
+      val b = Seq[(Int, Integer, Int)]((1, null, 1)).toDF("k", "g", "w")
+      val df = a.join(b, a("k") === b("k")).where(a("f") > b("g") || a("x") > 5)
+        .where(lit(10) / (a("v") - b("w")) > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On

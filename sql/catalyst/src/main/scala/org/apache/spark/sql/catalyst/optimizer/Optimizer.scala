@@ -2625,21 +2625,59 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
     // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
-    // inner condition must be deterministic. When it is throwable, e.g. one that `ReorderJoin`
-    // keeps in a filter in place of the top join, only the outer conjuncts that can not fail are
-    // combined: the inner filter drops a row on which its condition is NULL, but `NULL AND x`
-    // evaluates `x`.
+    // inner condition must be deterministic. The inner filter drops a row on which its condition
+    // is NULL, but `NULL AND x` evaluates `x`. So when the inner condition can be NULL (see
+    // `canBeNull`), the conjuncts that can fail (see `canFail`) are combined as
+    // `If(<inner condition>, <them>, false)`, which evaluates them only where it is TRUE, also
+    // after a later rule moves them, e.g. into a join condition. A subquery of the inner condition
+    // would be computed again in the `If`, so then the conjuncts are combined as before, but for
+    // a throwable inner condition, e.g. one that `ReorderJoin` keeps in a filter in place of the
+    // top join, above which only the ones that can not fail are combined.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (movable, rest) = splitMovable(
-        splitConjunctivePredicates(fc), Seq(grandChild), afterBarrier = nc.throwable)
-      val mergedFilter = (ExpressionSet(movable) --
-        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
+      val hasSubquery = SubqueryExpression.hasSubquery(nc)
+      val guard = !hasSubquery && canBeNull(nc)
+      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild),
+        afterBarrier = hasSubquery && nc.throwable)
+      val newConjuncts =
+        (ExpressionSet(movable) -- ExpressionSet(splitConjunctivePredicates(nc))).toSeq
+      lazy val failable = failableOutput(grandChild)
+      val (guarded, plain) = newConjuncts.partition(cond => guard && canFail(cond, failable))
+      val mergedFilter = (plain ++ guarded.reduceOption(And).map(If(nc, _, Literal.FalseLiteral)))
+        .reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
       rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+
+    // Removes an `If(p, x, false)` of the case above once `x` can not fail, e.g. after
+    // `ConstantFolding`, or once the conjuncts before it make `p` TRUE where they are TRUE and can
+    // not be NULL, e.g. after `InferFiltersFromConstraints` adds `IS NOT NULL` checks for the
+    // columns of a comparison. As a filter drops a row on which its condition is NULL, `p AND x`
+    // then keeps the same rows, and evaluates `x` only where it can.
+    case Filter(condition, child)
+        if condition.containsPattern(IF) && removeGuards(condition, child).isDefined =>
+      Filter(removeGuards(condition, child).get, child)
+  }
+
+  private def removeGuards(condition: Expression, child: LogicalPlan): Option[Expression] = {
+    lazy val failable = failableOutput(child)
+    val conjuncts = splitConjunctivePredicates(condition)
+    val newConjuncts = conjuncts.foldLeft(Seq.empty[Expression]) {
+      case (before, If(p, x, Literal.FalseLiteral))
+          if splitConjunctivePredicates(x).forall(!canFail(_, failable)) =>
+        before ++ (ExpressionSet(splitConjunctivePredicates(p)) -- ExpressionSet(before)).toSeq ++
+          splitConjunctivePredicates(x)
+      case (before, If(p, x, Literal.FalseLiteral)) if before.nonEmpty &&
+          splitConjunctivePredicates(p).forall(ExpressionSet(before).contains) &&
+          !canBeNull(before.reduce(And)) =>
+        before ++ splitConjunctivePredicates(x)
+      case (before, cond) => before :+ cond
+    }
+    val unchanged = newConjuncts.length == conjuncts.length &&
+      newConjuncts.zip(conjuncts).forall { case (a, b) => a.fastEquals(b) }
+    if (unchanged) None else Some(newConjuncts.reduce(And))
   }
 }
 
