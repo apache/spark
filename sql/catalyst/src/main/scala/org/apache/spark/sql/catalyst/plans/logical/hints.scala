@@ -82,8 +82,12 @@ object JoinHint {
  * The hint attributes to be applied on a specific node.
  *
  * @param strategy The preferred join strategy.
+ * @param skewColumns The columns of the hinted relation to detect skewed keys on. Only used by
+ *                    the SKEW_JOIN strategy, empty otherwise.
  */
-case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
+case class HintInfo(
+    strategy: Option[JoinStrategyHint] = None,
+    skewColumns: Seq[String] = Nil) {
 
   /**
    * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
@@ -94,7 +98,8 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
    * Currently, for join strategy hints, the new [[HintInfo]] will contain the strategy in this
    * [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]]. The
    * `hintOverriddenCallback` will be called if this [[HintInfo]] and the other [[HintInfo]]
-   * both have a strategy defined but the join strategies are different.
+   * both have a strategy defined but the join strategies are different. The skew columns
+   * always follow the strategy that is picked.
    */
   def merge(other: HintInfo, hintErrorHandler: HintErrorHandler): HintInfo = {
     if (this.strategy.isDefined &&
@@ -102,10 +107,14 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
         this.strategy.get != other.strategy.get) {
       hintErrorHandler.hintOverridden(other)
     }
-    HintInfo(strategy = this.strategy.orElse(other.strategy))
+    if (this.strategy.isDefined) this else HintInfo(other.strategy, other.skewColumns)
   }
 
-  override def toString: String = strategy.map(s => s"(strategy=$s)").getOrElse("none")
+  override def toString: String = {
+    strategy.map { s =>
+      if (skewColumns.isEmpty) s"(strategy=$s)" else s"(strategy=$s, skewColumns=$skewColumns)"
+    }.getOrElse("none")
+  }
 }
 
 sealed abstract class JoinStrategyHint {
@@ -129,7 +138,8 @@ object JoinStrategyHint {
     BROADCAST,
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
-    SHUFFLE_REPLICATE_NL)
+    SHUFFLE_REPLICATE_NL,
+    SKEW_JOIN)
 
   private lazy val allHintAliasesUpperCase: Set[String] =
     strategies.flatMap(_.hintAliases).map(_.toUpperCase(Locale.ROOT))
@@ -178,6 +188,20 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
   override def displayName: String = "shuffle_replicate_nl"
   override def hintAliases: Set[String] = Set(
     "SHUFFLE_REPLICATE_NL")
+}
+
+/**
+ * The hint for splitting a join on the hot keys of the hinted relation. The rows of the hot keys
+ * are joined with a broadcast hash join and all the other rows with a sort merge join. This helps
+ * when a key is frequent on both sides, as the output of that key is then too large for a single
+ * task even though no shuffle block is oversized. The columns to detect hot keys on are given as
+ * `SKEW_JOIN(table(col1, col2))`.
+ */
+case object SKEW_JOIN extends JoinStrategyHint {
+  override def displayName: String = "skew_join"
+  override def hintAliases: Set[String] = Set(
+    "SKEW_JOIN",
+    "SKEWJOIN")
 }
 
 /**
