@@ -7041,7 +7041,11 @@ object SQLConf {
         "rows. When false, revert to evaluating the UDF for every row, which can fail a query " +
         "that references the UDF's result only for rows without matching inner rows. Only " +
         "effective for the subqueries whose COUNT bug DecorrelateInnerQuery handles, which needs " +
-        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true.")
+        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true. When false, it also makes " +
+        "a correlated scalar subquery over a nested aggregate without GROUP BY whose result " +
+        "for such rows is not computed while the query is optimized, and that has a scalar " +
+        "Python or external UDF in the value over no rows of a correlated aggregate without " +
+        "GROUP BY below its top aggregate, keep the handling before SPARK-60501.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -8969,6 +8973,20 @@ object SQLConf {
       .doc("When set to true, restores legacy behavior of potential incorrect count bug " +
         "handling for scalar subqueries.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR =
+    buildConf("spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior")
+      .internal()
+      .doc("When true, restores the behavior before SPARK-60501, where a correlated scalar " +
+        "subquery whose top Aggregate is over a correlated Aggregate without GROUP BY can " +
+        "return a wrong result for an outer row without matching rows, e.g. COUNT(*) over a " +
+        "MAX returns 0 instead of 1. Has no effect when " +
+        s"${DECORRELATE_INNER_QUERY_ENABLED.key} is false or " +
+        s"${LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING.key} is true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
