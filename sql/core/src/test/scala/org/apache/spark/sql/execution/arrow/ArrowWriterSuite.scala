@@ -42,6 +42,61 @@ import org.apache.spark.util.MaybeNull
 
 class ArrowWriterSuite extends SparkFunSuite {
 
+  test("SPARK-61081: GEOMETRY and GEOGRAPHY keep their WKB only in the lossless representation") {
+    def fromHex(hex: String): Array[Byte] =
+      hex.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    // POINT(1 2) as big-endian and as little-endian WKB.
+    val bigEndian = fromHex("00000000013FF00000000000004000000000000000")
+    val littleEndian = fromHex("0101000000000000000000F03F0000000000000040")
+    Seq[(DataType, Array[Byte] => BinaryView)](
+      (GeometryType(4326), InternalGeometry.fromWkb(_, 4326).getValue),
+      (GeographyType(4326), InternalGeography.fromWkb(_, 4326).getValue)).foreach {
+      case (dt, fromWkb) =>
+        val value = fromWkb(bigEndian)
+        // The value as its own array, and as a view into the middle of a larger array.
+        val padded = Array[Byte](-1, -1) ++ value.getBytes ++ Array[Byte](-1)
+        val inputs = Seq(value, BinaryView.fromBytes(padded, 2, value.numBytes))
+        // Other consumers get little-endian WKB; the cache's lossless schema keeps it as created.
+        Seq(false -> littleEndian, true -> bigEndian).foreach { case (lossless, expectedWkb) =>
+          inputs.foreach { input =>
+            val schema = new StructType().add("value", dt)
+            val root = VectorSchemaRoot.create(
+              ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = lossless),
+              ArrowUtils.rootAllocator)
+            val writer = ArrowWriter.create(root)
+            writer.write(InternalRow(input))
+            writer.finish()
+            val reader = new ArrowColumnVector(root.getFieldVectors().get(0))
+            assert(reader.getBinaryView(0).getBytes === fromWkb(expectedWkb).getBytes)
+            root.close()
+          }
+        }
+    }
+
+    // Rows of one column with different SRIDs, one of them created from big-endian WKB, each
+    // keep their own SRID header and WKB.
+    Seq[(DataType, Seq[BinaryView])](
+      (GeometryType("ANY"), Seq(
+        InternalGeometry.fromWkb(bigEndian, 0).getValue,
+        InternalGeometry.fromWkb(littleEndian, 4326).getValue)),
+      (GeographyType("ANY"), Seq(
+        InternalGeography.fromWkb(bigEndian, 4267).getValue,
+        InternalGeography.fromWkb(littleEndian, 4269).getValue))).foreach { case (dt, values) =>
+      val schema = new StructType().add("value", dt)
+      val root = VectorSchemaRoot.create(
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true),
+        ArrowUtils.rootAllocator)
+      val writer = ArrowWriter.create(root)
+      values.foreach(value => writer.write(InternalRow(value)))
+      writer.finish()
+      val reader = new ArrowColumnVector(root.getFieldVectors().get(0))
+      values.zipWithIndex.foreach { case (value, i) =>
+        assert(reader.getBinaryView(i).getBytes === value.getBytes, dt.toString)
+      }
+      root.close()
+    }
+  }
+
   test("simple") {
     def check(
         dt: DataType,

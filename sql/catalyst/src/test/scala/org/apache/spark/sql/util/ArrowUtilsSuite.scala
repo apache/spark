@@ -369,6 +369,30 @@ class ArrowUtilsSuite extends SparkFunSuite {
       defaultType.asInstanceOf[ArrowType.Interval].getUnit === IntervalUnit.MONTH_DAY_NANO)
   }
 
+  test("SPARK-61081: lossless GEOMETRY and GEOGRAPHY fields only match lossless fields") {
+    def field(dt: DataType, lossless: Boolean): Field = ArrowUtils
+      .toArrowSchema(
+        new StructType().add("value", dt), "UTC", true, false, losslessInternalTypes = lossless)
+      .findField("value")
+    def compat(a: Field, d: Field): Boolean = ArrowUtils.isCompatibleWithDeclaredField(a, d)
+    Seq[DataType](
+      GeometryType(4326),
+      GeographyType(4326),
+      new StructType().add("i", IntegerType).add("g", GeometryType(4326)),
+      ArrayType(GeographyType(4326)),
+      MapType(IntegerType, GeometryType(4326))).foreach { dt =>
+      // A lossless field can hold big-endian WKB, which a consumer that declares the interchange
+      // field must not take verbatim. Interchange fields hold little-endian WKB, which a
+      // lossless field also accepts.
+      assert(!compat(field(dt, lossless = true), field(dt, lossless = false)), dt.toString)
+      assert(compat(field(dt, lossless = true), field(dt, lossless = true)), dt.toString)
+      assert(compat(field(dt, lossless = false), field(dt, lossless = true)), dt.toString)
+      assert(ArrowUtils.fromArrowField(field(dt, lossless = true)) === dt, dt.toString)
+    }
+    assert(ArrowUtils.keepsGeoWkbAsCreated(field(GeometryType(4326), lossless = true)))
+    assert(!ArrowUtils.keepsGeoWkbAsCreated(field(GeometryType(4326), lossless = false)))
+  }
+
   test("isCompatibleWithDeclaredField requires congruence with the declared field tree") {
     def declared(schema: StructType, largeVarTypes: Boolean = false): Field = {
       ArrowUtils.toArrowSchema(schema, "UTC", true, largeVarTypes).findField("value")

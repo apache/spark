@@ -20,9 +20,12 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.util.STUtils
+import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.BinaryView
 
 class GeographyDataFrameSuite extends SharedSparkSession {
 
@@ -207,6 +210,150 @@ class GeographyDataFrameSuite extends SharedSparkSession {
       queryContext = Array(ExpectedContext("g", 30, 30)))
   }
 
+  test("SPARK-61081: GROUP BY, DISTINCT and hashing on a Geography column") {
+    // The GROUP BY, DISTINCT and DISTRIBUTE BY queries below hash-partition on `g` in a shuffle.
+    // With four input partitions, equal values reach that shuffle from different map tasks, so
+    // the test checks that their hashes agree.
+    val rdd = sparkContext.parallelize(
+      Seq.tabulate(20)(i => Row(Geography.fromWKB(if (i % 4 == 0) point2 else point1, 4326))), 4)
+    val schema = StructType(Seq(StructField("g", GeographyType(4326), nullable = false)))
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("geog_t")
+
+    val groupBy = "SELECT COUNT(*) FROM geog_t GROUP BY g"
+    checkAnswer(spark.sql(groupBy), Seq(Row(5L), Row(15L)))
+    checkAnswer(spark.sql("SELECT COUNT(DISTINCT g) FROM geog_t"), Row(2L))
+    checkAnswer(spark.sql("SELECT COUNT(*) FROM (SELECT DISTINCT g FROM geog_t)"), Row(2L))
+    checkAnswer(spark.sql("SELECT approx_count_distinct(g) FROM geog_t"), Row(2L))
+    checkAnswer(
+      spark.sql("SELECT COUNT(*) FROM (SELECT * FROM geog_t DISTRIBUTE BY g)"), Row(20L))
+    checkAnswer(
+      spark.sql("SELECT COUNT(DISTINCT hash(g)), COUNT(DISTINCT xxhash64(g)) FROM geog_t"),
+      Row(2L, 2L))
+
+    // Forces the hash aggregate to spill into its sort-based fallback, which orders the keys.
+    withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1,2") {
+      checkAnswer(spark.sql(groupBy), Seq(Row(5L), Row(15L)))
+    }
+
+    // The hash aggregate cannot hold a STRING max, so this GROUP BY is a sort-based aggregate,
+    // which sorts the geo keys after the shuffle.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val sortAggregate =
+        spark.sql("SELECT COUNT(*), max(hex(ST_AsBinary(g))) FROM geog_t GROUP BY g")
+      assert(sortAggregate.queryExecution.executedPlan.exists(_.isInstanceOf[SortAggregateExec]))
+      checkAnswer(sortAggregate, Seq(
+        Row(5L, "010100000000000000000035400000000000001E40"),
+        Row(15L, "010100000000000000000031400000000000001C40")))
+    }
+  }
+
+  test("SPARK-61081: bucketed writes of non-NULL Geography values fail") {
+    // POINT(1 2) as little-endian and as big-endian WKB. Parquet stores both as little-endian
+    // WKB, so a bucket id computed from the big-endian bytes would not match the stored bytes.
+    val littleEndian = "X'0101000000000000000000F03F0000000000000040'"
+    val bigEndian = "X'00000000013FF00000000000004000000000000000'"
+    val values = s"SELECT ST_GeogFromWKB($littleEndian) AS g " +
+      s"UNION ALL SELECT ST_GeogFromWKB($bigEndian) AS g"
+    val nullValue = "ST_GeogFromWKB(CAST(NULL AS BINARY))"
+    def checkBucketedWriteFails(write: => Any, dataType: String = "\"GEOGRAPHY(4326)\""): Unit = {
+      checkError(
+        exception = intercept[SparkRuntimeException](write),
+        condition = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> dataType))
+    }
+
+    withTable("t", "t_ctas", "t_df", "t_struct", "t_deep", "t_array", "t_map", "t_map_key",
+        "t_udt", "t_udt_struct", "t_other") {
+      sql("CREATE TABLE t (g GEOGRAPHY(4326)) USING parquet CLUSTERED BY (g) INTO 8 BUCKETS")
+      Seq("true", "false").foreach { plannedWrite =>
+        withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite) {
+          checkBucketedWriteFails(sql(s"INSERT INTO t $values"))
+          // A NULL value hashes to the same bucket before and after the Parquet round trip.
+          sql(s"INSERT INTO t SELECT $nullValue")
+        }
+      }
+      checkAnswer(spark.table("t"), Seq(Row(null), Row(null)))
+
+      checkBucketedWriteFails(
+        sql(s"CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) INTO 8 BUCKETS AS $values"))
+      assert(!spark.catalog.tableExists("t_ctas"))
+      sql("CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) " +
+        s"INTO 8 BUCKETS AS SELECT * FROM ($values) WHERE false")
+      checkAnswer(spark.table("t_ctas"), Seq.empty)
+      checkBucketedWriteFails(sql(values).write.bucketBy(8, "g").saveAsTable("t_df"))
+      assert(!spark.catalog.tableExists("t_df"))
+      sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df")
+      checkAnswer(spark.table("t_df"), Seq.empty)
+
+      // In the nested cases, the non-NULL value follows a non-geo field or a NULL element, or
+      // is a map key.
+      sql("CREATE TABLE t_struct (s STRUCT<id: INT, g: GEOGRAPHY(4326)>) USING parquet " +
+        "CLUSTERED BY (s) INTO 8 BUCKETS")
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_struct SELECT named_struct('id', 1, 'g', g) FROM ($values)"),
+        "\"STRUCT<id: INT NOT NULL, g: GEOGRAPHY(4326) NOT NULL>\"")
+      sql(s"INSERT INTO t_struct SELECT named_struct('id', 1, 'g', $nullValue)")
+      checkAnswer(spark.table("t_struct"), Row(Row(1, null)))
+      sql("CREATE TABLE t_deep " +
+        "(s STRUCT<id: INT, a: ARRAY<STRUCT<x: INT, g: GEOGRAPHY(4326)>>>) " +
+        "USING parquet CLUSTERED BY (s) INTO 8 BUCKETS")
+      def deepValue(g: String): String =
+        s"named_struct('id', 1, 'a', array(named_struct('x', 2, 'g', $g)))"
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_deep SELECT ${deepValue("g")} FROM ($values)"),
+        "\"STRUCT<id: INT NOT NULL, " +
+          "a: ARRAY<STRUCT<x: INT NOT NULL, g: GEOGRAPHY(4326) NOT NULL>> NOT NULL>\"")
+      sql(s"INSERT INTO t_deep SELECT ${deepValue(nullValue)}")
+      checkAnswer(spark.table("t_deep"), Row(Row(1, Seq(Row(2, null)))))
+      sql("CREATE TABLE t_array (a ARRAY<GEOGRAPHY(4326)>) USING parquet " +
+        "CLUSTERED BY (a) INTO 8 BUCKETS")
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_array SELECT array($nullValue, g) FROM ($values)"),
+        "\"ARRAY<GEOGRAPHY(4326)>\"")
+      sql(s"INSERT INTO t_array SELECT array($nullValue)")
+      checkAnswer(spark.table("t_array"), Row(Seq(null)))
+      // With planned writes on, the sort that V1Writes adds for a MAP bucket column does not
+      // resolve, because the hash expression does not accept maps.
+      withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> "false") {
+        sql("CREATE TABLE t_map (m MAP<INT, GEOGRAPHY(4326)>) USING parquet " +
+          "CLUSTERED BY (m) INTO 8 BUCKETS")
+        checkBucketedWriteFails(
+          sql(s"INSERT INTO t_map SELECT map(1, g) FROM ($values)"),
+          "\"MAP<INT, GEOGRAPHY(4326)>\"")
+        sql(s"INSERT INTO t_map SELECT map(1, $nullValue)")
+        checkAnswer(spark.table("t_map"), Row(Map(1 -> null)))
+        sql("CREATE TABLE t_map_key (m MAP<GEOGRAPHY(4326), INT>) USING parquet " +
+          "CLUSTERED BY (m) INTO 8 BUCKETS")
+        checkBucketedWriteFails(
+          sql(s"INSERT INTO t_map_key SELECT map(g, 1) FROM ($values)"),
+          "\"MAP<GEOGRAPHY(4326), INT>\"")
+      }
+
+      // The bucket id hash looks through a user-defined type to the geo value.
+      def withUdt(query: String, dataType: DataType): DataFrame = spark.internalCreateDataFrame(
+        sql(query).queryExecution.toRdd, new StructType().add("u", dataType))
+      val udt = new TestGeographyUDT
+      val udtType = "UDT(\"GEOGRAPHY(4326)\")"
+      checkBucketedWriteFails(
+        withUdt(values, udt).write.bucketBy(8, "u").saveAsTable("t_udt"), udtType)
+      assert(!spark.catalog.tableExists("t_udt"))
+      withUdt(s"SELECT $nullValue", udt).write.bucketBy(8, "u").saveAsTable("t_udt")
+      checkBucketedWriteFails(withUdt(values, udt).write.insertInto("t_udt"), udtType)
+      checkAnswer(spark.table("t_udt"), Row(null))
+      checkBucketedWriteFails(
+        withUdt(s"SELECT named_struct('g', g) FROM ($values)", new StructType().add("g", udt))
+          .write.bucketBy(8, "u").saveAsTable("t_udt_struct"),
+        "\"STRUCT<g: GEOGRAPHY(4326)>\"")
+      assert(!spark.catalog.tableExists("t_udt_struct"))
+
+      // Only bucket columns are checked.
+      sql("CREATE TABLE t_other (id INT, g GEOGRAPHY(4326)) USING parquet " +
+        "CLUSTERED BY (id) INTO 8 BUCKETS")
+      sql(s"INSERT INTO t_other SELECT 1, g FROM ($values)")
+      checkAnswer(spark.sql("SELECT COUNT(*) FROM t_other"), Row(2L))
+    }
+  }
+
   test("geospatial feature disabled") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
       val geography = Geography.fromWKB(point1, 4326)
@@ -237,4 +384,14 @@ class GeographyDataFrameSuite extends SharedSparkSession {
       )
     }
   }
+}
+
+// A user-defined type whose values are GEOGRAPHY(4326) values.
+private[sql] class TestGeographyUDT extends UserDefinedType[Geography] {
+  override def sqlType: DataType = GeographyType(4326)
+  override def serialize(obj: Geography): Any =
+    STUtils.serializeGeogFromWKB(obj, GeographyType(4326))
+  override def deserialize(datum: Any): Geography =
+    STUtils.deserializeGeog(datum.asInstanceOf[BinaryView], GeographyType(4326))
+  override def userClass: Class[Geography] = classOf[Geography]
 }

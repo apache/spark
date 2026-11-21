@@ -120,7 +120,14 @@ object V1WritesUtils {
       dataColumns: Seq[Attribute],
       options: Map[String, String]): Option[WriterBucketSpec] = {
     bucketSpec.map { spec =>
-      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      val bucketColumns = spec.bucketColumnNames.map { name =>
+        val column = dataColumns.find(_.name == name).get
+        if (BucketingUtils.containsGeoSpatialType(column.dataType)) {
+          RejectGeoSpatialBucketValue(column)
+        } else {
+          column
+        }
+      }
 
       if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==
         "true") {
