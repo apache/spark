@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, IntegralType}
@@ -130,6 +131,59 @@ object DecorrelateInnerQuery extends PredicateHelper {
       case Equality(a, b) if isSupported(a) => !containsAttribute(b)
       case Equality(a, b) if isSupported(b) => !containsAttribute(a)
       case o => !containsAttribute(o)
+    }
+  }
+
+  /**
+   * Splits the conjuncts of a filter whose results are aggregated or used by a set operation, in
+   * their written order, into the ones moved below its domain join, the ones kept in the filter
+   * and the others, which are decorrelated as before.
+   *
+   * A correlated conjunct used as a join condition with the outer query is evaluated after the
+   * filter, or ahead of it once pushed into the outer query, and the conjuncts left in the filter
+   * read the inner column that such an equality equates to an outer column. So when a conjunct
+   * may not be evaluated ahead of the others (see `splitMovable`, which takes an outer reference
+   * as a column), it and the ones written before it are kept in the filter, and so are the
+   * correlated ones written after them that read their outer columns. They read the domain
+   * attributes of those columns, so they are evaluated in their written order on the values of
+   * each outer row. The uncorrelated conjuncts that may move are moved below the domain join,
+   * where they can still be pushed into a scan.
+   *
+   * Nothing is kept when the domain can not stand for the outer columns that the kept conjuncts
+   * read. It groups the outer rows by them and joins them back with `<=>`, so each column must be
+   * orderable, its equal values must be identical, unlike a string of a non-binary collation or a
+   * float that can be -0.0, and the outer query must not be streaming.
+   *
+   * TODO: Keep the written order also for these outer columns, for a filter whose results are not
+   * aggregated, e.g. in an EXISTS subquery, for the condition of a join in the subquery, across
+   * operators, e.g. for a throwable conjunct in a filter above another one with a correlated
+   * equality, and for an outer column that the outer query computes with an expression that can
+   * fail.
+   */
+  private def splitKeptInPlace(
+      conditions: Seq[Expression],
+      child: LogicalPlan,
+      outerPlan: LogicalPlan): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
+    val stayUp = splitMovable(conditions.map(stripOuterReference), Seq(child))._2.toSet
+    def mayNotMove(cond: Expression): Boolean = stayUp.contains(stripOuterReference(cond))
+    val (prefix, rest) = conditions.splitAt(conditions.lastIndexWhere(mayNotMove) + 1)
+    val prefixOuterReferences = collectOuterReferences(prefix)
+    val (onKeptColumns, others) =
+      rest.partition(collectOuterReferences(_).exists(prefixOuterReferences.contains))
+    val keptInPlace = prefix ++ onKeptColumns
+    val domainAttributes = collectOuterReferences(keptInPlace)
+    val canBuildDomain = (domainAttributes.isEmpty || !outerPlan.isStreaming) &&
+      domainAttributes.forall { a =>
+        RowOrdering.isOrderable(a.dataType) && UnsafeRowUtils.isBinaryStable(a.dataType) &&
+          !NormalizeFloatingNumbers.needNormalize(a.dataType)
+      }
+    if (prefix.isEmpty || !canBuildDomain) {
+      (Nil, Nil, conditions)
+    } else {
+      val (movedBelow, kept) =
+        keptInPlace.partition(cond => !containsOuter(cond) && !mayNotMove(cond))
+      val (othersBelow, othersLeft) = others.partition(!containsOuter(_))
+      (movedBelow ++ othersBelow, kept, othersLeft)
     }
   }
 
@@ -561,7 +615,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
         plan match {
           case Filter(condition, child) =>
             val conditions = splitConjunctivePredicates(condition)
-            val (correlated, uncorrelated) = conditions.partition(containsOuter)
+            // Keep the written order around a non-deterministic or throwable conjunct when the
+            // results are aggregated, see `splitKeptInPlace`.
+            val (movedBelow, keptInPlace, rest) =
+              if (aggregated || underSetOp) splitKeptInPlace(conditions, child, outerPlan)
+              else (Nil, Nil, conditions)
+            val (correlated, uncorrelated) = rest.partition(containsOuter)
             // Find outer references that can be substituted by attributes from the inner
             // query using the equality predicates.
             // If we are under a set op, we never use the predicates directly to substitute outer
@@ -622,17 +681,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 if (underSetOp) (Seq.empty[Expression], correlated)
                 else correlated.partition(canPullUpOverAgg)
               val outerReferences = collectOuterReferences(predicates)
-              val newOuterReferences =
-                parentOuterReferences ++ outerReferences -- equivalences.keySet
-              val (newChild, joinCond, outerReferenceMap) =
-                decorrelate(child, newOuterReferences, aggregated, underSetOp)
+              // The kept conjuncts read the domain attributes of their outer columns, also when an
+              // equality used as a join condition equates such a column to an inner one.
+              val newOuterReferences = (parentOuterReferences ++ outerReferences --
+                equivalences.keySet) ++ collectOuterReferences(keptInPlace)
+              val (newChild, joinCond, outerReferenceMap) = decorrelate(
+                movedBelow.reduceOption(And).map(Filter(_, child)).getOrElse(child),
+                newOuterReferences, aggregated, underSetOp)
               // Add the outer references mapping collected from the equality conditions.
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               // Replace all outer references in the non-equality predicates.
               val newCorrelated = replaceOuterReferences(predicates, newOuterReferenceMap)
+              val newKeptInPlace = replaceOuterReferences(keptInPlace, outerReferenceMap)
               // The new filter condition is the original filter condition with correlated
               // equality predicates removed.
-              val newFilterCond = newCorrelated ++ uncorrelated
+              val newFilterCond = newKeptInPlace ++ newCorrelated ++ uncorrelated
               val newFilter = newFilterCond match {
                 case Nil => newChild
                 case conditions => Filter(conditions.reduce(And), newChild)

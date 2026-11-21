@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DecimalType, DoubleType, IntegerType, LongType,
+  MapType, StringType}
 
 class DecorrelateInnerQuerySuite extends PlanTest {
 
@@ -208,6 +209,43 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Filter(x > a,
           DomainJoin(Seq(x), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("SPARK-62142: keep the predicates up to the last one that may not move in the filter") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val guard = If(b < 0, Cast(RaiseError(Literal("negative b")), BooleanType), b > 0)
+      val minB = Alias(min(b), "min_b")()
+      // The remainder by an outer column can fail, so it stays in the filter after the throwable
+      // guard, and so do the equality written before the guard and the conjuncts written after
+      // them that read its outer column. They read the domain attribute of `z` too, although the
+      // equality on `z` alone is still pulled up. `a > 0` moves below the domain join.
+      val innerPlan =
+        Aggregate(Nil, Seq(minB),
+          Filter(a > 0 && OuterReference(x) === a && guard &&
+              Literal(1) % OuterReference(y) === 0 && OuterReference(y) === b &&
+              (OuterReference(y) <=> OuterReference(z)) && OuterReference(z) === c,
+            testRelation))
+      val correctAnswer =
+        Aggregate(Seq(x, y, z, c), Seq(minB, x, y, z, c),
+          Filter(x === a && guard && Literal(1) % y === 0 && y === b && (y <=> z),
+            DomainJoin(Seq(x, y, z), Filter(a > 0, testRelation))))
+      check(innerPlan, testRelation2, correctAnswer, Seq(x <=> x, y <=> y, z <=> z, z === c))
+
+      // The domain can not stand for these outer columns or for a streaming outer query, so
+      // nothing is kept.
+      Seq(
+        LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))()),
+        LocalRelation(AttributeReference("s", StringType("UTF8_LCASE"))()),
+        LocalRelation(AttributeReference("d", DoubleType)()),
+        LocalRelation(Seq(x), isStreaming = true)).foreach { outerPlan =>
+        val o = outerPlan.output.head
+        check(
+          Aggregate(Nil, Seq(minB), Filter(IsNotNull(OuterReference(o)) && guard, testRelation)),
+          outerPlan,
+          Aggregate(Nil, Seq(minB), Filter(guard, testRelation)),
+          Seq(IsNotNull(o)))
+      }
+    }
   }
 
   test("join with correlated equality predicates") {
