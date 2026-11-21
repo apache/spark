@@ -2920,9 +2920,9 @@ class AstBuilder extends DataTypeAstBuilder
         }
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
-          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("BYTES", ctx)
         } else {
-          throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
+          throw QueryParsingErrors.invalidByteLengthLiteralError(source(ctx.bytes), ctx)
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
@@ -2931,10 +2931,10 @@ class AstBuilder extends DataTypeAstBuilder
         }
         if (ctx.identifier != null) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON colname", ctx)
+            "BUCKET x OUT OF y ON column", ctx)
         } else {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON function", ctx)
+            "BUCKET x OUT OF y ON function()", ctx)
         }
 
       case ctx: SampleByBucketContext =>
@@ -3081,8 +3081,7 @@ class AstBuilder extends DataTypeAstBuilder
     val version = visitVersion(ctx.version)
     val timestamp = Option(ctx.timestamp).map(expression)
     if (timestamp.exists(_.references.nonEmpty)) {
-      throw QueryParsingErrors.invalidTimeTravelSpec(
-        "timestamp expression cannot refer to any columns", ctx.timestamp)
+      throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.timestamp)
     }
     RelationTimeTravel(plan, timestamp, version)
   }
@@ -3123,16 +3122,14 @@ class AstBuilder extends DataTypeAstBuilder
       // Timestamp-based range
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
       }
       val endTs = Option(ctx.endingTimestamp).map(expression)
       if (endTs.exists(_.references.nonEmpty)) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.endingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.endingTimestamp)
       }
       if (endTs.exists(SubqueryExpression.hasSubquery)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -3172,8 +3169,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else if (ctx.startingTimestamp != null) {
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -4979,7 +4975,7 @@ class AstBuilder extends DataTypeAstBuilder
             .split("\\s")
             .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
             .filter(s => s != "interval" && s.matches("[a-z]+"))
-          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq)
+          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq, value)
         } else {
           Literal(interval, CalendarIntervalType)
         }
@@ -5286,11 +5282,13 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Construct an [[Literal]] from [[CalendarInterval]] and
    * units represented as a [[Seq]] of [[String]].
+   * `intervalString` is the interval text without the INTERVAL keyword, used in errors.
    */
   private def constructMultiUnitsIntervalLiteral(
       ctx: ParserRuleContext,
       calendarInterval: CalendarInterval,
-      units: Seq[String]): Literal = {
+      units: Seq[String],
+      intervalString: => String): Literal = {
     val yearMonthFields = mutable.Set.empty[Byte]
     val dayTimeFields = mutable.Set.empty[Byte]
     for (unit <- units) {
@@ -5307,8 +5305,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
     if (yearMonthFields.nonEmpty) {
       if (dayTimeFields.nonEmpty) {
-        val literalStr = source(ctx)
-        throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
+        throw QueryParsingErrors.mixedIntervalUnitsError(intervalString, ctx)
       }
       Literal(
         calendarInterval.months,
@@ -5349,10 +5346,10 @@ class AstBuilder extends DataTypeAstBuilder
         Literal(micros, DayTimeIntervalType(start, end))
       }
     } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
-      val units =
-        ctx.errorCapturingMultiUnitsInterval.body.unit.asScala.map(
-          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
-      constructMultiUnitsIntervalLiteral(ctx, calendarInterval, units)
+      val body = ctx.errorCapturingMultiUnitsInterval.body
+      val units = body.unit.asScala.map(_.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
+      constructMultiUnitsIntervalLiteral(
+        ctx, calendarInterval, units, multiUnitsIntervalString(body).trim)
     } else {
       Literal(calendarInterval, CalendarIntervalType)
     }
@@ -5365,8 +5362,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(
-          innerCtx.unitToUnitInterval)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
     } else {
@@ -5374,10 +5370,43 @@ class AstBuilder extends DataTypeAstBuilder
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
     }
+  }
+
+  /**
+   * Returns the interval string of multiple unit value pairs, e.g. " 1 YEAR -2 DAYS" for
+   * INTERVAL 1 YEAR '-2' DAYS.
+   */
+  private def multiUnitsIntervalString(ctx: MultiUnitsIntervalContext): String = {
+    val units = ctx.unit.asScala
+    val values = ctx.intervalValue().asScala
+    assert(units.length == values.length)
+    units.indices.map { i =>
+      val u = units(i).getText
+      val v = if (values(i).stringLit() != null) {
+        val value = string(visitStringLit(values(i).stringLit()))
+        // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+        // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+        // units and become valid ones, e.g. '1 day 2 hour'.
+        // Ideally, we only ensure the value parts don't contain any units here.
+        if (value.exists(Character.isLetter)) {
+          throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
+        }
+        if (values(i).MINUS() == null) {
+          value
+        } else if (value.startsWith("-")) {
+          value.replaceFirst("-", "")
+        } else {
+          s"-$value"
+        }
+      } else {
+        values(i).getText
+      }
+      " " + v + " " + u
+    }.mkString
   }
 
   /**
@@ -5385,34 +5414,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.unit.asScala
-      val values = ctx.intervalValue().asScala
       try {
-        assert(units.length == values.length)
-        val kvs = units.indices.map { i =>
-          val u = units(i).getText
-          val v = if (values(i).stringLit() != null) {
-            val value = string(visitStringLit(values(i).stringLit()))
-            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
-            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
-            // units and become valid ones, e.g. '1 day 2 hour'.
-            // Ideally, we only ensure the value parts don't contain any units here.
-            if (value.exists(Character.isLetter)) {
-              throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
-            }
-            if (values(i).MINUS() == null) {
-              value
-            } else if (value.startsWith("-")) {
-              value.replaceFirst("-", "")
-            } else {
-              s"-$value"
-            }
-          } else {
-            values(i).getText
-          }
-          UTF8String.fromString(" " + v + " " + u)
-        }
-        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
+        IntervalUtils.stringToInterval(UTF8String.fromString(multiUnitsIntervalString(ctx)))
       } catch {
         case st: SparkThrowable => throw st
         case i: IllegalArgumentException =>
@@ -7063,13 +7066,10 @@ class AstBuilder extends DataTypeAstBuilder
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
     if (!conf.resolver(columnNameParts.last,
         getIdentifierText(ctx.colType().colName))) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
-        "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
+      throw QueryParsingErrors.changeColumnRenameUnsupportedError(ctx)
     }
     if (ctx.colType.NULL != null) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-        "NOT NULL", "ALTER COLUMN", ctx,
-        Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
+      throw QueryParsingErrors.changeColumnNotNullUnsupportedError(ctx)
     }
 
     AlterColumns(
@@ -7094,20 +7094,17 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         val name = typedVisit[Seq[String]](colType.name)
         if (name.length > 1) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+          throw QueryParsingErrors.replaceColumnsNestedColumnUnsupportedError(name, ctx)
         }
         var commentSpec: Option[CommentSpecContext] = None
         colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
           blockBang(opt.errorCapturingNot)
 
           if (opt.NULL != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "NOT NULL", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsNotNullUnsupportedError(ctx)
           }
           if (opt.colPosition != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "Column position", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsColumnPositionUnsupportedError(ctx)
           }
           if (Option(opt.defaultExpression()).map(visitDefaultExpression).isDefined) {
             throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
@@ -7598,7 +7595,7 @@ class AstBuilder extends DataTypeAstBuilder
     def singlePart(parts: Seq[String]): String = {
       if (parts.length > 1) {
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
-          parts.init.quoted, parentCtx)
+          parts, parentCtx)
       }
       parts.head
     }
