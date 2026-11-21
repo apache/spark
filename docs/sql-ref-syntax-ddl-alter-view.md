@@ -24,6 +24,10 @@ license: |
 The `ALTER VIEW` statement can alter metadata associated with the view. It can change the definition of the view, change
 the name of a view to a different name, set and unset the metadata of the view by setting `TBLPROPERTIES`.
 
+`RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` also apply to a
+[metric view](sql-ref-syntax-ddl-create-metric-view.html). To change a metric view's definition, use
+`CREATE OR REPLACE VIEW ... WITH METRICS`, or drop and recreate the view in the session catalog.
+
 #### RENAME View
 Renames the existing view. If the new view name already exists in the source database, a `TableAlreadyExistsException` is thrown. This operation
 does not support moving the views across databases.
@@ -246,5 +250,6 @@ DESC TABLE EXTENDED open_orders;
 
 * [describe-table](sql-ref-syntax-aux-describe-table.html)
 * [create-view](sql-ref-syntax-ddl-create-view.html)
+* [create-metric-view](sql-ref-syntax-ddl-create-metric-view.html)
 * [drop-view](sql-ref-syntax-ddl-drop-view.html)
 * [show-views](sql-ref-syntax-aux-show-views.html)
