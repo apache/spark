@@ -706,7 +706,34 @@ object SQLConf {
         "UDF construction. Transpiled UDFS attempt to match the Python functionality but " +
         "may not be 100% equivalent. Some known differences include: overflows from input types " +
         "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
-        "returns. This initial version only works with non-Connect Spark; Spark Connect " +
+        "returns. Applies to regular Python UDFs whether or not they are Arrow-optimized. " +
+        "Setting spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled changes the " +
+        "values an Arrow-optimized UDF receives and so disables transpilation of " +
+        "Arrow-optimized UDFs only. Scalar pandas UDFs are transpiled only for element-wise " +
+        "bodies built from `+` `-` `*` `%`, unary `+`/`-` and `Series.isnull()` (and its " +
+        "aliases); a `*` repeating a string Series requires a literal repeat count. " +
+        "Anything else, including comparisons and any use of `if`, `and`, `or`, `not` or " +
+        "`is None`, falls back to interpreted Python, because those do not mean the same " +
+        "thing on a Series. " +
+        "Setting spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true disables " +
+        "all scalar pandas UDF transpilation. " +
+        "Where a transpiled pandas UDF does differ, it is because numpy " +
+        "arithmetic is fixed-width: it wraps on integer overflow, keeps float32 through a " +
+        "float literal, loses precision above 2^53 for an integral column carrying " +
+        "NULLs -- in " +
+        "each of those cases the transpiled expression is the exact or ANSI-correct one. " +
+        "A scalar pandas UDF whose body is fractional but whose declared return type is " +
+        "integral is not transpiled: the cast would truncate where the interpreted " +
+        "conversion fails. Other " +
+        "vectorized UDFs (arrow_udf, the iterator forms, grouped map/agg) are never " +
+        "transpiled. A transpiled expression can be non-nullable where the Python UDF it " +
+        "replaces is always nullable. Streaming state schemas are stored nullable either " +
+        "way, so a stateful query can be restarted after transpilation settings change, " +
+        "unless it was started with " +
+        "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled=false: such a " +
+        "query must restart with the transpilation settings it started with, or the restart " +
+        "can fail with STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE. " +
+        "This initial version only works with non-Connect Spark; Spark Connect " +
         "support is to follow. This is an *experimental* feature."
     )
     .version("4.3.0")
