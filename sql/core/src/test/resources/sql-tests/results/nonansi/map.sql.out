@@ -16,6 +16,41 @@ NULL
 
 
 -- !query
+select map(1Y, 'a', 44Y, 'b')[300], map(1Y, 'a', 44Y, 'b')[44]
+-- !query schema
+struct<map(1, a, 44, b)[300]:string,map(1, a, 44, b)[44]:string>
+-- !query output
+NULL	b
+
+
+-- !query
+select map(1S, 'a', 44S, 'b')[65580], map(1S, 'a', 44S, 'b')[44]
+-- !query schema
+struct<map(1, a, 44, b)[65580]:string,map(1, a, 44, b)[44]:string>
+-- !query output
+NULL	b
+
+
+-- !query
+select map(1, 'a', 44, 'b')[4294967340L], map(1, 'a', 44, 'b')[44L]
+-- !query schema
+struct<map(1, a, 44, b)[4294967340]:string,map(1, a, 44, b)[44]:string>
+-- !query output
+NULL	b
+
+
+-- !query
+select k, map(1Y, 'a', 44Y, 'b')[k] from values (44), (300), (-212), (null) as t(k)
+-- !query schema
+struct<k:int,map(1, a, 44, b)[k]:string>
+-- !query output
+-212	NULL
+300	NULL
+44	b
+NULL	NULL
+
+
+-- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5)
 -- !query schema
 struct<map_contains_key(map(1, a, 2, b), 5):boolean>

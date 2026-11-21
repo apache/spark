@@ -137,6 +137,54 @@ class DataFrameComplexTypeSuite extends SharedSparkSession {
     checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
   }
 
+  test("SPARK-61239: access a map with an integral key of a wider type than the map keys") {
+    withTable("t") {
+      // Read the maps and the keys from a table, so that the lookups are not constant folded.
+      // Each key that is out of the range of a map key type wraps around to 44 in that type:
+      // 300 and -212 in TINYINT, 65580 in TINYINT and SMALLINT, 4294967340 in all three.
+      sql(
+        """CREATE TABLE t USING parquet AS SELECT
+          |  map(CAST(1 AS TINYINT), 'a', CAST(44 AS TINYINT), 'b') AS m8,
+          |  map(CAST(1 AS SMALLINT), 'a', CAST(44 AS SMALLINT), 'b') AS m16,
+          |  map(1, 'a', 44, 'b') AS m32,
+          |  k,
+          |  TRY_CAST(k AS INT) AS ki
+          |FROM VALUES (1L), (44L), (300L), (-212L), (65580L), (4294967340L), (NULL) AS v(k)
+          |""".stripMargin)
+      val t = spark.table("t")
+      val values = Seq("a", "b", null, null, null, null, null)
+      val keys = Seq[java.lang.Long](1L, 44L, 300L, -212L, 65580L, 4294967340L, null)
+      val expected = keys.zip(values).map { case (k, v) => Row(k, v, v, v, v, v) }
+
+      Seq(true, false).foreach { ansi =>
+        Seq(
+          ("true", CodegenObjectFactoryMode.CODEGEN_ONLY),
+          ("false", CodegenObjectFactoryMode.NO_CODEGEN)).foreach { case (wholeStage, mode) =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> ansi.toString,
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage,
+              SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString) {
+            checkAnswer(
+              sql("SELECT k, m8[k], m16[k], m32[k], m8[ki], m16[ki] FROM t"),
+              expected)
+            checkAnswer(
+              t.select($"k", $"m8"($"k"), $"m16".getItem($"k"), $"m32"($"k"), $"m8"($"ki"),
+                $"m16".getItem($"ki")),
+              expected)
+            checkAnswer(
+              sql("SELECT m8[300], m8[-212], m16[65580], m32[4294967340L], m8[44], m32[44L] " +
+                "FROM t WHERE k = 1"),
+              Row(null, null, null, null, "b", "b"))
+            checkAnswer(
+              t.where($"k" === 1).select($"m8"(300), $"m16".getItem(65580), $"m32"(4294967340L),
+                $"m8"(44L)),
+              Row(null, null, null, "b"))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-37855: IllegalStateException when transforming an array inside a nested struct") {
     def makeInput(): DataFrame = {
       val innerElement1 = Row(3, 3.12)
