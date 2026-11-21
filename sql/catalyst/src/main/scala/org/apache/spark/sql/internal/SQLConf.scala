@@ -9525,7 +9525,7 @@ object SQLConf {
         "it shares with the pipeline's declared or inferred schema, as Spark 4.3 does. When " +
         "false (default), those columns take their metadata from the pipeline's schema, as a " +
         "full refresh and an update of a materialized view do.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
