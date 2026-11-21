@@ -223,6 +223,123 @@ private[expressions] object UnaryArithmetic {
   }
 }
 
+/**
+ * [[Abs]] or [[UnaryMinus]] that returns NULL where the ANSI form raises an overflow error, in
+ * every mode. It cannot raise itself, so the subclasses are [[NoThrow]]. Over an integral value
+ * or an ANSI interval, both overflow only on the minimum value of the type. `try_abs` and
+ * `try_negative` are replaced with a subclass over the types that can overflow.
+ */
+abstract class UnaryArithmeticOrNull extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  /** The result for `value`, which is not the minimum value of its type. */
+  protected def op(value: Long): Long
+
+  /** The Java code of the result for `value`, which is not the minimum value of its type. */
+  protected def opCode(value: String): String
+
+  /** The interpreted evaluation of a non-null input for the input type. */
+  protected def nonNullEvaluator: Any => Any = dataType match {
+    case ByteType => input =>
+      val v = input.asInstanceOf[Byte]
+      if (v == Byte.MinValue) null else op(v).toByte
+    case ShortType => input =>
+      val v = input.asInstanceOf[Short]
+      if (v == Short.MinValue) null else op(v).toShort
+    case IntegerType | _: YearMonthIntervalType => input =>
+      val v = input.asInstanceOf[Int]
+      if (v == Int.MinValue) null else op(v).toInt
+    case LongType | _: DayTimeIntervalType => input =>
+      val v = input.asInstanceOf[Long]
+      if (v == Long.MinValue) null else op(v)
+  }
+
+  // Resolved once, rather than for every row.
+  private lazy val evalNonNull = nonNullEvaluator
+
+  protected override def nullSafeEval(input: Any): Any = evalNonNull(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
+    val boxedType = CodeGenerator.boxedType(dataType)
+    nullSafeCodeGen(ctx, ev, c => {
+      val value = ctx.freshName("value")
+      s"""
+         |$javaType $value = $c;
+         |if ($value == $boxedType.MIN_VALUE) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = ($javaType) (${opCode(value)});
+         |}
+         |""".stripMargin
+    })
+  }
+}
+
+case class AbsOrNull(child: Expression) extends UnaryArithmeticOrNull with NoThrow {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegralType, AnsiIntervalType))
+
+  override def prettyName: String = "try_abs"
+
+  override protected def op(value: Long): Long = math.abs(value)
+
+  override protected def opCode(value: String): String = s"java.lang.Math.abs($value)"
+
+  override protected def withNewChildInternal(newChild: Expression): AbsOrNull =
+    copy(child = newChild)
+}
+
+/**
+ * Also over a [[CalendarInterval]], which overflows when one of its fields is the minimum value
+ * of its type.
+ */
+case class NegateOrNull(child: Expression) extends UnaryArithmeticOrNull with NoThrow {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegralType, AnsiIntervalType, CalendarIntervalType))
+
+  override def prettyName: String = "try_negative"
+
+  override protected def op(value: Long): Long = -value
+
+  override protected def opCode(value: String): String = s"-($value)"
+
+  override protected def nonNullEvaluator: Any => Any = dataType match {
+    case CalendarIntervalType => input =>
+      val v = input.asInstanceOf[CalendarInterval]
+      if (v.months == Int.MinValue || v.days == Int.MinValue || v.microseconds == Long.MinValue) {
+        null
+      } else {
+        IntervalUtils.negate(v)
+      }
+    case _ => super.nonNullEvaluator
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
+    case CalendarIntervalType =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+           |if ($c.months == Integer.MIN_VALUE || $c.days == Integer.MIN_VALUE ||
+           |    $c.microseconds == Long.MIN_VALUE) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = $iu.negate($c);
+           |}
+           |""".stripMargin)
+    case _ => super.doGenCode(ctx, ev)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): NegateOrNull =
+    copy(child = newChild)
+}
+
 abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
