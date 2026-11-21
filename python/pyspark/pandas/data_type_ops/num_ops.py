@@ -288,18 +288,22 @@ class NumericOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return pyspark_column_op("__lt__", left, right, fillna=False)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return pyspark_column_op("__le__", left, right, fillna=False)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return pyspark_column_op("__ge__", left, right, fillna=False)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return pyspark_column_op("__gt__", left, right, fillna=False)
 
 
