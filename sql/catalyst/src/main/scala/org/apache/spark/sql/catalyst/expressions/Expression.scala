@@ -131,6 +131,25 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
+  /**
+   * Returns true when evaluating this expression on a row does not depend on
+   * row ordering, prior rows, partition index, or task/file-split context.
+   * Note: `rowOrderIndependent == true` does NOT imply `deterministic == true`
+   * or idempotence across task retries, speculative execution, or duplicate calls.
+   *
+   * Only expressions that inherit `Expression.deterministic` propagate
+   * `children.forall(_.rowOrderIndependent)` automatically; any subclass
+   * overriding `deterministic` defaults conservatively to `deterministic`
+   * unless it explicitly overrides `rowOrderIndependent`.
+   */
+  lazy val rowOrderIndependent: Boolean = {
+    if (Expression.overridesDeterministic(getClass)) {
+      deterministic
+    } else {
+      children.forall(_.rowOrderIndependent)
+    }
+  }
+
   def nullable: Boolean
 
   /**
@@ -436,6 +455,23 @@ abstract class Expression extends TreeNode[Expression] {
   protected lazy val hasExpensiveChild: Boolean = children.exists(_.expensive)
 }
 
+object Expression {
+  // One reflective lookup per Expression subclass. `Class.getMethod` resolves every public method
+  // of the class and its supertypes, so an unloadable signature on a third-party Expression fails
+  // with `LinkageError`; catch it and conservatively treat the class as overriding `deterministic`
+  // so `rowOrderIndependent` falls back to `deterministic`.
+  private val DETERMINISTIC_OVERRIDE_CACHE = new ClassValue[java.lang.Boolean]() {
+    override protected def computeValue(cls: Class[_]): java.lang.Boolean = try {
+      cls.getMethod("deterministic").getDeclaringClass != classOf[Expression]
+    } catch {
+      case _: LinkageError => java.lang.Boolean.TRUE
+    }
+  }
+
+  private def overridesDeterministic(cls: Class[_]): Boolean =
+    DETERMINISTIC_OVERRIDE_CACHE.get(cls)
+}
+
 object ExpressionPatternBitMask {
   val mask: BitSet = {
     val bits = new BitSet(TreePattern.maxId)
@@ -556,6 +592,7 @@ trait NonSQLExpression extends Expression {
 trait Nondeterministic extends Expression {
   final override lazy val deterministic: Boolean = false
   final override def foldable: Boolean = false
+  override lazy val rowOrderIndependent: Boolean = false
 
   @transient
   private[this] var initialized = false

@@ -320,6 +320,9 @@ object SerializerSupport {
  *                        will not apply certain optimizations such as constant folding.
  * @param scalarFunction the [[ScalarFunction]] object if this is calling the magic method of the
  *                       [[ScalarFunction]] otherwise is unset.
+ * @param isRowOrderIndependent Whether this nondeterministic invocation's output distribution
+ *                              depends only on the current row's inputs and not on row ordering
+ *                              or other rows. Ignored when `isDeterministic` is true.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -330,7 +333,8 @@ case class StaticInvoke(
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
     isDeterministic: Boolean = true,
-    scalarFunction: Option[ScalarFunction[_]] = None) extends InvokeLike {
+    scalarFunction: Option[ScalarFunction[_]] = None,
+    isRowOrderIndependent: Boolean = false) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -343,6 +347,10 @@ case class StaticInvoke(
   override def nullIntolerant: Boolean = propagateNull
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
+  override lazy val rowOrderIndependent: Boolean =
+    (isDeterministic || isRowOrderIndependent ||
+      scalarFunction.exists(_.isRowOrderIndependent)) &&
+      arguments.forall(_.rowOrderIndependent)
 
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
@@ -404,10 +412,13 @@ case class StaticInvoke(
     copy(arguments = newChildren)
 
   override protected def stringArgs: Iterator[Any] = {
+    val args = super.stringArgs.toSeq
+    val withoutRowOrderIndependent = if (isRowOrderIndependent) args else args.dropRight(1)
     if (scalarFunction.nonEmpty) {
-      super.stringArgs
+      withoutRowOrderIndependent.iterator
     } else {
-      super.stringArgs.toSeq.dropRight(1).iterator
+      // Drop unset `scalarFunction` (index 8) to keep plan strings concise and stable.
+      (withoutRowOrderIndependent.take(8) ++ withoutRowOrderIndependent.drop(9)).iterator
     }
   }
 
@@ -465,6 +476,16 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
+  private def scalarFunctionRowOrderIndependent: Boolean = targetObject match {
+    case Literal(fn: ScalarFunction[_], _) if functionName == ScalarFunction.MAGIC_METHOD_NAME =>
+      fn.isRowOrderIndependent
+    case _ => false
+  }
+
+  override lazy val rowOrderIndependent: Boolean =
+    deterministic ||
+      ((isDeterministic || scalarFunctionRowOrderIndependent) &&
+        children.forall(_.rowOrderIndependent))
   override def inputTypes: Seq[AbstractDataType] =
     if (methodInputTypes.nonEmpty) {
       Seq(targetObject.dataType) ++ methodInputTypes

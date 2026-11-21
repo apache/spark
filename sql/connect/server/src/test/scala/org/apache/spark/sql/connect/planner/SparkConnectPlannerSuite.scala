@@ -21,23 +21,26 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any, ByteString, StringValue}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, Encoder, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, NameStreamingSources, RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF, ScalaUDF, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.{SparkConnectTestUtils, UdfToProtoUtils}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1401,5 +1404,168 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(
       intercepted.getMessage.contains("No handler found for extension type: " +
         "type.googleapis.com/google.protobuf.StringValue"))
+  }
+
+  test("CommonInlineUserDefinedFunction row_order_independent decode and guard") {
+    val rel = createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()), Seq.empty)
+    val idAttr = proto.Expression
+      .newBuilder()
+      .setUnresolvedAttribute(
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("id"))
+      .build()
+
+    // 1. ScalarScalaUDF with row_order_independent = true
+    val fn = (x: Int) => x + 1
+    val scalaUdf = SparkUserDefinedFunction(fn, PrimitiveIntEncoder :: Nil, PrimitiveIntEncoder)
+      .withName("scala_row_indep")
+      .asRowOrderIndependentNondeterministic()
+    val scalaProto = UdfToProtoUtils.toProto(scalaUdf, Seq(idAttr))
+    val scalaPlan = transform(
+      proto.Relation
+        .newBuilder()
+        .setProject(
+          proto.Project
+            .newBuilder()
+            .setInput(rel)
+            .addExpressions(
+              proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(scalaProto)))
+        .build())
+    val scalaExpr = scalaPlan
+      .asInstanceOf[logical.Project]
+      .projectList
+      .head
+      .asInstanceOf[UnresolvedAlias]
+      .child
+      .asInstanceOf[ScalaUDF]
+    assert(!scalaExpr.deterministic)
+    assert(scalaExpr.rowOrderIndependent)
+
+    // 2. Old client omitting row_order_independent defaults safely to false
+    val oldScalaProto = scalaProto.toBuilder.clearRowOrderIndependent().build()
+    val oldScalaPlan = transform(
+      proto.Relation
+        .newBuilder()
+        .setProject(
+          proto.Project
+            .newBuilder()
+            .setInput(rel)
+            .addExpressions(
+              proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(oldScalaProto)))
+        .build())
+    val oldScalaExpr = oldScalaPlan
+      .asInstanceOf[logical.Project]
+      .projectList
+      .head
+      .asInstanceOf[UnresolvedAlias]
+      .child
+      .asInstanceOf[ScalaUDF]
+    assert(!oldScalaExpr.deterministic)
+    assert(!oldScalaExpr.rowOrderIndependent)
+
+    // 3. Scala UDAF with row_order_independent = true rejected on server
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = a + b
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = PrimitiveLongEncoder
+      override def outputEncoder: Encoder[Long] = PrimitiveLongEncoder
+    }
+    val udaProto = UdfToProtoUtils
+      .toProto(UserDefinedAggregator(agg, PrimitiveLongEncoder).withName("bad_uda"), Seq(idAttr))
+      .toBuilder
+      .setRowOrderIndependent(true)
+      .build()
+    val scalaAggEx = intercept[SparkIllegalArgumentException] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project
+              .newBuilder()
+              .setInput(rel)
+              .addExpressions(
+                proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(udaProto)))
+          .build())
+    }
+    assert(scalaAggEx.getCondition === "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR")
+    assert(scalaAggEx.getMessageParameters.get("functionName") === "bad_uda")
+
+    // 4. PythonUDF with row_order_independent = true
+    val pyProto = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setFunctionName("py_row_indep")
+      .setDeterministic(false)
+      .setRowOrderIndependent(true)
+      .addArguments(idAttr)
+      .setPythonUdf(
+        proto.PythonUDF
+          .newBuilder()
+          .setEvalType(PythonEvalType.SQL_BATCHED_UDF)
+          .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
+          .setCommand(ByteString.copyFrom("cmd".getBytes()))
+          .setPythonVer("3.10"))
+      .build()
+    val pyPlan = transform(
+      proto.Relation
+        .newBuilder()
+        .setProject(
+          proto.Project
+            .newBuilder()
+            .setInput(rel)
+            .addExpressions(
+              proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(pyProto)))
+        .build())
+    val pyExpr = pyPlan
+      .asInstanceOf[logical.Project]
+      .projectList
+      .head
+      .asInstanceOf[UnresolvedAlias]
+      .child
+      .asInstanceOf[PythonUDF]
+    assert(!pyExpr.deterministic)
+    assert(pyExpr.rowOrderIndependent)
+
+    // 5. PythonUDAF & incremental Python aggregator with row_order_independent = true rejected
+    Seq(
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF).foreach { aggEvalType =>
+      val pyAggProto = pyProto.toBuilder
+        .setPythonUdf(pyProto.getPythonUdf.toBuilder.setEvalType(aggEvalType))
+        .build()
+      val pyAggEx = intercept[SparkIllegalArgumentException] {
+        transform(
+          proto.Relation
+            .newBuilder()
+            .setProject(
+              proto.Project
+                .newBuilder()
+                .setInput(rel)
+                .addExpressions(
+                  proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(pyAggProto)))
+            .build())
+      }
+      assert(pyAggEx.getCondition === "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR")
+      assert(pyAggEx.getMessageParameters.get("functionName") === "py_row_indep")
+    }
+
+    // 6. Java UDAF registration with row_order_independent = true rejected on server
+    val javaAggProto = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setFunctionName("bad_java_uda")
+      .setDeterministic(false)
+      .setRowOrderIndependent(true)
+      .setJavaUdf(
+        proto.JavaUDF
+          .newBuilder()
+          .setClassName("test.org.apache.spark.sql.MyDoubleAvg")
+          .setAggregate(true))
+      .build()
+    val javaAggEx = intercept[SparkIllegalArgumentException] {
+      transform(proto.Command.newBuilder().setRegisterFunction(javaAggProto).build())
+    }
+    assert(javaAggEx.getCondition === "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR")
+    assert(javaAggEx.getMessageParameters.get("functionName") === "bad_java_uda")
   }
 }

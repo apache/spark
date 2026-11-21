@@ -1910,7 +1910,13 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           }
 
           if (!a.child.deterministic) {
-            neverInlines += a
+            if (conf.rowOrderIndependentNondeterministicPushdownEnabled &&
+              a.child.rowOrderIndependent && count == 1 &&
+              !relatedConsumers.exists(hasReferenceInsideLambda(_, a.toAttribute))) {
+              maybeInlines += a
+            } else {
+              neverInlines += a
+            }
           } else if (alwaysInline || containsUDF) {
             mustInlines += a
           } else if (count == 1 || cheapToInlineProducer(a, relatedConsumers)) {
@@ -1987,6 +1993,14 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           producer.deterministic &&
             (count == 1 || inline || cheapToInlineProducer(producer, relatedConsumers))
       }
+  }
+
+  private def hasReferenceInsideLambda(expr: Expression, ref: Attribute): Boolean = {
+    expr.exists {
+      case l: LambdaFunction => l.function.references.contains(ref)
+      case h: HigherOrderFunction => h.functions.exists(_.references.contains(ref))
+      case _ => false
+    }
   }
 
   private object ExtractOnlyRef {
@@ -2907,6 +2921,39 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
       }
 
+    // Push disjoint deterministic predicates past row-order-independent nondeterministic
+    // projections while keeping predicates on nondeterministic aliases and post-guard
+    // throwable or failable predicates above the Project.
+    case f @ Filter(condition, project @ Project(fields, grandChild))
+      if allowRowOrderIndependent(fields) && canPushThroughCondition(grandChild, condition) =>
+      val aliasMap = getAliasMap(project)
+      val nondetAliases =
+        AttributeSet(project.projectList.filterNot(_.deterministic).map(_.toAttribute))
+      val avoidDoubleEval = conf.avoidDoubleFilterEval
+      val originalAndRewrittenConditionsWithUsedAlias =
+        splitConjunctivePredicates(condition).map { cond =>
+          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
+          (cond, usedAliases, replaced)
+        }
+      lazy val failable = failableOutput(grandChild)
+      val (pushDownWithReplaced, stayUp) = splitPushable(
+        originalAndRewrittenConditionsWithUsedAlias)(
+        canPush = { case (cond, usedAliases, _) =>
+          cond.deterministic &&
+            cond.references.intersect(nondetAliases).isEmpty &&
+            (!avoidDoubleEval || !usedAliases.exists(a => isExpensive(a._2.child)))
+        },
+        throwable = { case (_, _, replaced) =>
+          isRowOrderIndependentBarrier(replaced, failable)
+        })
+      if (pushDownWithReplaced.nonEmpty) {
+        val pushed = project.withNewChildren(
+          Seq(Filter(pushDownWithReplaced.map(_._3).reduce(And), grandChild)))
+        if (stayUp.isEmpty) pushed else Filter(stayUp.map(_._1).reduce(And), pushed)
+      } else {
+        f
+      }
+
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
@@ -2915,9 +2962,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // change its result (see `pushBelowAggregate`). A throwable predicate written after one that
     // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
     // throwable alias of the aggregate.
+    // When `rowOrderIndependentNondeterministicPushdownEnabled` is enabled, we also allow pushing
+    // disjoint deterministic predicates referencing only deterministic grouping keys through
+    // row-order-independent nondeterministic aggregates while preserving ANSI written-order
+    // barriers.
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.aggregateExpressions.forall(_.deterministic)
-        && aggregate.groupingExpressions.nonEmpty =>
+      if aggregate.groupingExpressions.nonEmpty && (
+        aggregate.aggregateExpressions.forall(_.deterministic) ||
+        (allowRowOrderIndependent(aggregate.aggregateExpressions) &&
+          allowRowOrderIndependent(aggregate.groupingExpressions))) =>
       val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {
@@ -3001,6 +3054,73 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
+
+    case filter @ Filter(condition, u: UnaryNode)
+        if (u.isInstanceOf[BatchEvalPython] || u.isInstanceOf[ArrowEvalPython]) &&
+          allowRowOrderIndependent(u.expressions) =>
+      // BatchEvalPython and ArrowEvalPython are row-preserving (never drop rows).
+      assert(!canDropRows(u))
+      lazy val failable = failableOutput(u.child)
+      val (pushDown, stayUp) = splitPushable(splitConjunctivePredicates(condition))(
+        canPush = cond =>
+          cond.deterministic &&
+            cond.references.subsetOf(u.child.outputSet) &&
+            !cond.references.exists(u.producedAttributes.contains),
+        throwable = isRowOrderIndependentBarrier(_, failable))
+      if (pushDown.nonEmpty) {
+        val newChild = u.withNewChildren(Seq(Filter(pushDown.reduceLeft(And), u.child)))
+        if (stayUp.nonEmpty) Filter(stayUp.reduceLeft(And), newChild) else newChild
+      } else {
+        filter
+      }
+  }
+
+  private[optimizer] def allowRowOrderIndependent(exprs: Seq[Expression]): Boolean =
+    conf.rowOrderIndependentNondeterministicPushdownEnabled && exprs.forall(_.rowOrderIndependent)
+
+  private[optimizer] def isRowOrderIndependentBarrier(
+      e: Expression,
+      failable: AttributeSet): Boolean = {
+    e.throwable ||
+      !canEvaluateRowOrderIndependentPushdownPredicate(e) ||
+      e.references.exists(failable.contains)
+  }
+
+  /**
+   * Returns whether `e` is safe to evaluate ahead of a stay-up filter when pushing deterministic
+   * predicates past a row-order-independent nondeterministic operator.
+   *
+   * Ordinary predicates must pass [[ExprUtils.canEvaluateUnconditionally]]. Runtime pruning
+   * predicates ([[DynamicPruningSubquery]] and [[BloomFilterMightContain]]) embed uncorrelated
+   * plan expressions and are rejected by `canEvaluateUnconditionally`, so they are checked via
+   * their key/value expressions instead while preserving `!e.throwable` and `failable` barriers
+   * for all other expressions (including ordinary scalar/IN/EXISTS subqueries).
+   */
+  private def canEvaluateRowOrderIndependentPushdownPredicate(e: Expression): Boolean = e match {
+    case dpp: DynamicPruningSubquery =>
+      !dpp.throwable && isUnconditionallyEvaluableKey(dpp.pruningKey)
+    case bf: BloomFilterMightContain =>
+      val bloomFilterSafe = bf.bloomFilterExpression match {
+        case s: ScalarSubquery => s.outerAttrs.isEmpty && !s.containsPattern(OUTER_REFERENCE)
+        case GetStructField(s: ScalarSubquery, _, _) =>
+          s.outerAttrs.isEmpty && !s.containsPattern(OUTER_REFERENCE)
+        case _: ScalarSubqueryReference => true
+        case other => ExprUtils.canEvaluateUnconditionally(other)
+      }
+      val valueSafe = bf.valueExpression match {
+        case XxHash64(children, _) => children.forall(isUnconditionallyEvaluableKey)
+        case other => isUnconditionallyEvaluableKey(other)
+      }
+      !bf.throwable && bloomFilterSafe && valueSafe
+    case _ =>
+      ExprUtils.canEvaluateUnconditionally(e)
+  }
+
+  private def isUnconditionallyEvaluableKey(e: Expression): Boolean = e match {
+    case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) =>
+      ExprUtils.canEvaluateUnconditionally(child)
+    case other =>
+      ExprUtils.canEvaluateUnconditionally(other)
   }
 
   def canPushThrough(p: UnaryNode): Boolean = p match {
@@ -3052,7 +3172,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   private[optimizer] def pushBelowAggregate(
       conds: Seq[Expression],
       aggregate: Aggregate): (Seq[Expression], Seq[Expression]) = {
+    val allDeterministic = aggregate.aggregateExpressions.forall(_.deterministic)
+    if (!allDeterministic &&
+        !(allowRowOrderIndependent(aggregate.aggregateExpressions) &&
+          allowRowOrderIndependent(aggregate.groupingExpressions))) {
+      return (Nil, conds)
+    }
     val aliasMap = getAliasMap(aggregate)
+    lazy val nondetAliases =
+      AttributeSet(aggregate.aggregateExpressions.filterNot(_.deterministic).map(_.toAttribute))
     val keys = if (aggregate.isStreaming) {
       Nil
     } else {
@@ -3064,7 +3192,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // (condition, condition with aliases expanded, pushed form or None if it cannot be pushed)
     val candidates = conds.map { cond =>
       val replaced = replaceAlias(cond, aliasMap)
-      val pushable = cond.deterministic && cond.references.nonEmpty &&
+      val avoidsNondetAlias = allDeterministic || cond.references.intersect(nondetAliases).isEmpty
+      val pushable = cond.deterministic && cond.references.nonEmpty && avoidsNondetAlias &&
         replaced.references.subsetOf(aggregate.child.outputSet)
       val normalized = if (pushable && keys.nonEmpty) {
         normalizeGroupingExpressions(replaced, keys)
@@ -3074,11 +3203,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val canPush = pushable && (!mayChangeKeyForm || normalized.fastEquals(replaced))
       (cond, replaced, if (canPush) Some(normalized) else None)
     }
+    lazy val failable = failableOutput(aggregate.child)
     // The aliases are expanded in the pushed conjunct, so a conjunct over a throwable alias is
     // throwable too.
     val (pushDown, stayUp) = splitPushable(candidates)(
       canPush = _._3.isDefined,
-      throwable = { case (_, replaced, _) => replaced.throwable })
+      throwable = { case (_, replaced, _) =>
+        if (allDeterministic) {
+          replaced.throwable
+        } else {
+          isRowOrderIndependentBarrier(replaced, failable)
+        }
+      })
     (pushDown.map(_._3.get), stayUp.map(_._1))
   }
 
@@ -3152,7 +3288,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * throwable one is fine, as it can only reduce the rows the throwable one sees. The conjuncts
    * to keep above are returned in the order they were written.
    */
-  private def splitPushable[T](conds: Seq[T])(
+  private[optimizer] def splitPushable[T](conds: Seq[T])(
       canPush: T => Boolean, throwable: T => Boolean): (Seq[T], Seq[T]) = {
     val (leading, rest) = conds.span(canPush)
     // The head of `rest`, if any, is the first conjunct that cannot be pushed.

@@ -30,7 +30,7 @@ import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException}
+import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -2331,7 +2331,13 @@ class SparkConnectPlanner(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
+    val rowOrderIndependent = fun.hasRowOrderIndependent && fun.getRowOrderIndependent
     if (udf.getAggregate) {
+      if (rowOrderIndependent) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+          messageParameters = Map("functionName" -> fun.getFunctionName))
+      }
       assertPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
       UserDefinedAggregator(
         aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -2347,7 +2353,8 @@ class SparkConnectPlanner(
         outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
         givenName = Option(fun.getFunctionName),
         nullable = udf.getNullable,
-        deterministic = fun.getDeterministic)
+        deterministic = fun.getDeterministic,
+        udfRowOrderIndependent = rowOrderIndependent)
     }
   }
 
@@ -2385,6 +2392,7 @@ class SparkConnectPlanner(
       fun: proto.CommonInlineUserDefinedFunction): UserDefinedPythonFunction = {
     val udf = fun.getPythonUdf
     val function = transformPythonFunction(udf)
+    val rowOrderIndependent = fun.hasRowOrderIndependent && fun.getRowOrderIndependent
     UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,
@@ -2392,7 +2400,8 @@ class SparkConnectPlanner(
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic,
       // Set only for incremental Python aggregators (see PythonAggregate).
-      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
+      bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null,
+      udfRowOrderIndependent = rowOrderIndependent)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -3498,6 +3507,11 @@ class SparkConnectPlanner(
       null
     }
     if (udf.getAggregate) {
+      if (fun.hasRowOrderIndependent && fun.getRowOrderIndependent) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+          messageParameters = Map("functionName" -> fun.getFunctionName))
+      }
       session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
     } else {
       session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)

@@ -158,4 +158,16 @@ public interface ScalarFunction<R> extends BoundFunction {
     );
   }
 
+  /**
+   * Returns true if evaluating this function on a row does not depend on row ordering, prior rows,
+   * partition index, or task/file-split context. Deterministic functions are always row-order
+   * independent.
+   *
+   * @return true if this function is row-order independent
+   * @since 5.0.0
+   */
+  default boolean isRowOrderIndependent() {
+    return isDeterministic();
+  }
+
 }

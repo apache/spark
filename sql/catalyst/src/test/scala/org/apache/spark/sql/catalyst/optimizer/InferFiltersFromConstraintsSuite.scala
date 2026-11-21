@@ -959,4 +959,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         asOfRight.where(IsNotNull(rightKey) && rightKey === 1).orderBy(rightKey.asc),
         LeftOuter).analyze)
   }
+
+  test("InferFiltersFromConstraints never infers filters from " +
+    "rowOrderIndependent exprs") {
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+    val roiCond = RowOrderIndepTestExpr("x.a".attr)() === 1
+    val originalQuery = x.where(roiCond)
+      .join(y, Inner, Some("x.a".attr === "y.a".attr)).analyze
+    val optimized = Optimize.execute(originalQuery)
+
+    // No filter referencing RowOrderIndepTestExpr should be inferred onto y.
+    val joinOpt = optimized.collectFirst { case j: Join => j }
+    assert(joinOpt.isDefined)
+    val rightHasRoiFilter = joinOpt.get.right.exists {
+      case f: Filter => f.condition.exists(_.isInstanceOf[RowOrderIndepTestExpr])
+      case _ => false
+    }
+    assert(!rightHasRoiFilter)
+  }
 }

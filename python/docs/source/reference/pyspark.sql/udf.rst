@@ -26,7 +26,9 @@ UDF
     :toctree: api/
 
     udf.UserDefinedFunction.asNondeterministic
+    udf.UserDefinedFunction.asRowOrderIndependentNondeterministic
     udf.UserDefinedFunction.returnType
+    udf.UserDefinedFunction.rowOrderIndependent
     UDFRegistration.register
     UDFRegistration.registerJavaFunction
     UDFRegistration.registerJavaUDAF

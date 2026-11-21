@@ -18,11 +18,13 @@ package org.apache.spark.sql.connect
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.Column
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.connect.test.ConnectFunSuite
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator}
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -70,6 +72,38 @@ class UserDefinedFunctionSuite extends ConnectFunSuite {
     udf(indirect)
     udf(Command1().direct)
     udf(MultipleLambdas().direct)
+  }
+
+  test("Connect UDF rowOrderIndependent chaining reset and UDAF rejection") {
+    val f = udf((x: Int) => x + 1)
+    assert(f.deterministic && f.rowOrderIndependent)
+
+    val rowIndep = f.asRowOrderIndependentNondeterministic()
+    assert(!rowIndep.deterministic && rowIndep.rowOrderIndependent)
+    val rowIndepProto = toExpr(rowIndep(Column("a"))).getCommonInlineUserDefinedFunction
+    assert(!rowIndepProto.getDeterministic)
+    assert(rowIndepProto.hasRowOrderIndependent && rowIndepProto.getRowOrderIndependent)
+
+    val reset = rowIndep.asNondeterministic()
+    assert(!reset.deterministic && !reset.rowOrderIndependent)
+    val resetProto = toExpr(reset(Column("a"))).getCommonInlineUserDefinedFunction
+    assert(!resetProto.getDeterministic)
+    assert(!resetProto.hasRowOrderIndependent)
+
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = a + b
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = PrimitiveLongEncoder
+      override def outputEncoder: Encoder[Long] = PrimitiveLongEncoder
+    }
+    val uda = UserDefinedAggregator(agg, PrimitiveLongEncoder).withName("bad_uda")
+    val ex = intercept[SparkIllegalArgumentException] {
+      uda.asRowOrderIndependentNondeterministic()
+    }
+    assert(ex.getCondition === "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR")
+    assert(ex.getMessageParameters.get("functionName") === "bad_uda")
   }
 }
 
