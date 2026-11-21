@@ -33,6 +33,7 @@ import org.apache.spark.internal.config.SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerJobEnd, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.BaseShuffleHandle
+import org.apache.spark.storage.{BlockId, RDDBlockId, StorageLevel}
 
 /**
  * A [[ShuffledRDD]] that emits a [[PipelinedShuffleDependency]] instead of a regular
@@ -682,6 +683,64 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         assert(shuffled.collect().map(_._1).sorted === (0 until 1000).toArray)
         assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
       }
+    }
+  }
+
+  for (cachedPartitions <- Seq(0, 1, 2)) {
+    test(s"consumer cache is rejected before channel tasks start (cached=$cachedPartitions)") {
+      withPipelinedSparkContext(cores = 4) { sc =>
+        val input = sc.parallelize(0 until 1000, 2).map(i => (i, i))
+        val consumer = new PipelinedShuffledRDD[Int, Int, Int](input, new HashPartitioner(2))
+          .cache()
+        val blocks = consumer.partitions.indices.map(RDDBlockId(consumer.id, _))
+        val blockManager = sc.env.blockManager
+        // Populate blocks without running the shuffle so a partial cache cannot leave a
+        // producer waiting for a reader during setup.
+        blocks.take(cachedPartitions).foreach { block =>
+          assert(blockManager.putIterator(
+            block, Iterator((block.splitIndex, block.splitIndex)),
+            StorageLevel.MEMORY_ONLY, tellMaster = true))
+        }
+        assert(blockManager.master.getLocations(blocks.toArray[BlockId]).map(_.nonEmpty).toSeq ===
+          blocks.indices.map(_ < cachedPartitions))
+
+        val events = new JobEvents
+        sc.addSparkListener(events)
+        val error = intercept[SparkException](consumer.collect())
+        checkError(
+          exception = error,
+          condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+          sqlState = Some("0A000"),
+          parameters = Map("reason" ->
+            (s"cache/persist/localCheckpoint on RDD $consumer in a pipelined consumer's " +
+              "within-stage chain (unpersist this RDD or rebuild it without localCheckpoint " +
+              "before submitting the job; persist only RDDs that do not read a pipelined " +
+              "shuffle within their stage)")))
+        sc.listenerBus.waitUntilEmpty()
+        assert(events.taskStarts.isEmpty)
+        assert(events.stageEnds.isEmpty)
+        assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+        assert(consumer.getStorageLevel === StorageLevel.MEMORY_ONLY)
+
+        consumer.unpersist(blocking = true)
+        for (_ <- 0 until 2) {
+          assert(consumer.collect().map(_._1).sorted === (0 until 1000).toArray)
+          assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+        }
+      }
+    }
+  }
+
+  test("pipelined actions recompute an evicted producer-input cache") {
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val input = sc.parallelize(0 until 1000, 2).map(i => (i, i)).cache()
+      assert(input.count() === 1000)
+      val shuffled = new PipelinedShuffledRDD[Int, Int, Int](input, new HashPartitioner(2))
+      assert(shuffled.collect().map(_._1).sorted === (0 until 1000).toArray)
+      sc.env.blockManager.master.removeRdd(input.id, blocking = true)
+      assert(input.getStorageLevel === StorageLevel.MEMORY_ONLY)
+      assert(shuffled.collect().map(_._1).sorted === (0 until 1000).toArray)
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
     }
   }
 

@@ -22,8 +22,11 @@ import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.{PipelinedShuffleDependency, SparkEnv, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.python.AttachDistributedSequenceExec
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
@@ -213,7 +216,86 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     }
   }
 
+  private def distributedSequence(input: DataFrame, cache: Boolean): DataFrame =
+    input.select(Column.internalFn("distributed_sequence_id", lit(cache)).as("index"), col("*"))
+
+  private def assertDistributedSequenceResult(df: DataFrame): Unit = {
+    val rows = df.collect()
+    assert(rows.map(_.getLong(0)).sorted === (0L until 4000L).toArray)
+    assert(rows.map(_.getLong(1)).sorted === (0L until 4000L).toArray)
+  }
+
   for (aqe <- Seq(false, true)) {
+    test(s"distributed sequence cache construction retains regular shuffles with AQE=$aqe") {
+      withPipelinedSession("pipelined-distributed-sequence-cache", aqe,
+          channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
+        val cacheKey = "pandas_on_Spark.compute.default_index_cache"
+        for {
+          storage <- Seq(None, Some("MEMORY_ONLY"), Some("LOCAL_CHECKPOINT"), Some("NONE"))
+          upperShuffle <- Seq(false, true)
+        } {
+          // An absent setting exercises pandas-on-Spark's default MEMORY_AND_DISK_SER.
+          storage match {
+            case Some(level) => spark.conf.set(cacheKey, "\"" + level + "\"")
+            case None => spark.conf.unset(cacheKey)
+          }
+          val indexed = distributedSequence(
+            spark.range(0, 4000, 1, 2).repartition(4).toDF(), cache = true)
+          // SinglePartition lets AQE inspect the cached operator below the upper exchange.
+          val df = if (upperShuffle) indexed.repartition(1) else indexed
+          val plan = df.queryExecution.executedPlan
+          val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }
+          assert(attach.size === 1)
+          assert(attach.head.cache)
+          assert(attach.head.child.outputPartitioning.numPartitions === 4)
+          val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
+          assert(exchanges.size === (if (upperShuffle) 2 else 1))
+          if (upperShuffle) {
+            assert(exchanges.exists(_.outputPartitioning == SinglePartition))
+          }
+          // Check before execute() constructs the persisted RDD and zipWithIndex counting job.
+          assert(exchanges.forall(!_.pipelined), s"cache=$storage; plan:\n$plan")
+          assertDistributedSequenceResult(df)
+          assert(collect(df.queryExecution.executedPlan) {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }.isEmpty)
+        }
+      }
+    }
+
+    test(s"distributed sequence without caching retains pipelined shuffles with AQE=$aqe") {
+      withPipelinedSession("pipelined-distributed-sequence-uncached", aqe,
+          channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
+        val df = distributedSequence(
+          spark.range(0, 4000, 1, 2).repartition(4).toDF(), cache = false)
+        val plan = df.queryExecution.executedPlan
+        val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }
+        assert(attach.size === 1)
+        assert(!attach.head.cache)
+        val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.nonEmpty && exchanges.forall(_.pipelined), s"plan:\n$plan")
+        // zipWithIndex counts a prefix of partitions before the final action reads them again.
+        assertDistributedSequenceResult(df)
+      }
+    }
+
+    test(s"distributed sequence caches shuffle-free producers with AQE=$aqe") {
+      withPipelinedSession("pipelined-distributed-sequence-producer", aqe,
+          channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
+        val df = distributedSequence(
+          spark.range(0, 4000, 1, 2).toDF(), cache = true).repartition(4)
+        val plan = df.queryExecution.executedPlan
+        val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }
+        assert(attach.size === 1)
+        assert(attach.head.cache)
+        assert(collect(attach.head.child) { case s: ShuffleExchangeExec => s }.isEmpty)
+        val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size === 1)
+        assert(exchanges.head.pipelined, s"plan:\n$plan")
+        assertDistributedSequenceResult(df)
+      }
+    }
+
     test(s"regular fallback is reused and avoids cloning shuffle-free plans with AQE=$aqe") {
       withPipelinedSession("pipelined-fallback-reuse", aqe) { spark =>
         val plain = spark.range(10).queryExecution
