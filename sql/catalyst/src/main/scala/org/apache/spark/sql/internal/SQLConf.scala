@@ -9565,6 +9565,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
+    buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
+      .internal()
+      .doc("When set to true, to_char renders a zero value as all spaces if the format string " +
+        "has no digits after the decimal point. For example: SELECT to_char(0, '999') returns " +
+        "'   '. When set to false, the zero digit is kept. For example: " +
+        "SELECT to_char(0, '999') returns '  0'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_XML_PARSER_ENABLED = {
     buildConf("spark.sql.legacy.useLegacyXMLParser")
       .internal()
