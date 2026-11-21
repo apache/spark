@@ -496,6 +496,52 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut(Not(And(equal, Literal(false))), 1)
   }
 
+  test("SPARK-60418: shortcut eliminate a conditional IN list element") {
+    val add = Add(Literal(1), Literal(0))
+    val equal = EqualTo(add, add)
+
+    def checkShortcut(expr: Expression, numCommonExpr: Int): Unit = {
+      val e1 = If(expr, Literal(1), Literal(2))
+      val ee1 = new EquivalentExpressions(true)
+      ee1.addExprTree(e1)
+      assert(ee1.getCommonSubexpressions.size == numCommonExpr)
+
+      val e2 = expr
+      val ee2 = new EquivalentExpressions(true)
+      ee2.addExprTree(e2)
+      assert(ee2.getCommonSubexpressions.size == numCommonExpr)
+    }
+
+    // `In` evaluates the list elements until one matches, so an element is conditional: it is
+    // not evaluated when an earlier one matches, nor at all when `value` is NULL. A subexpression
+    // inside one must not be eliminated, whichever position it is in.
+    checkShortcut(In(Literal(1), Seq(Literal(1), equal)), 0)
+    checkShortcut(In(Literal(1), Seq(equal, Literal(1))), 0)
+    checkShortcut(In(Literal(1), Seq(Literal(1), Literal(2), equal)), 0)
+
+    // `value` is always evaluated, so its subexpressions are still eligible.
+    checkShortcut(In(equal, Seq(Literal(true), Literal(false))), 1)
+
+    // The peel reaches `value` through an `And`/`Or` chain and vice versa.
+    checkShortcut(In(And(equal, Literal(true)), Seq(Literal(true))), 1)
+    checkShortcut(And(In(Literal(1), Seq(Literal(1), equal)), Literal(true)), 0)
+
+    // Two `In`s that share a conditional element: the element stays out, and this is the shape
+    // SPARK-60418 reported, where the shared element raised on a row that neither `In` reached.
+    val in1 = In(Literal(1), Seq(Literal(1), equal))
+    val in2 = In(Literal(1), Seq(Literal(1), equal, Literal(2)))
+    val ee = new EquivalentExpressions(true)
+    ee.addExprTree(in1)
+    ee.addExprTree(in2)
+    assert(ee.getCommonSubexpressions.isEmpty)
+
+    // An identical `In` is still eliminated as a whole: it carries its own short-circuit.
+    val eeWhole = new EquivalentExpressions(true)
+    eeWhole.addExprTree(in1)
+    eeWhole.addExprTree(in1)
+    assert(eeWhole.getCommonSubexpressions == Seq(in1))
+  }
+
   test("SPARK-58211: shortcut eliminate operand past the first in a chained AND/OR") {
     val add = Add(Literal(1), Literal(0))
     val equal = EqualTo(add, add)
