@@ -3139,12 +3139,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Only push down the predicates that is deterministic and all the referenced attributes
     // come from grandchild. With `keepFailableUp`, a predicate that can fail, such as a throwable
     // one or an ANSI division, is not pushed even when it is written first, as the operator in
-    // between can drop rows it would then see (see `cannotFailOnDroppedRows`).
+    // between can drop rows it would then see (see `cannotFailOnDroppedRows`). The legacy conf
+    // keeps only a throwable predicate up, as before.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
+    val canPushBelow: Expression => Boolean = if (!keepFailableUp) {
+      _ => true
+    } else if (SQLConf.get.legacyPushFailableFiltersThroughGenerate) {
+      !_.throwable
+    } else {
+      cannotFailOnDroppedRows
+    }
     val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
-      cond.deterministic && (!keepFailableUp || cannotFailOnDroppedRows(cond)) &&
-        cond.references.subsetOf(grandchild.outputSet)
+      cond.deterministic && canPushBelow(cond) && cond.references.subsetOf(grandchild.outputSet)
     }
 
     if (pushDown.nonEmpty) {
