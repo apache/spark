@@ -1519,8 +1519,13 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     val result = e transform {
       case a: Attribute => rewrites(a)
     } match {
-      // Make sure exprId is unique in each child of Union.
-      case Alias(child, alias) => Alias(child, alias)()
+      // Make sure exprId is unique in each child of Union. The alias keeps its explicit metadata,
+      // as in the first child, so that the CHAR types of the children stay the same, see
+      // SetOperationCharPadding.
+      case a @ Alias(child, alias) =>
+        Alias(child, alias)(
+          explicitMetadata = a.explicitMetadata,
+          nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case other => other
     }
 

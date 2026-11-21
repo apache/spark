@@ -49,7 +49,6 @@ object TypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
     WidenSetOperationTypes ::
-    PadSetOperationCharLengths ::
     ProcedureArgumentCoercion ::
     DefaultValueExpressionCoercion ::
     new CombinedTypeCoercionRule(

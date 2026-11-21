@@ -804,6 +804,9 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        // After WidenSetOperationTypes, and not part of the type coercion rules, which also run on
+        // optimized plans.
+        PadSetOperationCharLengths,
         ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,

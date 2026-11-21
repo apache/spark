@@ -846,6 +846,18 @@ trait CharVarcharTestSuite extends QueryTest {
         spark.table("t5").union(spark.table("t5")).select(functions.col("c").as("c", metadata)),
         Seq(Row(padded), Row(padded)))
 
+      // In the legacy mode, CHAR is a STRING and nothing is padded.
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        withTable("l3", "l5") {
+          sql(s"CREATE TABLE l3(c CHAR(3)) USING $format")
+          sql(s"CREATE TABLE l5(c CHAR(5)) USING $format")
+          sql("INSERT INTO l3 VALUES ('a')")
+          sql("INSERT INTO l5 VALUES ('a')")
+          checkAnswer(sql("SELECT c FROM l3 UNION ALL SELECT c FROM l5"), Seq(Row("a"), Row("a")))
+          checkAnswer(sql("SELECT c FROM l3 UNION SELECT c FROM l5"), Row("a"))
+        }
+      }
+
       // the default collation, implicit or explicit, is the same collation
       sql(s"CREATE TABLE tc(id INT, c CHAR(5) COLLATE UTF8_BINARY) USING $format")
       sql("INSERT INTO tc VALUES (3, 'a')")
@@ -876,10 +888,13 @@ trait CharVarcharTestSuite extends QueryTest {
       // The padding of the shorter child's scan to the widest length matches as one padding of
       // the column, which a source can be given.
       val plan = sql(s"SELECT * FROM ($union) WHERE c = 'a'").queryExecution.optimizedPlan
-      assert(plan.flatMap(_.expressions).exists(_.exists {
+      val comparisons = plan.collect { case f: Filter => f.condition }.flatMap(_.collect {
+        case e: EqualTo => e.left
+      })
+      assert(comparisons.length == 2 && comparisons.forall {
         case CharVarcharUtils.ReadSidePadding(_: Attribute, 5) => true
         case _ => false
-      }))
+      })
     }
   }
 
@@ -4400,6 +4415,16 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           Seq(Row(1, "a" + " ".repeat(2)), Row(2, "a" + " ".repeat(2)), Row(3, "abcde")))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'a'"), Seq(Row(1), Row(2)))
         checkAnswer(sql("SELECT id FROM v WHERE c = 'abcde'"), Row(3))
+        // The narrowing of the first child back to its own length matches as the padding of its
+        // scan, which a source can be given.
+        val plan = sql("SELECT id FROM v WHERE c = 'a'").queryExecution.optimizedPlan
+        val comparisons = plan.collect { case f: Filter => f.condition }.flatMap(_.collect {
+          case e: EqualTo => e.left
+        })
+        assert(comparisons.nonEmpty && comparisons.forall {
+          case CharVarcharUtils.ReadSidePadding(_: Attribute, 3) => true
+          case _ => false
+        })
       }
 
       // a struct built from the columns has the raw types in the metadata of its fields
