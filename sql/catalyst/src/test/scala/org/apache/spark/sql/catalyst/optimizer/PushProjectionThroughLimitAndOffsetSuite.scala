@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Exists, InSubquery, ListQuery, Literal, OuterReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LocalRelation, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
@@ -158,5 +158,43 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
       .localLimit(15).offset(5).globalLimit(10)
       .analyze
     comparePlans(optimized6, expected6)
+  }
+
+  test("subquery projections retain limit and offset boundaries") {
+    val input = LocalRelation(Seq("a".attr.int))
+    val subquery = LocalRelation(Seq("b".attr.int))
+    val a = input.output.head
+
+    val projections = Seq(
+      ("correlated scalar", Alias(ScalarSubquery(subquery,
+        outerAttrs = Seq(OuterReference(a))), "value")(), false),
+      ("correlated exists", Alias(Exists(subquery,
+        outerAttrs = Seq(OuterReference(a))), "value")(), false),
+      ("uncorrelated in", Alias(InSubquery(Seq(a),
+        ListQuery(subquery, numCols = 1)), "value")(), false),
+      ("uncorrelated scalar", Alias(ScalarSubquery(subquery), "value")(), true),
+      ("uncorrelated exists", Alias(Exists(subquery), "value")(), true),
+      ("ordinary deterministic", Alias(a, "value")(), true))
+
+    val boundaries = Seq[(String, LogicalPlan => LogicalPlan)](
+      "local limit" -> (child => LocalLimit(Literal(10), child)),
+      "global and local limit" -> (child =>
+        GlobalLimit(Literal(10), LocalLimit(Literal(10), child))),
+      "offset" -> (child => Offset(Literal(3), child)))
+
+    for {
+      (kind, expression, shouldPush) <- projections
+      (boundary, wrap) <- boundaries
+    } {
+      withClue(s"$kind across $boundary: ") {
+        val project = Project(Seq(a, expression), wrap(input))
+        val expected = if (shouldPush) {
+          wrap(Project(Seq(a, expression), input))
+        } else {
+          project
+        }
+        comparePlans(PushProjectionThroughLimitAndOffset(project), expected)
+      }
+    }
   }
 }
