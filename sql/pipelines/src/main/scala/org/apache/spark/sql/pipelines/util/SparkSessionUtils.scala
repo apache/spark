@@ -17,25 +17,72 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import org.apache.spark.sql.SparkSession
+import scala.util.Try
 
-object SparkSessionUtils {
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.internal.{SharedState, StaticSQLConf}
+
+object SparkSessionUtils extends Logging {
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations.
+   *
+   * Every pair that a running session cannot take is ignored. These are the pairs
+   * `spark.conf.set` rejects: static SQL configurations and, unless
+   * `spark.sql.legacy.setCommandRejectsSparkCoreConfs` is false, Spark core configurations.
+   * This applies to each pair the helper receives, whether it comes from a pipeline's
+   * `configuration` or from flow-level settings such as Python `spark_conf` and SQL `SET`
+   * statements in pipeline source files. Such settings belong to the Spark Connect server the
+   * pipeline runs on and are given when that server starts (for example
+   * `start-connect-server.sh --conf key=value`); a pipeline's `configuration` and a flow's
+   * `spark_conf` can only change settings a running session accepts. When the requested value
+   * differs from the session's value, a warning is logged on the driver, with the value redacted
+   * the same way the session redacts options.
    */
   def withSqlConf[T](spark: SparkSession, pairs: (String, String)*)(f: => T): T = {
     val conf = spark.conf
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(conf.getOption)
-    keys.lazyZip(values).foreach((k, v) => conf.set(k, v))
+    // Each pair is checked with the rule `spark.conf.set` itself applies, right before it is set,
+    // so the skip cannot drift from what the session rejects.
+    val previousValues = pairs.flatMap { case (k, v) =>
+      if (Try(conf.requireNonStaticConf(k)).isSuccess) {
+        val previous = conf.getOption(k)
+        conf.set(k, v)
+        Some(k -> previous)
+      } else {
+        if (!isInEffect(spark, k, v)) {
+          val (_, redacted) = spark.sessionState.conf.redactOptions(Seq(k -> v)).head
+          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, k)}=${MDC(LogKeys.VALUE, redacted)} " +
+            log"because it cannot be modified on a running session. It is a setting of the " +
+            log"Spark Connect server the pipeline runs on. Set it when that server starts, for " +
+            log"example with start-connect-server.sh --conf key=value.")
+        }
+        None
+      }
+    }
     try f
     finally {
-      keys.zip(currentValues).foreach {
+      previousValues.reverse.foreach {
         case (key, Some(value)) => conf.set(key, value)
         case (key, None) => conf.unset(key)
       }
     }
+  }
+
+  /**
+   * Whether the session already holds `value` for `key`, so that skipping the pair changes
+   * nothing.
+   */
+  private def isInEffect(spark: SparkSession, key: String, value: String): Boolean = {
+    val requested = if (key == StaticSQLConf.WAREHOUSE_PATH.key) {
+      // The session stores the warehouse directory qualified (see `SharedState`), so qualify the
+      // requested directory the same way before comparing. Keep the raw value if that fails.
+      Try(SharedState.qualifyWarehousePath(spark.sessionState.newHadoopConf(), value))
+        .getOrElse(value)
+    } else {
+      value
+    }
+    spark.conf.getOption(key).contains(requested)
   }
 }
