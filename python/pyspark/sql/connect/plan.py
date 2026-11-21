@@ -54,6 +54,7 @@ from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.types import UnparsedDataType, pyspark_types_to_proto_types
 from pyspark.sql.types import DataType, StructType
+from pyspark.sql.utils import to_str
 from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
@@ -2794,7 +2795,7 @@ class CreateDatabase(LogicalPlan):
             if_not_exists=self._if_not_exists,
         )
         for k, v in self._properties.items():
-            cmd.properties[k] = v
+            cmd.properties[k] = cast(str, to_str(v))
         plan.catalog.create_database.CopyFrom(cmd)
         return plan
 
