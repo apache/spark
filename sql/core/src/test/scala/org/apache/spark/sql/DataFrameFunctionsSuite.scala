@@ -550,6 +550,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         stopIndex = 0))
   }
 
+  test("uniform with integral bounds includes both ends of the range") {
+    val df = spark.range(1000).select(uniform(lit(-1), lit(1), lit(0)).alias("x"))
+    checkAnswer(df.selectExpr("min(x)", "max(x)", "count(DISTINCT x)"), Row(-1, 1, 3))
+    withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> "true") {
+      checkAnswer(df.selectExpr("min(x)", "max(x)", "count(DISTINCT x)"), Row(0, 0, 1))
+    }
+  }
+
   test("uniform function") {
     withTable("t") {
       sql("create table t(col int not null) using csv")
