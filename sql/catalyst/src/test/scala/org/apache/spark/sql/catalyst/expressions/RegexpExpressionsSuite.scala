@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -625,6 +627,47 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
+  }
+
+  test("SPARK-59961: StringSplit should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    StringSplit(Literal("100-200"), Literal("-"), Literal(-1)).genCode(ctx)
+    // three global variables (lastRegex, lastCollationAwareRegex, and pattern) are always
+    // required, which are allocated in type-based global array.
+    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.mutableStateInitCode.length == 3)
+  }
+
+  test("SPARK-59961: cache the compiled regex in StringSplit") {
+    val str = $"a".string.at(0)
+    val regex = $"b".string.at(1)
+    val expr = StringSplit(str, regex, Literal(-1))
+
+    val row1 = create_row("aa2bb3cc", "[1-9]+")
+    val row2 = create_row("aa-bb-cc", "[1-9]+")
+    val row3 = create_row("aa-bb-cc", "-")
+
+    val patternField = expr.getClass.getDeclaredField("pattern")
+    patternField.setAccessible(true)
+    val lastRegexField = expr.getClass.getDeclaredField("lastRegex")
+    lastRegexField.setAccessible(true)
+
+    val expected = new GenericArrayData(Array("aa", "bb", "cc").map(UTF8String.fromString))
+    assert(expr.eval(row1) === expected)
+    val firstPattern = patternField.get(expr)
+    assert(firstPattern != null)
+
+    // Same regex value on a different row must reuse the cached compiled pattern.
+    expr.eval(row2)
+    assert(patternField.get(expr) eq firstPattern)
+    assert(lastRegexField.get(expr) === UTF8String.fromString("[1-9]+"))
+
+    // A different regex value must trigger a recompilation.
+    expr.eval(row3)
+    val secondPattern = patternField.get(expr)
+    assert(secondPattern != null)
+    assert(!(secondPattern eq firstPattern))
+    assert(secondPattern.asInstanceOf[java.util.regex.Pattern].pattern() == "-")
   }
 
   test("SPARK-30759: cache initialization for literal patterns") {
