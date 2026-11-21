@@ -41,6 +41,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -163,6 +164,9 @@ class SparkContext:
     _python_includes: Optional[List[str]] = (
         None  # zip and egg files that need to be added to PYTHONPATH
     )
+    _accumulatorServer: Optional[
+        Union[accumulators.AccumulatorTCPServer, accumulators.AccumulatorUnixServer]
+    ] = None
     serializer: Serializer
     profiler_collector: Optional[ProfilerCollector]
 
@@ -320,12 +324,12 @@ class SparkContext:
         start_update_server = accumulators._start_update_server
         self._accumulatorServer = start_update_server(auth_token, is_unix_domain_sock, socket_path)
         assert self._jvm is not None
-        if is_unix_domain_sock:
+        if isinstance(self._accumulatorServer, accumulators.AccumulatorUnixServer):
             self._javaAccumulator = self._jvm.PythonAccumulatorV2(
                 self._accumulatorServer.server_address
             )
         else:
-            host, port = self._accumulatorServer.server_address  # type: ignore[misc]
+            host, port = self._accumulatorServer.server_address
             self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
@@ -710,9 +714,9 @@ class SparkContext:
                 )
             finally:
                 self._jsc = None
-        if getattr(self, "_accumulatorServer", None):
+        if self._accumulatorServer is not None:
             self._accumulatorServer.shutdown()
-            self._accumulatorServer = None  # type: ignore[assignment]
+            self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
 
