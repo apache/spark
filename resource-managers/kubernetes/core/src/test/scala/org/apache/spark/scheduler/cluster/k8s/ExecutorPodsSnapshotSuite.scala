@@ -45,9 +45,19 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
       testCase(deletedExecutor(4), PodDeleted),
       testCase(unknownExecutor(5), PodUnknown),
       testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded),
-      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed)
+      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed),
+      testCase(unschedulableExecutor(8), PodUnschedulable(_, ""))
     )
     doTest(testCases)
+  }
+
+  test("SPARK-61268: an unschedulable pending pod carries the scheduler's message") {
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
+    val snapshot = ExecutorPodsSnapshot(Seq(unschedulableExecutor(0, message = "no fit")), 0)
+    snapshot.executorPods(0) match {
+      case PodUnschedulable(_, message) => assert(message === "no fit")
+      case other => fail(s"expected PodUnschedulable, got $other")
+    }
   }
 
   test("SPARK-30821: States are interpreted correctly from pod metadata"

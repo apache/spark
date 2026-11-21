@@ -80,7 +80,7 @@ object ExecutorPodsSnapshot extends Logging {
       val phase = pod.getStatus.getPhase.toLowerCase(Locale.ROOT)
       phase match {
         case "pending" =>
-          PodPending(pod)
+          unschedulableMessage(pod).map(PodUnschedulable(pod, _)).getOrElse(PodPending(pod))
         case "running" =>
           // If we're checking all containers look for any non-zero exits
           if (shouldCheckAllContainers &&
@@ -121,6 +121,14 @@ object ExecutorPodsSnapshot extends Logging {
           PodUnknown(pod)
       }
     }
+  }
+
+  private def unschedulableMessage(pod: Pod): Option[String] = {
+    Option(pod.getStatus.getConditions).map(_.asScala).getOrElse(Seq.empty)
+      .find { c =>
+        c.getType == "PodScheduled" && c.getStatus == "False" && c.getReason == "Unschedulable"
+      }
+      .map(c => Option(c.getMessage).getOrElse(""))
   }
 
   private def isDeleted(pod: Pod): Boolean = {
