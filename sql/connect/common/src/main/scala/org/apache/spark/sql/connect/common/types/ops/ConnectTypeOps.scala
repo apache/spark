@@ -21,7 +21,7 @@ import org.apache.arrow.vector.FieldVector
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, LocalTimeEncoder}
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
 import org.apache.spark.sql.connect.client.arrow.types.ops.{TimestampLTZNanosTypeConnectOps, TimestampNTZNanosTypeConnectOps, TimeTypeConnectOps}
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
@@ -162,6 +162,10 @@ object ConnectTypeOps {
   def forEncoder(enc: AgnosticEncoder[_]): Option[ConnectTypeOps] =
     enc match {
       case LocalTimeEncoder(precision) => Some(new TimeTypeConnectOps(TimeType(precision)))
+      case e: LocalDateTimeNanosEncoder =>
+        Some(new TimestampNTZNanosTypeConnectOps(TimestampNTZNanosType(e.precision)))
+      case e: InstantNanosEncoder =>
+        Some(new TimestampLTZNanosTypeConnectOps(TimestampLTZNanosType(e.precision)))
       // Add new framework encoders here
       case _ => None
     }
@@ -170,6 +174,8 @@ object ConnectTypeOps {
   def forDataType(dt: DataType): Option[ConnectTypeOps] =
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeConnectOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeConnectOps(t))
       // Add new framework types here
       case _ => None
     }
