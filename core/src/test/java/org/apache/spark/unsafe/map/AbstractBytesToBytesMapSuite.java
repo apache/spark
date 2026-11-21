@@ -351,6 +351,28 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
+  @Test
+  public void onlyLookupUpdatesProbeStatistics() {
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, PAGE_SIZE_BYTES);
+    final int recordLengthBytes = 8;
+    final byte[] keyData = getRandomByteArray(1);
+    try {
+      BytesToBytesMap.Location threadLocation = map.new Location();
+      map.safeLookup(keyData, Platform.BYTE_ARRAY_OFFSET, recordLengthBytes, threadLocation);
+      Assertions.assertFalse(threadLocation.isDefined());
+      Assertions.assertTrue(Double.isNaN(map.getAvgHashProbesPerKey()));
+
+      Assertions.assertFalse(
+        map.lookup(keyData, Platform.BYTE_ARRAY_OFFSET, recordLengthBytes).isDefined());
+      Assertions.assertEquals(1.0, map.getAvgHashProbesPerKey());
+
+      map.safeLookup(keyData, Platform.BYTE_ARRAY_OFFSET, recordLengthBytes, threadLocation, 7);
+      Assertions.assertEquals(1.0, map.getAvgHashProbesPerKey());
+    } finally {
+      map.free();
+    }
+  }
+
   private int iteratorTestBase(boolean destructive, boolean isWithKeyIndex, long pageSizeBytes)
       throws Exception {
     final int size = 4096;

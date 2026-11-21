@@ -679,7 +679,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc);
+    countLookup(probe(keyBase, keyOffset, keyLength, loc));
     return loc;
   }
 
@@ -696,7 +696,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
-    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
+    countLookup(probe(keyBase, keyOffset, keyLength, loc, hash));
     return loc;
   }
 
@@ -706,58 +706,75 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
+  private void countLookup(int probes) {
+    numKeyLookups++;
+    numProbes += probes;
+  }
+
   /**
    * Looks up a key and saves the result in the provided `loc`.
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
-   * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
-   * concurrent lookup. The map must not be modified concurrently.
+   * {@link Location}. The map must not be modified concurrently.
+   *
+   * This method does not update the probe statistics. Threads that share a map, such as the tasks
+   * that probe a broadcast hash relation, would all write the same counters, and the contention
+   * on their cache line can cost more than the lookup itself.
    *
    * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
    * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
-    if (keyOperationsFactory == null) {
-      safeLookup(
-        keyBase,
-        keyOffset,
-        keyLength,
-        loc,
-        Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
-    } else {
-      ensureReady();
-      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
-    }
+    probe(keyBase, keyOffset, keyLength, loc);
   }
 
   /**
    * Looks up a key with a precomputed hash and saves the result in the provided `loc`.
    *
    * The provided hash is ignored when this map has configured key operations. Each thread must
-   * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
-   * and the map must not be modified concurrently.
+   * supply its own {@link Location}, and the map must not be modified concurrently. Like
+   * {@link #safeLookup(Object, long, int, Location)}, this method does not update the probe
+   * statistics.
    *
    * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
    * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+    probe(keyBase, keyOffset, keyLength, loc, hash);
+  }
+
+  /** Finds the slot of a key, saves it in `loc`, and returns the number of probes. */
+  private int probe(Object keyBase, long keyOffset, int keyLength, Location loc) {
+    if (keyOperationsFactory == null) {
+      return probe(
+        keyBase,
+        keyOffset,
+        keyLength,
+        loc,
+        Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    }
+
+    ensureReady();
+    return probeWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+  }
+
+  /** Finds the slot of a key with a precomputed hash, and returns the number of probes. */
+  private int probe(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     ensureReady();
     assert(longArray != null);
     if (keyOperationsFactory != null) {
-      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
-      return;
+      return probeWithKeyOperations(keyBase, keyOffset, keyLength, loc);
     }
-
-    numKeyLookups++;
 
     int pos = hash & mask;
     int step = 1;
+    int probes = 0;
     while (true) {
-      numProbes++;
+      probes++;
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
         loc.with(pos, hash, false);
-        return;
+        return probes;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hash) {
@@ -772,7 +789,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
               keyLength
             );
             if (areEqual) {
-              return;
+              return probes;
             }
           }
         }
@@ -782,7 +799,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
-  private void safeLookupWithKeyOperations(
+  private int probeWithKeyOperations(
       Object keyBase, long keyOffset, int keyLength, Location loc) {
     assert(longArray != null);
     assert(keyOperationsFactory != null);
@@ -791,16 +808,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
     assert(keyOperations != null);
     final int hash = keyOperations.hash(keyBase, keyOffset, keyLength);
 
-    numKeyLookups++;
-
     int pos = hash & mask;
     int step = 1;
+    int probes = 0;
     while (true) {
-      numProbes++;
+      probes++;
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
         loc.with(pos, hash, false);
-        return;
+        return probes;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hash) {
@@ -813,7 +829,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
                 loc.getKeyBase(),
                 loc.getKeyOffset(),
                 keyLength)) {
-            return;
+            return probes;
           }
           if (keyOperations.equals(
               keyBase,
@@ -822,7 +838,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
               loc.getKeyBase(),
               loc.getKeyOffset(),
               loc.getKeyLength())) {
-            return;
+            return probes;
           }
         }
       }
@@ -1236,7 +1252,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the average number of probes per key lookup.
    *
-   * This statistic may be inaccurate if lookups are performed concurrently.
+   * This statistic counts only {@link #lookup} calls, not {@link #safeLookup} calls.
    */
   public double getAvgHashProbesPerKey() {
     return (1.0 * numProbes) / numKeyLookups;
