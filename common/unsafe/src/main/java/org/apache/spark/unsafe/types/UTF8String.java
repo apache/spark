@@ -1688,7 +1688,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
       return result;
     }
-    return split(pattern.toString(), limit);
+    return split(pattern.toString(), null, limit);
   }
 
   public UTF8String[] splitLegacyTruncate(UTF8String pattern, int limit) {
@@ -1707,7 +1707,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       return result;
     }
-    return split(pattern.toString(), limit);
+    return split(pattern.toString(), null, limit);
+  }
+
+  /**
+   * Same as {@link #split(UTF8String, int)}, but with the regex already compiled, so that a
+   * caller splitting many strings around the same regex compiles it only once.
+   */
+  public UTF8String[] split(Pattern pattern, int limit) {
+    if (pattern.pattern().isEmpty()) {
+      return split(EMPTY_UTF8, limit);
+    }
+    return split(pattern.pattern(), pattern, limit);
+  }
+
+  /**
+   * Same as {@link #splitLegacyTruncate(UTF8String, int)}, but with the regex already compiled,
+   * so that a caller splitting many strings around the same regex compiles it only once.
+   */
+  public UTF8String[] splitLegacyTruncate(Pattern pattern, int limit) {
+    if (pattern.pattern().isEmpty()) {
+      return splitLegacyTruncate(EMPTY_UTF8, limit);
+    }
+    return split(pattern.pattern(), pattern, limit);
   }
 
   public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
@@ -1720,23 +1742,52 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // as the separator to split string. Java String's split, however, only accept
       // regex as the pattern to split, thus we can quote the delimiter to escape special
       // characters in the string.
-      return split(Pattern.quote(delimiter.toString()), limit);
+      return split(Pattern.quote(delimiter.toString()), null, limit);
     }
   }
 
-  private UTF8String[] split(String delimiter, int limit) {
+  // `compiled` is `delimiter` already compiled, or null to let String.split compile it.
+  private UTF8String[] split(String delimiter, Pattern compiled, int limit) {
     // Java String's split method supports "ignore empty string" behavior when the limit is 0
     // whereas other languages do not. To avoid this java specific behavior, we fall back to
     // -1 when the limit is 0.
     if (limit == 0) {
       limit = -1;
     }
-    String[] splits = toString().split(delimiter, limit);
+    // String.split splits around a single-char delimiter with indexOf rather than a regex, which
+    // beats matching even a pre-compiled Pattern, so only use `compiled` where it would not.
+    String[] splits =
+      compiled == null || (compiled.flags() == 0 && splitsWithoutRegex(delimiter)) ?
+        toString().split(delimiter, limit) : compiled.split(toString(), limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
       res[i] = fromString(splits[i]);
     }
     return res;
+  }
+
+  /**
+   * Mirrors the check String.split uses to split around `regex` with indexOf instead of compiling
+   * it: a single char that is not a regex metacharacter, or a backslash followed by a char that
+   * is not an ASCII letter or digit, and in both cases not a surrogate. This only picks the faster
+   * of two equivalent calls: otherwise String.split is Pattern.compile(regex).split(this, limit).
+   */
+  private static boolean splitsWithoutRegex(String regex) {
+    char ch;
+    if (regex.length() == 1) {
+      ch = regex.charAt(0);
+      if (".$|()[{^?*+\\".indexOf(ch) != -1) {
+        return false;
+      }
+    } else if (regex.length() == 2 && regex.charAt(0) == '\\') {
+      ch = regex.charAt(1);
+      if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    return !Character.isSurrogate(ch);
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {

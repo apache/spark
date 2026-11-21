@@ -53,6 +53,18 @@ object StringFunctionsBenchmark extends SqlBasedBenchmark {
         doRegexpReplaceBenchmark()
       }
       benchmark.run()
+
+      val splitBenchmark = new Benchmark("split", N, output = output)
+      splitBenchmark.addCase("split('*-*', '-')", M) { _ =>
+        df.selectExpr("split(subject, '-')").noop()
+      }
+      splitBenchmark.addCase("split('*-*', '[-]')", M) { _ =>
+        df.selectExpr("split(subject, '[-]')").noop()
+      }
+      splitBenchmark.addCase("split('*-*' COLLATE UTF8_LCASE, '-')", M) { _ =>
+        df.selectExpr("split(subject COLLATE UTF8_LCASE, '-')").noop()
+      }
+      splitBenchmark.run()
     }
   }
 }
