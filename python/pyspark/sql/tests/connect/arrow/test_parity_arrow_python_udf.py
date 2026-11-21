@@ -15,10 +15,16 @@
 # limitations under the License.
 #
 
+import contextlib
+import os
+import tempfile
 import unittest
 
+from pyspark.sql.functions import udf
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.util import PythonEvalType
 
 
 class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):
@@ -107,6 +113,62 @@ class ArrowPythonUDFParityNonLegacyTests(UDFParityTests, ArrowPythonUDFParityNon
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super().tearDownClass()
+
+
+class ArrowPythonUDFServerFallbackTests(ReusedConnectTestCase):
+    """
+    The client checks its own Python before it creates an Arrow-optimized Python UDF, so these hide
+    a package from the Python that runs the UDF on the server only.
+    """
+
+    @contextlib.contextmanager
+    def _not_installed_on_server(self, module):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, f"{module}.py"), "w") as f:
+                f.write(f'raise ModuleNotFoundError("No module named {module!r}", name={module!r})')
+            with self.sql_conf({"spark.pythonWorkerEnv.PYTHONPATH": d}):
+                yield
+
+    def test_falls_back_without_pyarrow(self):
+        with self._not_installed_on_server("pyarrow"):
+
+            @udf("int")
+            def plus_one(x):
+                return x + 1
+
+            self.assertEqual(plus_one.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
+            df = self.spark.range(3).select(plus_one("id").alias("v"))
+            self.assertEqual([row.v for row in df.collect()], [1, 2, 3])
+            self.assertIn("BatchEvalPython", df._explain_string())
+
+    def test_stays_arrow_optimized_without_pandas(self):
+        with self._not_installed_on_server("pandas"):
+            df = self.spark.sql(
+                "SELECT 1 AS i, 'a' AS s, 1.5D AS d, CAST(1.25 AS DECIMAL(3, 2)) AS dec, "
+                "X'01' AS b, DATE'2026-10-24' AS dt, TIMESTAMP'2026-10-24 01:02:03' AS ts, "
+                "array(1, 2) AS a, map('k', 1) AS m, named_struct('f', 1) AS st"
+            )
+            identity = [udf(lambda x: x, f.dataType)(f.name).alias(f.name) for f in df.schema]
+            result = df.select(*identity)
+            self.assertEqual(result.collect(), df.collect())
+            self.assertIn("ArrowEvalPython", result._explain_string())
+
+    def test_falls_back_without_pandas_in_legacy_mode(self):
+        with (
+            self._not_installed_on_server("pandas"),
+            self.sql_conf(
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+            ),
+        ):
+
+            @udf("int")
+            def plus_one(x):
+                return x + 1
+
+            self.assertEqual(plus_one.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
+            df = self.spark.range(3).select(plus_one("id").alias("v"))
+            self.assertEqual([row.v for row in df.collect()], [1, 2, 3])
+            self.assertIn("BatchEvalPython", df._explain_string())
 
 
 if __name__ == "__main__":
