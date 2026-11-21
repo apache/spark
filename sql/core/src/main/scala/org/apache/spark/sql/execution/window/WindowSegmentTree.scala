@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
+import java.io.Closeable
 import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 
 import scala.collection.mutable
@@ -338,6 +339,11 @@ private[window] class WindowSegmentTree(
 
   // ---------- Internals ----------
 
+  private def closeIterator(iterator: Iterator[UnsafeRow]): Unit = iterator match {
+    case closeable: Closeable => closeable.close()
+    case _ =>
+  }
+
   private def computeBlockAggregates(
       array: ExternalAppendOnlyUnsafeRowArray,
       n: Int,
@@ -345,25 +351,29 @@ private[window] class WindowSegmentTree(
     if (n == 0) return Array.empty
     val result = new Array[InternalRow](nBlocks)
     val iter = array.generateIterator()
-    var b = 0
-    while (b < nBlocks) {
-      val buf = newBuffer()
-      initProj.target(buf)(InternalRow.empty)
-      val start = b * blockSize
-      val end = math.min(start + blockSize, n)
-      var i = start
-      while (i < end) {
-        if (!iter.hasNext) {
-          throw SparkException.internalError("rowArray iterator exhausted unexpectedly")
+    try {
+      var b = 0
+      while (b < nBlocks) {
+        val buf = newBuffer()
+        initProj.target(buf)(InternalRow.empty)
+        val start = b * blockSize
+        val end = math.min(start + blockSize, n)
+        var i = start
+        while (i < end) {
+          if (!iter.hasNext) {
+            throw SparkException.internalError("rowArray iterator exhausted unexpectedly")
+          }
+          val row = iter.next()
+          updateProj.target(buf)(joinedRow(buf, row))
+          i += 1
         }
-        val row = iter.next()
-        updateProj.target(buf)(joinedRow(buf, row))
-        i += 1
+        result(b) = buf
+        b += 1
       }
-      result(b) = buf
-      b += 1
+      result
+    } finally {
+      closeIterator(iter)
     }
-    result
   }
 
   /** Merge `src` buffer into `dst` buffer using mergeProj. */
@@ -458,17 +468,21 @@ private[window] class WindowSegmentTree(
     val leaves = new Array[InternalRow](blockRows)
     val iter = rowArray.generateIterator(blockStart)
     var i = 0
-    while (i < blockRows) {
-      if (!iter.hasNext) {
-        throw SparkException.internalError(
-          s"rowArray iterator exhausted at block $blockIdx row $i")
+    try {
+      while (i < blockRows) {
+        if (!iter.hasNext) {
+          throw SparkException.internalError(
+            s"rowArray iterator exhausted at block $blockIdx row $i")
+        }
+        val row = iter.next()
+        val buf = newBuffer()
+        initProj.target(buf)(InternalRow.empty)
+        updateProj.target(buf)(joinedRow(buf, row))
+        leaves(i) = buf
+        i += 1
       }
-      val row = iter.next()
-      val buf = newBuffer()
-      initProj.target(buf)(InternalRow.empty)
-      updateProj.target(buf)(joinedRow(buf, row))
-      leaves(i) = buf
-      i += 1
+    } finally {
+      closeIterator(iter)
     }
 
     val allLevels = mutable.ArrayBuffer[Array[InternalRow]](leaves)
