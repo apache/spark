@@ -1128,6 +1128,13 @@ class FilterPushdownSuite extends PlanTest {
       .where($"n" > 1)
       .analyze
     comparePlans(Optimize.execute(afterDeterministic), afterDeterministicAnswer)
+
+    // A division that can not fail, as in legacy mode, where a zero divisor gives NULL, is still
+    // pushed.
+    val legacyDivide = Divide(Literal(10), $"a", NumericEvalContext(EvalMode.LEGACY)) > 1
+    val legacy = aggregate(testRelation).where(Rand(10) > 0.5 && legacyDivide).analyze
+    val legacyAnswer = aggregate(testRelation.where(legacyDivide)).where(Rand(10) > 0.5).analyze
+    comparePlans(Optimize.execute(legacy), legacyAnswer)
   }
 
   test("SPARK-62144: a condition that can fail is not pushed through a union ahead of a " +
@@ -1142,6 +1149,27 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
+  test("SPARK-62144: a condition over a column that can fail is not pushed through a window or " +
+    "a sort ahead of a non-deterministic condition before it") {
+    // `k > 1` can not fail itself, but the projection below computes `k` with a division.
+    // `b > 1` can not fail, so it is still pushed.
+    def projected(child: LogicalPlan): LogicalPlan =
+      child.select(ansiDivide($"a", $"b") as "k", $"b", $"c")
+    val winExpr = windowExpr(count($"c"), windowSpec($"k" :: $"b" :: Nil, Nil, UnspecifiedFrame))
+    def window(child: LogicalPlan): LogicalPlan =
+      child.window(winExpr.as("w") :: Nil, $"k" :: $"b" :: Nil, Nil)
+    def sort(child: LogicalPlan): LogicalPlan = child.orderBy($"c".asc)
+    Seq(window _, sort _).foreach { operator =>
+      val originalQuery = operator(projected(testRelation))
+        .where(Rand(10) > 0.5 && $"k" > 1 && $"b" > 1)
+        .analyze
+      val correctAnswer = operator(projected(testRelation.where($"b" > 1)))
+        .where(Rand(10) > 0.5 && $"k" > 1)
+        .analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
   test("SPARK-62144: a cheap condition that can fail is neither pushed nor split off ahead of a " +
     "non-deterministic condition before it") {
     val originalQuery = testStringRelation
@@ -1151,6 +1179,22 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testStringRelation.where($"a" > 1)
       .select($"a", $"b", expensiveRLike("magic") as "f")
       .where((Rand(10) > 0.5 || $"f") && ansiDivide($"a", $"b") > 1)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("SPARK-62144: a cheap non-deterministic condition written after an expensive one is " +
+    "still pushed, ahead of a condition that can fail after it") {
+    val originalQuery = testStringRelation
+      .select($"a", $"b", expensiveRLike("magic") as "f")
+      .where($"f" && Rand(10) > 0.5 && ansiDivide($"a", $"b") > 1)
+      .analyze
+    // As before, `rand` goes below the projection, so `f` is computed only on the rows it keeps,
+    // and the division follows it there, so it still only sees those rows.
+    val correctAnswer = testStringRelation
+      .where(Rand(10) > 0.5 && ansiDivide($"a", $"b") > 1)
+      .select($"a", $"b", expensiveRLike("magic") as "f")
+      .where($"f")
       .analyze
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
