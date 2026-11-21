@@ -86,7 +86,7 @@ class CoalesceBucketsInJoinSuite extends QueryTest with SharedSparkSession
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)
     FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
-      None)
+      None, bucketingEnabled = true, isBucketedRelation = true)
   }
 
   // Buckets only on the first column, even when `cols` has more, so the scan's partitioning

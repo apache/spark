@@ -311,6 +311,12 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
   def disableBucketedScan: Boolean
+  // The `spark.sql.sources.bucketing.enabled` value captured when this scan was planned.
+  // `bucketedScan` (and therefore `outputPartitioning`) is decided from this frozen value instead
+  // of the live session config, so a scan rebuilt after planning -- such as the copy that
+  // `PlanAdaptiveDynamicPruningFilters` makes at AQE stage creation -- keeps the decision the plan
+  // was built with even if the config changes between planning and execution (SPARK-60610).
+  def bucketingEnabled: Boolean
   // Bucket ids for bucket pruning.
   def optionalBucketSet: Option[BitSet]
   // Number of coalesced buckets.
@@ -451,7 +457,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (getSqlConf(relation.sparkSession).bucketingEnabled && relation.bucketSpec.isDefined
+    if (bucketingEnabled && relation.bucketSpec.isDefined
       && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
@@ -587,7 +593,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
           bucketedKey -> "true",
           "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } else if (!getSqlConf(relation.sparkSession).bucketingEnabled) {
+      } else if (!bucketingEnabled) {
         metadata + (bucketedKey -> "false (disabled by configuration)")
       } else if (disableBucketedScan) {
         metadata + (bucketedKey -> "false (disabled by query planner)")
@@ -743,6 +749,14 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param storageFilters Filters evaluated by the storage layer (e.g. parquet reader) to drive
  *                       value-column IO pruning based on key-column evaluation. May contain
  *                       subqueries, which `preparedStorageFilters` materializes on the driver.
+ * @param bucketingEnabled The `spark.sql.sources.bucketing.enabled` value captured by the planner
+ *                         (FileSourceStrategy) when the scan is created, frozen so a post-planning
+ *                         rebuild keeps the planned bucketing decision.
+ * @param isBucketedRelation Whether `relation` carries a bucket spec, captured as a field at
+ *                           planning so `doCanonicalize` can scope the frozen `bucketingEnabled`
+ *                           flag (which only affects the layout of a bucketed relation) without
+ *                           reading `relation`, which is `@transient` and null on a (de)serialized
+ *                           scan (SPARK-23731).
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -756,7 +770,9 @@ case class FileSourceScanExec(
     override val tableIdentifier: Option[TableIdentifier],
     override val disableBucketedScan: Boolean = false,
     override val markedForSingleTaskExecution: Boolean = false,
-    override val storageFilters: Seq[Expression] = Nil)
+    override val storageFilters: Seq[Expression] = Nil,
+    override val bucketingEnabled: Boolean,
+    isBucketedRelation: Boolean)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -980,8 +996,9 @@ case class FileSourceScanExec(
       log"bytes, open cost is considered as scanning ${MDC(OPEN_COST_IN_BYTES, openCostInBytes)} " +
       log"bytes.")
 
-    // Filter files with bucket pruning if possible
-    val bucketingEnabled = getSqlConf(relation.sparkSession).bucketingEnabled
+    // Filter files with bucket pruning if possible. `optionalBucketSet` is decided at planning, so
+    // this uses the frozen `bucketingEnabled` to stay consistent with the planned scan rather than
+    // re-reading the config (SPARK-60610).
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         // Do not prune the file if bucket file name is invalid
@@ -1043,7 +1060,17 @@ case class FileSourceScanExec(
       None,
       disableBucketedScan,
       markedForSingleTaskExecution,
-      QueryPlan.normalizePredicates(storageFilters, output))
+      QueryPlan.normalizePredicates(storageFilters, output),
+      // Scope the frozen bucketing flag to a bucketed relation in the canonical form: only there
+      // does it change the layout. For a non-bucketed relation it changes nothing, so keeping it
+      // out lets two such scans built across a bucketing-config change stay sameResult, which
+      // dynamic partition pruning relies on to reuse a broadcast across the change (SPARK-60610).
+      // Read the `isBucketedRelation` field, not `relation.bucketSpec`: `relation` is `@transient`
+      // and null on a (de)serialized scan, so touching it here threw while canonicalizing the
+      // readback (SPARK-23731). The field is frozen at planning, so the canonical form is stable
+      // across (de)serialization.
+      bucketingEnabled && isBucketedRelation,
+      isBucketedRelation)
   }
 
   override def getStream: Option[SparkDataStream] = stream
