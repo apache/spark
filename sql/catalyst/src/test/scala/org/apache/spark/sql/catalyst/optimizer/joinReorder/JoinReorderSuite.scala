@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer.joinReorder
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, If, IsNull, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError}
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.optimizer.JoinReorderDP.JoinPlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf.{CBO_ENABLED, JOIN_REORDER_ENABLED}
@@ -388,35 +388,82 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
   private def raiseUnless(cond: Expression): Expression =
     If(cond, Literal(true), IsNull(RaiseError(Literal("boom"))))
 
-  test("SPARK-62054: keep the conditions that may not move or are over one item in the top join") {
-    // The project, which prunes t2.k-1-5, keeps ReorderJoin from flattening the joins.
+  // A division in ANSI mode, where it can fail.
+  private def divide(l: Expression, r: Expression): Expression =
+    Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+
+  // The conjuncts of the top filter in their written order, which `comparePlans` does not check.
+  private def topFilterConjuncts(plan: LogicalPlan): Seq[Expression] =
+    normalizeExprIds(plan).collectFirst { case Filter(condition, _) => condition }
+      .map(splitConjunctivePredicates(_).map(_.canonicalized)).getOrElse(Nil)
+
+  test("SPARK-62054: put the conditions that no join may take in a filter above the joins") {
+    // The project, which prunes t2.k-1-5, keeps ReorderJoin from flattening the joins. No join
+    // takes overT1, which is over t1 only, nor overT1T3 and the conditions after it, which may
+    // not move: overT1T3 is throwable, the division can fail, and so can `q`, which overQ reads.
+    // They would otherwise be evaluated on rows that the join with t2, or overT1T3, removes. The
+    // filter is above all the joins, so none of them is a join key, and it reads columns that the
+    // query does not output.
+    val x3 = t3.select(nameToAttr("t3.v-1-100"),
+      divide(Literal(100), nameToAttr("t3.v-1-100")).as("q"))
     val overT1 = raiseUnless(nameToAttr("t1.k-1-2") > 0)
     val overT1T3 = raiseUnless(nameToAttr("t1.v-1-10") + nameToAttr("t3.v-1-100") > 0)
-    val failable = nameToAttr("t1.v-1-10") / nameToAttr("t3.v-1-100") > 0
+    val failable = divide(nameToAttr("t1.v-1-10"), nameToAttr("t3.v-1-100")) > 0
+    val overQ = nameToAttr("t1.k-1-2") < $"q"
     val originalPlan =
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
-        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100") &&
-          overT1 && overT1T3 && failable))
+        .join(x3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100") &&
+          overT1 && overT1T3 && failable && overQ))
+        .select(nameToAttr("t3.v-1-100"))
 
-    // No join below the top one takes overT1, which is over t1 only, nor overT1T3 and the
-    // division, which may not move: overT1T3 is throwable, and the division can fail after it.
-    // They would otherwise be evaluated on rows that the join with t2, or overT1T3, removes.
     val bestPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5") &&
-          overT1 && overT1T3 && failable))
-        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"), nameToAttr("t3.v-1-100"))
+      t1.join(x3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .where(overT1 && overT1T3 && failable && overQ)
+        .select(nameToAttr("t3.v-1-100"))
+
+    val optimized = Optimize.execute(originalPlan.analyze)
+    comparePlans(optimized, bestPlan.analyze)
+    assert(topFilterConjuncts(optimized) === topFilterConjuncts(bestPlan.analyze))
+  }
+
+  test("SPARK-62054: keep a lower join with a condition that may not move as one item") {
+    // The lower join removes a row on which its condition is NULL, so no condition above it is
+    // evaluated on the row. It is one item, which is joined with t3 before t5, and its own joins
+    // are reordered by themselves, with its condition that may not move in a filter above them.
+    // The projects, which prune t4.k-1-2 and t5.v-1-5, keep ReorderJoin from flattening the joins.
+    def attrs(names: String*): Seq[Attribute] = names.map(nameToAttr)
+    val throwing = raiseUnless(nameToAttr("t1.v-1-10") > nameToAttr("t2.k-1-5"))
+    val lowerOutput = attrs("t1.k-1-2", "t1.v-1-10", "t4.v-1-10", "t2.k-1-5")
+    val originalPlan =
+      t1.join(t4, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t4.v-1-10")))
+        .select(attrs("t1.k-1-2", "t1.v-1-10", "t4.v-1-10"): _*)
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5") && throwing))
+        .join(t5, Inner, Some(nameToAttr("t5.k-1-5") === nameToAttr("t2.k-1-5")))
+        .select(lowerOutput ++ attrs("t5.k-1-5"): _*)
+        .join(t3, Inner, Some(nameToAttr("t3.v-1-100") === nameToAttr("t1.v-1-10")))
+
+    val bestPlan =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t4.select(attrs("t4.v-1-10"): _*), Inner,
+          Some(nameToAttr("t1.v-1-10") === nameToAttr("t4.v-1-10")))
+        .where(throwing)
+        .select(lowerOutput: _*)
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5.select(attrs("t5.k-1-5"): _*), Inner,
+          Some(nameToAttr("t5.k-1-5") === nameToAttr("t2.k-1-5")))
+        .select(lowerOutput ++ attrs("t5.k-1-5", "t3.v-1-100"): _*)
 
     comparePlans(Optimize.execute(originalPlan.analyze), bestPlan.analyze)
   }
 
   test("SPARK-62054: keep the order if the join conditions do not connect all items") {
-    // The only condition of the join with t2 is over t1, so no join can take t2.
+    // The only condition of the join with t3 is over t1, so no join can take t3.
     val originalPlan =
-      t1.join(t2, Inner, Some(raiseUnless(nameToAttr("t1.k-1-2") > 0)))
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
-        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t3, Inner, Some(raiseUnless(nameToAttr("t1.v-1-10") > 0)))
         .analyze
 
     val expected = withSQLConf(JOIN_REORDER_ENABLED.key -> "false") {
