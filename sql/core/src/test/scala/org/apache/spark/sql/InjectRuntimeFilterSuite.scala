@@ -2258,4 +2258,53 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+  private def hashArities(query: String): Seq[Int] =
+    sql(query).queryExecution.optimizedPlan.collect {
+      case Filter(condition, _) => condition.collect {
+        case BloomFilterMightContain(_, XxHash64(children, _)) => children.length
+      }
+    }.flatten
+
+  test("Runtime bloom filter join: composite key") {
+    val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and bf1.b1 = bf2.b2 " +
+      "where bf2.a2 = 62"
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_COMPOSITE_ENABLED.key -> "false") {
+        assert(hashArities(query).sorted == Seq(1, 1))
+      }
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_COMPOSITE_ENABLED.key -> "true") {
+        assert(hashArities(query).sorted == Seq(1, 1, 2))
+        val expected = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+          sql(query).collect()
+        }
+        checkAnswer(sql(query), expected)
+        val plan = sql(query).queryExecution.optimizedPlan
+        assert(getNumBloomFilters(plan) == 3)
+        val rule = org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter
+        assert(hashArities(query).sorted ==
+          rule(plan).collect {
+            case Filter(condition, _) => condition.collect {
+              case BloomFilterMightContain(_, XxHash64(children, _)) => children.length
+            }
+          }.flatten.sorted)
+      }
+    }
+  }
+
+  test("Runtime bloom filter join: composite key skipped") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
+      SQLConf.RUNTIME_BLOOM_FILTER_COMPOSITE_ENABLED.key -> "true") {
+      assert(hashArities("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62") == Seq(1))
+      assert(hashArities("select * from bf1 join bf2 on bf1.c1 = bf2.c2 and bf1.b1 = bf2.b2") ==
+        Seq.empty)
+      withSQLConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD.key -> "0") {
+        assert(hashArities("select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
+          "bf1.b1 = bf2.b2 where bf2.a2 = 62") == Seq.empty)
+      }
+    }
+  }
 }

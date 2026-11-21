@@ -67,9 +67,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       perPartition: Boolean): Option[LogicalPlan] = {
     if (!perPartition) {
       Some(injectBloomFilter(
-        filterApplicationSideKey,
+        Seq(filterApplicationSideKey),
         filterApplicationSidePlan,
-        filterCreationSide
+        filterCreationSide,
+        Seq(filterCreationSide.key)
       )).filterNot(_ eq filterApplicationSidePlan)
     } else if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold) {
       perPartitionTransform(filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)
@@ -211,16 +212,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def injectBloomFilter(
-      filterApplicationSideKey: Expression,
+      filterApplicationSideKeys: Seq[Expression],
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): LogicalPlan = {
-    val filterCreationSideKey = filterCreationSide.key
+      filterCreationSide: FilterCreationSide,
+      filterCreationSideKeys: Seq[Expression]): LogicalPlan = {
     val filterCreationSidePlan = filterCreationSide.plan
     // Skip if the filter creation side is too big
     if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold) {
       return filterApplicationSidePlan
     }
-    val hash = new XxHash64(Seq(filterCreationSideKey))
+    val hash = new XxHash64(filterCreationSideKeys)
     val bloomFilterAgg = filterCreationSide.rowCount
       .map(rowCount => new BloomFilterAggregate(hash, rowCount.longValue))
       .getOrElse(new BloomFilterAggregate(hash))
@@ -241,7 +242,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideKey)))
+      new XxHash64(filterApplicationSideKeys))
     Filter(filter, filterApplicationSidePlan)
   }
 
@@ -654,6 +655,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
+  private def hasCompositeBloomFilter(plan: LogicalPlan, keys: Seq[Expression]): Boolean = {
+    plan.exists {
+      case Filter(condition, _) =>
+        splitConjunctivePredicates(condition).exists {
+          case BloomFilterMightContain(_, XxHash64(children, _)) =>
+            children.length == keys.length && children.zip(keys).forall(t => t._1.fastEquals(t._2))
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
   private def tryInjectRuntimeFilter(plan: LogicalPlan): LogicalPlan = {
     var filterCounter = 0
     // Per-partition bloom filters count apart, under a limit of the same value. So one that is
@@ -802,6 +815,53 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             }
           }
         })
+        if (conf.runtimeFilterCompositeBloomFilterEnabled && leftKeys.length >= 2 &&
+          filterCounter < numFilterThreshold &&
+          leftKeys.zip(rightKeys).forall { case (l, r) =>
+            isSimpleExpression(l) && isSimpleExpression(r) &&
+              UnsafeRowUtils.isBinaryStable(l.dataType) &&
+              UnsafeRowUtils.isBinaryStable(r.dataType) &&
+              dynamicPruningSubqueries(left, l).isEmpty &&
+              dynamicPruningSubqueries(right, r).isEmpty
+          }) {
+          def sharedLeaf(side: LogicalPlan, keys: Seq[Expression]): Boolean = {
+            val leaves = keys.map(findExpressionAndTrackLineageDown(_, side).map(_._2))
+            leaves.forall(_.isDefined) && leaves.tail.forall(_.get eq leaves.head.get)
+          }
+          def compositeCreationSide(
+              side: LogicalPlan,
+              keys: Seq[Expression],
+              other: LogicalPlan,
+              otherKeys: Seq[Expression]): Option[FilterCreationSide] =
+            if (sharedLeaf(side, keys)) {
+              extractBeneficialFilterCreatePlan(side, other, keys.head, otherKeys.head)
+                .filter { c =>
+                  c.key.semanticEquals(otherKeys.head) &&
+                    otherKeys.forall(_.references.subsetOf(c.plan.outputSet))
+                }
+            } else {
+              None
+            }
+          val hasShuffle = isProbablyShuffleJoin(join)
+          val oldLeft = newLeft
+          val oldRight = newRight
+          if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
+            !hasCompositeBloomFilter(newLeft, leftKeys)) {
+            compositeCreationSide(left, leftKeys, right, rightKeys).foreach { c =>
+              newLeft = injectBloomFilter(leftKeys, newLeft, c, rightKeys)
+            }
+          }
+          if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
+            (hasShuffle || probablyHasShuffle(right)) &&
+            !hasCompositeBloomFilter(newRight, rightKeys)) {
+            compositeCreationSide(right, rightKeys, left, leftKeys).foreach { c =>
+              newRight = injectBloomFilter(rightKeys, newRight, c, leftKeys)
+            }
+          }
+          if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
+            filterCounter = filterCounter + 1
+          }
+        }
         join.withNewChildren(Seq(newLeft, newRight))
     }
   }
