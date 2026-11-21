@@ -1019,6 +1019,38 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
+  test("SPARK-62143: a dynamic pruning or runtime filter is pushed through a generate that can " +
+    "drop rows unless its key can fail") {
+    // Their subqueries and bloom filters are computed once, wherever the filters are, so only
+    // their keys could fail on the rows the generate drops.
+    val Seq(a, b, _) = testRelationWithArrayType.output
+    val generate = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr")).analyze.asInstanceOf[Generate]
+    def dynamicPruning(key: Expression): Expression = DynamicPruningSubquery(
+      key, testRelation1, testRelation1.output, Seq(0), onlyInBroadcast = false)()
+    val runtimeFilters = dynamicPruning(a) &&
+      BloomFilterMightContain(ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(b))) &&
+      PerPartitionRuntimeFilterSubquery(b, testRelation1, PerPartitionSizing(1L, None, 1L))
+    comparePlans(Optimize.execute(Filter(runtimeFilters, generate)),
+      generate.copy(child = Filter(runtimeFilters, generate.child)))
+
+    // The key is built in ANSI mode, where it can fail.
+    val failingKey = Filter(
+      dynamicPruning(Add(a, Literal(1), NumericEvalContext(EvalMode.ANSI))), generate)
+    comparePlans(Optimize.execute(failingKey), failingKey)
+  }
+
+  test("SPARK-62143: a condition that can fail is not pushed through a script transformation") {
+    // The division is built in ANSI mode, where it can fail. The script can output no row for its
+    // input rows. Its output replaces its input, so only a condition that reads no column could be
+    // pushed below it.
+    val script = ScriptTransformation("cat", Seq($"value".string), testRelation,
+      ScriptInputOutputSchema(Nil, Nil, None, None, Nil, Nil, None, None, schemaLess = false))
+    val divide = Divide(Literal(1.0), Literal(0.0), NumericEvalContext(EvalMode.ANSI))
+    val query = script.where(divide > 1.0)
+    comparePlans(Optimize.execute(query), query)
+  }
+
   test("SPARK-60633: a throwable condition is not pushed through an aggregate ahead of the " +
     "conditions before it") {
     val originalQuery = testRelation.groupBy($"a")($"a", count($"b") as "c")
