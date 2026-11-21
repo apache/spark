@@ -8372,6 +8372,36 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF =
+    buildConf("spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf")
+      .internal()
+      .doc("When true, restores the Spark 4.3 behavior for data source option key casing in " +
+        "Hadoop Configuration: options are lowercased in Data Source V1 reads, inserts " +
+        "(including Data Source V2 file table inserts that fall back to V1) and schema " +
+        "inference, Spark Connect batch reads, Data Source V2 schema inference, Data Source V2 " +
+        "reads of a streaming sink's output, and Data Source V2 CSV, JSON, and text file split " +
+        "decisions, and the write-side option merge retains case-colliding spellings and " +
+        "excludes only exact 'path' and 'paths' keys. When false (the default), the original " +
+        "key casing is preserved, case-colliding spellings are deduplicated to match " +
+        "case-insensitive option lookup, and 'path' and 'paths' are excluded case-insensitively.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_LOWERCASE_JDBC_PREDICATES_OPTIONS =
+    buildConf("spark.sql.legacy.lowercaseJdbcPredicatesOptions")
+      .internal()
+      .doc("When true, the three-argument JDBCOptions and JdbcOptionsInWrite constructors " +
+        "(used by DataFrameReader.jdbc(url, table, predicates, connectionProperties)) " +
+        "lowercase option and connection property keys wrapped in a CaseInsensitiveMap, " +
+        "which is the behavior in Spark 4.3 and earlier. When false (the default), the " +
+        "original key casing is preserved.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY =
     buildConf("spark.sql.legacy.unpivot.useFirstValueNestedNullability")
       .internal()

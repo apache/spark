@@ -2232,6 +2232,36 @@ class ClientE2ETestSuite
       spark.client.setPlanCompressionOptions(originalPlanCompressionOptions)
     }
   }
+
+  test("SPARK-60887: DataFrameReader batch read preserves option key casing") {
+    withTempPath { dir =>
+      dir.mkdirs()
+      java.nio.file.Files.writeString(new java.io.File(dir, "data.txt").toPath, "visible\n")
+      java.nio.file.Files.writeString(new java.io.File(dir, "_logs").toPath, "filtered\n")
+      val path = dir.getCanonicalPath
+
+      withSQLConf("spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf" -> "false") {
+        val rows = spark.read
+          .option("ignoredPathSegmentRegex", "")
+          .option("mapreduce.input.pathFilter.class", "org.apache.hadoop.mapred.OutputLogFilter")
+          .text(path)
+          .collect()
+          .map(_.getString(0))
+        assert(rows === Array("visible"))
+      }
+
+      withSQLConf("spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf" -> "true") {
+        val rows = spark.read
+          .option("ignoredPathSegmentRegex", "")
+          .option("mapreduce.input.pathFilter.class", "org.apache.hadoop.mapred.OutputLogFilter")
+          .text(path)
+          .collect()
+          .map(_.getString(0))
+          .sorted
+        assert(rows === Array("filtered", "visible"))
+      }
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

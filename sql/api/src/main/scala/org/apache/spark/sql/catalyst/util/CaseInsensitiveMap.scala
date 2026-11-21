@@ -43,9 +43,23 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T])
 
   override def +[B1 >: T](kv: (String, B1)): CaseInsensitiveMap[B1] = this.updated(kv._1, kv._2)
 
-  def ++(xs: IterableOnce[(String, T)]): CaseInsensitiveMap[T] = {
-    xs.iterator.foldLeft(this) { (m, kv) => m.updated(kv._1, kv._2) }
+  override def concat[B1 >: T](xs: IterableOnce[(String, B1)]): CaseInsensitiveMap[B1] = {
+    val rawXs = xs match {
+      case ci: CaseInsensitiveMap[B1 @unchecked] => ci.originalMap.iterator
+      case other => other.iterator
+    }
+    if (!rawXs.hasNext) {
+      this.asInstanceOf[CaseInsensitiveMap[B1]]
+    } else {
+      val dedupedXs = rawXs.foldLeft(Map.empty[String, (String, B1)]) { case (acc, kv) =>
+        acc.updated(kv._1.toLowerCase(Locale.ROOT), kv)
+      }
+      val base = originalMap.filterNot(kv => dedupedXs.contains(kv._1.toLowerCase(Locale.ROOT)))
+      new CaseInsensitiveMap[B1](base ++ dedupedXs.values)
+    }
   }
+
+  override def ++[B1 >: T](xs: IterableOnce[(String, B1)]): CaseInsensitiveMap[B1] = concat(xs)
 
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 

@@ -45,9 +45,7 @@ class JDBCOptions(
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(CaseInsensitiveMap(parameters ++ Map(
-      JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
+    this(JDBCOptions.mergeUrlAndTable(url, table, parameters))
   }
 
   /**
@@ -311,9 +309,7 @@ class JdbcOptionsInWrite(
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(CaseInsensitiveMap(parameters ++ Map(
-      JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
+    this(JDBCOptions.mergeUrlAndTable(url, table, parameters))
   }
 
   require(
@@ -327,6 +323,20 @@ class JdbcOptionsInWrite(
 object JDBCOptions {
   private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
   private val jdbcOptionNames = collection.mutable.Set[String]()
+
+  private[jdbc] def mergeUrlAndTable(
+      url: String,
+      table: String,
+      parameters: Map[String, String]): CaseInsensitiveMap[String] = {
+    val base = if (SQLConf.get.getConf(SQLConf.LEGACY_LOWERCASE_JDBC_PREDICATES_OPTIONS)) {
+      CaseInsensitiveMap(parameters).keyLowerCasedMap
+    } else {
+      parameters
+    }
+    CaseInsensitiveMap(base ++ Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_TABLE_NAME -> table))
+  }
 
   private def newOption(name: String): String = {
     jdbcOptionNames += name.toLowerCase(Locale.ROOT)

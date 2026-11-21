@@ -1884,6 +1884,6 @@ object TestingUDT {
 class FakeFileSystemRequiringDSOption extends LocalFileSystem {
   override def initialize(name: URI, conf: Configuration): Unit = {
     super.initialize(name, conf)
-    require(conf.get("ds_option", "") == "value")
+    require(conf.get("ds_Option", "") == "value")
   }
 }

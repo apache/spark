@@ -125,6 +125,8 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends sql.DataFra
       builder.setBucketBy(bucketBuilder)
     })
 
+    // TODO(SPARK-60887): Serialize `extraOptions.originalMap` once the write-side planner
+    // supports preserving per-write option key casing with a legacy rollback.
     extraOptions.foreach { case (k, v) =>
       builder.putOptions(k, v)
     }

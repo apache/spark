@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MICROS
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
 import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
-import org.apache.spark.sql.internal.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -62,10 +62,27 @@ class ParquetFilters(
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
     variantExtractionSchema: Option[StructType] = None,
-    readSchema: Option[StructType] = None) {
+    readSchema: Option[StructType] = None,
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get) {
   // Shredded-variant physical field-name constants.
   private val TYPED_VALUE = "typed_value"
   private val VALUE = "value"
+
+  private def matchParquetField(
+      parquetGroup: GroupType,
+      field: StructField): Option[Type] = {
+    if (useFieldId && ParquetUtils.hasFieldId(field)) {
+      val fieldId = ParquetUtils.getFieldId(field)
+      val matched = parquetGroup.getFields.asScala.filter(
+        f => f.getId != null && f.getId.intValue() == fieldId)
+      if (matched.size == 1) Some(matched.head) else None
+    } else if (caseSensitive) {
+      parquetGroup.getFields.asScala.find(_.getName == field.name)
+    } else {
+      val matched = parquetGroup.getFields.asScala.filter(_.getName.equalsIgnoreCase(field.name))
+      if (matched.size == 1) Some(matched.head) else None
+    }
+  }
 
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
@@ -97,9 +114,45 @@ class ParquetFilters(
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-      (field.fieldNames.toImmutableArraySeq.quoted, field)
+    val primitiveFields = readSchema match {
+      case Some(sparkReadSchema) if useFieldId && ParquetUtils.hasFieldIds(sparkReadSchema) =>
+        def getPrimitiveFieldsById(
+            readStruct: StructType,
+            parquetGroup: GroupType,
+            logicalParentNames: Array[String] = Array.empty,
+            physParentNames: Array[String] = Array.empty): Seq[(String, ParquetPrimitiveField)] = {
+          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+          readStruct.fields.toSeq.flatMap { field =>
+            matchParquetField(parquetGroup, field) match {
+              case Some(p: PrimitiveType)
+                  if p.getRepetition != Repetition.REPEATED &&
+                    !field.dataType.isInstanceOf[StructType] &&
+                    !field.dataType.isInstanceOf[ArrayType] &&
+                    !field.dataType.isInstanceOf[MapType] =>
+                val logicalNames = logicalParentNames :+ field.name
+                val physNames = physParentNames :+ p.getName
+                Some(logicalNames.toImmutableArraySeq.quoted ->
+                  ParquetPrimitiveField(
+                    fieldNames = physNames,
+                    fieldType = ParquetSchemaType(
+                      getNormalizedLogicalType(p), p.getPrimitiveTypeName, p.getTypeLength)))
+              case Some(g: GroupType) if g.getOriginalType == null =>
+                field.dataType match {
+                  case s: StructType if !VariantMetadata.isVariantStruct(s) =>
+                    getPrimitiveFieldsById(
+                      s, g, logicalParentNames :+ field.name, physParentNames :+ g.getName)
+                  case _ => Nil
+                }
+              case _ => Nil
+            }
+          }
+        }
+        getPrimitiveFieldsById(sparkReadSchema, schema.asGroupType())
+      case _ =>
+        getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
+          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+          (field.fieldNames.toImmutableArraySeq.quoted, field)
+        }
     }
     if (caseSensitive) {
       primitiveFields.toMap
@@ -373,10 +426,8 @@ class ParquetFilters(
       physParentNames: Array[String]): Seq[(String, ShreddedVariantField)] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     variantFields.flatMap { field =>
-      val physChildOpt = physGroup.getFields.asScala.collectFirst {
-        case g: GroupType if
-          (if (caseSensitive) g.getName == field.name
-           else g.getName.equalsIgnoreCase(field.name)) => g
+      val physChildOpt = matchParquetField(physGroup, field).collect {
+        case g: GroupType => g
       }
       physChildOpt match {
         case None => Nil

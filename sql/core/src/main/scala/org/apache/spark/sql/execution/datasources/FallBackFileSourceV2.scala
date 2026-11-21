@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Logical
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replace the File source V2 table in [[InsertIntoStatement]] to V1 [[FileFormat]].
@@ -37,13 +38,19 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
     case i @ InsertIntoStatement(
         d @ ExtractV2Table(table: FileTable), _, _, _, _, _, _, _, _) =>
       val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
+      val options = if (sparkSession.sessionState.conf.getConf(
+          SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF)) {
+        d.options.asScala.toMap
+      } else {
+        d.options.asCaseSensitiveMap.asScala.toMap
+      }
       val relation = HadoopFsRelation(
         table.fileIndex,
         table.fileIndex.partitionSchema,
         table.schema,
         None,
         v1FileFormat,
-        d.options.asScala.toMap)(sparkSession)
+        options)(sparkSession)
       i.copy(table = LogicalRelation(relation))
   }
 }

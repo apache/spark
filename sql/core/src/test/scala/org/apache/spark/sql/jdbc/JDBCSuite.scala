@@ -3492,6 +3492,78 @@ class JDBCSuite extends SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-60887: predicates jdbc reader preserves option and connection property key casing") {
+    val props = new Properties()
+    props.setProperty("password", "testPass")
+    props.setProperty("loginTimeout", "10")
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_JDBC_PREDICATES_OPTIONS.key -> "false") {
+      val df = spark.read
+        .option("User", "testUser")
+        .option("CustomOpt", "val")
+        .jdbc(url, "TEST.PEOPLE", Array("THEID = 1"), props)
+      val connProps = df.queryExecution.analyzed.collectFirst {
+        case LogicalRelationWithTable(r: JDBCRelation, _) => r.jdbcOptions.asConnectionProperties
+      }.get
+      assert(connProps.getProperty("User") === "testUser")
+      assert(connProps.getProperty("user") === null)
+      assert(connProps.getProperty("CustomOpt") === "val")
+      assert(connProps.getProperty("loginTimeout") === "10")
+      assert(connProps.getProperty("logintimeout") === null)
+      assert(df.collect().length === 1)
+
+      val writeOpts = new org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite(
+        url, "TEST.PEOPLE", CaseInsensitiveMap(Map("User" -> "testUser", "loginTimeout" -> "10")))
+      assert(writeOpts.asConnectionProperties.getProperty("User") === "testUser")
+      assert(writeOpts.asConnectionProperties.getProperty("loginTimeout") === "10")
+    }
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_JDBC_PREDICATES_OPTIONS.key -> "true") {
+      val df = spark.read
+        .option("User", "testUser")
+        .option("CustomOpt", "val")
+        .jdbc(url, "TEST.PEOPLE", Array("THEID = 1"), props)
+      val connProps = df.queryExecution.analyzed.collectFirst {
+        case LogicalRelationWithTable(r: JDBCRelation, _) => r.jdbcOptions.asConnectionProperties
+      }.get
+      assert(connProps.getProperty("user") === "testUser")
+      assert(connProps.getProperty("User") === null)
+      assert(connProps.getProperty("customopt") === "val")
+      assert(connProps.getProperty("logintimeout") === "10")
+      assert(connProps.getProperty("loginTimeout") === null)
+      assert(df.collect().length === 1)
+
+      val writeOpts = new org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite(
+        url, "TEST.PEOPLE", CaseInsensitiveMap(Map("User" -> "testUser", "loginTimeout" -> "10")))
+      assert(writeOpts.asConnectionProperties.getProperty("user") === "testUser")
+      assert(writeOpts.asConnectionProperties.getProperty("logintimeout") === "10")
+    }
+
+    // Other jdbc entry points keep original casing regardless of the legacy flag.
+    Seq("false", "true").foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_LOWERCASE_JDBC_PREDICATES_OPTIONS.key -> legacy) {
+        val df1 = spark.read
+          .option("User", "testUser")
+          .jdbc(url, "TEST.PEOPLE", props)
+        val props1 = df1.queryExecution.analyzed.collectFirst {
+          case LogicalRelationWithTable(r: JDBCRelation, _) => r.jdbcOptions.asConnectionProperties
+        }.get
+        assert(props1.getProperty("User") === "testUser")
+        assert(props1.getProperty("loginTimeout") === "10")
+
+        val df2 = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", "TEST.PEOPLE")
+          .option("loginTimeout", "10")
+          .load()
+        val props2 = df2.queryExecution.analyzed.collectFirst {
+          case LogicalRelationWithTable(r: JDBCRelation, _) => r.jdbcOptions.asConnectionProperties
+        }.get
+        assert(props2.getProperty("loginTimeout") === "10")
+      }
+    }
+  }
 }
 
 object JDBCSuite {

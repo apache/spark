@@ -1402,4 +1402,87 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       intercepted.getMessage.contains("No handler found for extension type: " +
         "type.googleapis.com/google.protobuf.StringValue"))
   }
+
+  test("SPARK-60887: Spark Connect batch read preserves option key casing") {
+    import org.apache.spark.sql.FakeFileSystemRequiringDSOption
+    import org.apache.spark.sql.execution.datasources.FakeFileSystemRequiringLowercaseDSOption
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark
+        .range(1)
+        .selectExpr("CAST(id AS STRING) AS v")
+        .write
+        .option("header", "true")
+        .csv(path)
+
+      val readRel = proto.Relation
+        .newBuilder()
+        .setRead(
+          proto.Read
+            .newBuilder()
+            .setDataSource(
+              proto.Read.DataSource
+                .newBuilder()
+                .setFormat("csv")
+                .addPaths(path)
+                .putOptions("ds_Option", "value")
+                .putOptions("Header", "true")))
+        .build()
+
+      withSQLConf(
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+        val df = Dataset.ofRows(spark, transform(readRel))
+        assert(df.schema.fieldNames === Array("v"))
+        assert(df.collect().map(_.getString(0)).toSeq === Seq("0"))
+      }
+
+      withSQLConf(
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringLowercaseDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+        val df = Dataset.ofRows(spark, transform(readRel))
+        assert(df.schema.fieldNames === Array("v"))
+        assert(df.collect().map(_.getString(0)).toSeq === Seq("0"))
+      }
+    }
+
+    withTempDir { dir =>
+      java.nio.file.Files.writeString(new java.io.File(dir, "data.txt").toPath, "visible\n")
+      java.nio.file.Files.writeString(new java.io.File(dir, "_logs").toPath, "filtered\n")
+      val path = dir.getCanonicalPath
+
+      val filterReadRel = proto.Relation
+        .newBuilder()
+        .setRead(
+          proto.Read
+            .newBuilder()
+            .setDataSource(
+              proto.Read.DataSource
+                .newBuilder()
+                .setFormat("text")
+                .addPaths(path)
+                .putOptions("ignoredPathSegmentRegex", "")
+                .putOptions(
+                  "mapreduce.input.pathFilter.class",
+                  "org.apache.hadoop.mapred.OutputLogFilter")))
+        .build()
+
+      withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+        val rows = Dataset.ofRows(spark, transform(filterReadRel)).collect().map(_.getString(0))
+        assert(rows === Array("visible"))
+      }
+
+      withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+        val rows = Dataset
+          .ofRows(spark, transform(filterReadRel))
+          .collect()
+          .map(_.getString(0))
+          .sorted
+        assert(rows === Array("filtered", "visible"))
+      }
+    }
+  }
 }
