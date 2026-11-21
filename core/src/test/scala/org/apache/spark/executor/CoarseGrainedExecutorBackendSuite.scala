@@ -37,7 +37,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.config.{EXECUTOR_MEMORY, PLUGINS}
+import org.apache.spark.internal.config.{EXECUTOR_CORES, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, MEMORY_OFFHEAP_SIZE, PLUGINS}
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -105,6 +105,34 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     ereqs.resource(FPGA, 3)
     val rp = rpBuilder.require(ereqs).build()
     testParsingMultipleResources(createSparkConf(), rp)
+  }
+
+  test("SPARK-61267: non-default profile memory and cores confs are applied to the executor conf") {
+    val conf = new SparkConf()
+      .set(EXECUTOR_MEMORY.key, "1g")
+      .set(EXECUTOR_CORES, 1)
+    // Make sure id 0 is taken by the default profile before building a custom one.
+    ResourceProfile.getOrCreateDefaultProfile(conf)
+    val ereqs = new ExecutorResourceRequests()
+      .memory("2g").memoryOverhead("512m").offHeapMemory("1g").cores(3)
+    val rp = new ResourceProfileBuilder().require(ereqs).build()
+    CoarseGrainedExecutorBackend.setResourceProfileConfs(conf, rp)
+    assert(conf.get(EXECUTOR_MEMORY) === 2048L)
+    assert(conf.get(EXECUTOR_MEMORY_OVERHEAD) === Some(512L))
+    assert(conf.get(MEMORY_OFFHEAP_SIZE) === 1024L * 1024 * 1024)
+    assert(conf.get(EXECUTOR_CORES) === 3)
+  }
+
+  test("SPARK-61267: default profile leaves the executor confs untouched") {
+    val conf = new SparkConf()
+      .set(EXECUTOR_MEMORY.key, "1g")
+      .set(EXECUTOR_CORES, 1)
+    CoarseGrainedExecutorBackend.setResourceProfileConfs(conf,
+      ResourceProfile.getOrCreateDefaultProfile(conf))
+    assert(conf.get(EXECUTOR_MEMORY) === 1024L)
+    assert(conf.get(EXECUTOR_CORES) === 1)
+    assert(!conf.contains(MEMORY_OFFHEAP_SIZE))
+    assert(!conf.contains(EXECUTOR_MEMORY_OVERHEAD))
   }
 
   test("parsing multiple resources") {
