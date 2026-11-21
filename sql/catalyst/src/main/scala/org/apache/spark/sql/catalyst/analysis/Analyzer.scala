@@ -4281,8 +4281,17 @@ class Analyzer(
         (newCond, newAgg)
 
       case p: Project =>
-        // First resolve against this Project's children output.
-        val resolved = resolveExpressionByPlanChildren(cond, p)
+        // First resolve against this Project's children output, leaving out the attributes of the
+        // window functions that ExtractWindowExpressions moved below it. They are SELECT aliases,
+        // and an input column with the same name takes precedence over them. A name that only
+        // matches such an alias is resolved against the SELECT list afterwards.
+        val windowAttrs = windowOutputs(p.child)
+        val resolved = if (windowAttrs.isEmpty) {
+          resolveExpressionByPlanChildren(cond, p)
+        } else {
+          val inputs = Project(p.child.output.filterNot(windowAttrs.contains), p.child)
+          resolveExpressionByPlanChildren(cond, p.copy(child = inputs))
+        }
         val subqueryResolved = resolveConditionSubqueries(resolved, p.child)
         // Recurse into child to resolve any remaining unresolved references and
         // propagate missing attributes through intermediate nodes.
@@ -4309,6 +4318,17 @@ class Analyzer(
             other.output.resolve(u.nameParts, conf.resolver).getOrElse(u)
         }
         (resolved, other)
+    }
+
+    /**
+     * The attributes defined by the Window nodes of this query block below `plan`, which
+     * `ExtractWindowExpressions` creates for the window functions of the SELECT list. They are
+     * above the Aggregate of the block, if any, and below the Projects of the SELECT list.
+     */
+    private def windowOutputs(plan: LogicalPlan): AttributeSet = plan match {
+      case w: Window => w.windowOutputSet ++ windowOutputs(w.child)
+      case p: Project => windowOutputs(p.child)
+      case _ => AttributeSet.empty
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
