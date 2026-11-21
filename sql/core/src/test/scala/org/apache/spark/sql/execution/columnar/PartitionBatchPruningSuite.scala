@@ -109,9 +109,10 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
   checkBatchPruning("SELECT key FROM pruningData WHERE 88 < key", 1, 2)(89 to 100)
   checkBatchPruning("SELECT key FROM pruningData WHERE 89 <= key", 1, 2)(89 to 100)
 
-  test("SPARK-58482: floating-point NaN bounds preserve range pruning") {
+  test("SPARK-58482: floating-point NaN bounds preserve batch pruning") {
+    // The first batch is finite-only; the second mixes one finite row with NaNs.
     val data = sparkContext.parallelize((1 to 20).map { id =>
-      if (id <= 10) {
+      if (id <= 11) {
         (id, 0.0f, 0.0d)
       } else {
         (id, Float.NaN, Double.NaN)
@@ -120,7 +121,7 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
 
     def checkPruning(filtered: org.apache.spark.sql.DataFrame): Unit = {
       val selected = filtered.select("id")
-      checkAnswer(selected, (11 to 20).map(Row(_)))
+      checkAnswer(selected, (12 to 20).map(Row(_)))
 
       val scan = collect(selected.queryExecution.executedPlan) {
         case in: InMemoryTableScanExec => in
@@ -137,6 +138,11 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
       checkPruning(data.filter($"doubleValue" > 5.0d))
       checkPruning(data.filter($"doubleValue" >= 2.0d))
       checkPruning(data.filter(lit(5.0d) < $"doubleValue"))
+      checkPruning(data.filter($"floatValue" === Float.NaN))
+      checkPruning(data.filter($"doubleValue" === Double.NaN))
+      // A second nonmatching literal prevents the optimizer from rewriting IN to equality.
+      checkPruning(data.filter($"floatValue".isin(Float.NaN, -1.0f)))
+      checkPruning(data.filter($"doubleValue".isin(Double.NaN, -1.0d)))
     } finally {
       data.unpersist(blocking = true)
     }

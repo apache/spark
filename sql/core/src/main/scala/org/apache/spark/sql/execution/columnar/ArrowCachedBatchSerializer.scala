@@ -811,7 +811,7 @@ private object ArrowCachedBatchSerializer {
   def calculateMinMaxFloat(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
-    // Cache pruning evaluates Catalyst comparisons, where NaN sorts after finite values.
+    // Catalyst orders NaN after all non-NaN values, including +Infinity.
     var min = 0.0f
     var max = 0.0f
     var hasValue = false
@@ -836,7 +836,7 @@ private object ArrowCachedBatchSerializer {
   def calculateMinMaxDouble(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
-    // Cache pruning evaluates Catalyst comparisons, where NaN sorts after finite values.
+    // Catalyst orders NaN after all non-NaN values, including +Infinity.
     var min = 0.0d
     var max = 0.0d
     var hasValue = false
