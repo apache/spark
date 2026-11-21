@@ -2855,8 +2855,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // first expensive one are all pushed. After it, a throwable component (e.g.
         // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
         // so it is not evaluated on rows the components before it would have filtered out. So
-        // does a component that can fail, written after a non-deterministic or throwable one
-        // that stays above (see `splitPushable`).
+        // does a cheap component that can fail, written after a non-deterministic or throwable
+        // one that stays above (see `splitPushable`).
         val (cheapWithUsed, expensiveWithUsed) = splitPushable(
           originalAndRewrittenConditionsWithUsedAlias)(
           canPush = { case (_, used, _) => isCheap(used) },
@@ -3168,8 +3168,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * throwable conjunct stays above, only the conjuncts that can not fail are pushed after it: a
    * conjunct that [[ExprUtils.canEvaluateUnconditionally]] rejects, or that reads a column in
    * `failable`, would be evaluated on rows that conjunct may have filtered out, e.g. an ANSI
-   * division written after `rand() < 0.1`. The conjuncts to keep above are returned in the order
-   * they were written.
+   * division written after `rand() < 0.1`. A non-deterministic conjunct that is pushed, as a cheap
+   * one can be below a projection, goes ahead of the pushed conjuncts written after it, so it
+   * needs none of this. The conjuncts to keep above are returned in the order they were written.
    */
   private def splitPushable[T](conds: Seq[T])(
       canPush: T => Boolean,
@@ -3177,9 +3178,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       failable: => AttributeSet): (Seq[T], Seq[T]) = {
     val (leading, rest) = conds.span(canPush)
     // The head of `rest`, if any, is the first conjunct that cannot be pushed, so it stays above.
-    // So does the head of `ordered`, if any, as it is non-deterministic or throwable.
+    // So does the head of `ordered`, if any, as it is throwable, or non-deterministic and cannot
+    // be pushed.
     val (reorderable, ordered) = rest.span { c =>
-      pushedForm(c).deterministic && !pushedForm(c).throwable
+      (pushedForm(c).deterministic || canPush(c)) && !pushedForm(c).throwable
     }
     lazy val failableColumns = failable
     val (pushedReorderable, stayUpReorderable) = reorderable.partition(canPush)
