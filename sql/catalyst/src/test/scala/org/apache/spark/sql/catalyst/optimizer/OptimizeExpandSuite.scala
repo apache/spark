@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -174,6 +174,36 @@ class OptimizeExpandSuite extends PlanTest {
       val optimized = Optimize.execute(query)
       assert(!hasPreAggBeforeExpand(optimized),
         "Should skip optimization for expression-based distinct")
+    }
+  }
+
+  test("SPARK-58888: skips when every distinct argument is foldable") {
+    // The Expand references no attribute of its child, so the pre-aggregate
+    // would be a global Aggregate(Nil, Nil) that emits one row for an empty
+    // input, turning COUNT(DISTINCT <const>) from 0 into 1.
+    withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+      val query = testRelation
+        .groupBy()(
+          countDistinct(Literal(1)).as("cd1"),
+          countDistinct(Literal(2)).as("cd2"))
+        .analyze
+      val optimized = Optimize.execute(query)
+      assert(!hasPreAggBeforeExpand(optimized),
+        "Should skip optimization when the pre-aggregate would have no grouping")
+    }
+  }
+
+  test("SPARK-58888: applies when one distinct argument is a real column") {
+    // col1 enters the pre-aggregate's GROUP BY, so it stays row-preserving.
+    withSQLConf(SQLConf.OPTIMIZE_EXPAND_RATIO.key -> "2") {
+      val query = testRelation
+        .groupBy()(
+          countDistinct(Literal(1)).as("cd1"),
+          countDistinct($"col1").as("cd2"))
+        .analyze
+      val optimized = Optimize.execute(query)
+      assert(hasPreAggBeforeExpand(optimized),
+        "Should still apply when the pre-aggregate has a grouping column")
     }
   }
 }
