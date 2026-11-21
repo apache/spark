@@ -21,7 +21,10 @@ import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{Executor, TaskMetrics}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{PARTITION_ID, STAGE_ATTEMPT_ID, STAGE_ID, TASK_ATTEMPT_ID}
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
@@ -244,6 +247,14 @@ abstract class TaskContext extends Serializable {
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure and completion callbacks, and rethrow the exception.
+        // Log the error first. The executor logs it only once the listeners have run, which a
+        // listener that crashes or hangs the executor prevents.
+        try {
+          TaskFailureLogger.logBeforeListeners(this, e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
         try {
           markTaskFailed(e)
         } catch {
@@ -411,4 +422,34 @@ abstract class TaskContext extends Serializable {
    * }}}
    */
   private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
+}
+
+/**
+ * Logs a task body failure before the task listeners run. The executor logs the failure only once
+ * the listeners have run, so a listener that crashes or hangs the executor, e.g. while releasing
+ * native resources, would otherwise leave no record of what failed the task.
+ *
+ * A separate object, as `TaskContext` is public API and must not pick up `Logging`'s members.
+ */
+private[spark] object TaskFailureLogger extends Logging {
+
+  /**
+   * Logs `error` at warning level with its stack trace, unless the executor is not going to
+   * report it as an error either, see `Executor.isReportedAsError`, or is stopping, in which
+   * case it logs the error without the stack trace (SPARK-19147).
+   */
+  def logBeforeListeners(context: TaskContext, error: Throwable): Unit = {
+    // A task cannot start without a SparkEnv, so a missing one means that `SparkContext.stop`
+    // cleared it in local mode while the task was still running.
+    val env = SparkEnv.get
+    val reportedAsError = env != null && !env.isStopped &&
+      Executor.isReportedAsError(error, context, env.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
+    if (reportedAsError) {
+      val stage = log"${MDC(STAGE_ID, context.stageId())}." +
+        log"${MDC(STAGE_ATTEMPT_ID, context.stageAttemptNumber())}"
+      logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
+        log" (partition ${MDC(PARTITION_ID, context.partitionId())}) failed. Its task " +
+        log"listeners run next; the executor reports the failure once they have run.", error)
+    }
+  }
 }
