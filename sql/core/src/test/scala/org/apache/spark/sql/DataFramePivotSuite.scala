@@ -654,4 +654,11 @@ class DataFramePivotSuite extends SharedSparkSession {
       checkAnswer(nanDf, Row(null, null, 20L))
     }
   }
+
+  test("SPARK-60072: pivot with count(*)") {
+    val df = Seq((1, "a"), (2, null)).toDF("x", "s")
+    checkAnswer(
+      df.groupBy("s").pivot("x", Seq(1, 2)).agg(count("*")),
+      Row(null, null, 1L) :: Row("a", 1L, null) :: Nil)
+  }
 }
