@@ -179,7 +179,7 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
   // classes as loaded from the published spark-sql-api_2.13 jar of that release, so it carries
   // that release's class descriptors (serialVersionUID, flags, fields and superclasses).
   private val releasedDescriptorResources =
-    Seq("4.0.0", "4.0.4", "4.1.3", "4.2.0").map(v =>
+    Seq("4.0.0", "4.0.4", "4.1.3", "4.2.0", "4.3.0").map(v =>
       s"udf-serialization/sql-types-classes-$v.bin")
 
   private def resourceBytes(name: String): Array[Byte] = {

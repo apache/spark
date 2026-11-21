@@ -47,12 +47,12 @@ private[spark] object UdfSerialization {
 
   /**
    * `serialVersionUID` changes from released Spark versions to this build, audited against the
-   * published `spark-sql-api_2.13` jars of 4.0.0 to 4.0.4, 4.1.0 to 4.1.3 and 4.2.0. For every
-   * entry, the released and the local class both use default field serialization (no
-   * `readObject`/`writeObject`, not `Externalizable`), neither declares a `serialVersionUID`, and
-   * their `ObjectStreamClass.getFields` are identical. `localSuid` must match this build, which
-   * `UdfSerializationSuite` enforces: any change to these classes' computed `serialVersionUID`
-   * requires re-auditing the affected entries.
+   * published `spark-sql-api_2.13` jars of 4.0.0 to 4.0.5, 4.1.0 to 4.1.4, 4.2.0 to 4.2.1 and
+   * 4.3.0. For every entry, the released and the local class both use default field serialization
+   * (no `readObject`/`writeObject`, not `Externalizable`), neither declares a `serialVersionUID`,
+   * and their `ObjectStreamClass.getFields` are identical. `localSuid` must match this build,
+   * which `UdfSerializationSuite` enforces: any change to these classes' computed
+   * `serialVersionUID` requires re-auditing the affected entries.
    */
   private[connect] val auditedTransitions: Set[SuidTransition] = Set(
     SuidTransition(
@@ -82,6 +82,10 @@ private[spark] object UdfSerialization {
     SuidTransition(
       "org.apache.spark.sql.types.Decimal",
       1715621871942419369L,
+      6398599065815978361L),
+    SuidTransition(
+      "org.apache.spark.sql.types.Decimal",
+      4401554505066564464L,
       6398599065815978361L),
     SuidTransition(
       "org.apache.spark.sql.types.Decimal$",
