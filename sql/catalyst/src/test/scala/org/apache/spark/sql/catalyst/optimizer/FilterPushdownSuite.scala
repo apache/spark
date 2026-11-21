@@ -1017,6 +1017,20 @@ class FilterPushdownSuite extends PlanTest {
       .where(divide > 1)
       .analyze
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // With the legacy conf, only a throwable condition stays above the generate, as before.
+    withSQLConf(SQLConf.LEGACY_PUSH_FAILABLE_FILTERS_THROUGH_GENERATE.key -> "true") {
+      val throwable = IsNull(RaiseError(Literal("boom")))
+      val legacyQuery = testRelationWithArrayType
+        .generate(Explode($"c_arr"), alias = Some("arr"))
+        .where(divide > 1 && throwable)
+        .analyze
+      val legacyAnswer = testRelationWithArrayType.where(divide > 1)
+        .generate(Explode($"c_arr"), alias = Some("arr"))
+        .where(throwable)
+        .analyze
+      comparePlans(Optimize.execute(legacyQuery), legacyAnswer)
+    }
   }
 
   test("SPARK-62143: a dynamic pruning or runtime filter is pushed through a generate that can " +
