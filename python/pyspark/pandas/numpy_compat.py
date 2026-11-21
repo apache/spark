@@ -253,6 +253,49 @@ def _fmin_func(c1: Column, c2: Column) -> Column:
     return F.when(c1 == c2, tie).otherwise(F.least(c1, c2))
 
 
+def _integer_ufunc_func(ufunc: Any) -> Callable[[np.dtype], Callable[..., Column]]:
+    """
+    Return the mapping of a NumPy ufunc that takes integers only, such as np.gcd.
+
+    The mapping takes the integer dtype NumPy gives the operands, see _integer_ufunc_dtype, and
+    returns a pandas UDF that runs the ufunc on the operands cast to that dtype. So the result has
+    that dtype, as in pandas, and stays exact above 2**53.
+    """
+
+    def build(dtype: np.dtype) -> Callable[..., Column]:
+        # The nullable counterpart of the dtype, such as Int64, keeps nulls.
+        nullable_dtype = dtype.name.capitalize()
+        return pandas_udf(  # type: ignore[call-overload]
+            lambda s1, s2: ufunc(s1.astype(nullable_dtype), s2.astype(nullable_dtype)),
+            as_spark_type(dtype),
+        )
+
+    return build
+
+
+def _integer_ufunc_dtype(ufunc: Any, inputs: Tuple[Any, ...]) -> np.dtype:
+    """
+    Return the integer dtype NumPy gives the result of `ufunc` for these operands.
+
+    Running the ufunc on one-element samples of the operand dtypes lets NumPy resolve the dtype,
+    and raises the same error as pandas for operands the ufunc does not support, such as floats.
+    """
+    samples = [
+        np.zeros(1, dtype=getattr(inp.dtype, "numpy_dtype", inp.dtype))
+        if isinstance(inp, IndexOpsMixin)
+        else inp
+        for inp in inputs
+    ]
+    dtype = ufunc(*samples).dtype
+    if dtype.kind != "i":
+        raise TypeError("ufunc '%s' is not supported for the input types" % ufunc.__name__)
+    return dtype
+
+
+# The binary mappings built by _integer_ufunc_func.
+_integer_ufuncs = ("gcd", "lcm")
+
+
 # Spark SQL expressions also determine the result types of these binary mappings.
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
@@ -267,7 +310,7 @@ binary_np_spark_mappings = {
     "fmax": _fmax_func,
     "fmin": _fmin_func,
     "fmod": _fmod_func,
-    "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "gcd": _integer_ufunc_func(np.gcd),
     "heaviside": lambda c1, c2: F.when(
         c1.isNull() | F.isnan(c1.cast("double")),
         c1.cast("double"),
@@ -276,7 +319,7 @@ binary_np_spark_mappings = {
     .when(c1 == 0, c2.cast("double"))
     .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
-    "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "lcm": _integer_ufunc_func(np.lcm),
     "ldexp": lambda c1, c2: F.when(
         c1.cast("double").isin(0.0, float("-inf"), float("inf")),
         c1.cast("double"),
@@ -620,6 +663,8 @@ def maybe_dispatch_ufunc_to_spark_func(
         np_spark_map_func = unary_np_spark_mappings.get(op_name) or binary_np_spark_mappings.get(
             op_name
         )
+        if op_name in _integer_ufuncs:
+            np_spark_map_func = np_spark_map_func(_integer_ufunc_dtype(ufunc, inputs))
 
         @no_type_check
         def convert_arguments(*args):
