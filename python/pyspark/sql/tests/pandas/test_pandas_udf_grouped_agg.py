@@ -594,6 +594,46 @@ class GroupedAggPandasUDFTestsMixin:
             agg2 = self.spark.sql("select max_udf(id) from table")
             assert_frame_equal(agg1.toPandas(), agg2.toPandas())
 
+    def test_grouped_without_group_by_clause_empty_input(self):
+        # SPARK-60826: an aggregation without grouping keys returns one row for an empty input
+        @pandas_udf("long")
+        def count_udf(v: pd.Series) -> int:
+            return len(v)
+
+        @pandas_udf("double")
+        def sum_udf(v: pd.Series) -> float:
+            return v.sum()
+
+        @pandas_udf("long")
+        def count_iter_udf(it: Iterator[pd.Series]) -> int:
+            return sum(len(v) for v in it)
+
+        @pandas_udf("long")
+        def count_0_args_udf() -> int:
+            return 7
+
+        for df in [
+            self.spark.range(10).where("id > 100"),
+            self.spark.range(10).where("id > 100").repartition(3),
+            self.spark.createDataFrame([], "id long"),
+        ]:
+            self.assertEqual(df.agg(count_udf("id")).collect(), df.agg(sf.count("id")).collect())
+            self.assertEqual(
+                df.agg(count_udf("id").alias("c"), (sum_udf("id") + 1).alias("s")).collect(),
+                [Row(c=0, s=1.0)],
+            )
+            self.assertEqual(df.agg(count_iter_udf("id")).collect(), [Row(0)])
+            self.assertEqual(df.agg(count_0_args_udf()).collect(), [Row(7)])
+
+            # An aggregation with grouping keys returns no row for an empty input.
+            self.assertEqual(df.groupBy("id").agg(count_udf("id")).collect(), [])
+            self.assertEqual(df.groupBy("id").agg(count_iter_udf("id")).collect(), [])
+
+        with self.temp_view("table"), self.temp_func("count_udf"):
+            self.spark.range(10).where("id > 100").createTempView("table")
+            self.spark.udf.register("count_udf", count_udf)
+            self.assertEqual(self.spark.sql("SELECT count_udf(id) FROM table").collect(), [Row(0)])
+
     def test_no_predicate_pushdown_through(self):
         # SPARK-30921: We should not pushdown predicates of PythonUDFs through Aggregate.
         import numpy as np

@@ -154,8 +154,11 @@ case class ArrowAggregatePythonExec(
       }
     }
 
-    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+    // Map grouped rows to ArrowPythonRunner results. An empty partition is skipped, except in an
+    // aggregation without grouping expressions: it has a single partition and a single group, and
+    // returns one row for an empty input as well, so the UDFs run on a group with no rows.
+    val skipEmptyPartition = groupingExpressions.nonEmpty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty && skipEmptyPartition) iter else {
       // If we have session window expression in aggregation, we wrap iterator with
       // UpdatingSessionIterator to calculate sessions for input rows and update
       // rows' session column, so that further aggregations can aggregate input rows
