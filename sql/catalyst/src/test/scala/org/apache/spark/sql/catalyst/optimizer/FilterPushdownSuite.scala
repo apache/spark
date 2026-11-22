@@ -1199,6 +1199,27 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
+  test("SPARK-62144: a cheap non-deterministic condition that can not fail is still pushed " +
+    "after a non-deterministic or throwable condition that stays above") {
+    // As before, `rand(10) > 0.5` goes below the projection, which only leaves the conditions
+    // before it fewer rows, but `rand(30) < a / b` stays above, as the division can fail.
+    // The blocker is a throwable condition after a condition over the expensive alias, or a
+    // non-deterministic condition over that alias.
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    Seq($"f" && ($"a" > 5 || raiseError), Rand(20) > 0.5 || $"f").foreach { blocker =>
+      val originalQuery = testStringRelation
+        .select($"a", $"b", expensiveRLike("magic") as "f")
+        .where(blocker && Rand(10) > 0.5 && Rand(30) < ansiDivide($"a", $"b"))
+        .analyze
+      val correctAnswer = testStringRelation
+        .where(Rand(10) > 0.5)
+        .select($"a", $"b", expensiveRLike("magic") as "f")
+        .where(blocker && Rand(30) < ansiDivide($"a", $"b"))
+        .analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation

@@ -2921,7 +2921,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // change its result (see `pushBelowAggregate`). A throwable predicate written after one that
     // stays up is not pushed, though, nor is one that can fail written after a non-deterministic
     // or throwable one that stays up (see `splitPushable`). This includes a predicate over a
-    // throwable alias of the aggregate, or one that can fail.
+    // throwable alias of the aggregate, or over an alias that can fail.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -3163,14 +3163,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * can fail to compute (see `failableOutput`). Every conjunct written before the first one that
    * cannot be pushed is pushed. After it, only the conjuncts that are not throwable (e.g.
    * `raise_error`) are pushed, so a throwable conjunct is not evaluated on rows the conjuncts
-   * before it would have filtered out. Moving a non-throwable conjunct below a throwable one is
-   * fine, as it can only reduce the rows the throwable one sees. Once a non-deterministic or
-   * throwable conjunct stays above, only the conjuncts that can not fail are pushed after it: a
-   * conjunct that [[ExprUtils.canEvaluateUnconditionally]] rejects, or that reads a column in
-   * `failable`, would be evaluated on rows that conjunct may have filtered out, e.g. an ANSI
-   * division written after `rand() < 0.1`. A non-deterministic conjunct that is pushed, as a cheap
-   * one can be below a projection, goes ahead of the pushed conjuncts written after it, so it
-   * needs none of this. The conjuncts to keep above are returned in the order they were written.
+   * before it would have filtered out. Once a non-deterministic or throwable conjunct stays above,
+   * only the conjuncts that can not fail (see `cannotFail`) are pushed after it: a conjunct that
+   * can fail, or that reads a column in `failable`, would be evaluated on rows that conjunct may
+   * have filtered out, e.g. an ANSI division written after `rand() < 0.1`. Moving a conjunct that
+   * can not fail below it is fine, as it can only reduce the rows it sees. A non-deterministic
+   * conjunct can be pushed only below a projection, where a cheap one is, and goes ahead of the
+   * pushed conjuncts written after it, so they still only see the rows it keeps. The conjuncts to
+   * keep above are returned in the order they were written.
    */
   private def splitPushable[T](conds: Seq[T])(
       canPush: T => Boolean,
@@ -3186,10 +3186,22 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     lazy val failableColumns = failable
     val (pushedReorderable, stayUpReorderable) = reorderable.partition(canPush)
     val (pushedOrdered, stayUpOrdered) = ordered.partition { c =>
-      canPush(c) && ExprUtils.canEvaluateUnconditionally(pushedForm(c)) &&
+      canPush(c) && cannotFail(pushedForm(c)) &&
         !pushedForm(c).references.exists(failableColumns.contains)
     }
     (leading ++ pushedReorderable ++ pushedOrdered, stayUpReorderable ++ stayUpOrdered)
+  }
+
+  /**
+   * Whether `e` can not fail, as [[ExprUtils.canEvaluateUnconditionally]] decides for a
+   * deterministic expression, which a non-deterministic one also passes if it only adds `rand`,
+   * `randn`, `spark_partition_id()` or `monotonically_increasing_id()`. These give values that
+   * differ between evaluations, but never fail, e.g. in `rand(10) < 0.01`.
+   */
+  private def cannotFail(e: Expression): Boolean = e match {
+    case _ if e.deterministic => ExprUtils.canEvaluateUnconditionally(e)
+    case _: Rand | _: Randn | _: SparkPartitionID | _: MonotonicallyIncreasingID => true
+    case _ => ExprUtils.isTotalOperator(e) && e.children.forall(cannotFail)
   }
 
   /** [[splitPushable]] over the conjuncts of `condition`, which are pushed as they are. */
