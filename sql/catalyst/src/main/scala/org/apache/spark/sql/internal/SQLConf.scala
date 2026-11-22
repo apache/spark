@@ -4659,7 +4659,7 @@ object SQLConf {
     buildConf("spark.sql.codegen.binBy.enabled")
       .internal()
       .doc("When true, enable code-gen for the BIN BY relation operator.")
-      .version("4.5.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
