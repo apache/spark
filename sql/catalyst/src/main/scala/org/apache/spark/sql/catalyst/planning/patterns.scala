@@ -289,8 +289,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       case Filter(cond, Join(_, _, _: InnerLike, _, JoinHint.NONE)) => Some(cond)
       case _ => None
     }
-    if (condition.exists(c =>
-        splitMovable(splitConjunctivePredicates(c), plan.children)._2.nonEmpty)) {
+    if (condition.exists(hasImmovableConjunct(_, plan.children))) {
       (Seq((plan, Inner)), Seq.empty)
     } else {
       flattenJoin(plan, parentJoinType)
