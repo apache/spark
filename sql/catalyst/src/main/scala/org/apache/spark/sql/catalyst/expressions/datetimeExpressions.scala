@@ -3784,7 +3784,10 @@ case class TruncTimestamp(
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
+  usage = """_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.
+      If that number does not fit in an INT, the function fails with `DATETIME_OVERFLOW`
+      regardless of `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * endDate - The end date to count days up to.

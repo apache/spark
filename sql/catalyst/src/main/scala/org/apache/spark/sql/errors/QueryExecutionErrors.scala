@@ -2964,6 +2964,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def subtractDatesOverflowError(
+      endDay: Int,
+      startDay: Int,
+      context: QueryContext): SparkArithmeticException = {
+    val end = toSQLDate(endDay)
+    val start = toSQLDate(startDay)
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> s"subtract $start from $end"),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def calendarIntervalArrowNanosOverflowError(
       interval: CalendarInterval): SparkArithmeticException = {
     new SparkArithmeticException(
@@ -3046,19 +3059,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("operation" -> s"add $i to the time value $t"),
       context = Array.empty,
       summary = "")
-  }
-
-  def subtractDatesOverflowError(
-      endDay: Int,
-      startDay: Int,
-      context: QueryContext): ArithmeticException = {
-    val end = toSQLDate(endDay)
-    val start = toSQLDate(startDay)
-    new SparkArithmeticException(
-      errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Map("operation" -> s"subtract $start from $end"),
-      context = getQueryContext(context),
-      summary = getSummary(context))
   }
 
   def invalidBucketFile(path: String): Throwable = {
