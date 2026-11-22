@@ -41,6 +41,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import EvalConf, RunnerConf
@@ -61,7 +62,11 @@ if have_pandas and have_pyarrow:
         PandasScalarUDFHandler,
         PandasWindowAggUDFHandler,
     )
-    from pyspark.sql.conversion import ArrowBatchTransformer
+    from pyspark.sql.conversion import (
+        ArrowBatchTransformer,
+        ArrowToPandasConversion,
+        PandasToArrowConversion,
+    )
 
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
@@ -430,6 +435,149 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
         struct_batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2, 3]))
         out = list(handler.run(0, iter([struct_batch])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
+
+    def test_detailed_timing_disabled(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
+        handler = self._handler(lambda dfs: dfs, self._return_type)
+        output = list(handler.run(0, iter([batch])))
+        self.assertEqual(output[0].num_rows, 2)
+        self.assertEqual(metrics.to_dict(), {})
+
+    def test_phase_timing_excludes_nested_input_and_consumer_work(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        clock_ns = 0
+
+        def advancing(ns, func):
+            running = False
+
+            def wrapped(*args, **kwargs):
+                nonlocal clock_ns, running
+                if running:
+                    return func(*args, **kwargs)
+                running = True
+                try:
+                    clock_ns += ns
+                    return func(*args, **kwargs)
+                finally:
+                    running = False
+
+            return wrapped
+
+        batches = [
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2])),
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[3, 4, 5])),
+        ]
+
+        def data():
+            nonlocal clock_ns
+            for batch in batches:
+                clock_ns += 17_000_000  # Read/deserialization.
+                clock_ns += 23_000_000  # Iterator work outside conversion.
+                yield batch
+            clock_ns += 29_000_000  # Input exhaustion.
+
+        def udf(dfs):
+            nonlocal clock_ns
+            clock_ns += 7_000_000
+            first = next(dfs)
+
+            def results():
+                nonlocal clock_ns
+                combined = pd.concat([first, *dfs])
+                for start, end in ((0, 1), (1, 4), (4, 5)):
+                    clock_ns += 13_000_000
+                    yield combined.iloc[start:end]
+                clock_ns += 11_000_000
+
+            return results()
+
+        handler = self._handler(
+            udf,
+            self._return_type,
+            RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
+        )
+        with (
+            patch("pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns),
+            patch.object(
+                ArrowToPandasConversion,
+                "to_pandas",
+                new=advancing(3_000_000, ArrowToPandasConversion.to_pandas),
+            ),
+            patch.object(
+                PandasToArrowConversion,
+                "from_pandas",
+                new=advancing(5_000_000, PandasToArrowConversion.from_pandas),
+            ),
+        ):
+            output = []
+            for batch in handler.run(0, data()):
+                output.append(batch)
+                clock_ns += 19_000_000  # Consumer work after yielding the output.
+
+        self.assertEqual([batch.num_rows for batch in output], [1, 3, 1])
+        self.assertEqual(self._struct_values(output), [1, 2, 3, 4, 5])
+        report = metrics.to_dict()
+        self.assertEqual(report["pythonNumTimedBatches"], 2)
+        self.assertEqual(report["pythonInputPreparationTime"], 2 * 3)
+        self.assertEqual(report["pythonUDFExecutionTime"], 7 + 3 * 13 + 11)
+        self.assertEqual(report["pythonOutputPreparationTime"], 3 * 5)
+
+    def test_timing_with_unconsumed_input_and_early_close(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
+
+        for consumed in (0, 1):
+            with self.subTest(consumed=consumed):
+                metrics.reset()
+                clock_ns = 0
+                pulls = 0
+
+                def data():
+                    nonlocal clock_ns, pulls
+                    for _ in range(2):
+                        pulls += 1
+                        clock_ns += 17_000_000
+                        yield batch
+
+                def udf(dfs):
+                    nonlocal clock_ns
+                    clock_ns += 7_000_000
+                    for _ in range(consumed):
+                        yield next(dfs)
+
+                handler = self._handler(
+                    udf,
+                    self._return_type,
+                    RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
+                )
+                input_iter = data()
+                result = handler.run(0, input_iter)
+                with patch(
+                    "pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns
+                ):
+                    try:
+                        self.assertEqual(pulls, 0)
+                        if consumed:
+                            self.assertEqual(next(result).num_rows, 2)
+                            clock_ns += 1_000_000_000
+                            result.close()
+                        else:
+                            self.assertEqual(list(result), [])
+                    finally:
+                        result.close()
+                        input_iter.close()
+
+                report = metrics.to_dict()
+                self.assertEqual(pulls, consumed)
+                self.assertEqual(report["pythonNumTimingReports"], 1)
+                self.assertEqual(report["pythonNumTimedBatches"], consumed)
+                self.assertEqual(report["pythonUDFExecutionTime"], 7)
 
     def test_legacy_accepts_any_iterable(self):
         # With the legacy flag on (its default), a UDF may return any iterable -- here a

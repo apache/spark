@@ -58,6 +58,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
+    // If the key has a UDF that needs extraction, the "Extract UDFs" batch evaluates the UDF in a
+    // node of its own, between a DPP filter on the key and the scan, so the scan could not prune
+    // with the filter. The filter would only drop rows before the join, at the cost of evaluating
+    // the UDF once more on every row. A key that has such a UDF only through an alias keeps its
+    // filter: by default it stays above the projection that evaluates the UDF, and in a union it
+    // can still prune the partitions of a branch that has no such UDF.
+    if (needsUDFExtraction(Seq(a))) return None
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
       case (resExp, l: LogicalRelation) =>
@@ -121,8 +128,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     lazy val hasBenefit = !filteringPlan.exists {
       case r: DataSourceV2ScanRelation => !r.onlyRowWisePushdowns
       case _ => false
-    } && !needsUDFExtraction(filteringPlan, filteringKeys) && pruningHasBenefit(
-      pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
+    } && !needsUDFExtraction(filteringKeys ++ filteringPlan.flatMap(_.expressions)) &&
+      pruningHasBenefit(pruningKey, partScan, filteringKeys.head, filteringPlan,
+        hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -140,13 +148,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Returns whether the filtering plan or keys have a UDF that only the "Extract UDFs" batch,
-   * which runs after this rule, plans for evaluation: a scalar Python UDF, a Python UDTF or an
-   * external UDF. That batch does not rewrite the plan of a [[DynamicPruningSubquery]], so a
-   * standalone DPP subquery, which evaluates the keys over the plan, would fail on such a UDF.
+   * Returns whether the expressions have a UDF that only the "Extract UDFs" batch, which runs
+   * after this rule, plans for evaluation: a scalar Python UDF, a Python UDTF or an external
+   * UDF. That batch does not rewrite the plan of a [[DynamicPruningSubquery]], so a standalone
+   * DPP subquery, which evaluates the filtering keys over the filtering plan, would fail on such
+   * a UDF.
    */
-  private def needsUDFExtraction(plan: LogicalPlan, keys: Seq[Expression]): Boolean = {
-    (keys ++ plan.flatMap(_.expressions)).exists(_.exists {
+  private def needsUDFExtraction(exprs: Seq[Expression]): Boolean = {
+    exprs.exists(_.exists {
       case _: PythonUDTF | _: ExternalUserDefinedFunction => true
       case e => PythonUDF.isScalarPythonUDF(e)
     })

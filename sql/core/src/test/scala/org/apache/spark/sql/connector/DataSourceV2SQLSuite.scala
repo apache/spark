@@ -1604,6 +1604,18 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-62051: insert a VALUES list evaluated at runtime with a nullable cast") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (ts TIMESTAMP_NTZ NOT NULL, r DOUBLE) USING foo")
+      // `rand()` makes the VALUES list evaluated at runtime, and the cast of `current_date()` to
+      // TIMESTAMP_NTZ is nullable
+      sql(s"INSERT INTO $t VALUES (current_date(), rand()), " +
+        "(TIMESTAMP_NTZ'2020-01-01 00:00:00', 1.0D)")
+      checkAnswer(spark.table(t).selectExpr("ts IS NULL"), Row(false) :: Row(false) :: Nil)
+    }
+  }
+
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
@@ -1717,7 +1729,8 @@ class DataSourceV2SQLSuiteV1Filter
               exception = intercept[ParseException] {
                 sql(sql1)
               },
-              condition = "_LEGACY_ERROR_TEMP_0032",
+              condition = "DUPLICATE_TABLE_PATH",
+              sqlState = "42613",
               parameters = Map("pathOne" -> "foo", "pathTwo" -> "bar"),
               context = ExpectedContext(
                 fragment = sql1,
@@ -1730,7 +1743,8 @@ class DataSourceV2SQLSuiteV1Filter
               exception = intercept[ParseException] {
                 sql(sql2)
               },
-              condition = "_LEGACY_ERROR_TEMP_0032",
+              condition = "DUPLICATE_TABLE_PATH",
+              sqlState = "42613",
               parameters = Map("pathOne" -> "foo", "pathTwo" -> "bar"),
               context = ExpectedContext(
                 fragment = sql2,

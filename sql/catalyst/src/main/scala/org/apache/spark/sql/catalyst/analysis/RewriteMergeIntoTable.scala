@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ConstantFolding, ReplaceExpressions, SpecialDatetimeValues}
@@ -183,6 +183,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     } else {
       // NOT MATCHED conditions only refer to source columns and can be pushed down.
       val filteredSource = insertAction.condition match {
+        case Some(insertCond) if insertCond.dataType == NullType =>
+          Filter(Cast(insertCond, BooleanType), source)
         case Some(insertCond) => Filter(insertCond, source)
         case None => source
       }
