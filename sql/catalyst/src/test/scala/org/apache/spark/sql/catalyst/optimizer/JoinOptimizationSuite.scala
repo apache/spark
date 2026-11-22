@@ -215,4 +215,27 @@ class JoinOptimizationSuite extends PlanTest {
       .select($"a", $"b", $"c", $"d", $"e", $"f")
     comparePlans(ReorderJoin(query.analyze), answer.analyze)
   }
+
+  test("SPARK-62226: reorder inner joins with a lower filter whose condition can be NULL") {
+    // The lower filter removes a row on which `b > d` is NULL, but in the join condition that the
+    // filter is put in, `NULL AND x` evaluates `x`. So a division above it that only reads its
+    // columns, which can fail in ANSI mode, is evaluated only where `b > d` is TRUE. A condition
+    // that can not fail, one that also reads a column of `z`, and any condition above a filter
+    // whose condition can not be NULL go into a join as before. Only ReorderJoin runs.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val z = LocalRelation($"e".int, $"f".int)
+    Seq(($"b" > $"d") -> true, $"b".isNotNull -> false).foreach { case (cond, nullable) =>
+      val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+        .where(cond)
+        .join(z, condition = Some($"e" === $"a" && divide($"c", $"d") > 1 && $"c" > 1))
+        .where(divide($"c", $"f") > 1)
+      val division = divide($"c", $"d") > 1
+      val guarded = if (nullable) If(cond, division, Literal(false)) else division
+      val answer = testRelation.join(testRelation1,
+          condition = Some($"a" === $"d" && cond && guarded && $"c" > 1))
+        .join(z, condition = Some($"e" === $"a" && divide($"c", $"f") > 1))
+      comparePlans(ReorderJoin(query.analyze), answer.analyze)
+    }
+  }
 }
