@@ -238,7 +238,10 @@ object MergeSubplans extends Rule[LogicalPlan] {
           val (planWithReferences, level) = insertReferences(p.plan, true, planMergers)
           levelFromSubqueries = levelFromSubqueries.max(level)
           p.withNewPlan(planWithReferences)
-        case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
+        // A throwable subquery is not merged either: the merged plan is read through a
+        // `CTERelationRef`, whose definition `ScalarSubquery.throwable` does not see, so the
+        // conjuncts written after the subquery that can fail could be moved ahead of it again.
+        case s: ScalarSubquery if !s.isCorrelated && s.deterministic && !s.throwable =>
           val (planWithReferences, level) = insertReferences(s.plan, true, planMergers)
 
           // The subquery could contain a hint that is not propagated once we merge it, but as a

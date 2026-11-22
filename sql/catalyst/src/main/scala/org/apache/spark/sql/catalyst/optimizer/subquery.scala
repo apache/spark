@@ -717,7 +717,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         subqueries += s
         // Results of scalar subqueries are nullable (as they get connected to the rest of the
         // query via left outer join)
-        s.plan.output.head.withNullability(true)
+        val result = s.plan.output.head.withNullability(true)
+        // The join computes the result of a non-deterministic or throwable subquery, so the
+        // expression that reads it stays a barrier (see ReorderBarrier).
+        if (!s.deterministic || s.throwable) ReorderBarrier(result) else result
     }
     newExpression.asInstanceOf[E]
   }

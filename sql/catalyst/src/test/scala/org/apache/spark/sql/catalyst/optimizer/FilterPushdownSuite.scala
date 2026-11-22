@@ -1306,6 +1306,26 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-62240: joins: do not push a condition that can fail ahead of a throwable " +
+    "scalar subquery") {
+    // The division is built in ANSI mode, where it can fail. A scalar subquery whose plan has a
+    // throwable expression is throwable, so the division written after it stays above the join.
+    // Without that expression, both are pushed below the join.
+    val divide = Divide($"d", Literal(2), NumericEvalContext(EvalMode.ANSI)) > 1
+    val relInSubquery = LocalRelation($"x".int)
+    Seq(IsNull(RaiseError(Literal("boom"))), $"x" > 1).foreach { condition =>
+      val subquery = IsNotNull(ScalarSubquery(relInSubquery.where(condition).groupBy()(max($"x"))))
+      val originalQuery = testRelation.join(testRelation1, Inner, Some($"a" === $"d"))
+        .where(subquery && divide)
+      val correctAnswer = if (condition.throwable) {
+        originalQuery
+      } else {
+        testRelation.where(subquery).join(testRelation1.where(divide), Inner, Some($"a" === $"d"))
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")

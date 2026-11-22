@@ -437,6 +437,10 @@ case class ScalarSubquery(
     plan.schema.fields.head.dataType
   }
   override def nullable: Boolean = true
+  // Like `deterministic`, this reads the plan too: evaluating the subquery for an outer row
+  // evaluates the expressions of its plan, e.g. a `raise_error` guard in its WHERE clause.
+  override lazy val throwable: Boolean =
+    children.exists(_.throwable) || plan.exists(_.expressions.exists(_.throwable))
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
     outerAttrs = outerAttrs)

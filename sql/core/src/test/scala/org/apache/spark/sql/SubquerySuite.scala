@@ -3777,4 +3777,49 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-62240: a condition that can fail is not evaluated ahead of a non-deterministic " +
+    "or throwable correlated scalar subquery") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("l", "r") {
+        spark.range(0, 10, 1, 1).toDF("l").createOrReplaceTempView("l")
+        spark.range(0, 10, 1, 1).toDF("r").createOrReplaceTempView("r")
+        // The subqueries are NULL for the row whose id is 3, the only one where the division is
+        // by zero, since `r != 3` is false there.
+        val subquery = "(SELECT max(r) FROM r WHERE r = l AND " +
+          "CASE WHEN l < 0 THEN raise_error('neg') ELSE r != 3 END)"
+        val nonDeterministic =
+          "(SELECT max(r) FROM r WHERE r = l AND length(uuid()) = 36 AND r != 3)"
+        val expected = (4L to 9L).map(Row(_))
+        checkAnswer(
+          sql(s"SELECT l FROM l WHERE $subquery IS NOT NULL AND 10 / (l - 3) > 0"), expected)
+        checkAnswer(
+          sql(s"SELECT l FROM (SELECT l, $subquery AS s FROM l) " +
+            "WHERE s IS NOT NULL AND 10 / (l - 3) > 0"),
+          expected)
+        checkAnswer(
+          sql(s"SELECT l FROM l WHERE $nonDeterministic IS NOT NULL AND 10 / (l - 3) > 0"),
+          expected)
+      }
+    }
+  }
+
+  test("SPARK-62240: a condition that can fail is not evaluated ahead of throwable scalar " +
+    "subqueries that could be merged") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("l", "r") {
+        spark.range(0, 10, 1, 1).toDF("l").createOrReplaceTempView("l")
+        spark.range(0, 10, 1, 1).toDF("r").createOrReplaceTempView("r")
+        // Both subqueries are NULL, since their CASE WHEN is false on every row, so no row is
+        // kept and the division by zero on the row whose id is 3 never runs. MergeSubplans would
+        // merge them into one plan read through a CTE reference.
+        def subquery(aggregate: String): String = s"(SELECT $aggregate(r) FROM r WHERE " +
+          "CASE WHEN r < 0 THEN raise_error('neg') ELSE r > 9 END)"
+        checkAnswer(
+          sql(s"SELECT l FROM l JOIN r ON l = r WHERE ${subquery("max")} IS NOT NULL AND " +
+            s"${subquery("min")} IS NOT NULL AND 10 / (r - 3) > 0"),
+          Nil)
+      }
+    }
+  }
 }
