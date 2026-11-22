@@ -26,7 +26,7 @@ import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -49,6 +50,7 @@ private object ConstantString extends ScalarFunction[UTF8String] {
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
  */
+@DataSourceV2Test
 class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
 
   private val rowLevelCat = "rowlevelcat"
@@ -442,6 +444,30 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
         val expected = if (dataType.startsWith("CHAR")) "x    " else "x"
         checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(expected, expected)))
+      }
+    }
+  }
+
+  test("SPARK-62110: generation expression comparing a CHAR column with a string literal") {
+    val tblName = "my_tab"
+    // A write pads 'OPEN' to the length of `status`, as it pads the stored value, unless the
+    // legacy config makes it store the value without padding. The copy of the rows reads `status`
+    // with its CHAR type.
+    Seq(false, true).foreach { legacy =>
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  id INT, status CHAR(10), is_open BOOLEAN GENERATED ALWAYS AS (status = 'OPEN')
+               |) USING foo""".stripMargin)
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString) {
+          sql(s"INSERT INTO testcat.$tblName(id, status) VALUES (1, 'OPEN')")
+          sql(s"INSERT INTO testcat.$tblName VALUES (2, 'OPEN', true)")
+          assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+            sql(s"INSERT INTO testcat.$tblName VALUES (3, 'OPEN', false)")
+          }
+          sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+          checkAnswer(sql(s"SELECT id, is_open FROM testcat.$tblName"),
+            Seq(Row(1, true), Row(2, true), Row(1, true), Row(2, true)))
+        }
       }
     }
   }
@@ -2021,8 +2047,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
           assert(ex.getMessage.contains(s"$command with generated columns"))
         }
-        // INSERT auto-fills the column from the legacy getter. Write last, because a write to
-        // this in-memory table rebuilds its columns with `columnGenerationExpression()`.
+        // INSERT auto-fills the column from the legacy getter.
         sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
         checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
       }
@@ -2681,6 +2706,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           spark.table(s"testcat.$tblName"),
           Row(new java.math.BigDecimal("1.1234567891"),
             new java.math.BigDecimal("1.26215515697488187881")))
+      }
+    }
+  }
+
+  test("SPARK-61922: a generation expression reads the TIME type setting of the session") {
+    // The setting defaults to true only in tests, so false shows that the session value is kept.
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled.toString) {
+        assert(StoredExpressionText.fixedConf(conf).isTimeTypeEnabled == enabled)
       }
     }
   }

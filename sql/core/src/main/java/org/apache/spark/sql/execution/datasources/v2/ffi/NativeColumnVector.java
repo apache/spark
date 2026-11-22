@@ -55,20 +55,23 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Spark does not need these checks here: it reads only the rows of the batch, whose buffers Arrow
  * Java sizes by the lengths of the arrays, which the reader checks before it imports them, and
  * the buffers of a batch stay allocated while the batch may be read: until next is called again,
- * and if the reader is closed before then, until the reader is unreachable, which the vector keeps
- * it from being. The strings, arrays, maps and child vectors that the vector returns do not refer
- * to the reader, so this holds for them only while the vector is reachable too. Spark reads a
- * value of a nullable column only after {@link #isNullAt(int)}, and the reader checks that the
- * columns that the schema declares not nullable have no null, so that the vector of such a
- * column does not count the nulls of each batch. The vector of a nullable
- * column takes the null_count that the library exported, and only counts the nulls when the
- * library did not.
+ * or until the reader is closed in a task whose consumers are then done with the batch. A reader
+ * that is closed before then outside of a task, or in a task with a thread that the task does not
+ * wait for (see {@code TaskInputThreads}), keeps them until the reader is unreachable, which the
+ * vector keeps it from being. The strings, arrays, maps and child vectors that the vector returns
+ * do not refer to the reader, so this holds for them only while the vector is reachable too.
+ * Spark reads a value of a nullable column only after {@link #isNullAt(int)}, and the reader
+ * checks that the columns that the schema declares not nullable have no null, so that the vector
+ * of such a column does not count the nulls of each batch. The vector of a nullable column takes
+ * the null_count that the library exported, and only counts the nulls when the library did not.
  *
  * <p>As the vector does not check the bounds and the reference count of the buffers, a consumer
  * must read only the rows of the current batch, below its number of rows, and only until next is
- * called again, as for the other column vectors that Spark reuses across batches: a read of
- * another row, e.g. through a row of the batch that the consumer kept after next, reads out of
- * range or freed memory, and may crash the JVM rather than throw. The vector does not free its
+ * called again or its task completes, as for the other column vectors that Spark reuses across
+ * batches: a read of another row, e.g. through a row of the batch that the consumer kept after
+ * next, reads out of range or freed memory, and may crash the JVM rather than throw. A consumer
+ * that reads a batch on a thread that its task does not wait for registers the thread first, with
+ * {@code TaskInputThreads.registerUnawaited}. The vector does not free its
  * Arrow vector on {@link #close()}, which the reader frees with the other vectors of the batch, so
  * that a consumer that closes the batch, rather than releasing it with
  * {@link #closeIfFreeable()}, does not free the buffers that the vector reads.

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, GeneralScalarExpression, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.write.LogicalWriteInfoImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -182,6 +183,17 @@ class CatalogSuite extends SparkFunSuite {
     txnCatalog.loadTable(testIdent)
     txnCatalog.alterTable(testIdent, TableChange.addColumn(Array("added"), IntegerType))
     assert(txnCatalog.loadTable(testIdent).columns().take(keptColumns.length) === keptColumns)
+  }
+
+  test("SPARK-61682: columns survive writes that append other columns") {
+    val catalog = newCatalog()
+    val keptColumns = columnsBeyondStructFields()
+    catalog.createTable(testIdent, new TableInfo.Builder().withColumns(keptColumns).build())
+    val schema = CatalogV2Util.v2ColumnsToStructType(keptColumns).add("written", StringType)
+    val info = LogicalWriteInfoImpl("query", schema, CaseInsensitiveStringMap.empty())
+    val table = catalog.liveTable(testIdent).asInstanceOf[SupportsWrite]
+    table.newWriteBuilder(info).build().toBatch
+    assert(catalog.loadTable(testIdent).columns().take(keptColumns.length) === keptColumns)
   }
 
   test("listTables") {

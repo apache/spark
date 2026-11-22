@@ -83,7 +83,34 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY) ||
+           (la == EVAL && isOperatorPipeEvalAssignment());
+  }
+
+  /**
+   * Checks if `| EVAL` is followed by an assignment: a column name and then `=`, or `.` for a
+   * multi-part key, which the parser captures to report a dedicated error. Otherwise `eval` is a
+   * column in a bitwise OR, as in `a | eval`, `(a | eval) = 1` or `CASE ... THEN a | eval END = 1`.
+   * So a token that ends an expression can't start the name, and a column named end needs
+   * backquotes after `|`.
+   */
+  private boolean isOperatorPipeEvalAssignment() {
+    int nameStart = _input.LA(3); // LA(1) is the pipe and LA(2) is EVAL.
+    if (nameStart == RIGHT_PAREN || nameStart == RIGHT_BRACKET || nameStart == END) {
+      return false;
+    }
+    int afterName = 4;
+    if (nameStart == IDENTIFIER_KW && _input.LA(4) == LEFT_PAREN) {
+      // IDENTIFIER('name'): its argument has no parentheses, so the name ends at the next one.
+      afterName = 5;
+      while (_input.LA(afterName) != RIGHT_PAREN && _input.LA(afterName) != Token.EOF) {
+        afterName++;
+      }
+      afterName++;
+    }
+    return _input.LA(afterName) == EQ || _input.LA(afterName) == DOT;
   }
 
   /**
@@ -646,18 +673,6 @@ createPipelineDatasetHeader
       (materializedView | streamingTable)
       (IF errorCapturingNot EXISTS)?
       identifierReference
-    ;
-
-streamRelationPrimary
-    : STREAM multipartIdentifier streamChangesClause?
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
-    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
-      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -1234,6 +1249,8 @@ groupingSet
     | expression
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 pivotClause
     : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
@@ -1247,6 +1264,8 @@ pivotValue
     : expression (AS? errorCapturingIdentifier)?
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
@@ -1306,7 +1325,41 @@ binByClause
         (BIN_START AS binStartAlias=errorCapturingIdentifier)?
         (BIN_END AS binEndAlias=errorCapturingIdentifier)?
         (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
-      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillClause
+    : GAP FILL LEFT_PAREN
+        (PARTITION BY partitionCol+=multipartIdentifier
+          (COMMA partitionCol+=multipartIdentifier)*)?
+        ORDER BY timeCol=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression
+          | RANGE BETWEEN rangeStart=valueExpression AND rangeEnd=valueExpression
+          | gapFillFillClause
+          | MAX GAP maxGap=expression
+          | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
+          | IS_GENERATED (AS isGeneratedAlias=errorCapturingIdentifier)?
+        )*
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillFillClause
+    : FILL LEFT_PAREN fillColumns+=gapFillColumn (COMMA fillColumns+=gapFillColumn)* RIGHT_PAREN
+    ;
+
+gapFillColumn
+    : multipartIdentifier gapFillMethod
+    ;
+
+gapFillMethod
+    : LINEAR
+    | FFILL
+    | FORWARD FILL
+    | BFILL
+    | BACKWARD FILL
+    | CONSTANT fillValue=expression
+    | NULL
     ;
 
 lateralView
@@ -1331,6 +1384,7 @@ relationExtension
     | pivotClause
     | unpivotClause
     | binByClause
+    | gapFillClause
     ;
 
 joinRelation
@@ -1412,7 +1466,11 @@ identifierComment
     ;
 
 relationPrimary
-    : streamRelationPrimary                                 #streamRelation
+    : STREAM (multipartIdentifier | LEFT_PAREN multipartIdentifier RIGHT_PAREN)
+      streamChangesClause? optionsClause?
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
+    | STREAM (tableFunctionCall | LEFT_PAREN tableFunctionCall RIGHT_PAREN)
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
     | temporalTableIdentifierReference temporalClause?
@@ -1510,10 +1568,9 @@ tableFunctionCall
       RIGHT_PAREN
     ;
 
-// A table function call with optional trailing clauses for streaming and aliasing.
-// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
-// the AST builder will reject it with an error. The clause must come before watermarkClause
-// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+// A table function call with optional trailing clauses. The identifiedByClause is parsed here so
+// that the AST builder can reject it with a tailored error for non-streaming TVFs. It must come
+// before watermarkClause and tableAlias to avoid ambiguity (since IDENTIFIED is non-reserved).
 tableFunctionCallWithTrailingClauses
     : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
@@ -2383,6 +2440,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | EVAL operatorPipeSetAssignmentSeq
     | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
@@ -2395,6 +2453,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | binByClause
+    | gapFillClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -2443,9 +2502,11 @@ ansiNonReserved
     | AT
     | ATOMIC
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2485,6 +2546,7 @@ ansiNonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONTAINS
     | CONTINUE
     | COST
@@ -2532,6 +2594,7 @@ ansiNonReserved
     | ENFORCED
     | ERROR
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -2545,18 +2608,22 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FFILL
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -2587,6 +2654,7 @@ ansiNonReserved
     | INTEGER
     | INTERVAL
     | INVOKER
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -2607,6 +2675,7 @@ ansiNonReserved
     | LIKE
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
@@ -2866,9 +2935,11 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2917,6 +2988,7 @@ nonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2976,6 +3048,7 @@ nonReserved
     | ERROR
     | ESCAPE
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -2992,10 +3065,12 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FFILL
     | FILTER
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
@@ -3004,10 +3079,12 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FROM
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -3044,6 +3121,7 @@ nonReserved
     | INTO
     | INVOKER
     | IS
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -3066,6 +3144,7 @@ nonReserved
     | LONG
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD

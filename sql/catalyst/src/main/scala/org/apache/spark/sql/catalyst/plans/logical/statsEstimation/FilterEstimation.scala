@@ -326,12 +326,12 @@ case class FilterEstimation(
     }
 
     attr.dataType match {
-      case _: NumericType | DateType | TimestampType | BooleanType =>
+      case dt if canConvertToDouble(dt) =>
         evaluateBinaryForNumeric(op, attr, literal, update)
-      case _: StringType | BinaryType =>
+      case _ =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
-        logDebug("[CBO] No range comparison statistics for String/Binary type " + attr)
+        logDebug("[CBO] No range comparison statistics for " + attr)
         None
     }
   }
@@ -449,7 +449,7 @@ case class FilterEstimation(
 
     // use [min, max] to filter the original hSet
     dataType match {
-      case _: NumericType | BooleanType | DateType | TimestampType =>
+      case _ if canConvertToDouble(dataType) =>
         if (ndv.toDouble == 0) {
           return Some(0.0)
         }
@@ -479,7 +479,7 @@ case class FilterEstimation(
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
-      case _: StringType | BinaryType =>
+      case _ =>
         if (ndv.toDouble == 0)  {
           return Some(0.0)
         }
@@ -722,10 +722,10 @@ case class FilterEstimation(
     }
 
     attrLeft.dataType match {
-      case _: StringType | BinaryType =>
+      case dt if !canConvertToDouble(dt) =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
-        logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
+        logDebug("[CBO] No range comparison statistics for " + attrLeft)
         return None
       case _ =>
         if (!colStatsMap.hasMinMaxStats(attrLeft)) {

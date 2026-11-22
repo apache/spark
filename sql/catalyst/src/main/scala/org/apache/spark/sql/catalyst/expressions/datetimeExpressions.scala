@@ -623,7 +623,8 @@ trait GetTimeField extends UnaryExpression
   }
 }
 
-case class Hour(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
+case class Hour(child: Expression, timeZoneId: Option[String] = None)
+  extends GetTimeField with NoThrow {
   def this(child: Expression) = this(child, None)
   override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getHours
@@ -640,7 +641,8 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None) extends Ge
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Minute(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
+case class Minute(child: Expression, timeZoneId: Option[String] = None)
+  extends GetTimeField with NoThrow {
   def this(child: Expression) = this(child, None)
   override def withTimeZone(timeZoneId: String): Minute = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getMinutes
@@ -657,7 +659,8 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None) extends 
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Second(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
+case class Second(child: Expression, timeZoneId: Option[String] = None)
+  extends GetTimeField with NoThrow {
   def this(child: Expression) = this(child, None)
   override def withTimeZone(timeZoneId: String): Second = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getSeconds
@@ -667,7 +670,7 @@ case class Second(child: Expression, timeZoneId: Option[String] = None) extends 
 }
 
 case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
-  extends GetTimeField {
+  extends GetTimeField with NoThrow {
   def this(child: Expression) = this(child, None)
   // 2 digits for seconds, and 6 digits for the fractional part with microsecond precision.
   override def dataType: DataType = DecimalType(8, 6)
@@ -775,7 +778,7 @@ trait GetDateField extends UnaryExpression with ImplicitCastInputTypes {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.contains.tab
-case class DayOfYear(child: Expression) extends GetDateField {
+case class DayOfYear(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getDayInYear
   override val funcName = "getDayInYear"
   override protected def withNewChildInternal(newChild: Expression): DayOfYear =
@@ -1394,14 +1397,14 @@ case class UnixNanos(child: Expression)
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.contains.tab
-case class Year(child: Expression) extends GetDateField {
+case class Year(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getYear
   override val funcName = "getYear"
   override protected def withNewChildInternal(newChild: Expression): Year =
     copy(child = newChild)
 }
 
-case class YearOfWeek(child: Expression) extends GetDateField {
+case class YearOfWeek(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getWeekBasedYear
   override val funcName = "getWeekBasedYear"
   override protected def withNewChildInternal(newChild: Expression): YearOfWeek =
@@ -1428,7 +1431,7 @@ case class YearOfWeek(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.contains.tab
-case class Quarter(child: Expression) extends GetDateField {
+case class Quarter(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getQuarter
   override val funcName = "getQuarter"
   override protected def withNewChildInternal(newChild: Expression): Quarter =
@@ -1455,7 +1458,7 @@ case class Quarter(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.contains.tab
-case class Month(child: Expression) extends GetDateField {
+case class Month(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getMonth
   override val funcName = "getMonth"
   override protected def withNewChildInternal(newChild: Expression): Month = copy(child = newChild)
@@ -1481,7 +1484,7 @@ case class Month(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.contains.tab
-case class DayOfMonth(child: Expression) extends GetDateField {
+case class DayOfMonth(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getDayOfMonth
   override val funcName = "getDayOfMonth"
   override protected def withNewChildInternal(newChild: Expression): DayOfMonth =
@@ -1508,7 +1511,7 @@ case class DayOfMonth(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "2.3.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class DayOfWeek(child: Expression) extends GetDateField {
+case class DayOfWeek(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getDayOfWeek
   override val funcName = "getDayOfWeek"
   override protected def withNewChildInternal(newChild: Expression): DayOfWeek =
@@ -1535,7 +1538,7 @@ case class DayOfWeek(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "2.4.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class WeekDay(child: Expression) extends GetDateField {
+case class WeekDay(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getWeekDay
   override val funcName = "getWeekDay"
   override protected def withNewChildInternal(newChild: Expression): WeekDay =
@@ -1562,7 +1565,7 @@ case class WeekDay(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class WeekOfYear(child: Expression) extends GetDateField {
+case class WeekOfYear(child: Expression) extends GetDateField with NoThrow {
   override val func = DateTimeUtils.getWeekOfYear
   override val funcName = "getWeekOfYear"
   override protected def withNewChildInternal(newChild: Expression): WeekOfYear =
@@ -1589,7 +1592,8 @@ case class WeekOfYear(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "4.0.0")
 // scalastyle:on line.contains.tab
-case class MonthName(child: Expression) extends GetDateField with DefaultStringProducingExpression {
+case class MonthName(child: Expression)
+  extends GetDateField with DefaultStringProducingExpression with NoThrow {
   override val func = DateTimeUtils.getMonthName
   override val funcName = "getMonthName"
   override protected def withNewChildInternal(newChild: Expression): MonthName =
@@ -1616,7 +1620,8 @@ case class MonthName(child: Expression) extends GetDateField with DefaultStringP
   group = "datetime_funcs",
   since = "4.0.0")
 // scalastyle:on line.contains.tab
-case class DayName(child: Expression) extends GetDateField with DefaultStringProducingExpression {
+case class DayName(child: Expression)
+  extends GetDateField with DefaultStringProducingExpression with NoThrow {
   override val func = DateTimeUtils.getDayName
   override val funcName = "getDayName"
 

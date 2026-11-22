@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `SHOW COLUMNS ...` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowColumnsSuite extends command.ShowColumnsSuiteBase with CommandSuiteBase
