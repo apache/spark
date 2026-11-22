@@ -321,6 +321,13 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
+   * Returns true if `condition`, the condition of a join or a filter whose inputs are `plans`, has
+   * a conjunct that may not move (see [[splitMovable]]).
+   */
+  protected def hasImmovableConjunct(condition: Expression, plans: Seq[LogicalPlan]): Boolean =
+    splitMovable(splitConjunctivePredicates(condition), plans)._2.nonEmpty
+
+  /**
    * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
    * constraints from `condition`. This is used for predicate pushdown.
    * When there is no such filter, `None` is returned.
