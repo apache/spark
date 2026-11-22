@@ -3643,6 +3643,15 @@ class DataFrameSuite extends SharedSparkSession
           qd.select($"q", $"d", count(lit(1)).over(Window.partitionBy($"q")).as("w"))
             .where($"w" > 5 && $"q" === $"d" && $"d" > 0),
           Nil)
+        // `ColumnPruning` removes the window, whose result is not read, so `q = e`, over both
+        // sides, must not go into the join through it, where a filter `isnotnull(q)` would be
+        // inferred from it.
+        checkAnswer(
+          qd.select($"q", count(lit(1)).over(Window.partitionBy($"q")).as("w"))
+            .join(broadcast(spark.range(10).select($"id".cast("double").as("e"))))
+            .where(rand(10) * 10 > 100 && $"q" === $"e")
+            .select($"q", $"e"),
+          Nil)
       }
     }
   }

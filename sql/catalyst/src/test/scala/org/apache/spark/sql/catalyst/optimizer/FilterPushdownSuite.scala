@@ -1313,9 +1313,10 @@ class FilterPushdownSuite extends PlanTest {
     // second child by position, and so does an aggregation that groups by it, also as an alias.
     // Below them, a condition over it would be pushed on through the projection. So after
     // `rand(0) > 0.1`, `q > 0` stays above the join, while `a > 0`, which can not fail, is
-    // pushed. `q = d` over both sides is only evaluated at the join. A window, a watermark, a
-    // repartition and an aggregation compute `q` on every row they get, so it goes into the join
-    // condition through them, while a union can pass `q` on to the join as it is.
+    // pushed. `q = d` over both sides is only evaluated at the join. A watermark, a repartition
+    // and an aggregation compute `q` on every row they get, so it goes into the join condition
+    // through them, while a union can pass `q` on to the join as it is, and `ColumnPruning` can
+    // remove a window whose results are not read.
     val relation = LocalRelation(attrA, attrB, $"t".timestamp)
     def project(child: LogicalPlan): LogicalPlan =
       child.select($"a", $"t", Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)).as("q"))
@@ -1325,7 +1326,7 @@ class FilterPushdownSuite extends PlanTest {
     val interval = new CalendarInterval(0, 0, 1000L)
     Seq(
       relation.select($"a", $"t", Cast($"b", DoubleType).as("q")).union(projected) -> false,
-      projected.window(winExpr.as("w") :: Nil, $"q" :: Nil, Nil) -> true,
+      projected.window(winExpr.as("w") :: Nil, $"q" :: Nil, Nil) -> false,
       EventTimeWatermark(UUID.randomUUID(), $"t", interval, project(streaming)) -> true,
       projected.distribute($"q")(2) -> true,
       projected.rebalance($"q") -> true,

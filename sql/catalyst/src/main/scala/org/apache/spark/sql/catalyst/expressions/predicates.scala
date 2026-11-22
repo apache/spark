@@ -272,9 +272,10 @@ trait PredicateHelper extends AliasHelper with Logging {
    * window whose results are not read, so its other columns count too.
    *
    * If `atJoin` is true, only the columns that a condition over more than one input of a join can
-   * fail on are returned. Such a condition is evaluated at the join, where a window, a watermark, a
+   * fail on are returned. Such a condition is evaluated at the join, where a watermark, a
    * repartition and an aggregation, for a grouping key, have computed the column on every row they
-   * got, so none is returned through them.
+   * got, so none is returned through them. A window still passes them through: once the condition
+   * is in the join, `ColumnPruning` can remove a window whose results are not read.
    *
    * Other columns and operators do not count:
    *  - A non-deterministic column, computed for every row the operator outputs, and the
@@ -318,12 +319,11 @@ trait PredicateHelper extends AliasHelper with Logging {
       AttributeSet(u.output.iterator.zipWithIndex.collect {
         case (a, i) if positions.contains(i) => a
       }.toSeq)
-    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort |
+         _: Window =>
       failableOutput(plan.children.head, atJoin)
-    case _: Window | _: EventTimeWatermark | _: RepartitionOperation | _: RebalancePartitions
-        if atJoin =>
+    case _: EventTimeWatermark | _: RepartitionOperation | _: RebalancePartitions if atJoin =>
       AttributeSet.empty
-    case w: Window => failableOutput(w.child)
     case w: EventTimeWatermark => failableOutput(w.child) - w.eventTime
     case u: UnaryNode if PushPredicateThroughNonJoin.canPushThrough(u) =>
       failableOutput(u.child, atJoin)
