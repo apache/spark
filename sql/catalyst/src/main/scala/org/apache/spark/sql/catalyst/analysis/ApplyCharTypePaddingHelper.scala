@@ -272,13 +272,15 @@ object ApplyCharTypePaddingHelper {
       })
   }
 
-  // `value` is the value of the constant `lit`.
+  // `value` is the value of the constant `lit`. It is only evaluated for a CHAR value: a constant
+  // compared with another type can be one that only an optimizer rule can evaluate, such as a cast
+  // of a special datetime string.
   private def padAttrLitCmp(
       expr: Expression,
       metadata: Metadata,
       padCharCol: Boolean,
       lit: Expression,
-      value: Any,
+      value: => Any,
       truncate: Boolean = true): Option[Seq[Expression]] = {
     if (expr.dataType.isInstanceOf[StringType]) {
       CharVarcharUtils.getRawType(metadata).flatMap {
