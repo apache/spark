@@ -27,13 +27,22 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, BoundReference, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, LocalLimit, Project, Sort}
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
-import org.apache.spark.sql.execution.ProjectExec
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.execution.{FileSourceScanExec, ProjectExec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -792,6 +801,238 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           fragment = "testcat.dropns.strlen('abc')",
           start = 7,
           stop = 34))
+    }
+  }
+
+  test("DSv2 ScalarFunction rowOrderIndependent across invoke modes") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+
+    val defaultFn = new JavaRowOrderIndepDefault
+    val magicFn = new JavaRowOrderIndepMagic
+    val staticMagicFn = new JavaRowOrderIndepStaticMagic
+
+    val defaultLegacyFn = new JavaRandomAddDefault
+    val magicLegacyFn = new JavaRandomAddMagic
+    val staticMagicLegacyFn = new JavaRandomAddStaticMagic
+
+    // AggregateFunction does not inherit isRowOrderIndependent();
+    // deterministic ScalarFunction defaults isRowOrderIndependent() == true.
+    assert(classOf[AggregateFunction[_, _]].getMethods.forall(_.getName != "isRowOrderIndependent"))
+    assert(StrLenDefault.isDeterministic)
+    assert(StrLenDefault.isRowOrderIndependent)
+    assert(!defaultLegacyFn.isDeterministic)
+    assert(!defaultLegacyFn.isRowOrderIndependent)
+    assert(!defaultFn.isDeterministic && defaultFn.isRowOrderIndependent)
+    assert(!magicFn.isDeterministic && magicFn.isRowOrderIndependent)
+    assert(!staticMagicFn.isDeterministic && staticMagicFn.isRowOrderIndependent)
+
+    withTempPath { dir =>
+      import testImplicits._
+      val data = (1 to 20).map(i => (i % 4, i)).toDF("part", "id")
+      data.repartition(1).write.partitionBy("part").parquet(dir.getCanonicalPath)
+
+      withTempView("v2_src") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("v2_src")
+
+        // Verify all 3 rowOrderIndependent execution paths (produceResult, invoke, static invoke)
+        // set rowOrderIndependent=true on Catalyst expressions and push filters into Parquet scan.
+        Seq(
+          ("default_ro", defaultFn, () => JavaRowOrderIndepDefault.CALLS.set(0),
+            () => JavaRowOrderIndepDefault.CALLS.get(),
+            (e: org.apache.spark.sql.catalyst.expressions.Expression) =>
+              e.isInstanceOf[ApplyFunctionExpression]),
+          ("magic_ro", magicFn, () => JavaRowOrderIndepMagic.CALLS.set(0),
+            () => JavaRowOrderIndepMagic.CALLS.get(),
+            (e: org.apache.spark.sql.catalyst.expressions.Expression) =>
+              e.isInstanceOf[Invoke]),
+          ("static_magic_ro", staticMagicFn, () => JavaRowOrderIndepStaticMagic.STATIC_CALLS.set(0),
+            () => JavaRowOrderIndepStaticMagic.STATIC_CALLS.get(),
+            (e: org.apache.spark.sql.catalyst.expressions.Expression) =>
+              e.isInstanceOf[StaticInvoke])
+        ).foreach { case (fnName, fn, resetCalls, getCalls, exprCheck) =>
+          addFunction(Identifier.of(Array("ns"), fnName), new JavaRandomAdd(fn))
+          resetCalls()
+          val df = sql(
+            s"""
+               |SELECT id, v FROM (
+               |  SELECT part, id, testcat.ns.$fnName(id) AS v FROM v2_src
+               |) WHERE part = 1 AND id > 10
+            """.stripMargin)
+          val rows = df.collect()
+          assert(rows.length === 2)
+          assert(getCalls() === 2, s"Expected 2 calls for $fnName, got ${getCalls()}")
+
+          val proj = df.queryExecution.optimizedPlan.collectFirst {
+            case p: Project if p.child.isInstanceOf[LogicalFilter] => p
+          }.get
+          val fnExpr = proj.projectList.flatMap(_.children.headOption).find(exprCheck).get
+          assert(!fnExpr.deterministic)
+          assert(fnExpr.rowOrderIndependent)
+
+          val scan = df.queryExecution.executedPlan.collectFirst {
+            case s: FileSourceScanExec => s
+          }.get
+          assert(scan.partitionFilters.nonEmpty)
+          assert(scan.dataFilters.nonEmpty)
+
+          // Predicate on nondeterministic rowOrderIndependent DSv2 function never pushes
+          // below Project.
+          val fnFilterDf = sql(
+            s"""
+               |SELECT id, v FROM (
+               |  SELECT part, id, testcat.ns.$fnName(id) AS v FROM v2_src
+               |) WHERE v = 105
+            """.stripMargin)
+          assert(fnFilterDf.queryExecution.optimizedPlan.collect {
+            case f: LogicalFilter if f.child.isInstanceOf[Project] => f
+          }.nonEmpty)
+        }
+
+        // Legacy nondeterministic DSv2 functions (isRowOrderIndependent = false) stay blocked.
+        Seq(
+          ("default_legacy", defaultLegacyFn),
+          ("magic_legacy", magicLegacyFn),
+          ("static_magic_legacy", staticMagicLegacyFn)
+        ).foreach { case (fnName, fn) =>
+          addFunction(Identifier.of(Array("ns"), fnName), new JavaRandomAdd(fn))
+          val df = sql(
+            s"""
+               |SELECT id, v FROM (
+               |  SELECT part, id, testcat.ns.$fnName(id) AS v FROM v2_src
+               |) WHERE part = 1 AND id > 10
+            """.stripMargin)
+          assert(df.queryExecution.optimizedPlan.collect {
+            case f: LogicalFilter if f.child.isInstanceOf[Project] => f
+          }.nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("DSv2 TopN and Aggregate pushdown never push rowOrderIndependent ScalarFunction") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "roi_v2_func"),
+      new JavaRandomAdd(new JavaRowOrderIndepDefault))
+
+    class TrackingPushdownScanBuilder extends ScanBuilder
+      with Scan with Batch with SupportsPushDownV2Filters
+      with SupportsPushDownAggregates with SupportsPushDownTopN {
+      var pushedPreds: Array[V2Predicate] = Array.empty
+      var pushedAgg: Option[Aggregation] = None
+      var pushedTopNOrders: Array[V2SortOrder] = Array.empty
+      var pushedTopNLimit: Option[Int] = None
+
+      override def readSchema(): StructType = {
+        if (pushedAgg.isDefined) {
+          new StructType().add("x", IntegerType).add("count", LongType)
+        } else {
+          new StructType().add("x", IntegerType)
+        }
+      }
+      override def build(): Scan = this
+      override def toBatch: Batch = this
+      override def planInputPartitions(): Array[InputPartition] = Array.empty
+      override def createReaderFactory(): PartitionReaderFactory =
+        throw new UnsupportedOperationException("not executed")
+
+      override def pushPredicates(predicates: Array[V2Predicate]): Array[V2Predicate] = {
+        pushedPreds = predicates
+        Array.empty
+      }
+      override def pushedPredicates(): Array[V2Predicate] = pushedPreds
+
+      override def supportCompletePushDown(aggregation: Aggregation): Boolean = true
+
+      override def pushAggregation(aggregation: Aggregation): Boolean = {
+        pushedAgg = Some(aggregation)
+        true
+      }
+
+      override def isPartiallyPushed: Boolean = false
+
+      override def pushTopN(orders: Array[V2SortOrder], limit: Int): Boolean = {
+        pushedTopNOrders = orders
+        pushedTopNLimit = Some(limit)
+        true
+      }
+    }
+
+    val lastBuilder =
+      new java.util.concurrent.atomic.AtomicReference[TrackingPushdownScanBuilder]()
+    val table = new Table with SupportsRead {
+      override def name(): String = "v2_roi_pushdown_test"
+      override def schema(): StructType = new StructType().add("x", IntegerType)
+      override def capabilities(): java.util.Set[TableCapability] =
+        java.util.EnumSet.of(TableCapability.BATCH_READ)
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        val sb = new TrackingPushdownScanBuilder()
+        lastBuilder.set(sb)
+        sb
+      }
+    }
+
+    val v2Relation = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    Dataset.ofRows(spark, v2Relation).createOrReplaceTempView("v2_roi_tbl")
+
+    withTempView("v2_roi_tbl") {
+      // Positive control: deterministic TopN pushes into ScanBuilder.
+      val detTopNPlan = sql("SELECT x FROM v2_roi_tbl ORDER BY x LIMIT 5")
+        .queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedTopNOrders.nonEmpty)
+      assert(lastBuilder.get().pushedTopNLimit.contains(5))
+      assert(detTopNPlan.collect { case s: Sort => s }.isEmpty)
+
+      // TopN over rowOrderIndependent DSv2 ScalarFunction must NOT push into V2 scan.
+      val roiTopNPlan = sql(
+        """
+          |SELECT x, testcat.ns.roi_v2_func(x) AS v
+          |FROM v2_roi_tbl
+          |ORDER BY testcat.ns.roi_v2_func(x)
+          |LIMIT 5
+        """.stripMargin).queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedTopNOrders.isEmpty)
+      assert(lastBuilder.get().pushedTopNLimit.isEmpty)
+      assert(roiTopNPlan.collect { case s: Sort => s }.nonEmpty)
+      assert(roiTopNPlan.collect { case l: LocalLimit => l }.nonEmpty)
+
+      // Aliased TopN over Project(roi_v2_func(x) AS v) must also NOT push into V2 scan.
+      val roiAliasedTopNPlan = sql(
+        """
+          |SELECT x, v FROM (
+          |  SELECT x, testcat.ns.roi_v2_func(x) AS v FROM v2_roi_tbl
+          |) ORDER BY v LIMIT 5
+        """.stripMargin).queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedTopNOrders.isEmpty)
+      assert(lastBuilder.get().pushedTopNLimit.isEmpty)
+      assert(roiAliasedTopNPlan.collect { case s: Sort => s }.nonEmpty)
+
+      // Positive control: deterministic GROUP BY pushes into ScanBuilder.
+      val detAggPlan = sql("SELECT x, COUNT(*) FROM v2_roi_tbl GROUP BY x")
+        .queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedAgg.isDefined)
+      assert(detAggPlan.collect { case a: Aggregate => a }.isEmpty)
+
+      // GROUP BY rowOrderIndependent DSv2 ScalarFunction must NOT push into V2 scan.
+      val roiAggPlan = sql(
+        """
+          |SELECT testcat.ns.roi_v2_func(x) AS v, COUNT(*)
+          |FROM v2_roi_tbl
+          |GROUP BY testcat.ns.roi_v2_func(x)
+        """.stripMargin).queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedAgg.isEmpty)
+      assert(roiAggPlan.collect { case a: Aggregate => a }.nonEmpty)
+
+      // Aliased GROUP BY over Project(roi_v2_func(x) AS v) must NOT push into V2 scan.
+      val roiAliasedAggPlan = sql(
+        """
+          |SELECT v, COUNT(*) FROM (
+          |  SELECT x, testcat.ns.roi_v2_func(x) AS v FROM v2_roi_tbl
+          |) GROUP BY v
+        """.stripMargin).queryExecution.optimizedPlan
+      assert(lastBuilder.get().pushedAgg.isEmpty)
+      assert(roiAliasedAggPlan.collect { case a: Aggregate => a }.nonEmpty)
+      assert(roiAliasedAggPlan.collect { case _: DataSourceV2ScanRelation => 1 }.size === 1)
     }
   }
 }

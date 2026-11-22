@@ -39,6 +39,7 @@ private[sql] object UserDefinedFunctionUtils {
       udf.outputEncoder.map(encoderFor(_)),
       udfName = udf.givenName,
       udfNullable = udf.nullable,
-      udfDeterministic = udf.deterministic)
+      udfDeterministic = udf.deterministic,
+      udfRowOrderIndependent = udf.udfRowOrderIndependent)
   }
 }

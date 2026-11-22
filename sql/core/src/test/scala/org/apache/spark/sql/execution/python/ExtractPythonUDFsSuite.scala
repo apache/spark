@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EvalOnlyWhen, Expression, If, Literal, PythonUDF}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, BatchEvalPython, Limit, LocalLimit, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, BatchEvalPython, Filter, Limit, LocalLimit, LocalRelation, Project}
 import org.apache.spark.sql.execution.{FileSourceScanExec, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.functions.{col, count, sum}
+import org.apache.spark.sql.functions.{array, col, count, lit, sequence, size, sum, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, LongType, StringType, StructType}
@@ -37,6 +38,8 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
   val batchedPythonUDF = new MyDummyPythonUDF
   val batchedNondeterministicPythonUDF = new MyDummyNondeterministicPythonUDF
   val scalarPandasUDF = new MyDummyScalarPandasUDF
+  val rowOrderIndepPythonUDF = new MyDummyRowOrderIndepPythonUDF
+  val rowOrderIndepScalarPandasUDF = new MyDummyRowOrderIndepScalarPandasUDF
 
   private def collectBatchExec(plan: SparkPlan): Seq[BatchEvalPythonExec] = plan.collect {
     case b: BatchEvalPythonExec => b
@@ -393,6 +396,155 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
     assert(evals.head.output == evals.head.requiredChildOutput ++ evals.head.resultAttrs)
     // The child is pruned to the columns passed through and the arguments.
     assert(evals.head.child.output.map(_.name).toSet == Set("a", "b"))
+  }
+
+  test("rowOrderIndependent PythonUDF pushdown, ANSI guard, " +
+    "lambda lifting, non-duplication, and agg/window rejection") {
+    val df = Seq((1, "a", 1), (20, "b", 1)).toDF("a", "b", "step")
+
+    // BatchEvalPython pushes disjoint deterministic filter below BatchEvalPython (Project path).
+    val dfBatch = df.withColumn("c", rowOrderIndepPythonUDF(col("b"))).filter(col("a") > 10)
+    assert(dfBatch.queryExecution.optimizedPlan.collect {
+      case b: BatchEvalPython if b.child.isInstanceOf[Filter] => b
+    }.nonEmpty)
+
+    // Direct Filter -> BatchEvalPython UnaryNode path: df.filter(roiPy(b) && a > 10).
+    val dfDirectBatch = df.filter(rowOrderIndepPythonUDF(col("b")) && col("a") > 10)
+    val directBatchPlan = dfDirectBatch.queryExecution.optimizedPlan
+    assert(directBatchPlan.collect {
+      case f @ Filter(_, b: BatchEvalPython) if b.child.isInstanceOf[Filter] => f
+    }.nonEmpty)
+    assert(directBatchPlan.collect {
+      case b: BatchEvalPython => b.child.collect { case f: Filter => f }
+    }.flatten.nonEmpty)
+
+    // Direct Filter -> ArrowEvalPython UnaryNode path: df.filter(roiPandas(b) && a > 10).
+    val dfDirectArrow = df.filter(rowOrderIndepScalarPandasUDF(col("b")) && col("a") > 10)
+    assert(dfDirectArrow.queryExecution.optimizedPlan.collect {
+      case f @ Filter(_, a: ArrowEvalPython) if a.child.isInstanceOf[Filter] => f
+    }.nonEmpty)
+
+    // Legacy nondeterministic PythonUDF keeps Filter above BatchEvalPython.
+    val dfLegacy = df.withColumn("c", batchedNondeterministicPythonUDF(col("b")))
+      .filter(col("a") > 10)
+    assert(dfLegacy.queryExecution.optimizedPlan.collect {
+      case f: Filter if f.child.isInstanceOf[BatchEvalPython] => f
+    }.nonEmpty)
+    val dfDirectLegacy = df.filter(batchedNondeterministicPythonUDF(col("b")) && col("a") > 10)
+    assert(dfDirectLegacy.queryExecution.optimizedPlan.collect {
+      case b: BatchEvalPython if b.child.isInstanceOf[Filter] => b
+    }.isEmpty)
+
+    // ArrowEvalPython pushes disjoint deterministic filter below ArrowEvalPython.
+    val dfArrow = df.withColumn("c", rowOrderIndepScalarPandasUDF(col("b"))).filter(col("a") > 10)
+    assert(dfArrow.queryExecution.optimizedPlan.collect {
+      case a: ArrowEvalPython if a.child.isInstanceOf[Filter] => a
+    }.nonEmpty)
+
+    // ANSI throwable post-stayUp barrier and guarded prefix pushdown across Batch & Arrow.
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        val dfStayUp = df.withColumn("c", rowOrderIndepPythonUDF(col("b")))
+          .filter(col("c") && size(sequence(lit(1), lit(3), col("step"))) > 0)
+        assert(dfStayUp.queryExecution.optimizedPlan.collect {
+          case b: BatchEvalPython if b.child.isInstanceOf[Filter] => b
+        }.isEmpty)
+        assert(dfStayUp.queryExecution.optimizedPlan.collect {
+          case f: Filter if f.child.isInstanceOf[BatchEvalPython] => f
+        }.nonEmpty)
+
+        val dfPushPrefix = df.withColumn("c", rowOrderIndepPythonUDF(col("b")))
+          .filter(col("step") =!= 0 && size(sequence(lit(1), lit(3), col("step"))) > 0 && col("c"))
+        assert(dfPushPrefix.queryExecution.optimizedPlan.collect {
+          case f: Filter if f.child.isInstanceOf[BatchEvalPython] => f
+        }.nonEmpty)
+        assert(dfPushPrefix.queryExecution.optimizedPlan.collect {
+          case b: BatchEvalPython if b.child.isInstanceOf[Filter] => b
+        }.nonEmpty)
+
+        val dfArrowStayUp = df.withColumn("c", rowOrderIndepScalarPandasUDF(col("b")))
+          .filter(col("c") && size(sequence(lit(1), lit(3), col("step"))) > 0)
+        assert(dfArrowStayUp.queryExecution.optimizedPlan.collect {
+          case a: ArrowEvalPython if a.child.isInstanceOf[Filter] => a
+        }.isEmpty)
+        assert(dfArrowStayUp.queryExecution.optimizedPlan.collect {
+          case f: Filter if f.child.isInstanceOf[ArrowEvalPython] => f
+        }.nonEmpty)
+      }
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val dfAnsiDivBatch = df.withColumn("c", rowOrderIndepPythonUDF(col("b")))
+        .filter(col("c") && (lit(10) / col("step")) > 1)
+      assert(dfAnsiDivBatch.queryExecution.optimizedPlan.collect {
+        case b: BatchEvalPython if b.child.isInstanceOf[Filter] => b
+      }.isEmpty)
+
+      val dfAnsiDivArrow = df.withColumn("c", rowOrderIndepScalarPandasUDF(col("b")))
+        .filter(col("c") && (lit(10) / col("step")) > 1)
+      assert(dfAnsiDivArrow.queryExecution.optimizedPlan.collect {
+        case a: ArrowEvalPython if a.child.isInstanceOf[Filter] => a
+      }.isEmpty)
+    }
+
+    // ExtractPythonUDFFromLambda preserves udfRowOrderIndependent when lifting out of transform.
+    val dfLambdaRoi = df
+      .withColumn("arr_c", transform(array(col("b")), x => rowOrderIndepPythonUDF(x)))
+      .filter(col("a") > 10)
+    val liftedArrowNodes = dfLambdaRoi.queryExecution.optimizedPlan.collect {
+      case a: ArrowEvalPython => a
+    }
+    assert(liftedArrowNodes.size === 1)
+    assert(liftedArrowNodes.head.udfs.size === 1)
+    assert(liftedArrowNodes.head.udfs.head.udfRowOrderIndependent)
+    assert(liftedArrowNodes.head.udfs.head.rowOrderIndependent)
+    assert(liftedArrowNodes.head.child.isInstanceOf[Filter])
+
+    val dfLambdaLegacy = df
+      .withColumn("arr_c", transform(array(col("b")), x => batchedNondeterministicPythonUDF(x)))
+      .filter(col("a") > 10)
+    assert(dfLambdaLegacy.queryExecution.optimizedPlan.collect {
+      case a: ArrowEvalPython if a.child.isInstanceOf[Filter] => a
+    }.isEmpty)
+
+    // PythonUDF isCheap == true must not duplicate rowOrderIndependent PythonUDF when count > 1.
+    val dfMultiRef = df.withColumn("c", rowOrderIndepPythonUDF(col("b")))
+      .select(col("c").as("c1"), col("c").as("c2"))
+    val evalNodes = dfMultiRef.queryExecution.optimizedPlan.collect {
+      case b: BatchEvalPython => b
+    }
+    assert(evalNodes.size === 1)
+    assert(evalNodes.head.udfs.size === 1)
+    val topProj = dfMultiRef.queryExecution.optimizedPlan.collectFirst {
+      case p: Project => p
+    }.get
+    assert(topProj.projectList.size === 2)
+
+    // UserDefinedPythonFunction rejects all 9 agg/window PythonEvalTypes.
+    val rejectedAggAndWindowEvalTypes = Seq(
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF)
+    rejectedAggAndWindowEvalTypes.foreach { evalType =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          UserDefinedPythonFunction(
+            name = "bad_agg",
+            func = new DummyUDF,
+            dataType = BooleanType,
+            pythonEvalType = evalType,
+            udfDeterministic = false,
+            udfRowOrderIndependent = true)
+        },
+        condition = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+        parameters = Map("functionName" -> "bad_agg"))
+    }
   }
 }
 

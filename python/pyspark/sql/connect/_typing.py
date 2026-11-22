@@ -76,11 +76,16 @@ class UserDefinedFunctionLike(Protocol):
     deterministic: bool
 
     @property
+    def rowOrderIndependent(self) -> bool: ...
+
+    @property
     def returnType(self) -> DataType: ...
 
     def __call__(self, *args: ColumnOrName) -> Column: ...
 
     def asNondeterministic(self) -> "UserDefinedFunctionLike": ...
+
+    def asRowOrderIndependentNondeterministic(self) -> "UserDefinedFunctionLike": ...
 
 
 class UserDefinedFunctionCallable(Protocol):

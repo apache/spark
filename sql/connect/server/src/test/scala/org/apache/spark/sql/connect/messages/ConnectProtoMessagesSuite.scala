@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.connect.messages
 
-import com.google.protobuf.ByteString
+import java.io.ByteArrayOutputStream
+
+import com.google.protobuf.{ByteString, CodedInputStream, CodedOutputStream, WireFormat}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
@@ -82,8 +84,64 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     val fun = commonInlineUserDefinedFunctionExpr.getCommonInlineUserDefinedFunction()
     assert(fun.getFunctionName == "f")
     assert(fun.getDeterministic == true)
+    assert(!fun.hasRowOrderIndependent)
+    assert(!fun.getRowOrderIndependent)
     assert(fun.getArgumentsCount == 1)
     assert(fun.hasPythonUdf == true)
     assert(pythonUdf.getPythonVer == "3.10")
+
+    val rowIndepBytes = fun.toBuilder
+      .setDeterministic(false)
+      .setRowOrderIndependent(true)
+      .build()
+      .toByteArray
+    val parsed = proto.CommonInlineUserDefinedFunction.parseFrom(rowIndepBytes)
+    assert(!parsed.getDeterministic)
+    assert(parsed.hasRowOrderIndependent)
+    assert(parsed.getRowOrderIndependent)
+
+    // (1) Raw wire bytes when field 8 (tag 0x40) is genuinely absent on the wire (older client):
+    val rawWithoutField8 = fun.toBuilder.setDeterministic(false).build().toByteArray
+    val cis = CodedInputStream.newInstance(rawWithoutField8)
+    var sawField8 = false
+    var tag = cis.readTag()
+    while (tag != 0) {
+      if (WireFormat.getTagFieldNumber(tag) == 8) {
+        sawField8 = true
+      }
+      cis.skipField(tag)
+      tag = cis.readTag()
+    }
+    assert(!sawField8)
+    val parsedAbsent = proto.CommonInlineUserDefinedFunction.parseFrom(rawWithoutField8)
+    assert(!parsedAbsent.getDeterministic)
+    assert(!parsedAbsent.hasRowOrderIndependent)
+    assert(!parsedAbsent.getRowOrderIndependent)
+
+    // (2) Field 8 explicitly false on the wire (tag 0x40 = (8 << 3) | 0, value 0x00):
+    val rawExplicitFalse = rawWithoutField8 ++ Array[Byte](0x40.toByte, 0x00.toByte)
+    val parsedExplicitFalse = proto.CommonInlineUserDefinedFunction.parseFrom(rawExplicitFalse)
+    assert(parsedExplicitFalse.hasRowOrderIndependent)
+    assert(!parsedExplicitFalse.getRowOrderIndependent)
+
+    // (3) Field 8 explicitly true on the wire (tag 0x40, value 0x01):
+    val rawExplicitTrue = rawWithoutField8 ++ Array[Byte](0x40.toByte, 0x01.toByte)
+    val parsedExplicitTrue = proto.CommonInlineUserDefinedFunction.parseFrom(rawExplicitTrue)
+    assert(parsedExplicitTrue.hasRowOrderIndependent)
+    assert(parsedExplicitTrue.getRowOrderIndependent)
+    assert(rawExplicitTrue.sameElements(rowIndepBytes))
+
+    // (4) Unknown future field tag (99) on the wire is safely preserved/ignored:
+    val baos = new ByteArrayOutputStream()
+    val cos = CodedOutputStream.newInstance(baos)
+    cos.writeBool(99, true)
+    cos.flush()
+    val parsedUnknown =
+      proto.CommonInlineUserDefinedFunction.parseFrom(rawWithoutField8 ++ baos.toByteArray)
+    assert(parsedUnknown.getFunctionName == "f")
+    assert(!parsedUnknown.getDeterministic)
+    assert(!parsedUnknown.hasRowOrderIndependent)
+    assert(!parsedUnknown.getRowOrderIndependent)
+    assert(parsedUnknown.getUnknownFields.hasField(99))
   }
 }

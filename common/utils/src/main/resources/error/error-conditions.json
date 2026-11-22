@@ -9959,6 +9959,11 @@
           "The replace function does not support nested column <colName>."
         ]
       },
+      "ROW_ORDER_INDEPENDENT_AGGREGATOR" : {
+        "message" : [
+          "Row-order-independent nondeterministic execution is not supported on aggregate UDF `<functionName>`."
+        ]
+      },
       "SCHEMA_LEVEL_COLLATIONS" : {
         "message" : [
           "Default collation for the specified schema."

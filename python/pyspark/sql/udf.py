@@ -24,7 +24,12 @@ import sys
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
-from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.column import Column
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -71,6 +76,21 @@ def _wrap_function(
     )
 
 
+_GROUPED_AGG_EVAL_TYPES = (
+    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+    PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+    PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+    PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+    PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+    PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+    PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+    PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+)
+
+_UNSUPPORTED_AGG_OP = "Row-order-independent nondeterminism for grouped aggregate and window UDFs"
+
+
 def _create_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
@@ -78,6 +98,7 @@ def _create_udf(
     name: Optional[str] = None,
     deterministic: bool = True,
     bufferSchema: Optional[StructType] = None,
+    rowOrderIndependent: bool = False,
 ) -> "UserDefinedFunctionLike":
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
@@ -88,6 +109,7 @@ def _create_udf(
         evalType=evalType,
         deterministic=deterministic,
         bufferSchema=bufferSchema,
+        rowOrderIndependent=rowOrderIndependent,
     )
     return udf_obj._wrapped()
 
@@ -165,6 +187,9 @@ class UserDefinedFunction:
     to create this instance.
     """
 
+    _GROUPED_AGG_EVAL_TYPES = _GROUPED_AGG_EVAL_TYPES
+    _UNSUPPORTED_AGG_OP = _UNSUPPORTED_AGG_OP
+
     def __init__(
         self,
         func: Callable[..., Any],
@@ -173,6 +198,7 @@ class UserDefinedFunction:
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
         bufferSchema: Optional[StructType] = None,
+        rowOrderIndependent: bool = False,
     ):
         if not callable(func):
             raise PySparkTypeError(
@@ -214,6 +240,12 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        if not deterministic and rowOrderIndependent and evalType in _GROUPED_AGG_EVAL_TYPES:
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": _UNSUPPORTED_AGG_OP},
+            )
+        self._rowOrderIndependent = (not deterministic) and rowOrderIndependent
         if isinstance(returnType, DataType):
             # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
             # conversion stays on ``returnType`` so unrelated types fail only when consumed.
@@ -513,6 +545,16 @@ class UserDefinedFunction:
                 )
 
     @property
+    def rowOrderIndependent(self) -> bool:
+        """
+        Returns true iff the UDF evaluation for each row is independent of row ordering,
+        prior rows, partition index, and task/file-split context.
+
+        .. versionadded:: 5.0.0
+        """
+        return self.deterministic or self._rowOrderIndependent
+
+    @property
     def returnType(self) -> DataType:
         # Make sure this is called after SparkContext is initialized.
         # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
@@ -567,6 +609,7 @@ class UserDefinedFunction:
             map(_to_java_column_opt, transpiled),
             input_categories,
             jbuf,
+            self._rowOrderIndependent,
         )
         return judf
 
@@ -739,10 +782,16 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.rowOrderIndependent = self.rowOrderIndependent  # type: ignore[attr-defined]
         wrapper.bufferSchema = self.bufferSchema  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())
+        wrapper.asRowOrderIndependentNondeterministic = (  # type: ignore[attr-defined]
+            functools.wraps(self.asRowOrderIndependentNondeterministic)(
+                lambda: self.asRowOrderIndependentNondeterministic()._wrapped()
+            )
+        )
         wrapper._unwrapped = self  # type: ignore[attr-defined]
         return wrapper  # type: ignore[return-value]
 
@@ -756,11 +805,44 @@ class UserDefinedFunction:
         # with 'deterministic' updated. See SPARK-23233.
         self._judf_placeholder = None
         self.deterministic = False
+        self._rowOrderIndependent = False
         # A transpiled rewrite replaces the (now nondeterministic) Python UDF
         # with a plain Catalyst expression, which the optimizer is free to
         # fold, reorder, or duplicate -- discarding the nondeterminism barrier
         # the caller just asked for. Drop any transpiled options so a
         # nondeterministic UDF always runs as interpreted Python.
+        self.transpiled = []
+        self._transpiled_param_names = []
+        self._transpiled_input_categories = []
+        self._positional_only_param_names = frozenset()
+        return self
+
+    def asRowOrderIndependentNondeterministic(self) -> "UserDefinedFunction":
+        """
+        Updates UserDefinedFunction to nondeterministic while declaring that each row's
+        evaluation is independent of row ordering, prior rows, partition index, and
+        task/file-split context.
+
+        .. versionadded:: 5.0.0
+
+        Returns
+        -------
+        UserDefinedFunction
+            This UDF instance marked as row-order-independent nondeterministic.
+
+        Notes
+        -----
+        Grouped aggregate and window UDFs do not support row-order-independent
+        nondeterminism and raise a :class:`PySparkValueError`.
+        """
+        if self.evalType in _GROUPED_AGG_EVAL_TYPES:
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": _UNSUPPORTED_AGG_OP},
+            )
+        self._judf_placeholder = None
+        self.deterministic = False
+        self._rowOrderIndependent = True
         self.transpiled = []
         self._transpiled_param_names = []
         self._transpiled_input_categories = []
@@ -925,6 +1007,7 @@ class UDFRegistration:
                 deterministic=f.deterministic,
                 # Preserve the incremental aggregator's buffer schema (None for other UDFs).
                 bufferSchema=getattr(f, "bufferSchema", None),
+                rowOrderIndependent=(not f.deterministic) and f.rowOrderIndependent,
             )
             register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
             return_udf = register_udf

@@ -1750,6 +1750,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
     IS_DISTINCT_FIELD_NUMBER: builtins.int
+    ROW_ORDER_INDEPENDENT_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1767,6 +1768,10 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def java_udf(self) -> global___JavaUDF: ...
     is_distinct: builtins.bool
     """(Required) Indicate if this function should be applied on distinct values."""
+    row_order_independent: builtins.bool
+    """(Optional) Indicate if each row's evaluation is independent of row ordering, prior rows,
+    partition index, and task/file-split context. Defaults to false when unset.
+    """
     def __init__(
         self,
         *,
@@ -1777,16 +1782,21 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
         is_distinct: builtins.bool = ...,
+        row_order_independent: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_row_order_independent",
+            b"_row_order_independent",
             "function",
             b"function",
             "java_udf",
             b"java_udf",
             "python_udf",
             b"python_udf",
+            "row_order_independent",
+            b"row_order_independent",
             "scalar_scala_udf",
             b"scalar_scala_udf",
         ],
@@ -1794,6 +1804,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_row_order_independent",
+            b"_row_order_independent",
             "arguments",
             b"arguments",
             "deterministic",
@@ -1808,10 +1820,18 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"java_udf",
             "python_udf",
             b"python_udf",
+            "row_order_independent",
+            b"row_order_independent",
             "scalar_scala_udf",
             b"scalar_scala_udf",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_row_order_independent", b"_row_order_independent"],
+    ) -> typing_extensions.Literal["row_order_independent"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
     ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf"] | None: ...

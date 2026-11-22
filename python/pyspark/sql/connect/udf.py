@@ -23,7 +23,7 @@ import sys
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
@@ -122,6 +122,7 @@ def _create_udf(
     name: Optional[str] = None,
     deterministic: bool = True,
     bufferSchema: Optional[StructType] = None,
+    rowOrderIndependent: bool = False,
 ) -> "UserDefinedFunctionLike":
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -131,6 +132,7 @@ def _create_udf(
         evalType=evalType,
         deterministic=deterministic,
         bufferSchema=bufferSchema,
+        rowOrderIndependent=rowOrderIndependent,
     )
     return udf_obj._wrapped()
 
@@ -154,6 +156,7 @@ class UserDefinedFunction:
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
         bufferSchema: Optional[StructType] = None,
+        rowOrderIndependent: bool = False,
     ):
         if not callable(func):
             raise PySparkTypeError(
@@ -193,6 +196,16 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        if (
+            not deterministic
+            and rowOrderIndependent
+            and evalType in PySparkUserDefinedFunction._GROUPED_AGG_EVAL_TYPES
+        ):
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": PySparkUserDefinedFunction._UNSUPPORTED_AGG_OP},
+            )
+        self._rowOrderIndependent = (not deterministic) and rowOrderIndependent
         # Intermediate aggregation buffer schema, set only for an incremental Python aggregator
         # (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. A first-class field
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
@@ -203,6 +216,16 @@ class UserDefinedFunction:
             _check_no_char_varchar(returnType, "Python UDF return types")
         if bufferSchema is not None:
             _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
+
+    @property
+    def rowOrderIndependent(self) -> bool:
+        """
+        Returns true iff the UDF evaluation for each row is independent of row ordering,
+        prior rows, partition index, and task/file-split context.
+
+        .. versionadded:: 5.0.0
+        """
+        return self.deterministic or self._rowOrderIndependent
 
     @property
     def returnType(self) -> DataType:
@@ -243,6 +266,7 @@ class UserDefinedFunction:
             function=py_udf,
             deterministic=self.deterministic,
             arguments=arg_exprs,
+            row_order_independent=(not self.deterministic) and self._rowOrderIndependent,
         )
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
@@ -280,10 +304,16 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.rowOrderIndependent = self.rowOrderIndependent  # type: ignore[attr-defined]
         wrapper.bufferSchema = self.bufferSchema  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())
+        wrapper.asRowOrderIndependentNondeterministic = (  # type: ignore[attr-defined]
+            functools.wraps(self.asRowOrderIndependentNondeterministic)(
+                lambda: self.asRowOrderIndependentNondeterministic()._wrapped()
+            )
+        )
         wrapper._unwrapped = self  # type: ignore[attr-defined]
         return wrapper  # type: ignore[return-value]
 
@@ -294,6 +324,34 @@ class UserDefinedFunction:
         .. versionadded:: 3.4.0
         """
         self.deterministic = False
+        self._rowOrderIndependent = False
+        return self
+
+    def asRowOrderIndependentNondeterministic(self) -> "UserDefinedFunction":
+        """
+        Updates UserDefinedFunction to nondeterministic while declaring that each row's
+        evaluation is independent of row ordering, prior rows, partition index, and
+        task/file-split context.
+
+        .. versionadded:: 5.0.0
+
+        Returns
+        -------
+        UserDefinedFunction
+            This UDF instance marked as row-order-independent nondeterministic.
+
+        Notes
+        -----
+        Grouped aggregate and window UDFs do not support row-order-independent
+        nondeterminism and raise a :class:`PySparkValueError`.
+        """
+        if self.evalType in PySparkUserDefinedFunction._GROUPED_AGG_EVAL_TYPES:
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": PySparkUserDefinedFunction._UNSUPPORTED_AGG_OP},
+            )
+        self.deterministic = False
+        self._rowOrderIndependent = True
         return self
 
 
@@ -352,6 +410,7 @@ class UDFRegistration:
                 f.deterministic,
                 # Set for the incremental aggregator (see pyspark.sql.aggregator).
                 buffer_type=getattr(f, "bufferSchema", None),
+                row_order_independent=(not f.deterministic) and f.rowOrderIndependent,
             )
             return f
         else:

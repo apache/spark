@@ -559,3 +559,19 @@ class MyDummyUDTPythonUDF extends UserDefinedPythonFunction(
   dataType = new ExamplePointUDT,
   pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
   udfDeterministic = true)
+
+class MyDummyRowOrderIndepPythonUDF extends UserDefinedPythonFunction(
+  name = "dummyRowOrderIndepUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+  udfDeterministic = false,
+  udfRowOrderIndependent = true)
+
+class MyDummyRowOrderIndepScalarPandasUDF extends UserDefinedPythonFunction(
+  name = "dummyRowOrderIndepScalarPandasUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+  udfDeterministic = false,
+  udfRowOrderIndependent = true)

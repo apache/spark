@@ -21,20 +21,21 @@ import java.math.BigDecimal
 import java.sql.Timestamp
 import java.time.{Instant, LocalDate, LocalTime}
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, Project}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
@@ -62,6 +63,14 @@ private case class KryoBufAggregator() extends Aggregator[Long, KryoEncodedBuf, 
   override def finish(reduction: KryoEncodedBuf): Long = reduction.value
   override def bufferEncoder: Encoder[KryoEncodedBuf] = Encoders.kryo[KryoEncodedBuf]
   override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+private object RowOrderIndepUDFTestCounters {
+  val rowOrderIndepCalls = new AtomicInteger(0)
+  val legacyNondetCalls = new AtomicInteger(0)
+  val parquetViewCalls = new AtomicInteger(0)
+  val chainingCalls = new AtomicInteger(0)
+  val wholeOptimizerCalls = new AtomicInteger(0)
 }
 
 class UDFSuite extends SharedSparkSession {
@@ -1329,5 +1338,263 @@ class UDFSuite extends SharedSparkSession {
     }
     assert(code.nonEmpty && code.forall(!_.contains("fieldName")))
     checkAnswer(df, Row(1) :: Row(1) :: Nil)
+  }
+
+  test("rowOrderIndependent UDF filter pushdown and call counts") {
+    val rowOrderIndepFn = udf((v: Int) => {
+      RowOrderIndepUDFTestCounters.rowOrderIndepCalls.incrementAndGet()
+      v * 2
+    }).asRowOrderIndependentNondeterministic()
+
+    val legacyNondetFn = udf((v: Int) => {
+      RowOrderIndepUDFTestCounters.legacyNondetCalls.incrementAndGet()
+      v * 2
+    }).asNondeterministic()
+
+    val input = (1 to 20).map(i => (i, i - 10)).toDF("a", "b")
+
+    // Disjoint deterministic filter pushes below Project; UDF runs only on surviving rows.
+    RowOrderIndepUDFTestCounters.rowOrderIndepCalls.set(0)
+    val dfRoiPush = input.select($"a", rowOrderIndepFn($"b").as("c")).filter($"a" > 15)
+    assert(dfRoiPush.queryExecution.optimizedPlan.collect {
+      case p: Project if p.child.isInstanceOf[LogicalFilter] => p
+    }.nonEmpty)
+    assert(dfRoiPush.collect().length === 5)
+    assert(RowOrderIndepUDFTestCounters.rowOrderIndepCalls.get() === 5)
+
+    // Mixed conjuncts split cleanly: a > 10 pushes below Project, c > 0 stays above.
+    RowOrderIndepUDFTestCounters.rowOrderIndepCalls.set(0)
+    val dfMixed = input.select($"a", rowOrderIndepFn($"b").as("c")).filter($"c" > 0 && $"a" > 10)
+    val mixedResult = dfMixed.collect()
+    assert(mixedResult.length === 10)
+    assert(mixedResult.forall(_.getInt(1) > 0))
+    assert(RowOrderIndepUDFTestCounters.rowOrderIndepCalls.get() === 10)
+
+    // Legacy .asNondeterministic() blocks filter pushdown; UDF runs on all 20 rows.
+    RowOrderIndepUDFTestCounters.legacyNondetCalls.set(0)
+    val dfLegacy = input.select($"a", legacyNondetFn($"b").as("c")).filter($"a" > 15)
+    assert(dfLegacy.queryExecution.optimizedPlan.collect {
+      case f: LogicalFilter if f.child.isInstanceOf[Project] => f
+    }.nonEmpty)
+    assert(dfLegacy.collect().length === 5)
+    assert(RowOrderIndepUDFTestCounters.legacyNondetCalls.get() === 20)
+
+    // Built-in rand(0) remains blocked from pushdown and preserves baseline output bit-for-bit.
+    val randBaseline = input.select($"a", rand(0).as("r")).collect()
+      .map(r => (r.getInt(0), r.getDouble(1))).toMap
+    val randFiltered = input.select($"a", rand(0).as("r")).filter($"a" > 15).collect()
+    assert(randFiltered.forall(r => r.getDouble(1) == randBaseline(r.getInt(0))))
+  }
+
+  test("whole SparkOptimizer preserves single ScalaUDF instance and 1x invocation count") {
+    val roiStrFn = udf((s: String) => {
+      RowOrderIndepUDFTestCounters.wholeOptimizerCalls.incrementAndGet()
+      s"${s}_x"
+    }).asRowOrderIndependentNondeterministic()
+
+    withTempPath { dir =>
+      (1 to 20).map(i => (i, s"val_$i")).toDF("a", "s")
+        .write.parquet(dir.getCanonicalPath)
+      val base = spark.read.parquet(dir.getCanonicalPath)
+
+      def countScalaUdfs(df: DataFrame): Int = {
+        df.queryExecution.optimizedPlan.collect {
+          case p => p.expressions.flatMap(_.collect { case u: ScalaUDF => u }).size
+        }.sum
+      }
+
+      // (1) Single-reference projection collapse + filter pushdown across full SparkOptimizer.
+      RowOrderIndepUDFTestCounters.wholeOptimizerCalls.set(0)
+      val dfSingleCollapse = base
+        .select($"a", roiStrFn($"s").as("c"))
+        .select($"a", coalesce(upper($"c"), lit("")).as("u"))
+        .filter($"a" > 15)
+      assert(countScalaUdfs(dfSingleCollapse) === 1)
+      assert(dfSingleCollapse.queryExecution.optimizedPlan.collect {
+        case p: Project => p
+      }.size === 1)
+      val singleCollapseRes = dfSingleCollapse.collect().map(_.getInt(0)).sorted
+      assert(singleCollapseRes.toSeq === (16 to 20))
+      assert(RowOrderIndepUDFTestCounters.wholeOptimizerCalls.get() === 5)
+
+      // (2) Single-reference projection + post-UDF LIKE predicate across full SparkOptimizer.
+      RowOrderIndepUDFTestCounters.wholeOptimizerCalls.set(0)
+      val dfSingleLike = base
+        .select($"a", roiStrFn($"s").as("c"))
+        .select($"a", upper($"c").as("u"))
+        .filter($"a" > 15 && $"u".like("%X%"))
+      assert(countScalaUdfs(dfSingleLike) === 1)
+      val singleLikeRes = dfSingleLike.collect().map(_.getInt(0)).sorted
+      assert(singleLikeRes.toSeq === (16 to 20))
+      assert(RowOrderIndepUDFTestCounters.wholeOptimizerCalls.get() === 5)
+
+      // (3) Multi-reference consumer across full SparkOptimizer keeps AST count == 1 and 1x calls.
+      RowOrderIndepUDFTestCounters.wholeOptimizerCalls.set(0)
+      val dfMultiRef = base
+        .select($"a", roiStrFn($"s").as("c"))
+        .select($"a", concat($"c", lit("_1")).as("u1"), concat($"c", lit("_2")).as("u2"))
+        .filter($"a" > 15)
+      assert(countScalaUdfs(dfMultiRef) === 1)
+      val multiRes = dfMultiRef.collect().map(_.getInt(0)).sorted
+      assert(multiRes.toSeq === (16 to 20))
+      assert(RowOrderIndepUDFTestCounters.wholeOptimizerCalls.get() === 5)
+    }
+  }
+
+  test("opaque temp view pushes partition/data filters into Parquet scan") {
+    withTempPath { dir =>
+      val rows = for {
+        dt <- Seq("2026-01-14", "2026-01-15")
+        country <- Seq("US", "CA")
+        i <- 1 to 10
+      } yield (i, country, dt, s"$country-$i")
+      rows.toDF("id", "country", "event_date", "payload")
+        .repartition(1)
+        .write
+        .partitionBy("event_date")
+        .parquet(dir.getCanonicalPath)
+
+      RowOrderIndepUDFTestCounters.parquetViewCalls.set(0)
+      val scoreUdf = udf((payload: String) => {
+        RowOrderIndepUDFTestCounters.parquetViewCalls.incrementAndGet()
+        payload.length
+      }).asRowOrderIndependentNondeterministic()
+
+      withTempView("events", "scored_events") {
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("events")
+        spark.udf.register("score_udf", scoreUdf)
+        sql(
+          """
+            |CREATE TEMP VIEW scored_events AS
+            |SELECT id, country, event_date, score_udf(payload) AS score
+            |FROM events
+          """.stripMargin)
+
+        val df = sql(
+          """
+            |SELECT id, score
+            |FROM scored_events
+            |WHERE event_date = '2026-01-15' AND country = 'US'
+          """.stripMargin)
+        assert(df.collect().length === 10)
+        assert(RowOrderIndepUDFTestCounters.parquetViewCalls.get() === 10)
+
+        val scan = df.queryExecution.executedPlan.collectFirst {
+          case s: FileSourceScanExec => s
+        }.get
+        assert(scan.partitionFilters.nonEmpty)
+        assert(scan.dataFilters.nonEmpty)
+      }
+    }
+  }
+
+  test("ANSI throwable and Divide predicate ordering and error suppression") {
+    val input = Seq((1, 0, 10), (2, 1, 20)).toDF("id", "step", "b")
+    val rowOrderIndepFn = udf((b: Int) => if (b == 10) -1 else 1)
+      .asRowOrderIndependentNondeterministic()
+    val throwableFn = udf((b: Int) => {
+      if (b <= 10) throw new IllegalArgumentException("bad row")
+      b
+    }).asRowOrderIndependentNondeterministic()
+    val detThrowingUdf = udf((step: Int) => {
+      if (step == 0) throw new IllegalArgumentException("det boom")
+      step > 0
+    })
+
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        // When c <= 0 for step == 0, sequence(1, 3, step) (throwable = true) must stay above
+        // Project so c > 0 short-circuits without throwing INVALID_PARAMETER_VALUE.ZERO.
+        val dfSafe = input.select($"id", $"step", rowOrderIndepFn($"b").as("c"))
+          .filter($"c" > 0 && size(sequence(lit(1), lit(3), $"step")) > 0)
+        checkAnswer(dfSafe, Row(2, 1, 1) :: Nil)
+
+        // Likewise, ANSI 10 / step > 1 (throwable == false, !canEvaluateUnconditionally) written
+        // AFTER stayed-up c > 0 must stay above Project and never throw DIVIDE_BY_ZERO on step == 0
+        // while trailing NoThrow (id > 0) still pushes cleanly.
+        val dfAnsiDivSafe = input.select($"id", $"step", rowOrderIndepFn($"b").as("c"))
+          .filter($"c" > 0 && (lit(10) / $"step" > 1) && $"id" > 0)
+        checkAnswer(dfAnsiDivSafe, Row(2, 1, 1) :: Nil)
+
+        // Deterministic throwing ScalaUDF (!ExprUtils.canEvaluateUnconditionally) after stayed-up
+        // c > 0 stays above Project without throwing on step == 0, while id > 0 pushes below.
+        val dfDetUdfSafe = input.select($"id", $"step", rowOrderIndepFn($"b").as("c"))
+          .filter($"c" > 0 && detThrowingUdf($"step") && $"id" > 0)
+        assert(dfDetUdfSafe.queryExecution.optimizedPlan.collect {
+          case p: Project if p.child.isInstanceOf[LogicalFilter] => p
+        }.nonEmpty)
+        checkAnswer(dfDetUdfSafe, Row(2, 1, 1) :: Nil)
+
+        // When step =!= 0 precedes 10 / step > 1 and sequence, the guarded prefix pushes below
+        // Project in exact written order without throwing.
+        val dfPushBoth = input.select($"id", $"step", rowOrderIndepFn($"b").as("c"))
+          .filter(
+            $"step" =!= 0 &&
+              (lit(10) / $"step" > 1) &&
+              size(sequence(lit(1), lit(3), $"step")) > 0 &&
+              $"c" > 0)
+        checkAnswer(dfPushBoth, Row(2, 1, 1) :: Nil)
+
+        // Pushing id > 1 below Project suppresses throwableUDF error on id == 1 row.
+        val dfSuppress = input.select($"id", throwableFn($"b").as("v")).filter($"id" > 1)
+        checkAnswer(dfSuppress, Row(2, 20) :: Nil)
+      }
+    }
+  }
+
+  test("chaining reset, registration, and UDAF rejection") {
+    val base = udf((x: Int) => {
+      RowOrderIndepUDFTestCounters.chainingCalls.incrementAndGet()
+      x + 1
+    })
+    assert(base.deterministic)
+    assert(base.rowOrderIndependent)
+
+    val rowIndep = base.asRowOrderIndependentNondeterministic()
+    assert(!rowIndep.deterministic)
+    assert(rowIndep.rowOrderIndependent)
+
+    val resetNondet = rowIndep.asNondeterministic()
+    assert(!resetNondet.deterministic)
+    assert(!resetNondet.rowOrderIndependent)
+
+    val reEnabled = resetNondet.asRowOrderIndependentNondeterministic()
+    assert(!reEnabled.deterministic)
+    assert(reEnabled.rowOrderIndependent)
+
+    // Verify resetNondet blocks pushdown while reEnabled allows it.
+    val dfInput = (1 to 10).toDF("a")
+    RowOrderIndepUDFTestCounters.chainingCalls.set(0)
+    assert(dfInput.select($"a", resetNondet($"a").as("c")).filter($"a" > 8).collect().length === 2)
+    assert(RowOrderIndepUDFTestCounters.chainingCalls.get() === 10)
+
+    RowOrderIndepUDFTestCounters.chainingCalls.set(0)
+    assert(dfInput.select($"a", reEnabled($"a").as("c")).filter($"a" > 8).collect().length === 2)
+    assert(RowOrderIndepUDFTestCounters.chainingCalls.get() === 2)
+
+    // Verify SQL registration preserves rowOrderIndependent.
+    spark.udf.register("row_indep_inc", reEnabled)
+    withTempView("src_n12") {
+      dfInput.createOrReplaceTempView("src_n12")
+      RowOrderIndepUDFTestCounters.chainingCalls.set(0)
+      val sqlDf = sql("SELECT a, c FROM (SELECT a, row_indep_inc(a) AS c FROM src_n12) WHERE a > 8")
+      assert(sqlDf.collect().length === 2)
+      assert(RowOrderIndepUDFTestCounters.chainingCalls.get() === 2)
+    }
+
+    // Verify UserDefinedAggregator rejects asRowOrderIndependentNondeterministic.
+    val uda = udaf(KryoBufAggregator())
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        uda.asRowOrderIndependentNondeterministic()
+      },
+      condition = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+      parameters = Map("functionName" -> uda.name))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        uda.withName("bad_uda").asRowOrderIndependentNondeterministic()
+      },
+      condition = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+      parameters = Map("functionName" -> "bad_uda"))
   }
 }

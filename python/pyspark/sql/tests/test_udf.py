@@ -31,11 +31,12 @@ from pyspark.errors import (
     AnalysisException,
     PySparkNotImplementedError,
     PySparkTypeError,
+    PySparkValueError,
     PythonException,
 )
 from pyspark.logger import PySparkLogger
 from pyspark.sql import Column, Row, SparkSession
-from pyspark.sql.functions import assert_true, col, lit, rand, udf
+from pyspark.sql.functions import assert_true, col, lit, pandas_udf, rand, udf
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -62,7 +63,15 @@ from pyspark.testing.sqlutils import (
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    eventually,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    timeout,
+)
 from pyspark.util import PythonEvalType, is_remote_only
 
 
@@ -1802,6 +1811,114 @@ class BaseUDFTestsMixin:
 
             check_logs()
 
+    def test_row_order_independent_nondeterministic_udf(self):
+        f = udf(lambda x: x + 1, IntegerType())
+        self.assertTrue(f.deterministic)
+        self.assertTrue(f.rowOrderIndependent)
+
+        row_indep = f.asRowOrderIndependentNondeterministic()
+        self.assertFalse(row_indep.deterministic)
+        self.assertTrue(row_indep.rowOrderIndependent)
+
+        reset = row_indep.asNondeterministic()
+        self.assertFalse(reset.deterministic)
+        self.assertFalse(reset.rowOrderIndependent)
+
+        re_enabled = reset.asRowOrderIndependentNondeterministic()
+        self.assertFalse(re_enabled.deterministic)
+        self.assertTrue(re_enabled.rowOrderIndependent)
+
+        with self.temp_func("row_indep_inc"):
+            registered = self.spark.udf.register("row_indep_inc", re_enabled)
+            self.assertFalse(registered.deterministic)
+            self.assertTrue(registered.rowOrderIndependent)
+            rows = (
+                self.spark.range(10)
+                .selectExpr("id", "row_indep_inc(cast(id as int)) AS v")
+                .filter("id >= 8")
+                .orderBy("id")
+                .collect()
+            )
+            self.assertEqual([(r[0], r[1]) for r in rows], [(8, 9), (9, 10)])
+
+            roi_bool = udf(lambda x: x > 0, BooleanType()).asRowOrderIndependentNondeterministic()
+            src = self.spark.range(10)
+            filtered = (
+                src.filter(roi_bool(col("id").cast("int")) & (col("id") >= 8))
+                .orderBy("id")
+                .collect()
+            )
+            self.assertEqual([r[0] for r in filtered], [8, 9])
+
+        expected_op = "Row-order-independent nondeterminism for grouped aggregate and window UDFs"
+        for eval_type in (
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+        ):
+            agg_udf = UserDefinedFunction(
+                lambda s: s,
+                DoubleType(),
+                evalType=eval_type,
+            )
+            with self.assertRaises(PySparkValueError) as pe:
+                agg_udf.asRowOrderIndependentNondeterministic()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": expected_op},
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_row_order_independent_nondeterministic_pandas_udf(self):
+        import pandas as pd
+
+        @pandas_udf("int")
+        def pandas_inc(s: pd.Series) -> pd.Series:
+            return s + 1
+
+        self.assertTrue(pandas_inc.deterministic)
+        self.assertTrue(pandas_inc.rowOrderIndependent)
+
+        roi_pandas = pandas_inc.asRowOrderIndependentNondeterministic()
+        self.assertFalse(roi_pandas.deterministic)
+        self.assertTrue(roi_pandas.rowOrderIndependent)
+
+        rows = (
+            self.spark.range(10)
+            .select(col("id"), roi_pandas(col("id").cast("int")).alias("v"))
+            .filter(col("id") >= 8)
+            .orderBy("id")
+            .collect()
+        )
+        self.assertEqual([(r[0], r[1]) for r in rows], [(8, 9), (9, 10)])
+
+        reset_pandas = roi_pandas.asNondeterministic()
+        self.assertFalse(reset_pandas.deterministic)
+        self.assertFalse(reset_pandas.rowOrderIndependent)
+
+        @pandas_udf("double")
+        def pandas_mean(s: pd.Series) -> float:
+            return float(s.mean())
+
+        expected_op = "Row-order-independent nondeterminism for grouped aggregate and window UDFs"
+        with self.assertRaises(PySparkValueError) as pe:
+            pandas_mean.asRowOrderIndependentNondeterministic()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": expected_op},
+        )
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -1843,6 +1960,38 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
                     )
                     rets = [x["ret"] for x in df.collect()]
                     self.assertEqual(rets, list(range(4, 1004)))
+
+    def test_row_order_independent_clears_transpilation(self):
+        def add_one(x: int) -> int:
+            return x + 1
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFs": "true",
+                "spark.sql.ansi.enabled": "true",
+            }
+        ):
+            det_udf = udf(add_one, LongType())
+            self.assertTrue(len(det_udf._unwrapped.transpiled) > 0)
+            det_plan_str = (
+                self.spark.range(4)
+                .select(det_udf(col("id")).alias("v"))
+                ._jdf.queryExecution()
+                .optimizedPlan()
+                .toString()
+            )
+            self.assertNotIn("BatchEvalPython", det_plan_str)
+
+            roi_udf = det_udf.asRowOrderIndependentNondeterministic()
+            self.assertEqual(roi_udf._unwrapped.transpiled, [])
+            self.assertEqual(roi_udf._unwrapped._transpiled_param_names, [])
+            self.assertEqual(roi_udf._unwrapped._transpiled_input_categories, [])
+            self.assertEqual(roi_udf._unwrapped._positional_only_param_names, frozenset())
+
+            roi_df = self.spark.range(4).select(roi_udf(col("id")).alias("v"))
+            plan_str = roi_df._jdf.queryExecution().optimizedPlan().toString()
+            self.assertIn("BatchEvalPython", plan_str)
+            self.assertEqual([r["v"] for r in roi_df.collect()], [1, 2, 3, 4])
 
 
 class UDFInitializationTests(unittest.TestCase):
