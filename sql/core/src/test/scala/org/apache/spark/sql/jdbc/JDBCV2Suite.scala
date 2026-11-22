@@ -31,8 +31,9 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
-import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
+import org.apache.spark.sql.connector.{IntegralAverage, NondeterministicIntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
@@ -258,6 +259,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       stmt.executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
+    h2Dialect.registerFunction("my_nondeterministic_avg", NondeterministicIntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
     h2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
     h2Dialect.registerFunction(
@@ -343,9 +345,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
 
   private def checkSchemaNames(df: DataFrame, names: Seq[String]): Unit = {
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
+    val scan = scanOf(df)
     assert(scan.schema.names.sameElements(names))
   }
 
@@ -1020,11 +1020,48 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
-  test("SPARK-61173: a scan with a pushed aggregate reads the same rows again") {
+  test("SPARK-61870: a scan with a pushed aggregate reads the same rows again") {
     val agg = spark.read.table("h2.test.employee").groupBy("DEPT").sum("SALARY")
     checkAggregateRemoved(agg)
     val scan = scanOf(agg)
     assert(scan.repeatableRead && !scan.onlyRowWisePushdowns)
+  }
+
+  test("SPARK-61870: a scan with a pushed aggregate function that is not deterministic does not " +
+    "read the same rows again") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      withTempPath { dir =>
+        val factPath = dir.getCanonicalPath
+        spark.range(10).selectExpr("id", "IF(id % 2 = 0, 'fred', 'mary') AS name")
+          .write.parquet(factPath)
+        // A JDBC scan reports no statistics, so a small default size lets it be a creation side.
+        withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "1000",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+          Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach {
+            case (f, repeatable) =>
+              val df = sql(s"SELECT name, h2.$f(id) AS v FROM h2.test.people GROUP BY name")
+              checkAggregateRemoved(df)
+              assert(scanOf(df).isRepeatableRead == repeatable, f)
+              // `v > 0` keeps every group but is a selective `Filter` above the scan, and the
+              // bloom filter's subquery would read the scan again.
+              val joined = df.where("v > 0").join(spark.read.parquet(factPath), "name")
+              val plan = joined.queryExecution.optimizedPlan
+              val hasBloomFilter = plan.exists(_.expressions.exists(_.exists {
+                case _: BloomFilterMightContain => true
+                case _ => false
+              }))
+              assert(hasBloomFilter == repeatable, s"$f:\n$plan")
+          }
+        }
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
   }
 
   test("scan with aggregate push-down, top N push-down and offset push-down") {
@@ -1048,7 +1085,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkSortRemoved(topN1)
     checkLimitRemoved(topN1)
     // A pushed top N lets the source pick other rows on a second read.
-    assert(!scanOf(topN1).repeatableRead)
+    assert(!scanOf(topN1).isRepeatableRead)
     checkPushedInfo(topN1,
       "PushedAggregates: [SUM(SALARY)]",
       "PushedGroupByExpressions: [DEPT]",

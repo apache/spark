@@ -1649,6 +1649,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     "when read again") {
     // Each read of the scan returns other rows, as a LIMIT without ORDER BY may. A bloom filter
     // built from another read than the join's would miss the join's key and drop its fact rows.
+    // `d.i > 0` keeps every row but is a selective `Filter` above the scan.
     withTempDir { dir =>
       val factPath = new File(dir, "fact").getCanonicalPath
       spark.range(1000).selectExpr("id", "CAST(id % 11 AS INT) AS k").write.parquet(factPath)
@@ -1665,6 +1666,53 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           assert(bloomFilterKeys(df.queryExecution.optimizedPlan).isEmpty,
             df.queryExecution.optimizedPlan)
           checkAnswer(df, Row(0))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61870: a DSv2 scan that reads the same rows again is a creation side") {
+    // A row-wise scan reads the same rows again. So does a scan with a pushed aggregate or join, or
+    // the target read of a copy-on-write UPDATE, which is not row-wise. That one counts under a
+    // selective `Filter`, but not for a key whose DPP filter is dropped, where `canEvaluateAgain`
+    // still asks for `onlyRowWisePushdowns`. The source keeps `i > 3` in a `Filter` above its
+    // scan. The V2 fact takes the inferred `part > 3` in fully, so when the dimension gives no
+    // bloom filter, the fact gives one on `d.i`.
+    withTempDir { dir =>
+      val factPath = new File(dir, "fact").getCanonicalPath
+      spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+        .write.partitionBy("part").parquet(factPath)
+      withTempView("rr_fact", "rr_dim") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+            SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+          spark.read.parquet(factPath).createOrReplaceTempView("rr_fact")
+          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+            .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true").load()
+            .createOrReplaceTempView("rr_dim")
+          Seq(false, true).foreach { dpp =>
+            val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false",
+                SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp.toString) {
+              sql("SELECT f.id FROM rr_fact f JOIN rr_dim d ON f.part = d.i WHERE d.i > 3")
+                .queryExecution.optimizedPlan
+            }
+            assert(plan.exists(_.expressions.exists(
+              _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, s"dpp = $dpp:\n$plan")
+            // (onlyRowWisePushdowns, repeatableRead) of the dimension's scan, first as built.
+            Seq((true, false), (false, true), (false, false)).foreach {
+              case (rowWise, repeatable) =>
+                val rewritten = plan.transform {
+                  case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
+                    assert(r.onlyRowWisePushdowns && !r.repeatableRead, plan)
+                    r.copy(onlyRowWisePushdowns = rowWise, repeatableRead = repeatable)
+                }
+                val expected = if (rowWise || (repeatable && !dpp)) Seq("part") else Seq("i")
+                assert(bloomFilterKeyNames(InjectRuntimeFilter(rewritten)) == expected,
+                  s"dpp = $dpp, onlyRowWisePushdowns = $rowWise, repeatableRead = $repeatable:\n" +
+                    rewritten)
+            }
+          }
         }
       }
     }
@@ -2375,7 +2423,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
               case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") => r
             }.getOrElse(fail(s"no dimension scan in $clue"))
             assert(scan.onlyRowWisePushdowns == rowWiseAndRepeatable, clue)
-            assert(scan.repeatableRead == rowWiseAndRepeatable, clue)
+            assert(scan.isRepeatableRead == rowWiseAndRepeatable, clue)
             assert(scan.pushedFilters.exists(_.isInstanceOf[GreaterThan]) == pushed, clue)
             // `i > 3` stays in a `Filter` above the scan only if the scan did not take it in.
             assert(optimized.exists {
@@ -2387,34 +2435,6 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             } == !pushed, clue)
             assert(bloomFilterKeyNames(optimized) == bloomFilterColumns, clue)
             checkAnswer(df, factRows(p => parts.contains(p)))
-          }
-
-          // A scan that reads the same rows again but is not row-wise, as with a pushed aggregate
-          // or join or as the target read of a copy-on-write UPDATE, still counts under a selective
-          // `Filter`, but not for a key whose DPP filter is dropped: such a scan records no pushed
-          // filters for `cannotFail` to check. The source keeps `i > 3` in a `Filter` above its
-          // scan here.
-          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
-            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
-            .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true").load()
-            .createOrReplaceTempView("rf_lim")
-          Seq(false, true).foreach { dpp =>
-            val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false",
-                SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp.toString) {
-              sql("SELECT f.id FROM rf_fact f JOIN rf_lim d ON f.part = d.i WHERE d.i > 3")
-                .queryExecution.optimizedPlan
-            }
-            assert(plan.exists(_.expressions.exists(
-              _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, s"dpp = $dpp:\n$plan")
-            Seq(true, false).foreach { repeatable =>
-              val rewritten = plan.transform {
-                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
-                  r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
-              }
-              val expected = if (repeatable && !dpp) Seq("part") else Seq("i")
-              assert(bloomFilterKeyNames(InjectRuntimeFilter(rewritten)) == expected,
-                s"dpp = $dpp, repeatableRead = $repeatable:\n$rewritten")
-            }
           }
 
           // A scan whose pushed filters are selective but which is too large for the creation side

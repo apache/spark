@@ -31,7 +31,7 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._
 
-  test("SPARK-61173: the target read of a copy-on-write update reads the same rows again") {
+  test("SPARK-61870: the target read of a copy-on-write update reads the same rows again") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }

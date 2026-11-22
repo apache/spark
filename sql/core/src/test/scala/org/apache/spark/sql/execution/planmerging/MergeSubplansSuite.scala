@@ -433,6 +433,59 @@ class MergeSubplansSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
+  test("SPARK-61818: Merge subqueries with existence joins that differ below the join") {
+    // `RewritePredicateSubquery` creates a fresh `exists` attribute for every existence join.
+    val exists1 = AttributeReference("exists", BooleanType, nullable = false)()
+    val exists2 = AttributeReference("exists", BooleanType, nullable = false)()
+    val subquery1 = ScalarSubquery(
+      testRelation.select($"a", $"b")
+        .join(testRelation2, ExistenceJoin(exists1), Some($"a" === $"d"))
+        .where($"b" > 1 || exists1)
+        .groupBy()(max($"b").as("max_b")))
+    val subquery2 = ScalarSubquery(
+      testRelation.select($"a", $"b", $"c")
+        .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"d"))
+        .where($"b" > 1 || exists2)
+        .groupBy()(count($"c").as("count_c")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    val mergedSubquery = testRelation.select($"a", $"b", $"c")
+      .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"d"))
+      .where($"b" > 1 || exists2)
+      .groupBy()(max($"b").as("max_b"), count($"c").as("count_c"))
+      .select(CreateNamedStruct(Seq(
+        Literal("max_b"), $"max_b",
+        Literal("count_c"), $"count_c"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-61818: Do not merge subqueries with existence joins with different conditions") {
+    val exists1 = AttributeReference("exists", BooleanType, nullable = false)()
+    val exists2 = AttributeReference("exists", BooleanType, nullable = false)()
+    val subquery1 = ScalarSubquery(
+      testRelation.select($"a", $"b")
+        .join(testRelation2, ExistenceJoin(exists1), Some($"a" === $"d"))
+        .where($"b" > 1 || exists1)
+        .groupBy()(max($"b").as("max_b")))
+    val subquery2 = ScalarSubquery(
+      testRelation.select($"a", $"b", $"c")
+        .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"e"))
+        .where($"b" > 1 || exists2)
+        .groupBy()(count($"c").as("count_c")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
   test("Do not merge subqueries with different join conditions") {
     val subquery1 = ScalarSubquery(testRelation.as("t1")
       .join(
@@ -2432,10 +2485,10 @@ class MergeSubplansSuite extends PlanTest {
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
-    // These stand in for a plain scan produced by the column-pruning path, which is mergeable,
-    // has only row-wise pushdowns and reads the same rows again.
+    // These stand in for a plain scan produced by the column-pruning path, which is mergeable and
+    // has only row-wise pushdowns.
     DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true,
-      onlyRowWisePushdowns = true, repeatableRead = true)
+      onlyRowWisePushdowns = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2462,7 +2515,7 @@ class MergeSubplansSuite extends PlanTest {
       StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     V2ScanPartitioningAndOrdering(
       DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true,
-        onlyRowWisePushdowns = true, repeatableRead = true))
+        onlyRowWisePushdowns = true))
       .asInstanceOf[DataSourceV2ScanRelation]
   }
 

@@ -24,8 +24,10 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.Level
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException, SparkThrowable}
@@ -33,13 +35,14 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, TransformExpression, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSingle}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows
+import org.apache.spark.sql.catalyst.plans.logical.{MergeRows, Project}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -2310,13 +2313,14 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-61377: FilterExec CSE computes an input column just before the first conjunct " +
     "that reads it") {
     // Each input column of the filter is a UDF alias the child `ProjectExec` computes in the same
-    // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier condition
-    // drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which must still
-    // compute a column just before the first condition that reads it, not up front. The
-    // projection split is turned off so the filter over the aliases stays above the projection.
+    // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier check or
+    // condition drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which
+    // must still compute a column just before the first check or condition that reads it, not up
+    // front. The projection split is turned off so the filter over the aliases stays above the
+    // projection.
     val f = udf((x: Long) => x)
     // Returns a primitive, so `r` is non-nullable and gets no inferred IsNotNull: it is first
-    // read by a plain condition (`r > 0` or the common `r + 1`).
+    // read by a plain condition (`r > 0`, `n + r > 0` or the common `r + 1`).
     val r = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"r($x)"); x })
     // Returns a boxed Long, so `rb` is nullable and is first read by its own IsNotNull check.
     val rb = udf { (x: Long) =>
@@ -2326,6 +2330,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
       if (x <= 5) throw new IllegalStateException(s"rc($x)"); java.lang.Long.valueOf(x) }
     // Not read by the filter at all, so the parent's `consume` loads it.
     val u = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"u($x)"); x })
+    // NULL for the rows `r` throws on, so `n IS NOT NULL`, generated among the checks of
+    // `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
+    val n = udf { (x: Long) => if (x <= 5) null else java.lang.Long.valueOf(x) }
 
     def firstFilterOverProject(df: DataFrame): FilterExec = {
       val plan = df.queryExecution.executedPlan
@@ -2336,8 +2343,25 @@ class WholeStageCodegenSuite extends SharedSparkSession
       fe.get
     }
     // Each `select` mints fresh exprIds that appear in the codegen dump's plan header but not in
-    // the generated Java; normalize them away to compare the generated code.
-    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    // the generated Java. Normalize them, the `/* NNN */` line numbers `codegenString` prefixes
+    // each line with, and whitespace away to compare the generated code.
+    def normalize(code: String): String =
+      code.replaceAll("#\\d+", "#").replaceAll("/\\* \\d+ \\*/", "").replaceAll("\\s+", " ")
+
+    val shapes = Seq(
+      // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
+      "f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0",
+      // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
+      "f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0",
+      // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
+      "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100",
+      // `rc` read only by a leftover IsNotNull; `rb`, `u` and `n` are not read by the filter.
+      "f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL",
+      // `r` first read by `n + r > 0`, after `n IS NOT NULL` generated among its checks. The
+      // check is written so that the shape does not depend on whether
+      // `InferFiltersFromConstraints` infers it, which it does not since SPARK-61823, as `n` can
+      // fail.
+      "n IS NOT NULL AND n + r > 0 AND f + 1 > 0 AND f + 1 < 100")
 
     // `methodSplitThreshold` 1 exercises the path that splits each common subexpression into its
     // own function, whose parameters are the input columns' variables; Int.MaxValue keeps the
@@ -2352,32 +2376,40 @@ class WholeStageCodegenSuite extends SharedSparkSession
         SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
         val df = spark.range(10).select(
           f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
-          rc($"id").as("rc"), u($"id").as("u"))
-        Seq(
-          // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
-          "f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0",
-          // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
-          "f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0",
-          // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
-          "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100",
-          // `rc` read only by a leftover IsNotNull; `rb` and `u` are not read by the filter.
-          "f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL"
-        ).foreach { predicate =>
-          val filtered = df.where(predicate)
-          firstFilterOverProject(filtered)
-          checkAnswer(filtered,
-            (6L to 9L).map(i => Row(i, i, i, i, i)))
-          // With the config off the same query returns the same rows (non-CSE path), and the
-          // generated code differs, so the shape above does take the CSE path.
-          val cseOn = codegenString(filtered.queryExecution.executedPlan)
-          val cseOff = withSQLConf(
-              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
-            val off = df.where(predicate)
-            checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i)))
-            codegenString(off.queryExecution.executedPlan)
+          rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
+        shapes.foreach { predicate =>
+          // Names the shape and the threshold in a failure, also when the query raises.
+          withClue(s"methodSplitThreshold $threshold, $predicate: ") {
+            try {
+              val filtered = df.where(predicate)
+              val fe = firstFilterOverProject(filtered)
+              if (predicate.startsWith("n IS NOT NULL")) {
+                // A check in a lower filter would also drop the rows before `r` is computed, and
+                // the shape would pass without testing that `r` is loaded after the check.
+                assert(fe.condition.exists {
+                  case IsNotNull(a: Attribute) => a.name == "n"
+                  case _ => false
+                } && fe.condition.references.exists(_.name == "r"),
+                  s"IsNotNull(n) and n + r > 0 should be in one filter: ${fe.condition}")
+              }
+              checkAnswer(filtered,
+                (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+              // With the config off the same query returns the same rows (non-CSE path), and
+              // the generated code differs, so the shape above does take the CSE path.
+              val cseOn = codegenString(filtered.queryExecution.executedPlan)
+              val cseOff = withSQLConf(
+                  SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
+                val off = df.where(predicate)
+                checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+                codegenString(off.queryExecution.executedPlan)
+              }
+              assert(normalize(cseOn) != normalize(cseOff),
+                "each shape should take the CSE path (codegen differs on/off)")
+            } catch {
+              case e: TestFailedException => throw e
+              case NonFatal(e) => fail("the query failed", e)
+            }
           }
-          assert(normalize(cseOn) != normalize(cseOff),
-            s"each shape should take the CSE path (codegen differs on/off): $predicate")
         }
 
         // `subExpr` names appear only when the states are split into functions, so they confirm
@@ -4118,6 +4150,30 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val compiles = CodegenMetrics.METRIC_COMPILATION_TIME.getCount
       query().collect()
       assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount == compiles)
+    }
+  }
+
+  test("SPARK-60541: whole-stage codegen runs a partition transform's function call") {
+    // `years` has a magic `invoke`, so its call generates code. `bucket` has only `produceResult`,
+    // whose call falls back to `eval` on the input row. So its project runs outside whole-stage
+    // codegen.
+    val base = spark.range(3)
+      .select(col("id"), timestamp_seconds(col("id") * 400 * 86400).as("ts"))
+      .queryExecution.analyzed
+    val Seq(id, ts) = base.output
+    Seq(
+      TransformExpression(YearsFunction, Seq(ts)) -> true,
+      TransformExpression(BucketFunction, Seq(id), Some(4)) -> false
+    ).foreach { case (transform, wholeStage) =>
+      val df = classic.Dataset.ofRows(spark, Project(Seq(Alias(transform, "key")()), base))
+      val inWholeStage = df.queryExecution.executedPlan.collect {
+        case w: WholeStageCodegenExec => w
+      }.exists(_.child.exists {
+        case p: ProjectExec => p.projectList.exists(_.exists(_.isInstanceOf[TransformExpression]))
+        case _ => false
+      })
+      assert(inWholeStage == wholeStage, df.queryExecution.executedPlan)
+      checkAnswer(df, Seq(Row(0), Row(1), Row(2)))
     }
   }
 }

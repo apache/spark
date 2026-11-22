@@ -25,9 +25,10 @@ import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /**
- * @param analyze Analyzes a plan under the active SQLConf. The check of a generated column goes
- *                through it, so that the settings its stored text is read under cover its analysis
- *                without applying to the query of the write.
+ * @param analyze Analyzes a plan under the active SQLConf. The check of a generated column and a
+ *                CHECK condition that a write reads from its text go through it, so that the
+ *                settings the stored text is read under cover its analysis without applying to the
+ *                query of the write.
  */
 class ResolveTableConstraints(
     val catalogManager: CatalogManager,
