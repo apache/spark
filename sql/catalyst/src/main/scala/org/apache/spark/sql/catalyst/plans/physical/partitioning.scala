@@ -27,11 +27,11 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper, UnsafeRowUtils}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType}
 import org.apache.spark.util.TransientBestEffortLazyVal
 
 /**
@@ -1009,7 +1009,8 @@ case class KeyedPartitioning(
    * The positions of the partition expressions that cover a cluster key of `required`, and so
    * have to survive a projection. An expression covers one in two ways:
    *
-   *  - one of its *references* is a cluster key, as a `bucket(4, a)` covers `a`;
+   *  - one of its *references* covers a cluster key (`KeyedPartitioning.coversKey`), as a
+   *    `bucket(4, a)` covers `a` unless equal values of `a` can be stored differently;
    *  - the expression *itself* is a cluster key, as a `years(ts)` under a clustering that names
    *    `years(ts)` rather than `ts`.
    *
@@ -1023,13 +1024,18 @@ case class KeyedPartitioning(
    * other side's clustering with `rebuiltOver(te, clustering(positionSet.head))`. Handing it
    * the second form above would rebuild a `years(ts)` clustered on `years(ts)` as
    * `years(years(ts))`.
-   * The two coincide exactly where every expression has a single reference and no expression is
-   * itself a cluster key. Where they diverge, `createShuffleSpec` refuses to project rather than
-   * projecting onto nothing.
+   * The two coincide exactly where every expression has a single reference, no expression is
+   * itself a cluster key, and every reference stores equal values alike. They diverge both ways:
+   * this one counts an expression that *is* a cluster key, which that one maps to nothing, and
+   * that one maps a function of a key whose equal values are stored differently, e.g. a bucket
+   * of a collated column, which this one does not count. `createShuffleSpec` projects only onto a
+   * position that both count, and refuses to project where none is left rather than projecting
+   * onto nothing.
    */
   def positionsCoveringClusterKeys(required: ClusteredDistribution): BitSet =
     expressions.zipWithIndex.collect {
-      case (e, i) if required.isClusterKey(e) || e.references.exists(required.isClusterKey) => i
+      case (e, i) if required.isClusterKey(e) ||
+          e.references.exists(KeyedPartitioning.coversKey(required)) => i
     }.to(BitSet)
 
   /**
@@ -1059,10 +1065,14 @@ case class KeyedPartitioning(
    * key, so its position survives a projection, yet two rows sharing `b` land in different buckets
    * when their `c` differs, so it is not a function of the cluster keys. Deliberately not
    * `positionsCoveringClusterKeys(required).size == expressions.length`.
+   *
+   * Rows that share a cluster key have equal values of it, while a function of it computes from
+   * the value as stored, so a reference counts only if it stores equal values alike
+   * (`KeyedPartitioning.coversKey`).
    */
   private def isFunctionOfClusterKeys(required: ClusteredDistribution): Boolean =
     expressions.forall { e =>
-      required.isClusterKey(e) || e.references.forall(required.isClusterKey)
+      required.isClusterKey(e) || e.references.forall(KeyedPartitioning.coversKey(required))
     }
 
   /**
@@ -1139,16 +1149,25 @@ case class KeyedPartitioning(
    * `keysSatisfy` may read the partition keys to decide whether a projection would merge anything.
    * `mayProjectToClusterKeys` holds the permission.
    *
-   * Where every partition expression has a single reference, that case coincides with
-   * `KeyedShuffleSpec.keyPositions.exists(_.nonEmpty)`, where `createShuffleSpec` takes its
-   * `joinKeyPositions` from. They cannot be merged into one derivation, see
-   * `positionsCoveringClusterKeys`.
+   * Where every partition expression has a single reference, that case asks whether some
+   * position is both mapped by `KeyedShuffleSpec.keyPositions` and counted by
+   * `positionsCoveringClusterKeys`, which are the positions `createShuffleSpec` projects onto. The
+   * two derivations themselves cannot be merged into one, see `positionsCoveringClusterKeys`. The
+   * `keyPositions` half keeps this as master had it for a position that is itself a cluster key
+   * but whose reference is not; such a position is safe, but `createShuffleSpec` would find
+   * nothing to project onto.
    */
   private def keysCanSatisfy(required: Distribution): Boolean = {
     val satisfiesAfterProjection = required match {
       case c: ClusteredDistribution if mayProjectToClusterKeys(c) =>
-        // Some position covers a cluster key, so there is something to project onto.
-        expressions.exists(_.references.exists(c.isClusterKey))
+        // Some position covers a cluster key, so there is something to project onto: it is a
+        // cluster key itself, as a collated column as a key of its own is, or a function of one
+        // that covers it (`KeyedPartitioning.coversKey`). Its reference has to be a cluster key
+        // too, since `createShuffleSpec` projects onto what `KeyedShuffleSpec.keyPositions` maps.
+        expressions.exists { e =>
+          e.references.exists(c.isClusterKey) &&
+            (c.isClusterKey(e) || e.references.exists(KeyedPartitioning.coversKey(c)))
+        }
       case _ => false
     }
     satisfiesAfterProjection || keysSatisfy(required)
@@ -1176,7 +1195,12 @@ case class KeyedPartitioning(
   override def createShuffleSpec(distribution: ClusteredDistribution): KeyedShuffleSpec = {
     val result = KeyedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
-      val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
+      // A position that maps to a cluster key but does not cover it, e.g. a bucket of a collated
+      // column, cannot keep rows sharing that key together, so it is not projected onto either.
+      val covering = positionsCoveringClusterKeys(distribution)
+      val joinKeyPositions = result.keyPositions.zipWithIndex.collect {
+        case (positions, i) if positions.nonEmpty && covering(i) => i
+      }
       // A marked claim is never projected. The claim says the undeclared rows sit at
       // `hash(key) % numPartitions` over *these* keys in *this* order, and both halves of the
       // projection below can break it: narrowing loses co-location, and `toGrouped` sorts it,
@@ -1295,6 +1319,41 @@ object KeyedPartitioning {
       isCollapsed = kps.exists(_.isCollapsed),
       unknownKeysOrigin = routing))
   }
+
+  /**
+   * Whether the reference `ref` of a partition expression covers a cluster key of `required`, so
+   * that a function of it keeps the rows sharing that key on one partition: `ref` is a cluster
+   * key, and values that its type deems equal are stored alike.
+   *
+   * Rows that share a cluster key have equal values of it, while a function of the key, such as a
+   * connector's transform, computes from the value as stored. The two differ for a string of a
+   * non-binary collation, whose equal values 'A' and 'a' under `UTF8_LCASE` have different bytes
+   * (`UnsafeRowUtils.isBinaryStable`), and for a `FLOAT` or `DOUBLE`, whose equal values `0.0` and
+   * `-0.0`, or two NaNs, have different bits. An aggregate normalizes a floating point key, but
+   * under the column's own exprId, so its clustering still names the column. A `bucket` over the
+   * bytes, or a transform of the bits, then splits equal values, so such a reference covers no
+   * cluster key, whoever built the expression: a scan, or a broadcast hash join that reports the
+   * streamed side's layout over the build side's key, e.g. over `c.s COLLATE UTF8_BINARY`
+   * (SPARK-62150).
+   *
+   * An expression that is itself a cluster key is not asked about, so a column of any type as a
+   * partition key of its own still covers it: partition keys are compared under their type's
+   * equality, which groups equal values together. Spark cannot tell whether a transform respects
+   * the equality, so this holds for every transform. It reads the reference's whole type, so a
+   * transform of a stable field of a struct that also holds such a value is refused too.
+   *
+   * This also holds for a join: one built from an `IN` or `EXISTS` subquery compares a collated
+   * column itself, since it is planned after `RewriteCollationJoin`, and is clustered on it.
+   */
+  private[physical] def coversKey(required: ClusteredDistribution)(ref: Expression): Boolean =
+    required.isClusterKey(ref) && equalValuesStoredAlike(ref.dataType)
+
+  /** Whether values that `dataType` deems equal have the same bytes, see `coversKey`. */
+  private def equalValuesStoredAlike(dataType: DataType): Boolean =
+    UnsafeRowUtils.isBinaryStable(dataType) && !dataType.existsRecursively {
+      case FloatType | DoubleType => true
+      case _ => false
+    }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
@@ -2240,8 +2299,10 @@ case class KeyedShuffleSpec(
    * cluster key". Both readings need the cluster key the expression consumes, which is why
    * this looks at the expression's reference and not at the expression itself. An expression that
    * *is* a cluster key therefore maps to nothing here, while
-   * `KeyedPartitioning.positionsCoveringClusterKeys` counts it. See that method for why the two
-   * stay apart.
+   * `KeyedPartitioning.positionsCoveringClusterKeys` counts it. And a function of a key whose
+   * equal values are stored differently, e.g. a bucket of a collated column, maps to that key
+   * here, while that method does not count it, since such a function can split rows that share
+   * the key (`KeyedPartitioning.coversKey`). See that method for why the two stay apart.
    *
    * Only an expression with a single reference maps to a position. With one reference, "some
    * reference is a cluster key" and "every reference is" are the same statement, which is what

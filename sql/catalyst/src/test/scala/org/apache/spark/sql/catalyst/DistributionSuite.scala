@@ -21,12 +21,13 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Cast, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, FloatType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class DistributionSuite extends SparkFunSuite with SQLHelper {
 
@@ -471,6 +472,61 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
 
     // Neither the expression nor its reference is a cluster key here, so this is refused.
     checkSatisfied(partitioning, ClusteredDistribution(Seq(other)), false)
+  }
+
+  test("SPARK-62150: a function of a cluster key covers it only where equal values are " +
+      "stored alike") {
+    def transformOf(e: Expression): TransformExpression =
+      TransformExpression(TestYearsFunction, Seq(e))
+    def transformedBy(e: Expression): KeyedPartitioning =
+      KeyedPartitioning(Seq(transformOf(e)), Seq(InternalRow(1), InternalRow(2)))
+    val lcase = StringType("UTF8_LCASE")
+    Seq(
+      StringType -> true,
+      IntegerType -> true,
+      lcase -> false,
+      StringType("UTF8_BINARY_RTRIM") -> false,
+      DoubleType -> false,
+      FloatType -> false,
+      ArrayType(DoubleType) -> false,
+      StructType(Seq(StructField("f", lcase))) -> false
+    ).foreach { case (dataType, covers) =>
+      val c = AttributeReference("c", dataType)()
+      // Rows sharing `c` have equal values of it, and a function of `c` maps them to one key only
+      // if its type stores equal values alike: 'A' and 'a' under UTF8_LCASE, or 0.0 and -0.0, are
+      // equal but stored differently.
+      checkSatisfied(transformedBy(c), ClusteredDistribution(Seq(c)), covers)
+      // A clustering that names the transform itself is satisfied whatever it reads.
+      checkSatisfied(transformedBy(c), ClusteredDistribution(Seq(transformOf(c))), true)
+    }
+
+    // A column as a key of its own covers itself, since partition keys are compared under their
+    // type's equality.
+    val s = AttributeReference("s", lcase)()
+    val d = AttributeReference("d", DoubleType)()
+    checkSatisfied(KeyedPartitioning(Seq(s),
+      Seq(InternalRow(UTF8String.fromString("a")), InternalRow(UTF8String.fromString("b")))),
+      ClusteredDistribution(Seq(s)), true)
+    checkSatisfied(KeyedPartitioning(Seq(d), Seq(InternalRow(0.5), InternalRow(1.5))),
+      ClusteredDistribution(Seq(d)), true)
+
+    // A function of a binary string built over a collated column, as a broadcast join builds over
+    // a build side's key `s COLLATE UTF8_BINARY`, is a function of the collated column.
+    checkSatisfied(transformedBy(Cast(s, StringType)), ClusteredDistribution(Seq(s)), false)
+
+    // In a layout of several positions, only a covering one is kept to project onto.
+    val id = AttributeReference("id", IntegerType)()
+    val mixed =
+      KeyedPartitioning(Seq(id, transformOf(s)), Seq(InternalRow(1, 1), InternalRow(1, 2)))
+    val onBoth = ClusteredDistribution(Seq(id, s))
+    assert(mixed.positionsCoveringClusterKeys(onBoth) == Set(0))
+    checkSatisfied(mixed, onBoth, false)
+    assert(!mixed.keysMaySatisfy(onBoth))
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // Grouped on `id` alone, which needs the conf, the two partitions of `id` 1 merge.
+      checkSatisfied(mixed, onBoth, false)
+      assert(mixed.keysMaySatisfy(onBoth))
+    }
   }
 
   test("SPARK-56877: fromPartitionings reuses already-consistent nested collections") {
