@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, IsNull, LessThan, Literal, Or, RaiseError, ScalarSubquery, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -533,6 +533,17 @@ class MergeSubplansSuite extends PlanTest {
         subquery6)
 
     comparePlans(Optimize.execute(originalQuery3.analyze), originalQuery3.analyze)
+  }
+
+  test("SPARK-62240: Do not merge subqueries with throwable elements") {
+    // A merged subquery is read through a `CTERelationRef`, which hides that its plan can throw,
+    // so the conjuncts written after it that can fail could be moved ahead of it again.
+    val throwing = IsNull(RaiseError(Literal("boom")))
+    val subquery1 = ScalarSubquery(testRelation.where(throwing).groupBy()(max($"a").as("max_a")))
+    val subquery2 = ScalarSubquery(testRelation.where(throwing).groupBy()(min($"a").as("min_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
   test("Do not merge different aggregate implementations") {

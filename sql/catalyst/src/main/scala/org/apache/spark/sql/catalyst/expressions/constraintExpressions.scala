@@ -69,16 +69,16 @@ case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpres
 }
 
 /**
- * Keeps the conjuncts written after a conjunct that reads `child` and that can fail from being
- * evaluated ahead of it (see `PredicateHelper.splitMovable`). `RewriteCorrelatedScalarSubquery`
- * wraps the result of a non-deterministic or throwable correlated scalar subquery in it when it
- * rewrites the subquery to a join: the join computes the result, so the conjunct that reads it
- * stays a barrier. It is throwable, also for a non-deterministic subquery: that keeps those
- * conjuncts in place just the same, while a non-deterministic expression would also stop other
- * rules, such as pushing a filter through a projection or eliminating an outer join. It is not
- * null-intolerant, though it passes its child through: `FilterExec` turns an `IsNotNull` over a
- * null-intolerant expression into a null check of its columns, which it may evaluate after the
- * other conjuncts.
+ * Keeps a conjunct that reads `child` a barrier: the conjuncts written after it that can fail are
+ * not evaluated ahead of it (see `PredicateHelper.splitMovable`).
+ * `RewriteCorrelatedScalarSubquery` wraps the result of a non-deterministic or throwable
+ * correlated scalar subquery in it when it rewrites the subquery to a join: the join computes the
+ * result, so the conjunct that reads it stays a barrier. It is throwable, also for a
+ * non-deterministic subquery: that keeps those conjuncts in place just the same, while a
+ * non-deterministic expression would also stop other rules, such as pushing a filter through a
+ * projection or eliminating an outer join. It is not null-intolerant, though it passes its child
+ * through: `FilterExec` turns an `IsNotNull` over a null-intolerant expression into a null check
+ * of its columns, which it may evaluate after the other conjuncts.
  */
 case class ReorderBarrier(child: Expression) extends TaggingExpression {
   override lazy val throwable: Boolean = true

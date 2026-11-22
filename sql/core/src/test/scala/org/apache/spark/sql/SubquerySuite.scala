@@ -3785,11 +3785,15 @@ class SubquerySuite extends SharedSparkSession
         spark.range(0, 10, 1, 1).toDF("l").createOrReplaceTempView("l")
         spark.range(0, 10, 1, 1).toDF("r").createOrReplaceTempView("r")
         // The subqueries are NULL for the row whose id is 3, the only one where the division is
-        // by zero, since `r != 3` is false there.
+        // by zero, since `r != 3` or `l != 3` is false there.
         val subquery = "(SELECT max(r) FROM r WHERE r = l AND " +
           "CASE WHEN l < 0 THEN raise_error('neg') ELSE r != 3 END)"
         val nonDeterministic =
           "(SELECT max(r) FROM r WHERE r = l AND length(uuid()) = 36 AND r != 3)"
+        // Without an aggregate, the subquery is rewritten to a left single join, whose condition
+        // takes the CASE WHEN over the outer column.
+        val singleJoin = "(SELECT r FROM r WHERE r = l AND " +
+          "CASE WHEN l < 0 THEN raise_error('neg') ELSE l != 3 END)"
         val expected = (4L to 9L).map(Row(_))
         checkAnswer(
           sql(s"SELECT l FROM l WHERE $subquery IS NOT NULL AND 10 / (l - 3) > 0"), expected)
@@ -3800,6 +3804,8 @@ class SubquerySuite extends SharedSparkSession
         checkAnswer(
           sql(s"SELECT l FROM l WHERE $nonDeterministic IS NOT NULL AND 10 / (l - 3) > 0"),
           expected)
+        checkAnswer(
+          sql(s"SELECT l FROM l WHERE $singleJoin IS NOT NULL AND 10 / (l - 3) > 0"), expected)
       }
     }
   }
