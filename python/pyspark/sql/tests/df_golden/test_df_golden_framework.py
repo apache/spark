@@ -25,14 +25,17 @@ Spark session, so they are fast and run anywhere.  The end-to-end golden runs
 that need a Spark Connect server live in the ``inputs/test_<topic>.py`` modules.
 """
 
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from unittest import mock
 
 from pyspark.sql.tests.df_golden import df_golden
 from pyspark.sql.tests.df_golden.df_golden import (
     DFGoldenTestMixin,
+    _golden_diff,
     _validate_test_file,
     assert_cases_in_sync,
     case_tags,
@@ -138,6 +141,44 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         self.assertNotIn("junk", body)
         # name precedes the outputs in the canonical order regardless of dict order.
         self.assertLess(body.index("--! name"), body.index("--! expected_output_schema"))
+
+    def test_golden_diff(self):
+        for old, new, expected in [
+            ("same\n", "same\n", ""),
+            ("old\n", "new\n", "@@ -1 +1 @@\n-old\n+new\n"),
+            ("old", "new\n", "@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n"),
+        ]:
+            with self.subTest(old=old, new=new):
+                path = self._write(old)
+                if expected:
+                    rel = "python/pyspark/sql/tests/df_golden/results/" + os.path.basename(path)
+                    expected = "--- a/{}\n+++ b/{}\n{}".format(rel, rel, expected)
+                self.assertEqual(_golden_diff(path, new), expected)
+                with open(path) as f:
+                    self.assertEqual(f.read(), old)
+
+    def test_golden_diff_for_new_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "test_new.py.out")
+            rel = "python/pyspark/sql/tests/df_golden/results/test_new.py.out"
+            expected = "--- /dev/null\n+++ b/{}\n@@ -0,0 +1 @@\n+new\n".format(rel)
+            self.assertEqual(_golden_diff(path, "new\n"), expected)
+            self.assertFalse(os.path.exists(path))
+
+    def test_golden_diff_preserves_non_newline_separators(self):
+        for separator in ("\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", chr(0x2028), chr(0x2029)):
+            for in_context in (False, True):
+                with self.subTest(separator=repr(separator), in_context=in_context):
+                    context = f"left{separator}right" if in_context else "context"
+                    before = "old" if in_context else f"old{separator}value"
+                    after = "new" if in_context else f"new{separator}value"
+                    path = self._write(f"{context}\n{before}\n")
+                    rel = "python/pyspark/sql/tests/df_golden/results/" + os.path.basename(path)
+                    expected = (
+                        f"--- a/{rel}\n+++ b/{rel}\n"
+                        f"@@ -1,2 +1,2 @@\n {context}\n-{before}\n+{after}\n"
+                    )
+                    self.assertEqual(_golden_diff(path, f"{context}\n{after}\n"), expected)
 
     # -- tags -------------------------------------------------------------
 
@@ -816,6 +857,134 @@ class DFGoldenTestMixinTests(unittest.TestCase):
         # the registration loop's variable would run.
         self.assertEqual(self.ran, ["_test_a", "_test_b"])
 
+    def test_passing_case_prints_diff_without_writing(self):
+        self._write_golden(self.GOLDEN_C)
+        old_content = self._read_golden()
+        compute = self._compute_case_outputs
+        self._start(
+            mock.patch.object(
+                df_golden,
+                "compute_case_outputs",
+                lambda spark, build_df: dict(
+                    compute(spark, build_df), expected_optimized_output="Range"
+                ),
+            )
+        )
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_c(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self._run_passing(Cases)
+        self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+        self.assertIn("+--! expected_optimized_output\n", output.getvalue())
+        self.assertEqual(self._read_golden(), old_content)
+        self.assertEqual(self.ran, ["_test_c"])
+
+    def test_failures_print_complete_diff_without_rerunning_cases(self):
+        self._write_golden(
+            "--! name\na\n--! expected_output_schema\nold_a\n!-- end\n"
+            "\n\n"
+            "--! name\nb\n--! expected_output_schema\nold_b\n!-- end\n"
+        )
+        old_content = self._read_golden()
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            result = self._run(Cases)
+        self.assertEqual(len(result.failures), 2)
+        self.assertEqual(result.errors, [])
+        self.assertIn("-old_a\n", output.getvalue())
+        self.assertIn("-old_b\n", output.getvalue())
+        self.assertIn("=== END GOLDEN DIFF ===\n", output.getvalue())
+        self.assertEqual(self._read_golden(), old_content)
+        self.assertEqual(self.ran, ["_test_a", "_test_b"])
+
+    def test_filtered_run_keeps_unrun_cases_in_diff(self):
+        self._write_golden(
+            "--! name\na\n--! expected_output_schema\nold_a\n!-- end\n"
+            "\n\n"
+            "--! name\nb\n--! expected_output_schema\nold_b\n!-- end\n"
+        )
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            result = self._run(Cases, "test_a")
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(result.errors, [])
+        self.assertIn("-old_a\n", output.getvalue())
+        self.assertNotIn("-old_b\n", output.getvalue())
+        self.assertEqual(self.ran, ["_test_a"])
+
+    def test_malformed_golden_prints_diff_before_verification_fails(self):
+        for unterminated in (False, True):
+            with self.subTest(unterminated=unterminated):
+                self.ran.clear()
+                df_golden._golden_file_owners.clear()
+                first = "--! name\na\n--! expected_output_schema\nstruct<_test_a:int>\n!-- end\n"
+                second = "--! name\nb\n"
+                if unterminated:
+                    second += "--! expected_output_schema\nstruct<_test_b:int>\n"
+                else:
+                    second += "!-- end\n"
+                old_content = first + "\n\n" + second
+                self._write_golden(old_content)
+
+                class Cases(DFGoldenTestMixin, self._provider()):
+                    def _test_a(self, spark):
+                        pass
+
+                    def _test_b(self, spark):
+                        pass
+
+                output = io.StringIO()
+                with redirect_stderr(output):
+                    result = self._run(Cases)
+                self.assertEqual(len(result.failures), 2)
+                self.assertEqual(result.errors, [])
+                message = "does not end with" if unterminated else "has no expected_"
+                self.assertTrue(all(message in failure for _, failure in result.failures))
+                self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+                self.assertIn("=== END GOLDEN DIFF ===\n", output.getvalue())
+                self.assertEqual(self._read_golden(), old_content)
+                self.assertEqual(self.ran, ["_test_a", "_test_b"])
+
+    def test_filtered_malformed_golden_does_not_produce_partial_diff(self):
+        old_content = "--! name\na\n!-- end\n\n\n--! name\nb\n!-- end\n"
+        self._write_golden(old_content)
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            result = self._run(Cases, "test_a")
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn("has no expected_", result.failures[0][1])
+        self.assertNotIn("=== BEGIN GOLDEN DIFF ===", output.getvalue())
+        self.assertEqual(self._read_golden(), old_content)
+        self.assertEqual(self.ran, ["_test_a"])
+
     # -- regeneration ------------------------------------------------------
 
     def test_regeneration_writes_the_golden_file_from_the_run(self):
@@ -832,7 +1001,11 @@ class DFGoldenTestMixinTests(unittest.TestCase):
             def _test_a(self, spark):
                 pass
 
-        self._run_passing(Cases)
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self._run_passing(Cases)
+        self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+        self.assertEqual(self.ran, ["_test_a", "_test_b"])
         self.assertEqual(
             self._read_golden(),
             "--! name\n__file_metadata__\n--! source\n{}.{}\n!-- end\n"
@@ -844,6 +1017,22 @@ class DFGoldenTestMixinTests(unittest.TestCase):
                 Cases.__module__, Cases.__qualname__
             ),
         )
+
+    def test_regeneration_replaces_a_file_that_cannot_be_decoded(self):
+        os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"
+        with open(self.golden, "wb") as f:
+            f.write(b"\xff")
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_c(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self._run_passing(Cases)
+        self.assertIn("cannot generate golden diff", output.getvalue())
+        self.assertEqual(self.ran, ["_test_c"])
+        self.assertIn("--! expected_output_schema\nstruct<_test_c:int>", self._read_golden())
 
     def test_regeneration_refuses_a_run_that_skipped_a_case(self):
         os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"

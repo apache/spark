@@ -622,7 +622,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                         self.assertEqual(phases[1:4], [0, 0, 0])
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
-    def test_phase_metrics_disabled_by_default(self):
+    def test_phase_metrics_not_collected_by_default(self):
         add_one = udf(lambda value: value + 1, "long", useArrow=True)
 
         def run():
@@ -651,28 +651,54 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             "pythonNumTimedBatches",
         )
         for name in detailed_metrics:
-            self.assertFalse(metrics.contains(name), name)
+            self.assertEqual(metrics.apply(name).value(), 0, name)
         self.assertTrue(metrics.contains("pythonProcessingTime"))
         self.assertTrue(metrics.contains("pythonNumPipelinedTasks"))
 
-    def test_phase_metrics_on_materialized_plan_after_config_change(self):
+    def test_phase_metrics_follow_execution_config(self):
         add_one = udf(lambda value: value + 1, "long", useArrow=True)
         timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
 
         with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
-            with self.sql_conf({timing_conf: "true"}):
-                result = self.spark.range(2, numPartitions=1).select(add_one("id"))
-                plan = result._jdf.queryExecution().executedPlan()
-                while plan.nodeName() != "ArrowEvalPython":
-                    self.assertEqual(plan.children().size(), 1)
-                    plan = plan.children().apply(0)
-                metrics = plan.metrics()
-                self.assertTrue(metrics.contains("pythonNumTimingReports"))
+            data = self.spark.range(2, numPartitions=1)
+            for name, build, expected in (
+                ("arrow", lambda: data.select(add_one("id")), [1, 2]),
+                ("map pandas", lambda: data.mapInPandas(lambda dfs: dfs, "id long"), [0, 1]),
+            ):
+                for enabled in (True, False):
+                    with self.subTest(handler=name, enabled=enabled):
+                        with self.sql_conf({timing_conf: str(enabled).lower()}):
+                            result = build()
+                            plan = result._jdf.queryExecution().executedPlan()
+                            while not plan.metrics().contains("pythonNumTimingReports"):
+                                self.assertEqual(plan.children().size(), 1)
+                                plan = plan.children().apply(0)
+                            metrics = plan.metrics()
+                        with self.sql_conf({timing_conf: str(not enabled).lower()}):
+                            self.assertEqual([row[0] for row in result.collect()], expected)
+                        self.assertEqual(
+                            metrics.apply("pythonNumTimingReports").value(), int(not enabled)
+                        )
 
-            self.assertEqual(self.spark.conf.get(timing_conf), "false")
-            self.assertEqual([row[0] for row in result.collect()], [1, 2])
-            self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
-            self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
+    def test_phase_metrics_disabled_when_plan_switches_to_legacy(self):
+        legacy_conf = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.adaptive.enabled": "false",
+                legacy_conf: "false",
+            }
+        ):
+            result = self.spark.range(2, numPartitions=1).select(
+                udf(lambda value: value, "long", useArrow=True)("id")
+            )
+            plan = result._jdf.queryExecution().executedPlan()
+            while not plan.metrics().contains("pythonNumTimingReports"):
+                self.assertEqual(plan.children().size(), 1)
+                plan = plan.children().apply(0)
+            with self.sql_conf({legacy_conf: "true"}):
+                self.assertEqual([row[0] for row in result.collect()], [0, 1])
+            self.assertEqual(plan.metrics().apply("pythonNumTimingReports").value(), 0)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -727,7 +753,7 @@ class ArrowStreamTimingTests(unittest.TestCase):
                 serializer = ArrowStreamSerializer(
                     write_start_stream=write_start_stream,
                     flush_per_batch=flush_per_batch,
-                    collect_timing=True,
+                    detailed_timing_enabled=True,
                 )
                 with patch(
                     "pyspark.sql.pandas.serializers.time.perf_counter_ns", side_effect=clock
@@ -827,7 +853,7 @@ class ArrowStreamTimingTests(unittest.TestCase):
             serializer = ArrowStreamSerializer(
                 write_start_stream=write_start_stream,
                 flush_per_batch=flush_per_batch,
-                collect_timing=timed,
+                detailed_timing_enabled=timed,
             )
             if fail:
                 with self.assertRaisesRegex(RuntimeError, "batch producer failed"):

@@ -97,6 +97,10 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
+    // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
+    // They stay in a filter above all the joins, which takes the place of the top join or filter.
+    // `CombineFilters` does not combine a condition that can fail from a filter above into it.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       // The first join that covers the references of a condition can be below the filter or the
@@ -263,11 +267,11 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(child = p.copy(child = right))
 
     case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
-        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+        if right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) &&
           p.references.subsetOf(left.outputSet) =>
       p.copy(child = left)
     case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
-        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+        if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) &&
           p.references.subsetOf(right.outputSet) =>
       p.copy(child = right)
   }
