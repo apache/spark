@@ -209,11 +209,13 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // `splitMovable`), e.g. one that can fail written after a throwable one, is not a key. It
       // stays in the other condition, in its written order. The first conjunct is evaluated
       // first on every pair anyway, so it may be a key unless it is non-deterministic, also when
-      // it is throwable. The columns of the inputs that can fail (`failableOutput`) do not
-      // count: a key over such a column reads the value that the projection below computes,
-      // while a filter pushed below the projection evaluates its expression again. This also
-      // keeps the keys the same when the inputs change, e.g. when AQE replaces them with query
-      // stages.
+      // it is throwable. As `PushPredicateThroughJoin` puts the conjuncts that may move first, a
+      // throwable one is still first only when none after it may move, e.g. when it is the only
+      // equality, and then it is the only key. The columns of the inputs that can fail
+      // (`failableOutput`) do not count: a key over such a column reads the value that the
+      // projection below computes, while a filter pushed below the projection evaluates its
+      // expression again. This also keeps the keys the same when the inputs change, e.g. when
+      // AQE replaces them with query stages.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
       val notMovable = predicates match {
         case _ if allEqualities => Nil
