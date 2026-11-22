@@ -216,85 +216,117 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val guard = If(b < 0, Cast(RaiseError(Literal("negative b")), BooleanType), b > 0)
       val minB = Alias(min(b), "min_b")()
-      // The remainder by an outer column can fail, so it stays in the filter after the throwable
-      // guard, and so does the equality written before the guard. So do the correlated
-      // conjuncts written after them that read an inner column, so that the equalities become keys
-      // of the domain join, while `y <=> z` is still pulled up. `a > 0` and `a < 10` move below.
+      // `b > y` can not be pulled up, so the filter has a domain join anyway. The remainder by an
+      // outer column can fail, so it stays in the filter after the throwable guard, and so does the
+      // equality written before the guard. So do the correlated conjuncts written after them that
+      // read an inner column, so that `z === c` becomes a key of the domain join, while `y <=> z`
+      // is still pulled up. `a > 0` and `a < 10` move below.
       val innerPlan =
         Aggregate(Nil, Seq(minB),
           Filter(a > 0 && OuterReference(x) === a && guard &&
-              Literal(1) % OuterReference(y) === 0 && OuterReference(y) === b &&
+              Literal(1) % OuterReference(y) === 0 && b > OuterReference(y) &&
               (OuterReference(y) <=> OuterReference(z)) && OuterReference(z) === c && a < 10,
             testRelation))
       val correctAnswer =
         Aggregate(Seq(x, y, z), Seq(minB, x, y, z),
-          Filter(x === a && guard && Literal(1) % y === 0 && y === b && z === c,
+          Filter(x === a && guard && Literal(1) % y === 0 && b > y && z === c,
             DomainJoin(Seq(x, y, z), Filter(a > 0 && a < 10, testRelation))))
       check(innerPlan, testRelation2, correctAnswer, Seq(x <=> x, y <=> y, z <=> z, y <=> z))
 
-      // A guard that reads no outer column needs no domain, so the equality is still pulled up.
-      check(
-        Aggregate(Nil, Seq(minB), Filter(guard && OuterReference(x) === a, testRelation)),
-        testRelation2,
-        Aggregate(Seq(a), Seq(minB, a), Filter(guard, testRelation)),
-        Seq(x === a))
-
-      // The domain can not stand for these outer columns or outer queries, or for `x`, which a
-      // filter below equates to `a`, so nothing is kept.
-      Seq(
-        LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))()),
-        LocalRelation(AttributeReference("s", StringType("UTF8_LCASE"))()),
-        LocalRelation(AttributeReference("d", DoubleType)()),
-        LocalRelation(AttributeReference("p", new ExamplePointUDT)()),
-        LocalRelation(AttributeReference("q", ArrayType(new ExamplePointUDT))()),
-        LocalRelation(AttributeReference("r", new StructType().add("p", new ExamplePointUDT))()),
-        LocalRelation(Seq(x), isStreaming = true),
-        Project(Seq(x, Alias(Rand(0), "r")()), testRelation2)).foreach { outerPlan =>
-        val o = outerPlan.output.head
-        check(
-          Aggregate(Nil, Seq(minB), Filter(IsNotNull(OuterReference(o)) && guard, testRelation)),
-          outerPlan,
-          Aggregate(Nil, Seq(minB), Filter(guard, testRelation)),
-          Seq(IsNotNull(o)))
-      }
+      // Without a domain join, e.g. when an equality equates every outer column that the other
+      // correlated conjuncts read, nothing is kept, and the equality is still pulled up.
       check(
         Aggregate(Nil, Seq(minB),
-          Filter(guard && Literal(1) % OuterReference(x) === 0,
+          Filter(OuterReference(x) === a && b > OuterReference(x) && guard, testRelation)),
+        testRelation2,
+        Aggregate(Seq(a), Seq(minB, a), Filter(b > a && guard, testRelation)),
+        Seq(x === a))
+      // When the kept guard reads no outer column, the equality written after it is still pulled
+      // up, as without this change.
+      check(
+        Aggregate(Nil, Seq(minB),
+          Filter(guard && OuterReference(x) === a && b > OuterReference(y), testRelation)),
+        testRelation2,
+        Aggregate(Seq(y, a), Seq(minB, y, a),
+          Filter(guard && b > y, DomainJoin(Seq(y), testRelation))),
+        Seq(y <=> y, x === a))
+      // A parent that reads an outer column needs a domain join too.
+      val minBY = Alias(min(b + OuterReference(y)), "min_b_y")()
+      check(
+        Aggregate(Nil, Seq(minBY),
+          Filter(OuterReference(x) === a && guard && Literal(1) % OuterReference(x) === 0,
+            testRelation)),
+        testRelation2,
+        Aggregate(Seq(x, y), Seq(Alias(min(b + y), "min_b_y")(minBY.exprId), x, y),
+          Filter(x === a && guard && Literal(1) % x === 0, DomainJoin(Seq(x, y), testRelation))),
+        Seq(x <=> x, y <=> y))
+
+      // The domain can not stand for these outer columns, so nothing is kept.
+      Seq(
+        AttributeReference("m", MapType(IntegerType, IntegerType))(),
+        AttributeReference("s", StringType("UTF8_LCASE"))(),
+        AttributeReference("d", DoubleType)(),
+        AttributeReference("p", new ExamplePointUDT)(),
+        AttributeReference("q", ArrayType(new ExamplePointUDT))(),
+        AttributeReference("r", new StructType().add("p", new ExamplePointUDT))()).foreach { o =>
+        check(
+          Aggregate(Nil, Seq(minB),
+            Filter(b > OuterReference(x) && IsNotNull(OuterReference(o)) && guard, testRelation)),
+          LocalRelation(x, o),
+          Aggregate(Seq(x), Seq(minB, x),
+            Filter(b > x && guard, DomainJoin(Seq(x), testRelation))),
+          Seq(x <=> x, IsNotNull(o)))
+      }
+      // Nor can it stand for `x`, which a filter below equates to `a`.
+      check(
+        Aggregate(Nil, Seq(minB),
+          Filter(guard && Literal(1) % OuterReference(x) === 0 && b > OuterReference(y),
             Filter(OuterReference(x) === a, testRelation))),
         testRelation2,
-        Aggregate(Seq(a), Seq(minB, a), Filter(guard, testRelation)),
-        Seq(x === a, Literal(1) % x === 0))
-      // The domain of a subquery in a filter is built with the other conjuncts of the filter.
-      val (filterPlan, filterJoinCond) = DecorrelateInnerQuery(
-        Aggregate(Nil, Seq(minB), Filter(IsNotNull(OuterReference(x)) && guard, testRelation)),
-        Filter(Rand(0) < 0.5, testRelation2))
-      check(filterPlan, filterJoinCond, Aggregate(Nil, Seq(minB), Filter(guard, testRelation)),
-        Seq(IsNotNull(x)))
+        Aggregate(Seq(y, a), Seq(minB, y, a),
+          Filter(b > y && guard, DomainJoin(Seq(y), testRelation))),
+        Seq(y <=> y, x === a, Literal(1) % x === 0))
+      // An equality in the condition of a left outer join below does not stand for `x`, so the
+      // conjuncts are kept.
+      check(
+        Aggregate(Nil, Seq(minB),
+          Filter(guard && Literal(1) % OuterReference(x) === 0 && b > OuterReference(x),
+            Join(testRelation, testRelation3, LeftOuter, Some(OuterReference(x) === a3),
+              JoinHint.NONE))),
+        testRelation2,
+        Aggregate(Seq(x), Seq(minB, x),
+          Filter(guard && Literal(1) % x === 0 && b > x,
+            Join(DomainJoin(Seq(x), testRelation), testRelation3, LeftOuter, Some(x === a3),
+              JoinHint.NONE))),
+        Seq(x <=> x))
 
       // The equality on `d` written after the kept conjuncts can not be a key of the domain join,
       // so it is still pulled up.
       val d = AttributeReference("d", DoubleType)()
       check(
         Aggregate(Nil, Seq(minB),
-          Filter(OuterReference(x) === a && guard && OuterReference(d) === b.cast(DoubleType),
+          Filter(b > OuterReference(x) && guard && OuterReference(d) === b.cast(DoubleType),
             testRelation)),
         LocalRelation(x, d),
         Aggregate(Seq(x, b), Seq(minB, x, b),
-          Filter(x === a && guard, DomainJoin(Seq(x), testRelation))),
+          Filter(b > x && guard, DomainJoin(Seq(x), testRelation))),
         Seq(x <=> x, d === b.cast(DoubleType)))
 
       // Under a set operation, the domain has every outer column anyway, so `a > 0` moves below
-      // it, although `s` can not be in the domain otherwise.
+      // it, although an equality equates `x` to `a`, and although `s` can not be in the domain
+      // otherwise.
       val s = AttributeReference("s", StringType("UTF8_LCASE"))()
-      val (setOpPlan, _) = DecorrelateInnerQuery(
-        Aggregate(Nil, Seq(minB),
-          Union(Filter(a > 0 && IsNotNull(OuterReference(s)) && guard, testRelation),
-            testRelation)),
-        LocalRelation(s).select())
-      assert(setOpPlan.exists {
-        case DomainJoin(_, Filter(_, _: LocalRelation), _, _) => true
-        case _ => false
-      })
+      Seq((OuterReference(x) === a, testRelation2),
+          (IsNotNull(OuterReference(s)), LocalRelation(s))).foreach { case (cond, outerPlan) =>
+        val (setOpPlan, _) = DecorrelateInnerQuery(
+          Aggregate(Nil, Seq(minB),
+            Union(Filter(a > 0 && cond && guard, testRelation), testRelation)),
+          outerPlan.select())
+        assert(setOpPlan.exists {
+          case DomainJoin(_, Filter(_, _: LocalRelation), _, _) => true
+          case _ => false
+        })
+      }
     }
   }
 

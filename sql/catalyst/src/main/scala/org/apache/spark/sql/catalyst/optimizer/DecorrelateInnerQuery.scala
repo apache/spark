@@ -152,50 +152,50 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * domain join. The uncorrelated conjuncts that may move are moved below, where they can still be
    * pushed into a scan.
    *
-   * The domain groups the outer rows by its columns, joins them back with `<=>` and reads the outer
-   * query once more. So an outer column that a kept conjunct reads must be orderable, its equal
-   * values must be identical, unlike a string of a non-binary collation or a floating-point value,
-   * also in a user-defined type, and no filter or join below may equate it to an inner column,
-   * which would stand for it instead. The outer query must also return the same rows again, so it
-   * must not be streaming or non-deterministic, including the other conjuncts of a filter that
-   * holds an IN or EXISTS subquery, which its domain is built with. Otherwise nothing is kept,
-   * unless the filter is used by a set operation, where the domain has every outer column anyway.
-   * A correlated conjunct written after the kept ones that reads an outer column that can not be in
-   * the domain is decorrelated as before.
+   * The domain reads the outer query once more, which gives other rows for some outer queries,
+   * e.g. a non-deterministic or sampled one. So only a filter that has a domain join anyway keeps
+   * its conjuncts in place: one used by a set operation, or one with an outer column that a parent
+   * reads or that a correlated conjunct reads that can not be pulled up over an Aggregate. The
+   * domain also groups the outer rows by its columns and joins them back with `<=>`. So an outer
+   * column that a kept conjunct reads must be orderable, its equal values must be identical,
+   * unlike a string of a non-binary collation or a floating-point value, also in a user-defined
+   * type, and no filter or join below may equate it to an inner column, which would stand for it
+   * instead. Otherwise nothing is kept, unless the filter is used by a set operation, where the
+   * domain has every outer column anyway. A correlated conjunct written after the kept ones that
+   * reads an outer column that can not be in the domain is decorrelated as before.
    *
-   * TODO: Keep the written order also for these outer columns and outer queries, for a filter whose
-   * results are not aggregated, e.g. in an EXISTS subquery without a Limit or a set operation, for
-   * the condition of a join in the subquery, across operators, e.g. for a throwable conjunct in a
-   * filter above another one with a correlated equality, and for an outer column that the outer
-   * query computes with an expression that can fail. Also detect an outer query that returns
-   * other rows again although it is deterministic, e.g. a `LogicalRDD` over random values.
+   * TODO: Keep the written order also for a filter without a domain join, e.g. one whose
+   * correlated conjuncts are all equalities, where the outer query must be one that returns the
+   * same rows again, for these outer columns, for a filter whose results are not aggregated, e.g.
+   * in an EXISTS subquery without a Limit or a set operation, for the condition of a join in the
+   * subquery, across operators, e.g. for a throwable conjunct in a filter above another one with a
+   * correlated equality, and for an outer column that the outer query computes with an expression
+   * that can fail.
    */
   private def splitKeptInPlace(
       conditions: Seq[Expression],
       child: LogicalPlan,
-      outerPlan: LogicalPlan,
+      parentOuterReferences: AttributeSet,
       underSetOp: Boolean): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
     val stayUp = splitMovable(conditions.map(stripOuterReference), Seq(child))._2.toSet
     def mayNotMove(cond: Expression): Boolean = stayUp.contains(stripOuterReference(cond))
     val (prefix, rest) = conditions.splitAt(conditions.lastIndexWhere(mayNotMove) + 1)
+    lazy val hasDomainJoin = underSetOp || {
+      val correlated = conditions.filter(containsOuter)
+      (parentOuterReferences ++ collectOuterReferences(correlated.filterNot(canPullUpOverAgg)) --
+        collectEquivalentOuterReferences(correlated).keySet).nonEmpty
+    }
     lazy val equatedBelow = AttributeSet(child.collect {
       case Filter(cond, _) => cond
       case Join(_, _, Inner, Some(cond), _) => cond
     }.flatMap(cond => collectEquivalentOuterReferences(splitConjunctivePredicates(cond)).keys))
-    lazy val outerIsRepeatable =
-      !outerPlan.isStreaming && outerPlan.children.forall(_.deterministic) && (outerPlan match {
-        case Filter(cond, _) => splitConjunctivePredicates(cond)
-          .filterNot(SubqueryExpression.hasInOrCorrelatedExistsSubquery).forall(_.deterministic)
-        case _ => true
-      })
     def canBeInDomain(a: Attribute): Boolean = underSetOp || {
       val dataType = withoutUserDefinedTypes(a.dataType)
-      outerIsRepeatable && RowOrdering.isOrderable(dataType) &&
-        UnsafeRowUtils.isBinaryStable(dataType) &&
+      RowOrdering.isOrderable(dataType) && UnsafeRowUtils.isBinaryStable(dataType) &&
         !NormalizeFloatingNumbers.needNormalize(dataType) && !equatedBelow.contains(a)
     }
     val prefixOuterReferences = collectOuterReferences(prefix)
-    if (prefix.isEmpty || !prefixOuterReferences.forall(canBeInDomain)) {
+    if (prefix.isEmpty || !hasDomainJoin || !prefixOuterReferences.forall(canBeInDomain)) {
       (Nil, Nil, conditions)
     } else {
       val (onDomain, others) = rest.partition { cond =>
@@ -650,7 +650,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // aggregated or used by a set operation, see `splitKeptInPlace`.
             val (movedBelow, keptInPlace, rest) =
               if (aggregated || underSetOp) {
-                splitKeptInPlace(conditions, child, outerPlan, underSetOp)
+                splitKeptInPlace(conditions, child, parentOuterReferences, underSetOp)
               } else {
                 (Nil, Nil, conditions)
               }
