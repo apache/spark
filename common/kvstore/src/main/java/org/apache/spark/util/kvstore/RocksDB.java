@@ -66,27 +66,20 @@ public class RocksDB implements KVStore {
   private static final BloomFilter fullFilter =
     new BloomFilter(10.0D /* BloomFilter.DEFAULT_BITS_PER_KEY */, false);
 
-  /**
-   * Disable compression in index data.
-   *
-   * Block size raised from the default 4KB to 8KB: records here (serialized
-   * TaskMetrics/JobInfo/StageInfo) are small, so 4KB blocks pay per-block overhead far more
-   * often than the data volume warrants.
-   */
+  /** Disable compression in index data. */
   private static final BlockBasedTableConfig tableFormatConfig = new BlockBasedTableConfig()
     .setFilterPolicy(fullFilter)
     .setEnableIndexCompression(false)
     .setIndexBlockRestartInterval(8)
-    .setFormatVersion(5)
-    .setBlockSize(8 * 1024);
+    .setFormatVersion(5);
 
   /**
    * - Use LZ4 everywhere, including the bottom most level.
    *
    * ZSTD at the bottom level trades CPU for disk space, which fits an archival store (e.g.
    * the History Server) but not this one: the live UI store's data is short-lived by eviction,
-   * disk space isn't the bottleneck, and profiling showed RocksDB compaction (much of it ZSTD
-   * compression) dominating driver CPU. Use the cheaper LZ4 uniformly instead.
+   * disk space isn't the bottleneck, and profiling showed RocksDB compaction consuming ~29% of
+   * driver CPU, much of it ZSTD's own compression work. Use the cheaper LZ4 uniformly instead.
    *
    * https://github.com/facebook/rocksdb/wiki/Compression#configuration
    */
@@ -94,13 +87,7 @@ public class RocksDB implements KVStore {
     .setCreateIfMissing(true)
     .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
     .setCompressionType(CompressionType.LZ4_COMPRESSION)
-    .setTableFormatConfig(tableFormatConfig)
-    // Bigger, merged flushes mean fewer L0 files and less compaction later. Keep
-    // maxWriteBufferNumber > minWriteBufferNumberToMerge so a spare memtable can always
-    // accept writes while the other two flush, instead of stalling writes.
-    .setWriteBufferSize(128 * 1024 * 1024)
-    .setMaxWriteBufferNumber(4)
-    .setMinWriteBufferNumberToMerge(2);
+    .setTableFormatConfig(tableFormatConfig);
 
   /**
    * - Use explicitly 'sync = false' like LevelDB KVStore implementation.
