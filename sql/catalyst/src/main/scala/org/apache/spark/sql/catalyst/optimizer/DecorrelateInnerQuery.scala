@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType,
-  StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, StructType,
+  UserDefinedType}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -157,17 +157,18 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * values must be identical, unlike a string of a non-binary collation or a floating-point value,
    * also in a user-defined type, and no filter or join below may equate it to an inner column,
    * which would stand for it instead. The outer query must also return the same rows again, so it
-   * must not be streaming or non-deterministic. Otherwise nothing is kept, unless the filter is
-   * used by a set operation, where the domain has every outer column anyway, and a correlated
-   * conjunct written after the kept ones is not kept either.
+   * must not be streaming or non-deterministic, including the other conjuncts of a filter that
+   * holds an IN or EXISTS subquery, which its domain is built with. Otherwise nothing is kept,
+   * unless the filter is used by a set operation, where the domain has every outer column anyway.
+   * A correlated conjunct written after the kept ones that reads an outer column that can not be in
+   * the domain is decorrelated as before.
    *
    * TODO: Keep the written order also for these outer columns and outer queries, for a filter whose
    * results are not aggregated, e.g. in an EXISTS subquery without a Limit or a set operation, for
    * the condition of a join in the subquery, across operators, e.g. for a throwable conjunct in a
    * filter above another one with a correlated equality, and for an outer column that the outer
    * query computes with an expression that can fail. Also detect an outer query that returns
-   * other rows again although its children are deterministic, e.g. a `LogicalRDD` over random
-   * values, or another non-deterministic conjunct of the filter that holds an EXISTS subquery.
+   * other rows again although it is deterministic, e.g. a `LogicalRDD` over random values.
    */
   private def splitKeptInPlace(
       conditions: Seq[Expression],
@@ -179,10 +180,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
     val (prefix, rest) = conditions.splitAt(conditions.lastIndexWhere(mayNotMove) + 1)
     lazy val equatedBelow = AttributeSet(child.collect {
       case Filter(cond, _) => cond
-      case Join(_, _, _, Some(cond), _) => cond
+      case Join(_, _, Inner, Some(cond), _) => cond
     }.flatMap(cond => collectEquivalentOuterReferences(splitConjunctivePredicates(cond)).keys))
     lazy val outerIsRepeatable =
-      !outerPlan.isStreaming && outerPlan.children.forall(_.deterministic)
+      !outerPlan.isStreaming && outerPlan.children.forall(_.deterministic) && (outerPlan match {
+        case Filter(cond, _) => splitConjunctivePredicates(cond)
+          .filterNot(SubqueryExpression.hasInOrCorrelatedExistsSubquery).forall(_.deterministic)
+        case _ => true
+      })
     def canBeInDomain(a: Attribute): Boolean = underSetOp || {
       val dataType = withoutUserDefinedTypes(a.dataType)
       outerIsRepeatable && RowOrdering.isOrderable(dataType) &&
@@ -208,9 +213,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
     case udt: UserDefinedType[_] => withoutUserDefinedTypes(udt.sqlType)
     case ArrayType(elementType, containsNull) =>
       ArrayType(withoutUserDefinedTypes(elementType), containsNull)
-    case MapType(keyType, valueType, valueContainsNull) =>
-      MapType(withoutUserDefinedTypes(keyType), withoutUserDefinedTypes(valueType),
-        valueContainsNull)
     case StructType(fields) =>
       StructType(fields.map(f => f.copy(dataType = withoutUserDefinedTypes(f.dataType))))
     case other => other
@@ -714,6 +716,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 else correlated.partition(canPullUpOverAgg)
               // No equality equates an outer column that a kept conjunct reads, here or below (see
               // `splitKeptInPlace`), so the kept conjuncts read its domain attribute.
+              assert(!collectOuterReferences(keptInPlace).exists(equivalences.contains))
               val outerReferences = collectOuterReferences(predicates ++ keptInPlace)
               val newOuterReferences =
                 parentOuterReferences ++ outerReferences -- equivalences.keySet

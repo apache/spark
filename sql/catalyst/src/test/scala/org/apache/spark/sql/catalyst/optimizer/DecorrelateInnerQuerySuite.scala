@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DecimalType, DoubleType, IntegerType, LongType,
-  MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DecimalType, DoubleType, IntegerType,
+  LongType, MapType, StringType, StructType}
 
 class DecorrelateInnerQuerySuite extends PlanTest {
 
@@ -246,6 +246,8 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         LocalRelation(AttributeReference("s", StringType("UTF8_LCASE"))()),
         LocalRelation(AttributeReference("d", DoubleType)()),
         LocalRelation(AttributeReference("p", new ExamplePointUDT)()),
+        LocalRelation(AttributeReference("q", ArrayType(new ExamplePointUDT))()),
+        LocalRelation(AttributeReference("r", new StructType().add("p", new ExamplePointUDT))()),
         LocalRelation(Seq(x), isStreaming = true),
         Project(Seq(x, Alias(Rand(0), "r")()), testRelation2)).foreach { outerPlan =>
         val o = outerPlan.output.head
@@ -262,6 +264,24 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         testRelation2,
         Aggregate(Seq(a), Seq(minB, a), Filter(guard, testRelation)),
         Seq(x === a, Literal(1) % x === 0))
+      // The domain of a subquery in a filter is built with the other conjuncts of the filter.
+      val (filterPlan, filterJoinCond) = DecorrelateInnerQuery(
+        Aggregate(Nil, Seq(minB), Filter(IsNotNull(OuterReference(x)) && guard, testRelation)),
+        Filter(Rand(0) < 0.5, testRelation2))
+      check(filterPlan, filterJoinCond, Aggregate(Nil, Seq(minB), Filter(guard, testRelation)),
+        Seq(IsNotNull(x)))
+
+      // The equality on `d` written after the kept conjuncts can not be a key of the domain join,
+      // so it is still pulled up.
+      val d = AttributeReference("d", DoubleType)()
+      check(
+        Aggregate(Nil, Seq(minB),
+          Filter(OuterReference(x) === a && guard && OuterReference(d) === b.cast(DoubleType),
+            testRelation)),
+        LocalRelation(x, d),
+        Aggregate(Seq(x, b), Seq(minB, x, b),
+          Filter(x === a && guard, DomainJoin(Seq(x), testRelation))),
+        Seq(x <=> x, d === b.cast(DoubleType)))
 
       // Under a set operation, the domain has every outer column anyway, so `a > 0` moves below
       // it, although `s` can not be in the domain otherwise.
