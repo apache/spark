@@ -2079,6 +2079,44 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("collectStatistics updates Float/Double lower bounds after an initial NaN") {
+    val schema = Seq(
+      AttributeReference("float_col", FloatType)(),
+      AttributeReference("double_col", DoubleType)()
+    )
+    val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+
+    for ((nanIndex, finiteValue) <- Seq((0, 1), (1, 2))) {
+      withClue(s"Leading nulls: $nanIndex: ") {
+        val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+        try {
+          root.allocateNew()
+          val floatVector = root.getVector("float_col").asInstanceOf[Float4Vector]
+          val doubleVector = root.getVector("double_col").asInstanceOf[Float8Vector]
+
+          if (nanIndex == 1) {
+            floatVector.setNull(0)
+            doubleVector.setNull(0)
+          }
+          floatVector.setSafe(nanIndex, Float.NaN)
+          floatVector.setSafe(nanIndex + 1, finiteValue.toFloat)
+          doubleVector.setSafe(nanIndex, Double.NaN)
+          doubleVector.setSafe(nanIndex + 1, finiteValue.toDouble)
+          root.setRowCount(nanIndex + 2)
+
+          val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+          assert(!stats.isNullAt(0) && stats.getFloat(0) == finiteValue.toFloat)
+          assert(!stats.isNullAt(1) && stats.getFloat(1).isNaN)
+          assert(!stats.isNullAt(5) && stats.getDouble(5) == finiteValue.toDouble)
+          assert(!stats.isNullAt(6) && stats.getDouble(6).isNaN)
+        } finally {
+          root.close()
+        }
+      }
+    }
+  }
+
   test("collectStatistics returns null bounds for non-orderable types") {
     // BinaryType has no natural ordering, so its lower and upper bounds must be null.
     // Null bounds disable partition pruning for those columns, preventing incorrect data exclusion.
