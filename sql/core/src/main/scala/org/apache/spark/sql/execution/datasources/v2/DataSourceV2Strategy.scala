@@ -216,7 +216,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // has a matching row. A built-in file scan gets no group filter, so no runtime filter prunes
       // its read.
       val groupBasedRead = relation.relation.table match {
-        case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
+        case t: RowLevelOperationTable =>
+          !t.isInsertOnly && !t.operation.isInstanceOf[SupportsDelta]
         case _ => false
       }
       val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty && !groupBasedRead) {
@@ -621,8 +622,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
-      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case InsertOnlyMerge(_: DataSourceV2Relation, query, r: DataSourceV2Relation, Some(write), _) =>
+      InsertOnlyMergeExec(
+        planLater(query),
+        refreshCache(r), // use the original relation to refresh the cache
+        write,
+        r.name) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -972,7 +977,7 @@ private object AppendWrite {
       plan: LogicalPlan
   ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
     case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
-    case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case m: InsertOnlyMerge => Some((m.originalTable, m.write, m.analyzedQuery))
     case _ => None
   }
 }

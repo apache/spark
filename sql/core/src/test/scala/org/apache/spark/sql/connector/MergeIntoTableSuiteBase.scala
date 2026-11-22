@@ -23,13 +23,13 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, TableInfo}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertOnlyMerge, ReplaceData, WriteDelta}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, RowLevelOperationWithOptions, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.MergeSummary
+import org.apache.spark.sql.connector.write.{MergeSummary, RowLevelOperation, RowLevelOperationTable}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, InsertOnlyMergeExec, MergeRowsExec}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, InsertOnlyMergeExec, MergeRowsExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -3803,6 +3803,110 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString"),
           Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
+      }
+    }
+  }
+
+  test("insert-only merge shares RowLevelOperationTable between LeftAnti scan and write") {
+    withTempView("source") {
+      Seq(
+        "single" ->
+          "WHEN NOT MATCHED THEN INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)",
+        "multi" ->
+          """WHEN NOT MATCHED AND s.pk = 3 THEN
+            |  INSERT (pk, salary, dep) VALUES (s.pk, s.salary + 1, s.dep)
+            |WHEN NOT MATCHED THEN
+            |  INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+            |""".stripMargin
+      ).foreach { case (variant, clauses) =>
+        withTable(tableNameAsString) {
+          createAndInitTable(
+            "pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |""".stripMargin,
+            Map("supports-insert-only-merge" -> "true"))
+
+          Seq((2, 250, "software"), (3, 300, "hr"), (4, 400, "eng"))
+            .toDF("pk", "salary", "dep")
+            .createOrReplaceTempView("source")
+
+          val Seq(qe) = withQueryExecutionsCaptured(spark) {
+            sql(
+              s"""MERGE INTO $tableNameAsString t WITH (`write-option` = 'v1')
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |$clauses
+                 |""".stripMargin)
+          }
+
+          val insertOnly = qe.optimizedPlan.collectFirst {
+            case m: InsertOnlyMerge => m
+          }.getOrElse(fail("expected InsertOnlyMerge in optimized plan"))
+          val writeRel = insertOnly.table.asInstanceOf[DataSourceV2Relation]
+          val origRel = insertOnly.originalTable.asInstanceOf[DataSourceV2Relation]
+          val opTable = writeRel.table.asInstanceOf[RowLevelOperationTable]
+          assert(opTable.operation.command() === RowLevelOperation.Command.MERGE)
+          assert(opTable.isInsertOnly)
+          assert(opTable.operation.asInstanceOf[RowLevelOperationWithOptions]
+            .options.get("write-option") === "v1")
+          assert(!origRel.table.isInstanceOf[RowLevelOperationTable])
+
+          val executedPlan = stripAQEPlan(qe.executedPlan)
+          assert(executedPlan.collectFirst { case e: InsertOnlyMergeExec => e }.isDefined)
+          val scanTables = collect(executedPlan) {
+            case b: BatchScanExec => b.table
+          }
+          assert(scanTables.exists(_ eq opTable),
+            "expected LeftAnti target scan to share the exact RowLevelOperationTable instance")
+
+          val expectedRow3 = if (variant == "multi") Row(3, 301, "hr") else Row(3, 300, "hr")
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              expectedRow3,
+              Row(4, 400, "eng")))
+        }
+      }
+    }
+  }
+
+  test("insert-only merge refreshes relation cache") {
+    Seq(false, true).foreach { optIn =>
+      withTable(tableNameAsString) {
+        withTempView("temp", "source") {
+          withCache("temp") {
+            createAndInitTable(
+              "pk INT NOT NULL, salary INT, dep STRING",
+              """{ "pk": 1, "salary": 100, "dep": "hr" }
+                |{ "pk": 2, "salary": 200, "dep": "software" }
+                |""".stripMargin,
+              Map("supports-insert-only-merge" -> optIn.toString))
+
+            val query = sql(s"SELECT * FROM $tableNameAsString WHERE salary = 100")
+            query.createOrReplaceTempView("temp")
+            sql("CACHE TABLE temp")
+
+            checkAnswer(sql("SELECT * FROM temp"), Row(1, 100, "hr") :: Nil)
+
+            Seq((1, 100, "hr"), (3, 100, "eng"))
+              .toDF("pk", "salary", "dep")
+              .createOrReplaceTempView("source")
+
+            sql(
+              s"""MERGE INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN NOT MATCHED THEN INSERT *
+                 |""".stripMargin)
+
+            checkAnswer(
+              sql("SELECT * FROM temp"),
+              Row(1, 100, "hr") :: Row(3, 100, "eng") :: Nil)
+          }
+        }
       }
     }
   }

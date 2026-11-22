@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import org.mockito.Mockito.mock
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
@@ -26,8 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsRowLevelOperations, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, RowLevelOperationTable}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
   PrepareExternalLookupJoin, TableCapabilityCheck}
@@ -149,6 +152,42 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
+  test("InsertOnlyMerge: check missing capabilities") {
+    val relation = DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
+    val plan = InsertOnlyMerge(relation, TestRelation, relation)
+
+    val exc = intercept[AnalysisException] {
+      TableCapabilityCheck.apply(plan)
+    }
+
+    assert(exc.getMessage.contains("does not support append in batch mode"))
+
+    val rloTable = RowLevelCapabilityTable()
+    val origRelation = DataSourceV2Relation.create(rloTable, None, None, emptyMap)
+    val opRelation = origRelation.copy(
+      table = RowLevelOperationTable(rloTable, mock(classOf[RowLevelOperation])))
+    val wrappedPlan = InsertOnlyMerge(opRelation, TestRelation, origRelation)
+
+    val wrappedExc = intercept[AnalysisException] {
+      TableCapabilityCheck.apply(wrappedPlan)
+    }
+
+    assert(wrappedExc.getMessage.contains("does not support append in batch mode"))
+  }
+
+  test("InsertOnlyMerge: check correct capabilities") {
+    Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
+      val relation = DataSourceV2Relation.create(CapabilityTable(write), None, None, emptyMap)
+      TableCapabilityCheck.apply(InsertOnlyMerge(relation, TestRelation, relation))
+
+      val rloTable = RowLevelCapabilityTable(write)
+      val origRelation = DataSourceV2Relation.create(rloTable, None, None, emptyMap)
+      val opRelation = origRelation.copy(
+        table = RowLevelOperationTable(rloTable, mock(classOf[RowLevelOperation])))
+      TableCapabilityCheck.apply(InsertOnlyMerge(opRelation, TestRelation, origRelation))
+    }
+  }
+
   test("Truncate: check missing capabilities") {
     Seq(CapabilityTable(),
       CapabilityTable(BATCH_WRITE),
@@ -251,7 +290,7 @@ private case object TestRelation extends LeafNode with NamedRelation {
   override def output: Seq[AttributeReference] = toAttributes(TableCapabilityCheckSuite.schema)
 }
 
-private case class CapabilityTable(_capabilities: TableCapability*) extends Table {
+private class CapabilityTable(_capabilities: TableCapability*) extends Table {
   override def name(): String = "capability_test_table"
   override def schema(): StructType = TableCapabilityCheckSuite.schema
   override def capabilities(): java.util.Set[TableCapability] = {
@@ -259,6 +298,25 @@ private case class CapabilityTable(_capabilities: TableCapability*) extends Tabl
     _capabilities.foreach(set.add)
     set
   }
+}
+
+private object CapabilityTable {
+  def apply(_capabilities: TableCapability*): CapabilityTable =
+    new CapabilityTable(_capabilities: _*)
+}
+
+private class RowLevelCapabilityTable(_capabilities: TableCapability*)
+  extends CapabilityTable(_capabilities: _*) with SupportsRowLevelOperations {
+  override def name(): String = "row_level_capability_test_table"
+  override def newRowLevelOperationBuilder(
+      info: RowLevelOperationInfo): RowLevelOperationBuilder = {
+    throw new UnsupportedOperationException()
+  }
+}
+
+private object RowLevelCapabilityTable {
+  def apply(_capabilities: TableCapability*): RowLevelCapabilityTable =
+    new RowLevelCapabilityTable(_capabilities: _*)
 }
 
 private class TestStreamSourceProvider extends StreamSourceProvider {

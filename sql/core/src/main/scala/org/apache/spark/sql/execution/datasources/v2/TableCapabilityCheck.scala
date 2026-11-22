@@ -58,7 +58,8 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
       case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) if !supportsBatchWrite(r.table) =>
         throw QueryCompilationErrors.unsupportedAppendInBatchModeError(r.name)
 
-      case InsertOnlyMerge(r: DataSourceV2Relation, _, _, _) if !supportsBatchWrite(r.table) =>
+      case InsertOnlyMerge(_, _, r: DataSourceV2Relation, _, _)
+          if !supportsBatchWrite(r.table) =>
         throw QueryCompilationErrors.unsupportedAppendInBatchModeError(r.name)
 
       case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _, _, _)

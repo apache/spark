@@ -654,7 +654,7 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
       expectedPartitionFieldNames)
 
     val table = collect(plan) { case s: BatchScanExec => s }.map(_.table).collectFirst {
-      case RowLevelOperationTable(t: InMemoryPartitionPredicateDeleteTable, _) => t
+      case RowLevelOperationTable(t: InMemoryPartitionPredicateDeleteTable, _, _) => t
     }.getOrElse(fail("Expected the row-level operation table"))
     val replacedDeps = table.replacedPartitions.map(_.head.toString)
     assert(replacedDeps.sorted === expectedReplacedDeps.toSeq.sorted)

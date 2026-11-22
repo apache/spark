@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.mockito.Mockito.{mock, withSettings}
+
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,8 +27,12 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
+import org.apache.spark.sql.connector.catalog.{SupportsRowLevelOperations, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
@@ -535,5 +541,49 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("Union: do not push LeftSemi/LeftAnti join cloning a RowLevelOperationTable") {
+    val rloTable = mock(
+      classOf[Table],
+      withSettings().extraInterfaces(classOf[SupportsRowLevelOperations]))
+      .asInstanceOf[Table with SupportsRowLevelOperations]
+    val opTable = RowLevelOperationTable(
+      rloTable, mock(classOf[RowLevelOperation]), isInsertOnly = true)
+    val d = AttributeReference("d", IntegerType)()
+    val v2Rel = DataSourceV2Relation(
+      opTable, Seq(d), None, None, CaseInsensitiveStringMap.empty())
+
+    Seq(LeftSemi, LeftAnti).foreach { jt =>
+      val unionPlan = Union(Seq(
+        LocalRelation($"a".int),
+        LocalRelation($"a".int)))
+      val originalQuery = unionPlan
+        .join(v2Rel, joinType = jt, condition = Some($"a" === d))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("Aggregate: do not push LeftSemi/LeftAnti join with unpushed DSv2 relation on right") {
+    val table = new Table {
+      override def name(): String = "v2_test_table"
+      override def schema(): StructType = new StructType().add("d", IntegerType)
+      override def capabilities(): java.util.Set[TableCapability] = java.util.Set.of()
+    }
+    val d = AttributeReference("d", IntegerType)()
+    val v2Rel = DataSourceV2Relation(
+      table, Seq(d), None, None, CaseInsensitiveStringMap.empty())
+
+    Seq(LeftSemi, LeftAnti).foreach { jt =>
+      val originalQuery = testRelation
+        .groupBy($"b")($"b")
+        .join(v2Rel, joinType = jt, condition = Some($"b" === d))
+        .analyze
+
+      // Must not call v2Rel.computeStats() before V2ScanRelationPushDown.
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 }

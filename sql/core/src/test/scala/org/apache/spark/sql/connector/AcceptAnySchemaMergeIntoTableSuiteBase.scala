@@ -21,9 +21,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row, SparkSessionExtensions}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation, RowLevelAssignmentResolution, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, InsertOnlyMerge, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
 import org.apache.spark.sql.execution.datasources.v2.InsertOnlyMergeExec
@@ -113,40 +114,49 @@ abstract class AcceptAnySchemaMergeIntoTableSuiteBase extends RowLevelOperationS
       Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
 
       // a single NOT MATCHED action and multiple NOT MATCHED actions are rewritten differently
-      Seq(
-        "WHEN NOT MATCHED THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')",
-        """WHEN NOT MATCHED AND s.pk = 2 THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
-          |WHEN NOT MATCHED THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
-          |""".stripMargin
-      ).foreach { clauses =>
-        withTable(tableNameAsString) {
-          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-            """{ "pk": 1, "salary": 100, "dep": "hr" }
-              |{ "pk": 2, "salary": 200, "dep": "software" }
-              |""".stripMargin)
+      Seq(false, true).foreach { optIn =>
+        Seq(
+          "WHEN NOT MATCHED THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')",
+          """WHEN NOT MATCHED AND s.pk = 2 THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+            |WHEN NOT MATCHED THEN INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+            |""".stripMargin
+        ).foreach { clauses =>
+          withTable(tableNameAsString) {
+            createAndInitTable(
+              "pk INT NOT NULL, salary INT, dep STRING",
+              """{ "pk": 1, "salary": 100, "dep": "hr" }
+                |{ "pk": 2, "salary": 200, "dep": "software" }
+                |""".stripMargin,
+              Map("supports-insert-only-merge" -> optIn.toString))
 
-          val executedPlan = executeAndKeepPlan {
-            sql(
-              s"""MERGE INTO $tableNameAsString
-                 |USING source s
-                 |ON test_table.pk = s.pk AND test_table._partition = 'hr'
-                 |$clauses
-                 |""".stripMargin)
+            val Seq(qe) = withQueryExecutionsCaptured(spark) {
+              sql(
+                s"""MERGE INTO $tableNameAsString
+                   |USING source s
+                   |ON test_table.pk = s.pk AND test_table._partition = 'hr'
+                   |$clauses
+                   |""".stripMargin)
+            }
+
+            val insertOnly = qe.optimizedPlan.collectFirst {
+              case m: InsertOnlyMerge => m
+            }.getOrElse(fail("expected an InsertOnlyMerge in the optimized plan"))
+            assert(insertOnly.table.output.map(_.name) === Seq("pk", "salary", "dep"))
+
+            val write = stripAQEPlan(qe.executedPlan).collectFirst {
+              case e: InsertOnlyMergeExec => e.write
+            }.getOrElse(fail("expected an InsertOnlyMergeExec in the executed plan"))
+            val appendWrite = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+            assert(appendWrite.info.schema.fieldNames === Array("pk", "salary", "dep"))
+
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr"), // unchanged (matched)
+                Row(2, 200, "software"), // unchanged
+                Row(2, 0, "new"), // insert (not matched in hr)
+                Row(3, 0, "new"))) // insert
           }
-
-          val write = executedPlan.collectFirst {
-            case e: InsertOnlyMergeExec => e.write
-          }.getOrElse(fail("expected an InsertOnlyMergeExec in the executed plan"))
-          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-          assert(append.info.schema.fieldNames === Array("pk", "salary", "dep"))
-
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(1, 100, "hr"), // unchanged (matched)
-              Row(2, 200, "software"), // unchanged
-              Row(2, 0, "new"), // insert (not matched in hr)
-              Row(3, 0, "new"))) // insert
         }
       }
     }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, RowLevelOperationTable, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -51,9 +51,9 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
-    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, _, None, _) =>
       val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val writeBuilder = newInsertOnlyMergeWriteBuilder(r.table, query, writeOptions, query.schema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       m.copy(write = Some(write), query = newQuery)
@@ -172,6 +172,43 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowIdSchema = None,
       metadataSchema)
     table.asWritable.newWriteBuilder(info)
+  }
+
+  private def newInsertOnlyMergeWriteBuilder(
+      table: Table,
+      query: LogicalPlan,
+      writeOptions: Map[String, String],
+      rowSchema: StructType,
+      queryId: String = UUID.randomUUID().toString): WriteBuilder = {
+
+    val info = LogicalWriteInfoImpl(
+      queryId,
+      rowSchema,
+      writeOptions.asOptions,
+      rowIdSchema = None,
+      metadataSchema = None)
+    table match {
+      case opTable @ RowLevelOperationTable(underlyingTable, operation, _) =>
+        // Only hand off to the RowLevelOperation if its target scan survived optimization
+        // (e.g. PropagateEmptyRelation can eliminate the LeftAnti scan on ON false or an
+        // empty source, in which case newScanBuilder was never invoked).
+        if (hasRowLevelScan(query, opTable)) {
+          operation.newWriteBuilder(info)
+        } else {
+          underlyingTable.asWritable.newWriteBuilder(info)
+        }
+      case _ =>
+        table.asWritable.newWriteBuilder(info)
+    }
+  }
+
+  private def hasRowLevelScan(
+      query: LogicalPlan,
+      opTable: RowLevelOperationTable): Boolean = {
+    query.exists {
+      case r: DataSourceV2ScanRelation => r.relation.table eq opTable
+      case _ => false
+    }
   }
 
   private def newDeltaWriteBuilder(
