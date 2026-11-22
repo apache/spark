@@ -67,12 +67,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
         Some(plan)
       }
     result match {
-      // Set consecutive join nodes ordered, also below the filter that `JoinReorderDP.search` may
-      // put above them.
-      case Some(p @ Project(_, f @ Filter(_, j: Join))) =>
-        p.copy(child = f.copy(child = replaceWithOrderedJoin(j)))
-      case Some(f @ Filter(_, j: Join)) =>
-        f.copy(child = replaceWithOrderedJoin(j))
+      // Set consecutive join nodes ordered.
       case Some(reordered) =>
         replaceWithOrderedJoin(reordered)
       // The conditions that may join two plans do not connect all items. Only the top join is set
@@ -98,7 +93,8 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       plan: LogicalPlan,
       isTop: Boolean = true): (Seq[LogicalPlan], ExpressionSet) = {
     plan match {
-      case j: Join if !isTop && hasImmovableCondition(j) =>
+      case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)
+        if !isTop && hasImmovableConjunct(cond, j.children) =>
         (Seq(plan), ExpressionSet())
       case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left, isTop = false)
@@ -113,19 +109,12 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  /** Whether `join` is an inner join whose condition has a conjunct that may not move. */
-  private def hasImmovableCondition(join: Join): Boolean = join match {
-    case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
-      splitMovable(splitConjunctivePredicates(cond), Seq(left, right))._2.nonEmpty
-    case _ =>
-      false
-  }
-
   private def replaceWithOrderedJoin(
       plan: LogicalPlan,
       isTop: Boolean = true): LogicalPlan = plan match {
     // A join that is an item (see `extractInnerJoins`) is reordered by itself later.
-    case j: Join if !isTop && hasImmovableCondition(j) =>
+    case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)
+      if !isTop && hasImmovableConjunct(cond, j.children) =>
       plan
     case j @ Join(left, right, jt: InnerLike, Some(cond), JoinHint.NONE) =>
       val replacedLeft = replaceWithOrderedJoin(left, isTop = false)
@@ -133,6 +122,11 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
     case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)) =>
       p.copy(child = replaceWithOrderedJoin(j, isTop))
+    // The filter that `JoinReorderDP.search` may put above the joins, and the project above it.
+    case p @ Project(_, f @ Filter(_, _: Join)) if isTop =>
+      p.copy(child = replaceWithOrderedJoin(f))
+    case f @ Filter(_, j: Join) if isTop =>
+      f.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
   }
@@ -174,11 +168,21 @@ case class OrderedJoin(
  * level 3: p({A, B, C, D})
  * where p({A, B, C, D}) is the final output plan.
  *
+ * Only the join conditions that may be evaluated ahead of the others (see
+ * `PredicateHelper.splitMovable`) join two plans. The other conditions, and the ones over one item
+ * or no item, go into a filter above the final plan. There is no final plan if the conditions that
+ * may join two plans do not connect all items.
+ *
  * For cost evaluation, since physical costs for operators are not available currently, we use
  * cardinalities and sizes to compute costs.
  */
 object JoinReorderDP extends PredicateHelper with Logging {
 
+  /**
+   * Returns the final plan of `items`, with the conditions that no join took in a filter above it,
+   * and with `output` as its output, or None if there is no final plan, when the conditions that
+   * may join two plans do not connect all items.
+   */
   def search(
       conf: SQLConf,
       items: Seq[LogicalPlan],
@@ -200,14 +204,14 @@ object JoinReorderDP extends PredicateHelper with Logging {
       joinPlanMap
     })
 
-    // Build filters from the join graph to be used by the search algorithm.
-    val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, conditions, itemIndex)
-
     // Only the conditions that may be evaluated ahead of the others (see `splitMovable`) join two
     // plans. The others, e.g. a throwable condition and a condition that can fail after it, go
     // into a filter above the joins (see below), so the joins keep the columns that they read.
     val (movableConds, otherConds) = splitMovable(conditions.toSeq, items)
     val joinConds = ExpressionSet(movableConds)
+
+    // Build filters from the join graph to be used by the search algorithm.
+    val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, joinConds, itemIndex)
 
     // Build plans for the next levels up to the last one, which has at most one plan, for all
     // items.
