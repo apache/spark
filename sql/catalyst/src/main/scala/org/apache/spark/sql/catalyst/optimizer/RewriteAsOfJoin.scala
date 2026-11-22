@@ -86,7 +86,12 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         val projectWithCorrelatedSubquery = Project(
           left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
           left)
-        val projectWithScalarSubquery = if (conf.decorrelateInnerQueryEnabled) {
+        // A streaming left side reaches here only with
+        // spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery, which keeps the previous plan
+        // so that a query restarts from its checkpoint. So it also keeps the legacy decorrelation
+        // when DecorrelateInnerQuery is disabled. The decorrelated plan would aggregate the
+        // streaming side, which streaming queries reject.
+        val projectWithScalarSubquery = if (conf.decorrelateInnerQueryEnabled || left.isStreaming) {
           projectWithCorrelatedSubquery
         } else {
           // Without DecorrelateInnerQuery, PullupCorrelatedPredicates only pulls correlated
@@ -104,12 +109,10 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
             .contains(PullOutNestedDataOuterRefExpressions.ruleName)
           val decorrelationEnabled = conf.clone()
           decorrelationEnabled.setConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED, true)
-          val decorrelated = SQLConf.withExistingConf(decorrelationEnabled) {
+          SQLConf.withExistingConf(decorrelationEnabled) {
             PullupCorrelatedPredicates(
               if (pullOutExcluded) host else PullOutNestedDataOuterRefExpressions(host))
-          }.transformUp { case r: LocalRelation if r eq leftPlaceholder => left }
-          assert(!decorrelated.exists(_ eq leftPlaceholder), "The placeholder for left is left")
-          decorrelated
+          }.transformUp { case r: LocalRelation if r == leftPlaceholder => left }
         }
 
         val filterRight = joinType match {
