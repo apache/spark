@@ -814,6 +814,30 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-62191: the split leaves an alias of each condition after a non-deterministic " +
+    "one to the top projection") {
+    def query(later: Expression): LogicalPlan = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"g" && (Rand(10) > 0.5 || $"f") && later)
+      .analyze
+
+    // Computing g below for the condition before the non-deterministic one would leave
+    // (g || b > 1) reading only columns of the lower layer, and the next pass would push it
+    // below the projection, ahead of the non-deterministic condition.
+    val readsOnlyG = query($"g" || $"b" > 1)
+    comparePlans(Optimize.execute(readsOnlyG), readsOnlyG)
+
+    // (g || j) still reads j in the top projection, so g can be computed below.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("other") as "g")
+      .where($"g")
+      .select($"a", expensiveRLike("magic") as "f", $"g", expensiveRLike("third") as "j")
+      .where((Rand(10) > 0.5 || $"f") && ($"g" || $"j"))
+      .analyze
+    comparePlans(Optimize.execute(query($"g" || $"j")), correctAnswer)
+  }
+
   test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     Seq(true, false).foreach { split =>

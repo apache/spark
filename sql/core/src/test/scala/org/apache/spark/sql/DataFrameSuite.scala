@@ -3019,16 +3019,21 @@ class DataFrameSuite extends SharedSparkSession
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val notX = udf((e: String) => e != "x")
       val length = udf((e: String) => e.length)
-      // `rand(10) * 10 > 100` is false on every row, so the first conjunct is false on 'x' only,
-      // and the `AND` short-circuit keeps the cast of 'x' from being evaluated. Each query is
-      // built inside the config loop, so it is planned under that config.
+      // `rand(10) * 10 > 100` is false on every row, so the conjunct with it is false on 'x' only,
+      // and the `AND` short-circuit keeps the cast of 'x' from being evaluated. With `n > 0`
+      // written first, the split must not compute `n` below for it either, or the next pass
+      // would push the cast below the projection. Each query is built inside the config loop, so
+      // it is planned under that config.
       def df: DataFrame = spark.range(0, 10, 1, 1)
         .selectExpr("IF(id = 3, 'x', CAST(id AS STRING)) AS e")
         .select($"e", notX($"e") as "f", length($"e") as "n")
-        .where((rand(10) * 10 > 100 || $"f") && $"e".cast("int") + $"n" > 0)
+      def nonDeterministic: Column = rand(10) * 10 > 100 || $"f"
+      def canFail: Column = $"e".cast("int") + $"n" > 0
+      val expected = (0 until 10).filter(_ != 3).map(i => Row(i.toString, true, 1))
       Seq(true, false).foreach { codegen =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
-          checkAnswer(df, (0 until 10).filter(_ != 3).map(i => Row(i.toString, true, 1)))
+          checkAnswer(df.where(nonDeterministic && canFail), expected)
+          checkAnswer(df.where($"n" > 0 && nonDeterministic && canFail), expected)
         }
       }
     }

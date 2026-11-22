@@ -2874,7 +2874,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // in a lower projection) ahead of the conditions written before them. So do all the
         // conditions written after the first of these: each reads an expensive alias, e.g. a UDF
         // or a regex whose pattern comes from the data, which can fail, so a lower layer must
-        // not evaluate it on the rows that condition filters out.
+        // not evaluate it on the rows that condition filters out. Nor may the split compute all
+        // of the expensive aliases that one of them reads below: the next pass of this rule would
+        // then see that condition as cheap and push it below the projection all the same.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
             val (splittable, notSplittable) = expensiveWithUsed.span {
@@ -2882,7 +2884,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             }
             val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
               project, aliasMap, baseChild,
-              splittable.map { case (cond, used, _) => (cond, used) })
+              splittable.map { case (cond, used, _) => (cond, used) },
+              notSplittable.drop(1).map(_._2))
             // Keep the top filter in the order the conditions were written, so a throwable
             // condition still only sees the rows the conditions before it kept.
             val stayUpSet = (unplaced ++ notSplittable.map(_._1)).toSet
@@ -3213,7 +3216,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * conditions by cost, and cost is no way to decide how many rows a non-deterministic
    * expression sees, nor may it evaluate a throwable one ahead of the conditions before it. Nor
    * may it evaluate one that can fail ahead of a non-deterministic or throwable condition written
-   * before it, so callers pass none written after such a condition.
+   * before it, so callers pass none written after such a condition. They pass the aliases that
+   * each of those conditions reads as `usedAfterBarrier` instead, and the split never computes
+   * all of the expensive aliases that one of them reads: the condition would then only read
+   * columns of the lower layers, and the next pass of the rule would push it below the projection
+   * as a cheap one, ahead of the condition before it.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form).
@@ -3222,10 +3229,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       project: Project,
       aliasMap: AttributeMap[Alias],
       baseChild: LogicalPlan,
-      expensiveConds: Seq[(Expression, AttributeMap[Alias])])
+      expensiveConds: Seq[(Expression, AttributeMap[Alias])],
+      usedAfterBarrier: Seq[AttributeMap[Alias]])
     : (LogicalPlan, AttributeSet, Seq[Expression]) = {
     val expensiveAliases = AttributeSet(
       aliasMap.collect { case (attr, alias) if isExpensive(alias.child) => attr })
+    // The expensive aliases of each condition in `usedAfterBarrier` that reads any.
+    val expensiveAfterBarrier = usedAfterBarrier
+      .map(used => AttributeSet(used.keys).intersect(expensiveAliases))
+      .filter(_.nonEmpty)
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
     // Two aliases share work exactly when they share a regex, so version 0 of the estimate
@@ -3280,9 +3292,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     var computed = AttributeSet.empty
     var searching = true
     while (searching) {
-      // Only split while it leaves an expensive alias for a later layer.
+      // Only split while it leaves an expensive alias for a later layer, and one of each
+      // condition in `usedAfterBarrier` for the top projection.
       val stillToCompute = expensiveAliases -- computed
-      val candidates = pending.filter { case (used, _) => !stillToCompute.subsetOf(used) }
+      val candidates = pending.filter { case (used, _) =>
+        !stillToCompute.subsetOf(used) &&
+          !expensiveAfterBarrier.exists(_.subsetOf(computed ++ used))
+      }
       if (candidates.isEmpty) {
         searching = false
       } else {
