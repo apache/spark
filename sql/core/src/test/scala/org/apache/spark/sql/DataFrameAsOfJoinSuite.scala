@@ -295,4 +295,28 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-62239: as-of join - decorrelateInnerQuery disabled") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val left = df1.withColumn("m", map(lit("k"), col("a")))
+    // With DecorrelateInnerQuery disabled, the first join used to fail with INTERNAL_ERROR (an
+    // outer reference was left in the MIN_BY order expression), and the second used to return
+    // every right row with `right_val <= m['k']` instead of the nearest one. The second also
+    // needs the map member pulled out of the subquery before decorrelation.
+    Seq((left.col("a"), null), (lit(10), left.col("m")("k") >= df2.col("right_val"))).foreach {
+      case (leftAsOf, joinExprs) =>
+        def asOfJoin(): DataFrame = left.joinAsOf(df2, leftAsOf, df2.col("a"), joinExprs,
+          joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward")
+        val expected = asOfJoin()
+        val expectedPlan = expected.queryExecution.optimizedPlan
+        val expectedAnswer = expected.collect().toSeq
+        // The nearest right `a` of each left row.
+        assert(expectedAnswer.map(_.getInt(4)).sorted == Seq(1, 3, 7))
+        withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+          val df = asOfJoin()
+          comparePlans(df.queryExecution.optimizedPlan, expectedPlan)
+          checkAnswer(df, expectedAnswer)
+        }
+    }
+  }
 }
