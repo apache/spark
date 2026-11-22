@@ -691,6 +691,38 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY codegen generates the same source for every bin width and origin") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      def query(width: String, origin: String): String =
+        s"""SELECT id, bin_start, bin_end, bin_distribute_ratio, value FROM VALUES
+           |  (1, TIMESTAMP '2024-01-01 00:02:00', TIMESTAMP '2024-01-01 00:17:00', 150.0D)
+           |  AS metrics(id, ts_start, ts_end, value)
+           |BIN BY (
+           |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL $width
+           |  ALIGN TO TIMESTAMP '$origin' DISTRIBUTE UNIFORM (value))""".stripMargin
+      val sources = Seq(
+        query(width = "'5' MINUTE", origin = "2024-01-01 00:00:00"),
+        query(width = "'7' MINUTE", origin = "2024-01-01 00:01:00")
+      ).map { q =>
+        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          sql(q).collect().toSeq
+        }
+        val df = sql(q)
+        val plan = df.queryExecution.executedPlan
+        val stage = binByCodegenStage(plan)
+          .getOrElse(fail(s"BIN BY was not code generated:\n$plan"))
+        checkAnswer(df, expected)
+        stage.doCodeGen()._2.body
+      }
+
+      assert(sources.distinct.length == 1)
+    }
+  }
+
   gridTest("BIN BY codegen handles mixed null and zero-length ranges")(Seq(false, true)) {
     codegen =>
       withSQLConf(
@@ -1171,6 +1203,7 @@ class BinByWithoutCodegenSuite extends BinBySuite {
     "BIN BY codegen fuses wide output and bin filtering",
     "BIN BY codegen splits its consume for a parent that reads every column (false)",
     "BIN BY codegen splits its consume for a parent that reads every column (true)",
+    "BIN BY codegen generates the same source for every bin width and origin",
     "BIN BY stops expanding a row at a LIMIT in the same stage (false)",
     "BIN BY stops expanding a row at a LIMIT in the same stage (true)",
     "BIN BY stops at a top-level LIMIT after the bins it returns (false)",

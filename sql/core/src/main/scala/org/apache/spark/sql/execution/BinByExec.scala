@@ -132,6 +132,24 @@ case class BinByExec(
       obj = TimestampFormatter.getFractionFormatter(zone),
       className = classOf[TimestampFormatter].getName
     )
+    // The width and the origin are references, so the generated source, and thus the compiled
+    // class in the cache, is the same for every width and origin.
+    val widthRef = ctx.addReferenceObj(
+      objName = "binWidth", obj = binWidthMicros, className = "java.lang.Long")
+    val width = ctx.addMutableState(
+      javaType = CodeGenerator.JAVA_LONG,
+      variableName = "binWidth",
+      initFunc = v => s"$v = $widthRef.longValue();",
+      forceInline = true
+    )
+    val originRef = ctx.addReferenceObj(
+      objName = "binOrigin", obj = originMicros, className = "java.lang.Long")
+    val origin = ctx.addMutableState(
+      javaType = CodeGenerator.JAVA_LONG,
+      variableName = "binOrigin",
+      initFunc = v => s"$v = $originRef.longValue();",
+      forceInline = true
+    )
     val taskContext = ctx.addMutableState(
       javaType = "TaskContext",
       variableName = "taskContext",
@@ -173,7 +191,7 @@ case class BinByExec(
        |      try {
        |        $total = java.lang.Math.subtractExact($end, $start);
        |        scala.Tuple2 $bucket = $dateTimeUtils.timeBucketFromTimestampDTInterval(
-       |          ${binWidthMicros}L, $start, ${originMicros}L, $zoneRef);
+       |          $width, $start, $origin, $zoneRef);
        |        $index = $bucket._1$$mcJ$$sp();
        |        $nextStart = $bucket._2$$mcJ$$sp();
        |      } catch (java.lang.ArithmeticException e) {
@@ -192,7 +210,7 @@ case class BinByExec(
        |    try {
        |      $index = java.lang.Math.addExact($index, 1L);
        |      $binEnd = $dateTimeUtils.timeBucketFromIndexDTInterval(
-       |        ${binWidthMicros}L, $index, ${originMicros}L, $zoneRef);
+       |        $width, $index, $origin, $zoneRef);
        |    } catch (java.lang.ArithmeticException e) {
        |      throw $errors.binByOverflowError();
        |    }
