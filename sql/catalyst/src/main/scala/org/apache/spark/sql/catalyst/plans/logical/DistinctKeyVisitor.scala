@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionSet, NamedExpression}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, LeftSemiOrAnti, RightOuter}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
@@ -122,7 +122,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     p match {
       case Join(_, _, LeftSemiOrAnti(_), _, _) =>
         p.left.distinctKeys
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+      case ExtractAllEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
           if left.distinctKeys.nonEmpty || right.distinctKeys.nonEmpty =>
         val rightJoinKeySet = joinKeySet(rightKeys)
         val leftJoinKeySet = joinKeySet(leftKeys)
