@@ -16,7 +16,6 @@
  */
 package org.apache.spark.internal.config
 
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -56,29 +55,6 @@ private[spark] object Python {
     .version("2.4.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
-
-  // Defined before the config entry, whose validator captures it.
-  private[spark] val IN_PROCESS_PATH_RULE = "In-process Python site-packages paths cannot " +
-    "contain single quotes, newlines, NUL, surrogate characters (including supplementary " +
-    "Unicode characters) or the platform path separator"
-
-  val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.python.inProcess.sitePackages")
-    .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
-      "These directories are processed with site.addsitedir after Spark distribution paths " +
-      "and the process PYTHONPATH. JEP must be directly importable from these directories. " +
-      s"$IN_PROCESS_PATH_RULE. Restart the executor process before changing these directories.")
-    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-    .version("4.4.0")
-    .stringConf
-    .toSequence
-    .checkValue(_.forall(isValidInProcessPath), IN_PROCESS_PATH_RULE)
-    .createWithDefault(Nil)
-
-  private[spark] def isValidInProcessPath(path: String): Boolean = {
-    !path.exists(c => c == '\'' || c == '\r' || c == '\n' || c == '\u0000' ||
-      Character.isSurrogate(c) ||
-      c == File.pathSeparatorChar)
-  }
 
   val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
     .internal()
@@ -189,7 +165,9 @@ private[spark] object Python {
         "while the main task thread reads output from the Python worker, allowing the two " +
         "directions to overlap. This can improve throughput for some workloads " +
         "(e.g., multi-column UDFs or compute-heavy UDFs like ML inference); for light, " +
-        "single-column UDFs the overhead of the extra thread may offset the gain.")
+        "single-column UDFs the overhead of the extra thread may offset the gain. " +
+        "Detailed Python UDF phase timings are not collected in this mode. " +
+        "pythonNumPipelinedTasks counts tasks using this mode.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

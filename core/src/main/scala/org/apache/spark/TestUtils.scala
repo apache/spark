@@ -203,7 +203,7 @@ private[spark] object TestUtils extends SparkTestUtils {
 
   // SPARK-40053: This string needs to be updated when the
   // minimum python supported version changes.
-  val minimumPythonSupportedVersion: String = "3.7.0"
+  val minimumPythonSupportedVersion: String = "3.11.0"
 
   def isPythonVersionAvailable: Boolean = {
     val version = minimumPythonSupportedVersion.split('.').map(_.toInt)

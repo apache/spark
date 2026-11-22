@@ -1185,6 +1185,20 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("SPARK-61935: update checks NOT NULL for a Scala UDF with a primitive input") {
+    withUserDefinedFunction("plus1" -> true) {
+      spark.udf.register("plus1", (x: Int) => x + 1)
+      createAndInitTable("pk INT NOT NULL, salary INT NOT NULL, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      val e = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET salary = plus1(IF(pk = 1, NULL, salary)) WHERE pk = 1")
+      }
+      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+  }
+
   test("update with NOT NULL checks") {
     createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
       """{ "pk": 1, "s": { "n_i": 1, "n_l": 11 }, "dep": "hr" }

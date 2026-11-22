@@ -201,6 +201,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
         Row(null, null, 113000.0, 3) :: Nil)
   }
 
+  test("SPARK-62094: grouping sets of a struct made nullable by an outer join") {
+    val left = Seq((1, 10), (2, 20)).toDF("a", "x")
+    val right = Seq(2).toDF("b")
+    // The field of `struct(right("b"))` is resolved as non-nullable, and becomes nullable after
+    // resolution
+    checkAnswer(
+      left.join(right, left("a") === right("b"), "left_outer")
+        .groupingSets(Seq(Seq(struct(right("b")))), struct(right("b")))
+        .count()
+        .toDF("s", "count")
+        .select($"s.b", $"count"),
+      Row(null, 1) :: Row(2, 1) :: Nil)
+  }
+
   test("grouping and grouping_id") {
     checkAnswer(
       courseSales.cube("course", "year")
@@ -4373,6 +4387,67 @@ class DataFrameAggregateSuite extends SharedSparkSession
       kll_sketch_get_rank_double($"sketch", lit(3.0))
     ).collect()(0)(0)
     assert(rank.asInstanceOf[Double] >= 0.0 && rank.asInstanceOf[Double] <= 1.0)
+  }
+
+  Seq("bigint", "float", "double").foreach { valueType =>
+    test(s"kll_sketch $valueType getters with NULL requests") {
+      val sketchDf = spark.range(-10, 20, 10).agg(
+        expr(s"kll_sketch_agg_$valueType(CAST(id AS $valueType))").as("sketch"))
+      Seq(
+        ("quantile", "double", "0.5D", Seq(-10, 0, -10)),
+        ("rank", valueType, s"CAST(10 AS $valueType)", Seq(2.0 / 3.0, 1.0, 2.0 / 3.0))
+      ).foreach { case (getter, requestType, request, expected) =>
+        val function = s"kll_sketch_get_${getter}_$valueType"
+        val nullScalar = s"CAST(NULL AS $requestType)"
+        val nullArray = s"CAST(NULL AS ARRAY<$requestType>)"
+        checkAnswer(
+          sketchDf.selectExpr(
+            s"$function(sketch, array(NULL, $request, NULL))",
+            s"$function(sketch, array($nullScalar, $nullScalar))",
+            s"$function(sketch, $nullScalar)",
+            s"$function(sketch, $nullArray)",
+            s"$function(CAST(NULL AS BINARY), CAST(0 AS $requestType))",
+            s"$function(CAST(NULL AS BINARY), array(CAST(0 AS $requestType)))"),
+          Row(expected, Seq(expected.head, expected.head), null, null, null, null))
+      }
+    }
+
+    test(s"kll_sketch $valueType getters reject NULL arrays requiring implicit casts") {
+      Seq(false, true).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          val sketchDf = spark.range(-10, 20, 10).agg(
+            expr(s"kll_sketch_agg_$valueType(CAST(id AS $valueType))").as("sketch"))
+          val (rank, nextRank, rankInputType) = if (valueType == "bigint") {
+            ("3", "4", "INT")
+          } else {
+            ("3.0", "4.0", "DECIMAL(2,1)")
+          }
+          Seq(
+            ("quantile", "DOUBLE", "0.5", "0.25", "DECIMAL(1,1)", Seq(0, -10)),
+            ("rank", valueType.toUpperCase(Locale.ROOT), rank, nextRank, rankInputType,
+              Seq(2.0 / 3.0, 2.0 / 3.0))
+          ).foreach { case (getter, requestType, request, nextRequest, inputType, expected) =>
+            val function = s"kll_sketch_get_${getter}_$valueType"
+            val query = s"$function(sketch, array($request, NULL))"
+            checkError(
+              exception = intercept[AnalysisException] {
+                sketchDf.selectExpr(query)
+              },
+              condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+              parameters = Map(
+                "sqlExpr" -> s""""$query"""",
+                "paramIndex" -> "second",
+                "inputSql" -> s""""array($request, NULL)"""",
+                "inputType" -> s""""ARRAY<$inputType>"""",
+                "requiredType" -> s"""("$requestType" or "ARRAY<$requestType>")"""),
+              context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
+            checkAnswer(
+              sketchDf.selectExpr(s"$function(sketch, array($request, $nextRequest))"),
+              Row(expected))
+          }
+        }
+      }
+    }
   }
 
   test("kll_sketch with null values") {

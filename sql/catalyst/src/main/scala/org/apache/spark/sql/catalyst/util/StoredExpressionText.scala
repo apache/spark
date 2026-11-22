@@ -37,8 +37,9 @@ object StoredExpressionText {
    * The settings a stored text is read under. The session time zone, case sensitivity, timestamp
    * type and decimal precision loss stay with the given session, because the settings of the DDL
    * are not known here and pinning them would silently change existing tables of a deployment that
-   * sets them. Any other config that the parsing or the analysis reads takes its default value,
-   * also one that a function reads while it is built, such as
+   * sets them. So does `spark.sql.timeType.enabled`, which decides whether the TIME type is
+   * supported, not how a text reads. Any other config that the parsing or the analysis reads takes
+   * its default value, also one that a function reads while it is built, such as
    * `spark.sql.legacy.negativeIndexInArrayInsert`. With
    * `spark.sql.legacy.useCurrentConfigsForGeneratedColumn`, these are the settings of the session.
    */
@@ -60,6 +61,7 @@ object StoredExpressionText {
     c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
     c.setConf(
       SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
+    c.setConf(SQLConf.TIME_TYPE_ENABLED, session.isTimeTypeEnabled)
     c
   }
 

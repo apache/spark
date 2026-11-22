@@ -55,7 +55,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
-  private val logicalPlan = df.queryExecution.logical
+  // Use the analyzed plan like `DataFrameWriter`. Re-analyzing an unanalyzed plan resolves the
+  // write output before `UpdateAttributeNullability` updates the stale nullability of the query.
+  private val logicalPlan = df.logicalPlan
 
   private var provider: Option[String] = None
 
