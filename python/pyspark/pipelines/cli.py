@@ -303,7 +303,7 @@ def run(
             raise PySparkException(
                 errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
                 messageParameters={
-                    "conflicting_option": "--full_refresh",
+                    "conflicting_option": "--full-refresh",
                 },
             )
         if refresh:

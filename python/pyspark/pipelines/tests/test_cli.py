@@ -392,7 +392,7 @@ class CLIUtilityTests(ReusedConnectTestCase):
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
             self.assertEqual(
-                context.exception.getMessageParameters(), {"conflicting_option": "--full_refresh"}
+                context.exception.getMessageParameters(), {"conflicting_option": "--full-refresh"}
             )
 
     def test_full_refresh_all_conflicts_with_refresh(self):
