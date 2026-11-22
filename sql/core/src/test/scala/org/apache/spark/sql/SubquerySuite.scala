@@ -4441,6 +4441,12 @@ class SubquerySuite extends SharedSparkSession
         """SELECT * FROM t1
           |WHERE a NOT IN (SELECT c1 FROM t2 WHERE c1 > a OR c1 NOT IN (SELECT col1 FROM t3n))
           |AND EXISTS (SELECT 1 FROM t2 WHERE c1 >= a)""".stripMargin
+      // A throwable conjunct written last stays in a Filter above the joins (SPARK-61927), which
+      // wraps the anti join just as a later subquery conjunct does, so the same holds for it.
+      val stayingUp =
+        """SELECT * FROM t1
+          |WHERE a NOT IN (SELECT c1 FROM t2 WHERE c1 > a OR c1 NOT IN (SELECT col1 FROM t3n))
+          |AND IF(a > 100, raise_error('unreachable'), true)""".stripMargin
       Seq(
         Seq.empty,
         Seq(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false"),
@@ -4448,6 +4454,14 @@ class SubquerySuite extends SharedSparkSession
       ).foreach { confs =>
         withSQLConf(confs: _*) {
           checkAnswer(sql(followed), Row(1) :: Row(2) :: Row(3) :: Nil)
+          val df = sql(stayingUp)
+          // The fixture only covers the Filter that stays up if it is planned above the anti join.
+          val stayUp = df.queryExecution.optimizedPlan.collectFirst {
+            case f @ Filter(_, j: Join) if j.joinType == LeftAnti => f
+          }
+          assert(stayUp.nonEmpty, s"expected a Filter above the anti join in\n" +
+            df.queryExecution.optimizedPlan)
+          checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
         }
       }
     }
