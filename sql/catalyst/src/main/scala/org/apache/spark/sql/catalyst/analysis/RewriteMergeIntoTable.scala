@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.{Collections, IdentityHashMap}
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ConstantFold
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
-import org.apache.spark.sql.catalyst.trees.TreePattern.MERGE_INTO_TABLE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, MERGE_INTO_TABLE, WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -89,7 +91,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
           val query = dataNotMatchedActions match {
             case Seq(insertAction: InsertAction) =>
-              tryBuildInsertOnlyMergeProject(r, source, cond, insertAction).getOrElse(mergeRows)
+              buildInsertOnlyMergeQuery(r, joinPlan, insertAction, mergeRows)
             case _ => mergeRows
           }
 
@@ -146,54 +148,83 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   }
 
   /**
-   * Tries to build a Project/Filter plan for a single INSERT action.
-   *
-   * Note: Pushing the action condition below the anti join can evaluate it for source rows that
-   * match the target. Failures deferred inside IF/CASE in that condition must stay in MergeRows
-   * so matching rows skip the condition.
-   *
-   * Note: Later optimizer rules may introduce failing constants that this check cannot see.
+   * Uses Project for values that fold safely and MergeRows for values needing conditional
+   * evaluation. Conditions are checked separately so safe source filters can still be pushed down.
+   * Later optimizer rules may introduce failing constants that this check cannot see.
    */
-  private def tryBuildInsertOnlyMergeProject(
+  private def buildInsertOnlyMergeQuery(
       relation: DataSourceV2Relation,
-      source: LogicalPlan,
-      cond: Expression,
-      insertAction: InsertAction): Option[Project] = {
-    // Run ReplaceExpressions, ComputeCurrentTime and SpecialDatetimeValues before ConstantFolding
-    // to detect failures that Project/Filter would expose. A failed fold can throw directly or
-    // be tagged for runtime evaluation. MergeRows evaluates instructions conditionally, like
-    // IF/CASE branches, so failures occur only if the failing expression is reached.
-    val folded = try {
-      val replaced = ReplaceExpressions.replace(insertAction.clone())
-      val withCurrentTime = ComputeCurrentTime.applyForExpression(replaced)
-      val rewritten = SpecialDatetimeValues.applyForExpression(withCurrentTime)
-      ConstantFolding.constantFolding(rewritten).asInstanceOf[InsertAction]
-    } catch {
-      case NonFatal(e) =>
-        logInfo(log"Keeping MergeRows for insert-only MERGE because expression preparation " +
-          log"or constant folding failed.", e)
-        return None
+      joinPlan: Join,
+      insertAction: InsertAction,
+      mergeRows: MergeRows): LogicalPlan = {
+    val condition = insertAction.condition.getOrElse(TrueLiteral)
+    val output = insertAction.assignments.map(_.value)
+    // Subqueries and window values need Project's analysis rules. Preserve their existing plan.
+    val supportsMergeRows = !output.exists { expr =>
+      SubqueryExpression.hasSubquery(expr) || expr.containsPattern(WINDOW_EXPRESSION)
+    }
+    val foldedCondition = if (supportsMergeRows) {
+      tryFoldMergeExpression(condition, isCondition = true)
+    } else {
+      Some(condition)
+    }
+    val foldedOutput = if (supportsMergeRows) {
+      output.map(tryFoldMergeExpression(_, isCondition = false))
+    } else {
+      output.map(Some(_))
     }
 
-    if (folded.condition.exists(
-        _.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)))) {
-      logInfo(log"Keeping MergeRows for insert-only MERGE because its action condition " +
-        log"contains a deferred constant-folding failure.")
-      None
-    } else {
-      // NOT MATCHED conditions only refer to source columns and can be pushed down.
-      val filteredSource = insertAction.condition match {
-        case Some(insertCond) if insertCond.dataType == NullType =>
-          Filter(Cast(insertCond, BooleanType), source)
-        case Some(insertCond) => Filter(insertCond, source)
-        case None => source
-      }
-      val filteredJoin = Join(filteredSource, relation, LeftAnti, Some(cond), JoinHint.NONE)
-      val output = insertAction.assignments.map(_.value)
-      val projectList = output.zip(relation.output).map { case (expr, attr) =>
+    val filteredSource = foldedCondition match {
+      // Filter requires BOOLEAN; MergeRows also accepts an untyped NULL condition.
+      case Some(cond) if insertAction.condition.isDefined && cond.dataType == NullType =>
+        Filter(Cast(cond, BooleanType), joinPlan.left)
+      case Some(cond) if insertAction.condition.isDefined => Filter(cond, joinPlan.left)
+      case _ => joinPlan.left
+    }
+    val filteredJoin = joinPlan.copy(left = filteredSource)
+    val values = foldedOutput.zip(output).map { case (folded, original) =>
+      folded.getOrElse(original)
+    }
+
+    if (foldedCondition.isDefined && foldedOutput.forall(_.isDefined)) {
+      val projectList = values.zip(relation.output).map { case (expr, attr) =>
         Alias(expr, attr.name)()
       }
-      Some(Project(projectList, filteredJoin))
+      Project(projectList, filteredJoin)
+    } else {
+      // A condition with a deferred failure must be evaluated only for unmatched source rows.
+      val instructionCondition = if (foldedCondition.isDefined) TrueLiteral else condition
+      mergeRows.copy(
+        notMatchedInstructions = Seq(Keep(Insert, instructionCondition, values)),
+        child = filteredJoin)
+    }
+  }
+
+  private def tryFoldMergeExpression(
+      expr: Expression,
+      isCondition: Boolean): Option[Expression] = {
+    try {
+      val replaced = ReplaceExpressions.replace(expr.clone())
+      val withCurrentTime = ComputeCurrentTime.applyForExpression(replaced)
+      // Catalog/user functions need ReplaceCurrentLike, which requires the session catalog.
+      if (withCurrentTime.containsPattern(CURRENT_LIKE)) return None
+      val rewritten = SpecialDatetimeValues.applyForExpression(withCurrentTime)
+      val failed = Collections.newSetFromMap(new IdentityHashMap[Expression, java.lang.Boolean]())
+      val folded = ConstantFolding.constantFolding(rewritten, failed = failed)
+      if (isCondition && (!failed.isEmpty ||
+          folded.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)))) {
+        None
+      } else if (rewritten.fastEquals(replaced)) {
+        // Reuse successful folds, but leave query-time values for the optimizer's shared snapshot.
+        Some(folded)
+      } else {
+        Some(expr)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logDebug("Keeping conditional MERGE evaluation after expression preparation or " +
+          "constant folding failed.", e)
+        None
     }
   }
 

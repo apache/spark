@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
@@ -2074,19 +2074,22 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       "IF(EXISTS(SELECT 1 FROM other o WHERE o.pk = s.pk), 1, 0)" -> 1,
       "row_number() OVER (ORDER BY s.pk)" -> 1)
     conditional <- Seq(false, true)
-  } yield (value, expectedSalary, conditional)) { case (value, expectedSalary, conditional) =>
+    failingCondition <- Seq(false, true)
+  } yield (value, expectedSalary, conditional, failingCondition)) {
+      case (value, expectedSalary, conditional, failingCondition) =>
     withTempView("source", "other") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
         """{ "pk": 1, "salary": 100, "dep": "hr" }""")
       Seq((2, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
       Seq((2, 20, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("other")
       val salary = if (conditional) s"IF(s.pk > 0, $value, 1 DIV 0)" else value
+      val condition = if (failingCondition) "AND IF(s.pk > 0, TRUE, 1 DIV 0 = 1)" else ""
 
       val Seq(qe) = withQueryExecutionsCaptured(spark) {
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s ON t.pk = s.pk
-             |WHEN NOT MATCHED THEN
+             |WHEN NOT MATCHED $condition THEN
              | INSERT (pk, salary, dep) VALUES (s.pk, $salary, s.dep)
              |""".stripMargin)
       }
@@ -2126,21 +2129,103 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  gridTest("MERGE rejects non-boolean action conditions")(Seq("s.salary", "s.salary + 1 DIV 0")) {
-      condition =>
+  gridTest("MERGE rejects non-boolean action conditions")(for {
+    condition <- Seq("salary", "salary + 1 DIV 0")
+    clause <- Seq("MATCHED", "NOT MATCHED", "NOT MATCHED BY SOURCE")
+  } yield (condition, clause)) { case (condition, clause) =>
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }""")
         Seq((2, 20, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        val (prefix, action, extraClause) = clause match {
+          case "MATCHED" => ("s", "DELETE", "WHEN NOT MATCHED THEN INSERT *")
+          case "NOT MATCHED" => ("s", "INSERT *", "")
+          case "NOT MATCHED BY SOURCE" => ("t", "DELETE", "")
+        }
         val error = intercept[AnalysisException] {
           sql(
             s"""MERGE INTO $tableNameAsString t
                |USING source s ON t.pk = s.pk
-               |WHEN NOT MATCHED AND $condition THEN INSERT *
+               |WHEN $clause AND $prefix.$condition THEN $action
+               |$extraClause
                |""".stripMargin)
         }
         assert(error.getCondition == "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN")
+      }
+    }
+  }
+
+  gridTest("single-insert MERGE defers failures exposed by current functions")(Seq(
+    "current_database()", "current_catalog()", "current_user()", "current_path()",
+    "current_timezone()")) { current =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        val merge =
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, CAST(concat($current, 'x') AS BIGINT), 'hr')
+             |""".stripMargin
+        Seq(1).toDF("pk").createOrReplaceTempView("source")
+        sql(merge)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100L, "hr"))
+
+        Seq(2).toDF("pk").createOrReplaceTempView("source")
+        val error = intercept[SparkNumberFormatException] { sql(merge) }
+        assert(error.getCondition == "CAST_INVALID_INPUT")
+      }
+    }
+  }
+
+  test("single-insert MERGE pushes a safe condition down when only its values fail to fold") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        spark.range(1, 4).selectExpr("CAST(id AS INT) AS pk")
+          .createOrReplaceTempView("source")
+        val Seq(qe) = withQueryExecutionsCaptured(spark) {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s ON t.pk = s.pk
+               |WHEN NOT MATCHED AND s.pk < 2 THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, 1 DIV 0, 'hr')
+               |""".stripMargin)
+        }
+        val rows = qe.analyzed.collect { case m: MergeRows => m }
+        assert(rows.size == 1)
+        assert(rows.head.child.asInstanceOf[Join].left.isInstanceOf[Filter])
+        val joins = qe.optimizedPlan.collect { case j @ Join(_, _, LeftAnti, _, _) => j }
+        assert(joins.size == 1, qe.optimizedPlan.treeString)
+        assert(joins.head.left.exists(_.isInstanceOf[Filter]), qe.optimizedPlan.treeString)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100L, "hr"))
+      }
+    }
+  }
+
+  gridTest("single-insert MERGE preserves folding errors alongside subqueries and windows")(Seq(
+    "(SELECT max(o.salary) FROM other o WHERE o.dep = s.dep)",
+    "IF(s.pk IN (SELECT o.pk FROM other o), 1, 0)",
+    "IF(EXISTS(SELECT 1 FROM other o WHERE o.pk = s.pk), 1, 0)",
+    "row_number() OVER (ORDER BY s.pk)")) { value =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source", "other") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        Seq((2, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+        Seq((2, 20, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("other")
+        val error = intercept[SparkArithmeticException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s ON t.pk = s.pk
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, $value, CAST(1 DIV 0 AS STRING))
+               |""".stripMargin)
+        }
+        assert(error.getCondition == "DIVIDE_BY_ZERO")
       }
     }
   }
