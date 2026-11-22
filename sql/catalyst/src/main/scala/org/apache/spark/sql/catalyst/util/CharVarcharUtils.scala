@@ -433,6 +433,37 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Matches what [[addPaddingForScan]] wraps a column in: the read-side CHAR padding, or under
+   * standard CHAR/VARCHAR semantics one of the read-side checks. Extracts the wrapped expression,
+   * the length, and whether shorter values are padded to that length, as the padding and the CHAR
+   * check do. Unlike [[ReadSidePadding]] it also matches the checks, which trim trailing spaces and
+   * fail on values still longer than the length, so it must not be used to compile padding.
+   */
+  private[sql] object ReadSidePaddingOrCheck {
+    def unapply(e: Expression): Option[(Expression, Int, Boolean)] = e match {
+      case s @ StaticInvoke(_, _, name, Seq(child, Literal(n: Int, _)), _, _, _, _, None)
+          if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        name match {
+          case READ_SIDE_PADDING | CHAR_TYPE_READ_SIDE_CHECK => Some((child, n, true))
+          case VARCHAR_TYPE_READ_SIDE_CHECK => Some((child, n, false))
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Strips a cast of a CHAR, VARCHAR or STRING value to a STRING of the same collation, such as
+   * the one a comparison with a STRING adds when CHAR and VARCHAR are first-class types. Such a
+   * cast returns the value unchanged, so the result is unique, or estimated, as the child is.
+   */
+  def stripCastToPlainString(e: Expression): Expression = e match {
+    case Cast(child, to: StringType, _, _) if StringHelper.plainStringType(child.dataType) == to =>
+      child
+    case _ => e
+  }
+
+  /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.
