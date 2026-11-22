@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Divide, EvalMode, Expression, If, InSubquery, IsNotNull, IsNull, ListQuery, Literal, NumericEvalContext, RaiseError, Rand}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class JoinOptimizationSuite extends PlanTest {
 
@@ -216,26 +217,78 @@ class JoinOptimizationSuite extends PlanTest {
     comparePlans(ReorderJoin(query.analyze), answer.analyze)
   }
 
+  private def ansiDivide(l: Expression, r: Expression): Expression =
+    Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+
   test("SPARK-62226: reorder inner joins with a lower filter whose condition can be NULL") {
     // The lower filter removes a row on which `b > d` is NULL, but in the join condition that the
-    // filter is put in, `NULL AND x` evaluates `x`. So a division above it that only reads its
-    // columns, which can fail in ANSI mode, is evaluated only where `b > d` is TRUE. A condition
-    // that can not fail, one that also reads a column of `z`, and any condition above a filter
-    // whose condition can not be NULL go into a join as before. Only ReorderJoin runs.
-    def divide(l: Expression, r: Expression): Expression =
-      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    // filter is put in, `NULL AND x` evaluates `x`. So a condition above it over two of its plans
+    // that can fail in ANSI mode, by itself or by reading `q`, is evaluated only where `b > d` is
+    // TRUE, with IS NOT NULL checks of its columns. One that can not fail once its cast of a
+    // literal is folded, one that also reads `z`, and the ones above a filter whose condition can
+    // not be NULL or of a streaming plan go into a join as before. Only ReorderJoin runs.
+    val canNotFail =
+      $"c" > $"d" || $"c" === Cast(Literal("1"), IntegerType, evalMode = EvalMode.ANSI)
+    Seq(($"b" > $"d", false, true), ($"b".isNotNull, false, false), ($"b" > $"d", true, false))
+      .foreach { case (cond, isStreaming, guarded) =>
+        val x = testRelation.copy(isStreaming = isStreaming)
+          .select($"a", $"b", $"c", ansiDivide($"a", $"b").as("q"))
+        val y = testRelation1.copy(isStreaming = isStreaming)
+        val z = LocalRelation(Seq($"e".int, $"f".int), Nil, isStreaming)
+        val failable = Seq(ansiDivide($"c", $"d") > 1, $"q" > $"d")
+        val query = x.join(y, condition = Some($"a" === $"d")).where(cond)
+          .join(z, condition = Some((Seq($"e" === $"a", canNotFail) ++ failable).reduce(_ && _)))
+          .where(ansiDivide($"c", $"f") > 1)
+        val moved = if (guarded) {
+          failable.map(If(cond, _, Literal(false))) ++ Seq($"c", $"d", $"q").map(IsNotNull(_))
+        } else {
+          failable
+        }
+        val answer = x.join(y,
+            condition = Some((Seq($"a" === $"d", cond, canNotFail) ++ moved).reduce(_ && _)))
+          .join(z, condition = Some($"e" === $"a" && ansiDivide($"c", $"f") > 1))
+        comparePlans(ReorderJoin(query.analyze), answer.analyze)
+      }
+  }
+
+  test("SPARK-62226: guard a condition above stacked filters whose condition can be NULL") {
+    // A condition over two plans is guarded by both filters, the lower one outermost. One over one
+    // plan is pushed down to it with the conjuncts of the filters that only read it, so only
+    // `c > 0`, which can be NULL, guards it, and nothing guards one over `z`. Only ReorderJoin
+    // runs.
     val z = LocalRelation($"e".int, $"f".int)
-    Seq(($"b" > $"d") -> true, $"b".isNotNull -> false).foreach { case (cond, nullable) =>
-      val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
-        .where(cond)
-        .join(z, condition = Some($"e" === $"a" && divide($"c", $"d") > 1 && $"c" > 1))
-        .where(divide($"c", $"f") > 1)
-      val division = divide($"c", $"d") > 1
-      val guarded = if (nullable) If(cond, division, Literal(false)) else division
-      val answer = testRelation.join(testRelation1,
-          condition = Some($"a" === $"d" && cond && guarded && $"c" > 1))
-        .join(z, condition = Some($"e" === $"a" && divide($"c", $"f") > 1))
-      comparePlans(ReorderJoin(query.analyze), answer.analyze)
-    }
+    val w = LocalRelation($"g".int, $"h".int)
+    val (overTwo, overOne, overZ) =
+      (ansiDivide($"c", $"d") > 1, ansiDivide($"c", $"b") > 1, ansiDivide($"e", $"f") > 1)
+    val lower = $"b" > $"d" && $"c" > 0 && $"a".isNotNull
+    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+      .where(lower)
+      .join(z, condition = Some($"e" === $"a")).where($"f" > $"b")
+      .join(w, condition = Some($"g" === $"a"))
+      .where(overTwo && overOne && overZ)
+    val answer = testRelation.join(testRelation1, condition = Some($"a" === $"d" && lower &&
+        IsNotNull($"c") && IsNotNull($"d") && If($"c" > 0, overOne, Literal(false)) &&
+        IsNotNull($"b")))
+      .join(z, condition = Some($"e" === $"a" && $"f" > $"b" &&
+        If(lower, If($"f" > $"b", overTwo, Literal(false)), Literal(false)) && overZ))
+      .join(w, condition = Some($"g" === $"a"))
+    comparePlans(ReorderJoin(query.analyze), answer.analyze)
+  }
+
+  test("SPARK-62226: do not guard a condition that ReorderJoin keeps out of the join conditions") {
+    // The IN subquery stays out of the join conditions, and `rand(0) > 0.5` and the division after
+    // it in a filter above all the joins, where they only see the rows that the lower filter
+    // keeps. Guarding them would wrap them again whenever the pushdown puts the lower filter, whose
+    // IN subquery can not go into a join either, back between the joins, until the batch reaches
+    // its iteration limit.
+    val z = LocalRelation($"e".int, $"f".int)
+    val s = LocalRelation($"y".int)
+    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+      .where(InSubquery(Seq($"a" + $"d"), ListQuery(s.select($"y"))))
+      .join(z, condition = Some($"e" === $"a"))
+      .where(InSubquery(Seq($"b" + $"d"), ListQuery(s.select($"y"))) && Rand(0) > 0.5 &&
+        ansiDivide($"c", $"d") > 1)
+    val optimized = Optimize.execute(query.analyze)
+    assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[If]))), optimized)
   }
 }
