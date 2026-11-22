@@ -195,9 +195,16 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     case Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
-      // as join keys.
+      // as join keys. A join computes its keys on every row of its inputs, ahead of the rest of
+      // its condition, so a conjunct that may not be evaluated ahead of the others (see
+      // `splitMovable`), e.g. one that can fail written after a throwable one, is not a key. It
+      // stays in the other condition, in its written order. Only the condition decides it, not
+      // the columns of the inputs that can fail, so that the keys do not change when the inputs
+      // do, e.g. when AQE replaces them with query stages: `NormalizeFloatingNumbers` only
+      // normalizes the keys that it finds in the optimizer.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val joinKeys = predicates.flatMap {
+      val notMovable = splitMovable(predicates, Nil)._2
+      val joinKeys = predicates.filterNot(notMovable.contains).flatMap {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
@@ -216,6 +223,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case _ => None
       }
       val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
+        case p if notMovable.contains(p) => false
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||

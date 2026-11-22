@@ -2115,6 +2115,49 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       }
     }
   }
+
+  test("SPARK-62241: do not compute an equality that can fail after a throwable join " +
+    "condition as a join key") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("c1", "c3") {
+        Seq((5, "abc"), (1, "7")).toDF("x", "s").write.saveAsTable("c1")
+        Seq(7).toDF("z").write.saveAsTable("c3")
+        // The CASE WHEN is false on the row whose s is 'abc', so the cast, which fails on it, is
+        // not evaluated on it. A join key would be computed on every row.
+        checkAnswer(
+          sql(
+            """SELECT c1.x, c3.z FROM c1 JOIN c3 ON
+              |  CASE WHEN c1.x > 3 THEN false WHEN c1.x >= 0 THEN true ELSE raise_error('k') END
+              |  AND CAST(c1.s AS INT) = c3.z
+              |""".stripMargin),
+          Row(1, 7))
+      }
+    }
+  }
+
+  test("SPARK-62241: AQE keeps the join keys after a throwable join condition") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      withTable("c1", "c3") {
+        Seq((1, "7"), (3, "-0")).toDF("x", "s").write.saveAsTable("c1")
+        Seq((7, 1), (0, 3)).toDF("z", "w").write.saveAsTable("c3")
+        // AQE plans the sort-merge join again as a broadcast hash join once its inputs are query
+        // stages. The equality on `q`, a cast computed below the join, must have the same role
+        // there: as a key that `NormalizeFloatingNumbers` did not normalize, -0.0 would not
+        // match 0.0.
+        checkAnswer(
+          sql(
+            """SELECT b.x, c3.z FROM (SELECT x, CAST(s AS DOUBLE) AS q FROM c1) b JOIN c3
+              |ON CASE WHEN c3.z > 100 THEN raise_error('big') ELSE true END
+              |  AND b.q = CAST(c3.z AS DOUBLE) AND b.x = c3.w
+              |""".stripMargin),
+          Seq(Row(1, 7), Row(3, 0)))
+      }
+    }
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite
