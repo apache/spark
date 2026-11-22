@@ -221,9 +221,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         Some(expr)
       }
     } catch {
-      case NonFatal(e) =>
-        logDebug("Keeping conditional MERGE evaluation after expression preparation or " +
-          "constant folding failed.", e)
+      case NonFatal(_) =>
+        logInfo(log"Keeping conditional MERGE evaluation after expression preparation or " +
+          log"constant folding failed.")
         None
     }
   }
