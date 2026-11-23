@@ -148,6 +148,57 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       }
     }
 
+    // A union traces each of its inputs that holds the join, so the second read of the CTE counts.
+    test(s"a range join bounded on one side only read twice through a union of a MATERIALIZED " +
+        s"CTE, V$version") {
+      withJoinConf(version) {
+        withTempView("l", "r") {
+          def query(secondTime: String)
+              : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], DataFrame) = {
+            val (leftInput, left) = input("left")
+            val (rightInput, right) = input("right")
+            left.createOrReplaceTempView("l")
+            right.createOrReplaceTempView("r")
+            (leftInput, rightInput, spark.sql(
+              s"WITH j AS MATERIALIZED (SELECT * FROM l JOIN r ON $oneSidedRange) " +
+              "SELECT CAST(w.start AS BIGINT), count(*) FROM " +
+              "(SELECT window(t, '10 seconds') AS w FROM " +
+              s"(SELECT leftTime AS t FROM j UNION ALL SELECT $secondTime AS t FROM j)) " +
+              "GROUP BY w"))
+          }
+          val (leftInput, rightInput, accepted) = query("leftTime")
+          testStream(accepted)(
+            MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+            MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+            AddData(rightInput, (2, 41L)), CheckNewAnswer((0L, 2L)),
+            MultiAddData(leftInput, (3, 100L))(rightInput, (3, 100L)), CheckNewAnswer(),
+            AddData(rightInput, (3, 101L)), CheckNewAnswer((40L, 4L)))
+          val (otherLeftInput, _, rejected) = query("rightTime")
+          testStream(rejected)(AddData(otherLeftInput, (1, 5L)), expectRejected("right"))
+        }
+      }
+    }
+
+    test(s"a stream with its own watermark unioned with a range join bounded on one side only, " +
+        s"V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (rightInput, right) = input("right")
+        val (otherInput, other) = input("other")
+        val result = windowCount(other.union(
+          left.join(right, expr(oneSidedRange)).select($"leftKey", $"leftTime")), "otherTime")
+        def addAll(other: Long, left: Long, right: Long): StreamAction =
+          StreamProgressLockedActions(Seq(AddData(otherInput, (7, other)),
+            AddData(leftInput, (left.toInt, left)), AddData(rightInput, (left.toInt, right))))
+        testStream(result)(
+          addAll(6L, 5L, 8L), CheckNewAnswer(),
+          addAll(40L, 40L, 40L), CheckNewAnswer(),
+          AddData(rightInput, (40, 41L)), CheckNewAnswer((0L, 2L)),
+          addAll(100L, 100L, 100L), CheckNewAnswer(),
+          AddData(rightInput, (100, 101L)), CheckNewAnswer((40L, 3L)))
+      }
+    }
+
     test(s"a range join bounded on one side only before a typed flatMapGroupsWithState with an " +
         s"event-time timeout, V$version") {
       withJoinConf(version) {

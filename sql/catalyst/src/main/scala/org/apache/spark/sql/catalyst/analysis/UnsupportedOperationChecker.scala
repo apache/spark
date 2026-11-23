@@ -227,11 +227,23 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   // The columns of `join`'s output that the event-time columns by which `operator` drops late rows
-  // are computed from: an aggregation's grouping columns, or else its input's columns. Projections
-  // and the expansion of a sliding window map their columns to the columns they read; any other
-  // node that is not stateful is followed into the one child that outputs all the traced columns.
-  // None for any other path, such as one through another stateful operator.
+  // are computed from, traced through each input of the operator that contains the join: an
+  // aggregation's grouping columns, or else that input's columns. Projections and the expansion of
+  // a sliding window map their columns to the columns they read, and a union maps them by position
+  // into each of its inputs that contains the join; any other node that is not stateful is
+  // followed into the one child that outputs all the traced columns. None as soon as one path
+  // cannot be followed, such as one through another stateful operator.
   private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
+    def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] = {
+      val withJoin = paths.filter { case (plan, _) => plan.exists(_ eq join) }
+      if (withJoin.isEmpty) None else withJoin.foldLeft(Option(AttributeSet.empty)) {
+        // A path without such a column carries none of the join's event times.
+        case (sources, (plan, attrs)) => sources.flatMap { s =>
+          (if (attrs.isEmpty) Some(AttributeSet.empty) else trace(plan, AttributeSet(attrs)))
+            .map(s ++ _)
+        }
+      }
+    }
     def trace(plan: LogicalPlan, attrs: AttributeSet): Option[AttributeSet] = plan match {
       case p if p eq join => Some(attrs)
       case Project(list, child) =>
@@ -240,6 +252,9 @@ object UnsupportedOperationChecker extends Logging {
       case Expand(projections, output, child) =>
         trace(child, AttributeSet(output.indices.filter(i => attrs.contains(output(i)))
           .flatMap(i => projections.flatMap(_(i).references))))
+      case u: Union =>
+        val positions = u.output.indices.filter(i => attrs.contains(u.output(i)))
+        traceAll(u.children.map(c => c -> positions.map(c.output)))
       case p if !isStatefulOperation(p) =>
         p.children.filter(c => attrs.subsetOf(c.outputSet)) match {
           case Seq(child) => trace(child, attrs)
@@ -247,14 +262,13 @@ object UnsupportedOperationChecker extends Logging {
         }
       case _ => None
     }
-    operator.children.find(_.exists(_ eq join)).flatMap { child =>
-      val eventTimes = operator match {
-        case a: Aggregate => a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol)
-        case _ => child.output.filter(hasEventTimeCol)
-      }
-      // An operator without such a column filters none of the join's rows.
-      if (eventTimes.isEmpty) Some(AttributeSet.empty) else trace(child, AttributeSet(eventTimes))
+    val groupingEventTimes = operator match {
+      case a: Aggregate => Some(a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol))
+      case _ => None
     }
+    traceAll(operator.children.map { c =>
+      c -> groupingEventTimes.getOrElse(c.output.filter(hasEventTimeCol))
+    })
   }
 
   // A stateful operator that drops the input rows below its watermark for late rows, by an
