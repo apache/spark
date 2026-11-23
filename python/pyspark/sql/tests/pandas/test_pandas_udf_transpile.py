@@ -385,7 +385,7 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
                         results.append(
                             (grouped.orderBy("k").collect(), sorted(joined.collect(), key=str))
                         )
-                self.assertEqual(results[0], results[1])
+                self.assertEqual(repr(results[0]), repr(results[1]))  # NaN != NaN
 
     def test_two_argument_body(self):
         df = self.spark.createDataFrame(
