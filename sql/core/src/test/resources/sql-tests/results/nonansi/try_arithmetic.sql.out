@@ -794,6 +794,16 @@ struct<try_abs(-1):double,try_negative(1):double>
 
 
 -- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES ('-1.5'), ('abc'), (NULL) AS t(c)
+-- !query schema
+struct<try_abs(c):double,try_negative(c):double>
+-- !query output
+1.5	1.5
+NULL	NULL
+NULL	NULL
+
+
+-- !query
 SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c)
 -- !query schema
 struct<try_abs(c):int,try_negative(c):int>

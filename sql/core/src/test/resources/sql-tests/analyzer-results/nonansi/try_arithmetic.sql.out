@@ -688,6 +688,14 @@ Project [try_abs(-1) AS try_abs(-1)#x, try_negative(1) AS try_negative(1)#x]
 
 
 -- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES ('-1.5'), ('abc'), (NULL) AS t(c)
+-- !query analysis
+Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
 SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c)
 -- !query analysis
 Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
