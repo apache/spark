@@ -551,10 +551,42 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
   }
 
   test("uniform with integral bounds includes both ends of the range") {
-    val df = spark.range(1000).select(uniform(lit(-1), lit(1), lit(0)).alias("x"))
-    checkAnswer(df.selectExpr("min(x)", "max(x)", "count(DISTINCT x)"), Row(-1, 1, 3))
-    withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> "true") {
-      checkAnswer(df.selectExpr("min(x)", "max(x)", "count(DISTINCT x)"), Row(0, 0, 1))
+    def stats(): DataFrame = spark.range(1000)
+      .select(uniform(lit(-1), lit(1), lit(0)).alias("x"))
+      .selectExpr("min(x)", "max(x)", "count(DISTINCT x)")
+    val closed = stats()
+    val legacy = withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> "true") {
+      stats()
+    }
+    // The flag is captured when the DataFrame is analyzed, not when it runs.
+    Seq("false", "true").foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> flag) {
+        checkAnswer(closed, Row(-1, 1, 3))
+        checkAnswer(legacy, Row(0, 0, 1))
+      }
+    }
+  }
+
+  test("uniform cached under one legacy flag value is not reused under the other") {
+    val query = "SELECT uniform(1, 10, 42) AS u FROM range(100)"
+    def maxOf(df: DataFrame): DataFrame = df.agg(max("u"))
+    Seq(("true", 9, 10), ("false", 10, 9)).foreach { case (cachedFlag, cachedMax, otherMax) =>
+      val otherFlag = (!cachedFlag.toBoolean).toString
+      val cached = withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> cachedFlag) {
+        spark.sql(query)
+      }
+      cached.cache()
+      try {
+        checkAnswer(maxOf(cached), Row(cachedMax))
+        withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> otherFlag) {
+          checkAnswer(maxOf(spark.sql(query)), Row(otherMax))
+        }
+        val otherSession = spark.newSession()
+        otherSession.conf.set(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key, otherFlag)
+        checkAnswer(maxOf(otherSession.sql(query)), Row(otherMax))
+      } finally {
+        cached.unpersist(blocking = true)
+      }
     }
   }
 

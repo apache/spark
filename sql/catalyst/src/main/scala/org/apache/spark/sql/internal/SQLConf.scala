@@ -9067,10 +9067,11 @@ object SQLConf {
     buildConf("spark.sql.legacy.uniformIntegralTruncate")
       .internal()
       .doc("When set to true, uniform(min, max) with integral bounds truncates a double drawn " +
-        "from [min, max) toward zero. This never returns max (or a negative min) and returns " +
-        "zero twice as often as other values when the range spans zero. When false, each " +
-        "integer in the closed range [min, max] is equally likely.")
+        "from [min, max) toward zero. This never returns a positive max or a negative min and " +
+        "returns zero twice as often as other values when the range spans zero. When false, " +
+        "each integer in the closed range [min, max] is equally likely.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

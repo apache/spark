@@ -345,11 +345,60 @@ true
 
 
 -- !query
-SELECT uniform(9223372036854775806L, 9223372036854775807L, 0) >= 9223372036854775806L AS result
+SELECT min(x) = 9223372036854775806L, max(x) = 9223372036854775807L,
+  avg(CAST(x = 9223372036854775806L AS INT)) BETWEEN 0.46 AND 0.54 AS balanced
+  FROM (SELECT uniform(9223372036854775806L, 9223372036854775807L, 0) AS x FROM range(10000))
 -- !query schema
-struct<result:boolean>
+struct<(min(x) = 9223372036854775806):boolean,(max(x) = 9223372036854775807):boolean,balanced:boolean>
 -- !query output
-true
+true	true	true
+
+
+-- !query
+SELECT min(x) = 4503599627370496L, max(x) = 4503599627370497L,
+  avg(CAST(x = 4503599627370496L AS INT)) BETWEEN 0.46 AND 0.54 AS balanced
+  FROM (SELECT uniform(4503599627370496L, 4503599627370497L, 0) AS x FROM range(10000))
+-- !query schema
+struct<(min(x) = 4503599627370496):boolean,(max(x) = 4503599627370497):boolean,balanced:boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT min(x) = 1700000000000000L, max(x) = 1700000000000001L,
+  avg(CAST(x = 1700000000000000L AS INT)) BETWEEN 0.46 AND 0.54 AS balanced
+  FROM (SELECT uniform(1700000000000000L, 1700000000000001L, 0) AS x FROM range(10000))
+-- !query schema
+struct<(min(x) = 1700000000000000):boolean,(max(x) = 1700000000000001):boolean,balanced:boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT count(DISTINCT pmod(x, 16)), min(x) < 0, max(x) > 0
+  FROM (SELECT uniform(-9223372036854775808L, 9223372036854775807L, 0) AS x FROM range(10000))
+-- !query schema
+struct<count(DISTINCT pmod(x, 16)):bigint,(min(x) < 0):boolean,(max(x) > 0):boolean>
+-- !query output
+16	true	true
+
+
+-- !query
+SELECT count(DISTINCT pmod(x, 1024)) > 1000, min(x) >= 0
+  FROM (SELECT uniform(0L, 9223372036854775807L, 0) AS x FROM range(10000))
+-- !query schema
+struct<(count(DISTINCT pmod(x, 1024)) > 1000):boolean,(min(x) >= 0):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SELECT count(DISTINCT pmod(x, 16)), min(x) >= -9223372036854775808L, max(x) < 0
+  FROM (SELECT uniform(-9223372036854775808L, -1L, 0) AS x FROM range(10000))
+-- !query schema
+struct<count(DISTINCT pmod(x, 16)):bigint,(min(x) >= -9223372036854775808):boolean,(max(x) < 0):boolean>
+-- !query output
+16	true	true
 
 
 -- !query

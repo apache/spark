@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -58,11 +59,65 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
         Uniform(Literal(first), Literal(second), Literal(0)).replacement,
         CatalystTypeConverters.convertToCatalyst(result))
     }
-    testUniform(0, 1, 0)
-    testUniform(0, 10, 7)
-    testUniform(0L, 10L, 7L)
+    testUniform(0, 1, 1)
+    testUniform(0, 10, 8)
+    testUniform(0L, 10L, 8L)
     testUniform(10.0F, 20.0F, 17.604954F)
     testUniform(10L, 20.0F, 17.604954F)
+  }
+
+  /** Evaluates a nondeterministic expression in partition 0 without code generation. */
+  private def evalInPartitionZero(e: Expression): Any = {
+    val copied = e.freshCopyIfContainsStatefulExpression()
+    copied.foreach {
+      case n: Nondeterministic => n.initialize(0)
+      case _ =>
+    }
+    copied.eval()
+  }
+
+  test("UniformLongOffset agrees with and without codegen") {
+    Seq(0L, 3L, (1L << 53) + 1, Long.MaxValue, Long.MinValue, -3L).foreach { n =>
+      val offset = UniformLongOffset(n, Literal(0L))
+      val expected = evalInPartitionZero(offset)
+      checkEvaluation(offset, expected)
+      val value = expected.asInstanceOf[Long]
+      if (n != 0L) {
+        assert(java.lang.Long.compareUnsigned(value, n) < 0, s"$value is not below $n")
+      }
+    }
+  }
+
+  test("Uniform with BIGINT bounds stays in range at the BIGINT limits") {
+    Seq(
+      (Long.MinValue, Long.MaxValue),
+      (Long.MinValue, -1L),
+      (0L, Long.MaxValue),
+      (Long.MaxValue - 1, Long.MaxValue),
+      (Long.MinValue, Long.MinValue + 1)).foreach { case (lo, hi) =>
+      Seq(0L, 1L, 42L).foreach { seed =>
+        val replacement = Uniform(Literal(lo), Literal(hi), Literal(seed)).replacement
+        val expected = evalInPartitionZero(replacement)
+        checkEvaluation(replacement, expected)
+        val value = expected.asInstanceOf[Long]
+        assert(lo <= value && value <= hi, s"$value is not in [$lo, $hi]")
+      }
+    }
+  }
+
+  test("Uniform keeps the legacy flag captured when it was built") {
+    val legacy = withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> "true") {
+      Uniform(Literal(-1), Literal(1), Literal(0))
+    }
+    val closed = Uniform(Literal(-1), Literal(1), Literal(0))
+    assert(legacy.legacyIntegralTruncate)
+    assert(!closed.legacyIntegralTruncate)
+    Seq(legacy.withNewSeed(1), legacy.withShiftedSeed(1),
+        legacy.withTimeZone("UTC"), legacy.freshCopyIfContainsStatefulExpression()).foreach {
+      case copied: Uniform => assert(copied.legacyIntegralTruncate)
+      case other => fail(s"Expected Uniform but got ${other.getClass.getName}")
+    }
+    assert(!legacy.semanticEquals(closed))
   }
 
   test("SPARK-58208: Uniform preserves its time zone when copied") {

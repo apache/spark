@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
@@ -212,10 +214,10 @@ object Randn {
     _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
       distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
       The provided numbers specifying the minimum and maximum values of the range must be constant.
-      If both of these numbers are integers, then the result will also be an integer drawn from
-      the closed range [min, max], with each integer equally likely. Otherwise if one or both of
-      these are floating-point numbers, then the result will also be a floating-point number in
-      the half-open range [min, max).
+      If both of these numbers have integral types, then the result will also be an integer drawn
+      from the closed range [min, max], with each integer equally likely. Otherwise if one or both
+      of these are floating-point or decimal numbers, then the result will be a DOUBLE in
+      [min, max), or a FLOAT or DECIMAL that is rounded to the result type and can equal max.
   """,
   arguments = """
     Arguments:
@@ -238,7 +240,9 @@ case class Uniform(
     max: Expression,
     seedExpression: Expression,
     hideSeed: Boolean,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    legacyIntegralTruncate: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE))
   extends RuntimeReplaceable
     with TernaryLike[Expression]
     with RDG
@@ -303,10 +307,10 @@ case class Uniform(
   override def third: Expression = seedExpression
 
   override def withNewSeed(newSeed: Long): Expression =
-    Uniform(min, max, Literal(newSeed, LongType), hideSeed, timeZoneId)
+    copy(seedExpression = Literal(newSeed, LongType))
 
   override def withShiftedSeed(shift: Long): Expression =
-    Uniform(min, max, Literal(seed + shift, LongType), hideSeed, timeZoneId)
+    copy(seedExpression = Literal(seed + shift, LongType))
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
@@ -320,7 +324,7 @@ case class Uniform(
         if (e.dataType == to) e else Cast(e, to, timeZoneId)
       }
       dataType match {
-        case _: IntegralType if !SQLConf.get.getConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE) =>
+        case _: IntegralType if !legacyIntegralTruncate =>
           integralReplacement(cast)
         case _ =>
           cast(Add(
@@ -337,15 +341,56 @@ case class Uniform(
 
   /**
    * Draws each integer in the closed range [min, max] with equal probability. Truncating a double
-   * drawn from [min, max) toward zero would never return `max` (or a negative `min`) and would
-   * return zero twice as often as any other value when the range spans it.
+   * drawn from [min, max) toward zero would never return a positive `max` or a negative `min`, and
+   * would return zero twice as often as any other value when the range spans it.
+   *
+   * The bounds are evaluated here so that the draw can be chosen from the size n of the range.
+   * When n is at most 2^53, `lo + floor(n * rand)` is exact: n is exact in DOUBLE, the offset lies
+   * in [0, n - 1] for every draw, and the addition is LONG arithmetic, so the magnitude of the
+   * bounds does not matter. A single DOUBLE draw has only 53 random bits, so wider BIGINT ranges
+   * use [[UniformLongOffset]], which draws the offset from 64 random bits.
    */
   private def integralReplacement(cast: (Expression, DataType) => Expression): Expression = {
+    val bounds = if (min.foldable && max.foldable) {
+      // Bounds that fail to evaluate use nonConstantIntegralReplacement, so the error surfaces at
+      // execution as it would for any other expression.
+      try {
+        Some((cast(min, LongType).eval(), cast(max, LongType).eval()))
+      } catch {
+        case NonFatal(_) => None
+      }
+    } else {
+      // Do not evaluate non-foldable bounds: the replacement can be built during canonicalization
+      // before checkInputDataTypes reports NON_FOLDABLE_INPUT.
+      None
+    }
+    bounds match {
+      case Some((null, _)) | Some((_, null)) =>
+        Literal(null, dataType)
+      case Some((a: Long, b: Long)) =>
+        val lo = math.min(a, b)
+        val hi = math.max(a, b)
+        // hi - lo is the unsigned size of the range minus one, which does not overflow.
+        val width = hi - lo
+        val offset = if (java.lang.Long.compareUnsigned(width, 1L << 53) < 0) {
+          Floor(Multiply(Literal((width + 1).toDouble), Rand(seed)))
+        } else {
+          UniformLongOffset(width + 1, Literal(seed, LongType))
+        }
+        cast(Add(Literal(lo), offset, evalMode = EvalMode.LEGACY), dataType)
+      case _ =>
+        nonConstantIntegralReplacement(cast)
+    }
+  }
+
+  /** Fallback for bounds that cannot be evaluated when the replacement is built. */
+  private def nonConstantIntegralReplacement(
+      cast: (Expression, DataType) => Expression): Expression = {
     val lo = Least(Seq(cast(min, LongType), cast(max, LongType)))
     val hi = Greatest(Seq(cast(min, LongType), cast(max, LongType)))
-    // floor(lo + (hi - lo + 1) * rand) lies in [lo, hi] except for double rounding error near
-    // the ends of very wide ranges, so clamp it back into the range. Floor saturates instead of
-    // failing on overflow so that the clamp also covers ranges touching the BIGINT limits.
+    // Adding lo in DOUBLE rounds the sum to the DOUBLE grid at the magnitude of the bounds, so
+    // clamp it back into the range. Floor saturates instead of failing on overflow so that the
+    // clamp also covers ranges touching the BIGINT limits.
     val draw = Floor(
       Add(
         cast(lo, DoubleType),
@@ -370,6 +415,61 @@ object Uniform {
     Uniform(min, max, UnresolvedSeed, hideSeed = true)
   def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform =
     Uniform(min, max, seedExpression, hideSeed = false)
+}
+
+/**
+ * Draws a LONG offset uniformly from [0, n), where `n` is read as an unsigned 64-bit value and
+ * zero stands for 2^64. Used by [[Uniform]] for BIGINT ranges with more values than a DOUBLE draw
+ * can reach. Words below 2^64 mod n are rejected, so the accepted words are a multiple of n and
+ * their unsigned remainders by n are equally likely. Fewer than two words are drawn on average.
+ */
+case class UniformLongOffset(n: Long, child: Expression) extends NondeterministicUnaryRDG {
+
+  override def dataType: DataType = LongType
+
+  // Unsigned 2^64 mod n: the number of words below which the remainder would be biased.
+  @transient private lazy val rejectBelow: Long =
+    if (n == 0L) 0L else java.lang.Long.remainderUnsigned(-n, n)
+
+  override def withNewSeed(seed: Long): UniformLongOffset =
+    UniformLongOffset(n, Literal(seed, LongType))
+
+  override def withShiftedSeed(shift: Long): UniformLongOffset =
+    UniformLongOffset(n, Add(child, Literal(shift), evalMode = EvalMode.LEGACY))
+
+  override protected def evalInternal(input: InternalRow): Long = {
+    var word = rng.nextLong()
+    if (n == 0L) {
+      word
+    } else {
+      while (java.lang.Long.compareUnsigned(word, rejectBelow) < 0) {
+        word = rng.nextLong()
+      }
+      java.lang.Long.remainderUnsigned(word, n)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val className = classOf[XORShiftRandom].getName
+    val rngTerm = ctx.addMutableState(className, "rng")
+    ctx.addPartitionInitializationStatement(
+      s"$rngTerm = new $className(${seed}L + partitionIndex);")
+    val draw = if (n == 0L) {
+      ""
+    } else {
+      s"""
+        while (java.lang.Long.compareUnsigned(${ev.value}, ${rejectBelow}L) < 0) {
+          ${ev.value} = $rngTerm.nextLong();
+        }
+        ${ev.value} = java.lang.Long.remainderUnsigned(${ev.value}, ${n}L);"""
+    }
+    ev.copy(code = code"""
+      long ${ev.value} = $rngTerm.nextLong();$draw""",
+      isNull = FalseLiteral)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): UniformLongOffset =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
