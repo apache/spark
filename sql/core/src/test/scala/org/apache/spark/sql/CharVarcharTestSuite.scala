@@ -4245,12 +4245,31 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   test("SPARK-61970: struct field and string literal without read-side padding") {
     withTempPath { dir =>
       withTable("t") {
-        sql("SELECT named_struct('c', 'a') AS s").write.format(format).save(dir.toString)
+        sql("SELECT named_struct('c', 'a') AS s UNION ALL SELECT named_struct('c', 'a  ')")
+          .write.format(format).save(dir.toString)
         sql(s"CREATE TABLE t (s STRUCT<c: CHAR(3)>) USING $format LOCATION '$dir'")
         withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
-          // The field, which the scan doesn't pad, is padded in the comparison too.
-          checkAnswer(sql("SELECT s.c FROM t WHERE s.c = 'a'"), Row("a"))
-          checkAnswer(sql("SELECT s.c FROM t WHERE s.c IN ('a', 'b')"), Row("a"))
+          // The field, which the scan doesn't pad, is padded in the comparison too, so values
+          // stored with and without the trailing spaces both match either form of the constant.
+          Seq("s.c = 'a'", "s.c = 'a  '", "s.c IN ('a')", "s.c IN ('a  ', 'b')").foreach { cond =>
+            checkAnswer(sql(s"SELECT s.c FROM t WHERE $cond"), Seq(Row("a"), Row("a  ")))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61970: struct field whose raw type does not parse back") {
+    withTempPath { dir =>
+      withTable("t") {
+        sql("SELECT named_struct('a-b', 'x', 'n', 'x') AS s")
+          .write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (s STRUCT<`a-b`: CHAR(3), n: STRING>) USING $format LOCATION '$dir'")
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          // The raw type string writes `a-b` unquoted, so it is not parsed, and the comparisons
+          // on the struct's fields keep working, without padding.
+          checkAnswer(sql("SELECT s.n FROM t WHERE s.n = 'x'"), Row("x"))
+          checkAnswer(sql("SELECT s.n FROM t WHERE s.n IN ('x', 'y')"), Row("x"))
         }
       }
     }

@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression,
   OuterReference
 }
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
 import org.apache.spark.sql.internal.SQLConf
@@ -59,17 +59,23 @@ object ApplyCharTypePaddingHelper {
    * or VARCHAR field keeps its length although its data type is a string.
    */
   object RawTypedRef {
-    // A value whose type no longer matches its raw type, e.g. after a cast, has none. A CHAR
-    // value is any string, as its collation can change while it keeps its metadata, as with
-    // Dataset.to.
-    def unapply(e: Expression): Option[DataType] = rawType(e).filter {
-      case _: CharType => e.dataType.isInstanceOf[StringType]
-      case rawType => DataTypeUtils.equalsIgnoreNullability(
-        CharVarcharUtils.replaceCharVarcharWithString(rawType), e.dataType)
+    // Only a string value has a CHAR raw type: one of another type, e.g. after a cast, has none.
+    // It can be a string of any collation, as Dataset.to can change the collation of a column
+    // while it keeps its metadata.
+    def unapply(e: Expression): Option[CharType] = rawType(e).collect {
+      case c: CharType if e.dataType.isInstanceOf[StringType] => c
     }
 
     private def rawType(e: Expression): Option[DataType] = e match {
-      case AttrOrOuterRef(attr) => CharVarcharUtils.getRawType(attr.metadata)
+      case AttrOrOuterRef(attr) =>
+        try {
+          CharVarcharUtils.getRawType(attr.metadata)
+        } catch {
+          // TODO: the raw type string is a catalogString, which writes the names of struct fields
+          // unquoted, so a name such as `a-b` doesn't parse back, and the CHAR fields of such a
+          // column are not padded in comparisons.
+          case _: ParseException => None
+        }
       case GetStructField(child, ordinal, _) =>
         child.dataType match {
           case current: StructType =>
@@ -128,36 +134,45 @@ object ApplyCharTypePaddingHelper {
       // The constant is checked first, so that the raw type is only parsed when it is needed.
       // With a constant on one side, none of the cases below can match.
       case b @ BinaryComparison(e, lit) if isStringConstant(lit) => e match {
-        case RawTypedRef(c: CharType) =>
+        case RawTypedRef(c) =>
           padAttrLitCmp(e, c, padCharCol, lit).map(b.withNewChildren).getOrElse(b)
         case _ => b
       }
 
       case b @ BinaryComparison(lit, e) if isStringConstant(lit) => e match {
-        case RawTypedRef(c: CharType) =>
+        case RawTypedRef(c) =>
           padAttrLitCmp(e, c, padCharCol, lit)
             .map(newChildren => b.withNewChildren(newChildren.reverse))
             .getOrElse(b)
         case _ => b
       }
 
-      case i @ In(e @ RawTypedRef(c: CharType), list) if i.resolved && list.forall(_.foldable) =>
-        // Compute the length of every list element in place, so that each length stays aligned
-        // with the element it came from. NULL elements have no length: they can never match, so
-        // they are left untouched instead of being padded. As in ConstantFolding, an element that
-        // fails to evaluate is left as it is, and its failure to the evaluation of the query.
-        val literalCharLengths = list.map(lit => tryEvalString(lit).flatten.map(_.numChars()))
-        val targetLen = (c.length +: literalCharLengths.flatten).max
-        i.copy(
-          value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
-          list = list.zip(literalCharLengths).map {
-            case (lit, Some(charLength)) =>
-              addPadding(lit, charLength, targetLen, alwaysPad = false)
-            case (lit, None) => lit
-          }
-        )
+      // As above, the raw type is only parsed once the list is known to be constants.
+      case i @ In(e, list)
+          if e.dataType.isInstanceOf[StringType] && i.resolved && list.forall(_.foldable) =>
+        e match {
+          case RawTypedRef(c) =>
+            // Compute the length of every list element in place, so that each length stays
+            // aligned with the element it came from. NULL elements have no length: they can never
+            // match, so they are left untouched instead of being padded. As in ConstantFolding,
+            // an element that fails to evaluate is left as it is, and its failure to the
+            // evaluation of the query.
+            val literalCharLengths = list.map(lit => tryEvalString(lit).flatten.map(_.numChars()))
+            val targetLen = (c.length +: literalCharLengths.flatten).max
+            i.copy(
+              value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
+              list = list.zip(literalCharLengths).map {
+                case (lit, Some(charLength)) =>
+                  addPadding(lit, charLength, targetLen, alwaysPad = false)
+                case (lit, None) => lit
+              }
+            )
+          case _ => i
+        }
 
       // For char type column or inner field comparison, pad the shorter one to the longer length.
+      // TODO: a CHAR field of a struct compared with another field or with a column, such as
+      // s.c = s2.c or s.c = c, is not padded yet, nor are CHAR array elements or map values.
       case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
           // For the same attribute, they must be the same length and no padding is needed.
           if !left.semanticEquals(right) =>
@@ -197,7 +212,7 @@ object ApplyCharTypePaddingHelper {
     e.foldable && e.dataType.isInstanceOf[StringType]
 
   /**
-   * Evaluates a foldable string expression: Some(value), with a null value for NULL, or None if
+   * Evaluates a foldable string expression: Some(Some(value)), Some(None) for NULL, or None if
    * it fails. The comparison may be in a branch that is never evaluated, so as in
    * ConstantFolding, the failure is left to the evaluation of the query.
    */
