@@ -812,7 +812,8 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       try f(session) finally stop(session)
     }
     appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      .filter(_.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")).toSeq
+      .filter(m => m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key) &&
+        m.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")).toSeq
   }
 
   test("SPARK-61843: repeats inside the default list are applied as listed") {
