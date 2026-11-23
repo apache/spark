@@ -1982,6 +1982,9 @@ lint_java = Module(
         # This rule is broader than what the linter checks so that a `.java` path in any other
         # directory still selects a module instead of being unclaimed.
         r".*\.java$",
+        # `dev/lint-java` runs Maven `checkstyle:check`, whose default resource includes also feed
+        # each module's resource `.properties` files to `dev/checkstyle.xml`.
+        r"(.*/)?src/(main|test)/resources/.*\.properties$",
         r"dev/checkstyle\.xml$",
         r"dev/checkstyle-suppressions\.xml$",
         r"dev/java-file-header$",

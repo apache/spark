@@ -234,11 +234,19 @@ class ModuleDefinitionsTests(unittest.TestCase):
             "common/tags/src/main/scala/org/apache/spark/annotation/package-info.java",
             "dev/checkstyle.xml",
             "dev/java-file-header",
+            "sql/core/src/test/resources/log4j2.properties",
+            "mllib/src/test/resources/log4j2.properties",
         ):
             with self.subTest(filename=filename):
                 changed_modules = determine_modules_for_files([filename])
                 self.assertIn(modules.lint_java, changed_modules)
                 self.assertNotIn(modules.root, changed_modules)
+
+    def test_properties_outside_resource_dirs_do_not_select_lint_java_module(self):
+        for filename in ("R/log4j2.properties", "project/build.properties"):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertNotIn(modules.lint_java, changed_modules)
 
     def test_scala_changes_do_not_select_lint_java_module(self):
         changed_modules = determine_modules_for_files(
