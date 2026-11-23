@@ -40,10 +40,10 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess &&
         !c.args.exists(SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
       val procedure = c.procedure match {
-        case ResolvedProcedure(_, _, p: BoundProcedure) => p
+        case ResolvedBoundProcedure(_, _, p) => p
       }
       session.sessionState.optimizer.execute(c) match {
-        case Call(_: ResolvedProcedure, args, _) =>
+        case Call(_: ResolvedBoundProcedure, args, _) =>
           invoke(procedure, args, c)
         case optimized =>
           // A rule such as `ExtractPythonUDFs` can add an operator under the `Call` to evaluate an
