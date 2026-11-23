@@ -792,6 +792,115 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       m.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")))
   }
 
+  test("SPARK-61843: repeats inside the default list are applied as listed") {
+    // Only cross-config overlap is de-duplicated; repeats within one config are applied as
+    // listed, as documented and as spark.sql.extensions already behaves.
+    val appender = new LogAppender("SPARK-61843 disjoint lists")
+    withLogAppender(appender) {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, Seq(
+          classOf[MyExtensions].getCanonicalName,
+          classOf[MyExtensions].getCanonicalName).mkString(","))
+        .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions2].getCanonicalName)
+        .getOrCreate()
+      try {
+        val rules = session.sessionState.analyzer.extendedResolutionRules
+        assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
+          Seq(MyRule(session), MyRule(session), MyRule2(session)))
+      } finally {
+        stop(session)
+      }
+    }
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .count(m => m.contains(classOf[MyExtensions].getCanonicalName) &&
+        m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key))
+    assert(warnings === 0)
+  }
+
+  test("SPARK-61843: a default-list entry also listed by the user is dropped and warned once") {
+    val appender = new LogAppender("SPARK-61843 shared extension warning")
+    withLogAppender(appender) {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, Seq(
+          classOf[MyExtensions].getCanonicalName,
+          classOf[MyExtensions].getCanonicalName).mkString(","))
+        .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
+        .getOrCreate()
+      try {
+        assert(
+          session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) === 1)
+      } finally {
+        stop(session)
+      }
+    }
+    // One warning per overlapping class, not one per default-list occurrence.
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .count(m => m.contains(classOf[MyExtensions].getCanonicalName) &&
+        m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key))
+    assert(warnings === 1)
+  }
+
+  test("SPARK-61843: spark.sql.extensions shows only the user list") {
+    // MyExtensions2Duplicate injects no parser, so SET is still parsed by the dialect that
+    // implements it; an injected parser delegates only to the base one and rejects SET.
+    val className = classOf[MyExtensions2Duplicate].getCanonicalName
+    val defaultOnly = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, className)
+      .getOrCreate()
+    try {
+      // The default list alone applies the extension, it does not merely leave the key unset.
+      val myFunction2 = FunctionIdentifier(
+        "myfunction2",
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(defaultOnly.sessionState.functionRegistry.lookupFunctionBuilder(myFunction2) ===
+        Some(MyExtensions2Duplicate.myFunction._3))
+      assert(defaultOnly.conf.getOption(SPARK_SESSION_EXTENSIONS.key).isEmpty)
+      assert(defaultOnly.sql(s"SET ${SPARK_SESSION_EXTENSIONS.key}").collect() ===
+        Array(Row(SPARK_SESSION_EXTENSIONS.key, "<undefined>")))
+    } finally {
+      stop(defaultOnly)
+    }
+
+    val withUser = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, className)
+      .config(SPARK_SESSION_EXTENSIONS.key, className)
+      .getOrCreate()
+    try {
+      assert(withUser.conf.getOption(SPARK_SESSION_EXTENSIONS.key) === Some(className))
+      assert(withUser.sql(s"SET ${SPARK_SESSION_EXTENSIONS.key}").collect() ===
+        Array(Row(SPARK_SESSION_EXTENSIONS.key, className)))
+    } finally {
+      stop(withUser)
+    }
+  }
+
+  test("SPARK-61843: the default list cannot be set at runtime") {
+    val key = SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key
+    val value = classOf[MyExtensions].getCanonicalName
+    val session = SparkSession.builder().master("local[1]").getOrCreate()
+    try {
+      checkError(
+        exception = intercept[AnalysisException](session.sql(s"SET $key=$value")),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> s"\"$key\""))
+      checkError(
+        exception = intercept[AnalysisException](session.conf.set(key, value)),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> s"\"$key\""))
+      checkError(
+        exception = intercept[AnalysisException](session.conf.unset(key)),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> s"\"$key\""))
+    } finally {
+      stop(session)
+    }
+  }
+
   test("use the last registered function name when there are duplicates") {
     val session = SparkSession.builder()
       .master("local[1]")
