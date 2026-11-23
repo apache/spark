@@ -6239,12 +6239,12 @@ object SQLConf {
       .internal()
       .doc("When true, kll_merge_agg_* without k returns a sketch with the lowest k among its " +
         "first non-empty input sketch and the input sketches that have started compacting " +
-        "(estimation mode), or the default k if every input is empty. When false, it takes " +
+        "(estimation mode), or the default k (200) if every input is empty. When false, it takes " +
         "the k of its first input sketch.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")

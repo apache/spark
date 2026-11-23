@@ -4582,8 +4582,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
           lowestCompactingK = true) == ((expectedK, n)), ordered)
       }
 
-      // GROUP BY: one group per in-order case. One partition and fewer than 128 groups, so the
-      // object hash aggregate reads each group in order.
+      // GROUP BY: one group per in-order case. With one partition and fewer groups than the
+      // sort-based fallback threshold (128), the object hash aggregate reads each group in order.
       val rows = for (((inputs, _), g) <- inOrder.zipWithIndex; in <- inputs)
         yield (g, sketchOf(in))
       for (on <- Seq(false, true)) {

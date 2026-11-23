@@ -30831,8 +30831,9 @@ def kll_merge_agg_bigint(
     """
     Aggregate function: merges binary KllLongsSketch representations and returns the
     merged sketch. The optional k parameter controls the size and accuracy of the merged
-    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
-    from the first input sketch.
+    sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
+    among the first non-empty input sketch and the input sketches that have started
+    compacting.
 
     .. versionadded:: 4.1.2
 
@@ -30876,8 +30877,9 @@ def kll_merge_agg_float(
     """
     Aggregate function: merges binary KllFloatsSketch representations and returns the
     merged sketch. The optional k parameter controls the size and accuracy of the merged
-    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
-    from the first input sketch.
+    sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
+    among the first non-empty input sketch and the input sketches that have started
+    compacting.
 
     .. versionadded:: 4.1.2
 
@@ -30921,8 +30923,9 @@ def kll_merge_agg_double(
     """
     Aggregate function: merges binary KllDoublesSketch representations and returns the
     merged sketch. The optional k parameter controls the size and accuracy of the merged
-    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
-    from the first input sketch.
+    sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
+    among the first non-empty input sketch and the input sketches that have started
+    compacting.
 
     .. versionadded:: 4.1.2
 
