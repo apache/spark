@@ -20,6 +20,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.BinaryView;
@@ -82,7 +84,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   protected void releaseMemory() {
-    nulls = null;
+    releaseNullBits();
     byteData = null;
     shortData = null;
     intData = null;
@@ -117,11 +119,13 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNull(int rowId) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     nulls[rowId] = (byte)0;
   }
 
   @Override
   public void putNull(int rowId) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
     nulls[rowId] = (byte)1;
     ++numNulls;
@@ -129,6 +133,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (!tracksNulls) return; // Skip writing nulls to a vector that holds no null bits.
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
     Arrays.fill(nulls, rowId, rowId + count, (byte) 1);
     numNulls += count;
@@ -136,13 +141,15 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
+    // A vector that holds no null bits never has one (numNulls stays 0: see putNull), so
+    // hasNull() alone already skips it; no separate tracksNulls check is needed here.
     if (!hasNull()) return;
     Arrays.fill(nulls, rowId, rowId + count, (byte) 0);
   }
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull() || nulls[rowId] == 1;
+    return tracksNulls && (isAllNull() || nulls[rowId] == 1);
   }
 
   //
@@ -670,11 +677,25 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       throw new RuntimeException("Unhandled " + type);
     }
 
-    byte[] newNulls = new byte[newCapacity];
-    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
+    byte[] newNulls = null;
+    if (tracksNulls) {
+      newNulls = new byte[newCapacity];
+      if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
+    }
     nulls = newNulls;
 
     capacity = newCapacity;
+  }
+
+  @Override
+  protected void releaseNullBits() {
+    nulls = null;
+  }
+
+  @VisibleForTesting
+  @Override
+  protected boolean hasNullBuffer() {
+    return nulls != null;
   }
 
   @Override
