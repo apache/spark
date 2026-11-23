@@ -55,8 +55,14 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private type RequestedJsonPath = (SimpleJsonPath, String)
   private type RequestedJsonPathUnit = Seq[RequestedJsonPath]
 
+  // Queries built under different settings can meet in the same Project after optimization.
+  private case class SharedJsonInput(canonicalJson: Expression, combineUnicodeSurrogates: Boolean)
+
+  private def sharedInput(expr: GetJsonObject): SharedJsonInput =
+    SharedJsonInput(expr.json.canonicalized, expr.combineUnicodeSurrogates)
+
   private case class SharedJsonFields(
-      json: Expression,
+      input: SharedJsonInput,
       paths: Seq[SimpleJsonPath],
       alias: Alias) {
     val ordinalMapping: Map[SimpleJsonPath, Int] = paths.zipWithIndex.toMap
@@ -208,36 +214,26 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
    */
   private def shareGetJsonObjects(project: Project): Project = {
     val candidateUnits = project.projectList.flatMap(collectGetJsonObjectFields)
-    val groups = mutable.ArrayBuffer.empty[
-      (Expression, mutable.ArrayBuffer[RequestedJsonPathUnit])]
-    val groupsByHash = mutable.HashMap.empty[
-      Int, mutable.ArrayBuffer[(Expression, mutable.ArrayBuffer[RequestedJsonPathUnit])]]
-
+    val groups = mutable.LinkedHashMap.empty[
+      SharedJsonInput, (Expression, mutable.ArrayBuffer[RequestedJsonPathUnit])]
     candidateUnits.foreach { unit =>
-      val getJsonObject = unit.head._1
-      val bucket = groupsByHash.getOrElseUpdate(
-        getJsonObject.json.semanticHash(), mutable.ArrayBuffer.empty)
-      bucket.find(_._1.semanticEquals(getJsonObject.json)) match {
-        case Some((_, fields)) =>
-          fields += unit.map { case (_, pathSegments, path) => pathSegments -> path }
-        case None =>
-          val requestedUnit = unit.map { case (_, pathSegments, path) => pathSegments -> path }
-          val group = getJsonObject.json -> mutable.ArrayBuffer(requestedUnit)
-          bucket += group
-          groups += group
-      }
+      val expr = unit.head._1
+      val (_, fields) = groups.getOrElseUpdate(sharedInput(expr),
+        (expr.json, mutable.ArrayBuffer.empty))
+      fields += unit.map { case (_, pathSegments, path) => pathSegments -> path }
     }
 
-    val sharedFields = groups.flatMap { case (json, requestedUnits) =>
+    val sharedFields = groups.iterator.flatMap { case (input, (json, requestedUnits)) =>
       groupNonConflictingPaths(requestedUnits).flatMap { nonConflictingPaths =>
         if (nonConflictingPaths.length > 1) {
           val pathSegments = nonConflictingPaths.map(_._1)
           val alias = Alias(
             MultiGetJsonObject(
               json,
-              nonConflictingPaths.map(_._2)),
+              nonConflictingPaths.map(_._2),
+              input.combineUnicodeSurrogates),
             "_shared_json_paths")()
-          Some(SharedJsonFields(json, pathSegments, alias))
+          Some(SharedJsonFields(input, pathSegments, alias))
         } else {
           None
         }
@@ -247,9 +243,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     if (sharedFields.isEmpty) {
       project
     } else {
-      val sharedFieldsByHash = sharedFields.groupBy(_.json.semanticHash())
+      val fieldsByInput = sharedFields.groupBy(_.input)
       val rewrittenProjectList = project.projectList.map { expression =>
-        rewriteGetJsonObjectFields(expression, sharedFieldsByHash)
+        rewriteGetJsonObjectFields(expression, fieldsByInput)
           .asInstanceOf[NamedExpression]
       }
       val innerProjectList = project.child.output ++ sharedFields.map(_.alias)
@@ -260,7 +256,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def collectGetJsonObjectFields(
       expression: Expression): Seq[SharedJsonCandidateUnit] = {
     expression match {
-      case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType))
+      case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType), _)
           if getJsonObject.deterministic =>
         GetJsonObject.simplePath(path)
           .filter(_.length <= maxSharedJsonPathDepth)
@@ -281,14 +277,14 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private def rewriteGetJsonObjectFields(
       expression: Expression,
-      sharedFieldsByHash: Map[Int, Seq[SharedJsonFields]]): Expression = {
+      fieldsByInput: Map[SharedJsonInput, Seq[SharedJsonFields]]): Expression = {
     expression match {
-      case getJsonObject @ GetJsonObject(json, Literal(path: UTF8String, StringType)) =>
+      case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType), _)
+          if getJsonObject.deterministic =>
         val replacement = for {
           pathSegments <- GetJsonObject.simplePath(path)
-          shared <- sharedFieldsByHash.getOrElse(json.semanticHash(), Nil).find { candidate =>
-            candidate.json.semanticEquals(json) && candidate.ordinalMapping.contains(pathSegments)
-          }
+          shared <- fieldsByInput.getOrElse(sharedInput(getJsonObject), Nil)
+            .find(_.ordinalMapping.contains(pathSegments))
         } yield GetStructField(shared.alias.toAttribute, shared.ordinalMapping(pathSegments))
         replacement.getOrElse(getJsonObject)
 
@@ -299,18 +295,16 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         eligibleCoalesceBranches(coalesce).map { branches =>
           val selectedBranches = branches.toMap
           val firstCandidate = branches.head._2
-          val shared = sharedFieldsByHash
-            .getOrElse(firstCandidate._1.json.semanticHash(), Nil)
+          val input = sharedInput(firstCandidate._1)
+          val shared = fieldsByInput.getOrElse(input, Nil)
             .find { candidate =>
-              candidate.json.semanticEquals(firstCandidate._1.json) &&
-                branches.forall { case (_, branchCandidate) =>
-                  val (_, pathSegments, _) = branchCandidate
-                  candidate.ordinalMapping.contains(pathSegments)
-                }
+              branches.forall { case (_, branchCandidate) =>
+                val (_, pathSegments, _) = branchCandidate
+                candidate.ordinalMapping.contains(pathSegments)
+              }
             }
           shared.map { sharedFields =>
-            val pairSharedFields = Map(
-              firstCandidate._1.json.semanticHash() -> Seq(sharedFields))
+            val pairSharedFields = Map(input -> Seq(sharedFields))
             coalesce.withNewChildren(coalesce.children.zipWithIndex.map { case (child, index) =>
               if (selectedBranches.contains(index)) {
                 rewriteGetJsonObjectFields(child, pairSharedFields)
@@ -324,7 +318,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       case other =>
         getJsonObjectTraversalChild(other).map { child =>
           other.withNewChildren(
-            rewriteGetJsonObjectFields(child, sharedFieldsByHash) +: other.children.tail)
+            rewriteGetJsonObjectFields(child, fieldsByInput) +: other.children.tail)
         }.getOrElse(other)
     }
   }
@@ -340,7 +334,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     def eligibleBranch(expression: Expression): Option[SharedJsonCandidate] = {
       expression match {
         case cast: Cast => eligibleBranch(cast.child)
-        case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType))
+        case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType), _)
             if getJsonObject.deterministic =>
           GetJsonObject.simplePath(path)
             .filter(_.length <= maxSharedJsonPathDepth)
@@ -354,8 +348,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       val candidates = branches.zipWithIndex.map { case (candidate, index) =>
         index -> candidate.get
       }
+      val input = sharedInput(candidates.head._2._1)
       val sameInput = candidates.tail.forall { case (_, candidate) =>
-        candidate._1.json.semanticEquals(candidates.head._2._1.json)
+        sharedInput(candidate._1) == input
       }
       val firstNamed = candidates.find { case (_, candidate) =>
         candidate._2.head.isInstanceOf[GetJsonObject.NamedPathSegment]

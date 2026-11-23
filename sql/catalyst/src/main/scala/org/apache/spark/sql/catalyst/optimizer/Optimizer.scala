@@ -4189,7 +4189,8 @@ object GenerateOptimization extends Rule[LogicalPlan] {
                   (originJsonTuple.children(i + 1), attr)
               }.unzip
             p.withNewChildren(Seq(g.copy(
-              generator = JsonTuple(originJsonTuple.children.head +: newJsonExpressions),
+              generator = originJsonTuple.copy(
+                children = originJsonTuple.children.head +: newJsonExpressions),
               generatorOutput = newGeneratorOutput)))
           case _ =>
             p

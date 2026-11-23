@@ -22,7 +22,7 @@ import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
-import com.fasterxml.jackson.core.json.JsonReadFeature
+import com.fasterxml.jackson.core.json.{JsonReadFeature, JsonWriteFeature}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -112,6 +112,14 @@ private[this] object SharedFactory {
     .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
     .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
     .build()
+
+  def createUtf8Generator(
+      output: ByteArrayOutputStream,
+      combineUnicodeSurrogates: Boolean): JsonGenerator = {
+    jsonFactory.createGenerator(output, JsonEncoding.UTF8).configure(
+      JsonWriteFeature.COMBINE_UNICODE_SURROGATES_IN_UTF8.mappedFeature(),
+      combineUnicodeSurrogates)
+  }
 }
 
 case class JsonToStructsEvaluator(
@@ -396,7 +404,9 @@ case class SchemaOfJsonEvaluator(options: Map[String, String]) {
 /**
  * The expression `JsonTuple` will utilize it to support codegen.
  */
-case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
+case class JsonTupleEvaluator(
+    foldableFieldNames: Array[Option[String]],
+    combineUnicodeSurrogates: Boolean) {
 
   import SharedFactory._
 
@@ -445,7 +455,7 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
 
           // Write the output directly to UTF8 encoded byte array.
           if (parser.nextToken() != JsonToken.VALUE_NULL) {
-            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+            Utils.tryWithResource(createUtf8Generator(output, combineUnicodeSurrogates)) {
               generator => copyCurrentStructure(generator, parser)
             }
 
@@ -633,7 +643,10 @@ object PositionResult {
  * garbage, not empty); anything else is treated as malformed, so the caller applies the ON ERROR
  * behavior consistently in both modes.
  */
-case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: Boolean) {
+case class JsonTableEvaluator(
+    containerPath: Seq[PathInstruction],
+    explodeRoot: Boolean,
+    combineUnicodeSurrogates: Boolean = false) {
   import PathInstruction._
   import SharedFactory._
 
@@ -1181,7 +1194,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    */
   private def serializeCurrentValue(parser: JsonParser): UTF8String = {
     val output = new ByteArrayOutputStream()
-    Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+    Utils.tryWithResource(createUtf8Generator(output, combineUnicodeSurrogates)) {
       // `copyCurrentStructureExact` preserves floating-point tokens byte-for-byte; the plain
       // `copyCurrentStructure` may round them for textual formats, which would corrupt a
       // high-precision fraction before JSON_TABLE casts the reserialized text to DECIMAL/STRING.
@@ -1334,13 +1347,11 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
 /**
  * The expression `GetJsonObject` will utilize it to support codegen.
  */
-case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
+case class GetJsonObjectEvaluator(cachedPath: UTF8String, combineUnicodeSurrogates: Boolean) {
   import com.fasterxml.jackson.core.JsonToken._
   import PathInstruction._
   import SharedFactory._
   import WriteStyle._
-
-  def this() = this(null)
 
   @transient
   private lazy val parsedPath: Option[List[PathInstruction]] = parsePath(cachedPath)
@@ -1378,7 +1389,7 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, jsonStr)) { parser =>
           outputBuffer.reset()
           val matched = Utils.tryWithResource(
-            jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) { generator =>
+            createUtf8Generator(outputBuffer, combineUnicodeSurrogates)) { generator =>
             parser.nextToken()
             evaluatePath(parser, generator, RawStyle, parsed.get)
           }
@@ -1561,7 +1572,8 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
  */
 case class MultiGetJsonObjectEvaluator(
     fallbackPaths: Seq[UTF8String],
-    simplePaths: Seq[Seq[GetJsonObject.SimpleJsonPathSegment]]) {
+    simplePaths: Seq[Seq[GetJsonObject.SimpleJsonPathSegment]],
+    combineUnicodeSurrogates: Boolean) {
   import SharedFactory._
 
   require(fallbackPaths.nonEmpty && simplePaths.length == fallbackPaths.length)
@@ -1589,7 +1601,7 @@ case class MultiGetJsonObjectEvaluator(
 
   @transient
   private lazy val fallbackEvaluators: Seq[GetJsonObjectEvaluator] =
-    fallbackPaths.map(new GetJsonObjectEvaluator(_))
+    fallbackPaths.map(new GetJsonObjectEvaluator(_, combineUnicodeSurrogates))
 
   @transient
   private lazy val outputBuffer = new ByteArrayOutputStream()
@@ -1798,7 +1810,7 @@ case class MultiGetJsonObjectEvaluator(
 
     try {
       Utils.tryWithResource(
-        jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) { generator =>
+        createUtf8Generator(outputBuffer, combineUnicodeSurrogates)) { generator =>
         copyValue(generator, rawString = true)
       }
     } catch {

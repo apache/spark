@@ -44,6 +44,8 @@ import org.apache.spark.unsafe.types.UTF8String
 class JsonFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
+  private val supplementaryChar = new String(Character.toChars(0x1F30A))
+
   test("function get_json_object") {
     val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
     checkAnswer(
@@ -56,6 +58,66 @@ class JsonFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
       Row("fang", "5"))
+  }
+
+  test("SPARK-62118: shared JSON extraction follows the query's session setting") {
+    val key = SQLConf.JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8.key
+    val session = spark.newSession()
+    val other = spark.newSession()
+    val json =
+      s"""{"a":{"s":"$supplementaryChar"},"b":[["$supplementaryChar"]],"s":"$supplementaryChar"}"""
+    val input = spark.sparkContext.parallelize(Seq(Tuple1(json)), 1)
+
+    def query(s: SparkSession): DataFrame = {
+      s.conf.set(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key, true)
+      s.createDataFrame(input).toDF("j").selectExpr(
+        "get_json_object(j, '$.a')", "get_json_object(j, '$.b[0]')",
+        "json_query(j, '$.s' KEEP QUOTES)", "json_query(j, '$.s' OMIT QUOTES)")
+    }
+
+    def checkShared(df: DataFrame, rendered: String): Unit = {
+      assert(df.queryExecution.optimizedPlan.exists { plan =>
+        plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      })
+      checkAnswer(df,
+        Row(s"""{"s":"$rendered"}""", s"""["$rendered"]""", s""""$rendered"""", supplementaryChar))
+    }
+
+    val escaped = "\\uD83C\\uDF0A"
+    assert(session.conf.get(key) == "false")
+    val original = query(session)
+    session.conf.set(key, true)
+    val enabled = query(session)
+    // Column pruning rebuilds json_tuple after the session setting has changed.
+    val tuple = session.sql(s"SELECT o FROM json_tuple('$json', 'a', 's') AS t(o, s)")
+    checkShared(original, escaped)
+    checkShared(query(other), escaped)
+    session.conf.set(key, false)
+    checkShared(enabled, supplementaryChar)
+    checkAnswer(tuple, Row(s"""{"s":"$supplementaryChar"}"""))
+    checkShared(query(session), escaped)
+  }
+
+  test("SPARK-62118: JSON tuple, query and table serialize supplementary characters") {
+    val fraction = "0.12345678901234567890123456789"
+    val literalObject = s"""{"s":"$supplementaryChar"}"""
+    val json =
+      s"""{"a":["$supplementaryChar"],"o":$literalObject,"s":"$supplementaryChar","n":$fraction}"""
+    for (enabled <- Seq(false, true)) {
+      withSQLConf(SQLConf.JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8.key -> enabled.toString) {
+        val rendered = if (enabled) supplementaryChar else "\\uD83C\\uDF0A"
+        val array = s"""["$rendered"]"""
+        val obj = s"""{"s":"$rendered"}"""
+        checkAnswer(sql(s"SELECT json_tuple('$json', 'o', 'a', 's')"),
+          Row(obj, array, supplementaryChar))
+        checkAnswer(sql(s"SELECT json_query('$json', '$$.o')"), Row(obj))
+        checkAnswer(sql(
+          s"SELECT * FROM JSON_TABLE('$json', '$$' " +
+            "COLUMNS (o STRING, a STRING, s STRING, n STRING))"),
+          Row(obj, array, supplementaryChar, fraction))
+        checkAnswer(sql(s"SELECT to_json(from_json('$json', 's STRING'))"), Row(literalObject))
+      }
+    }
   }
 
   val tuples: Seq[(String, String)] =
@@ -370,7 +432,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
       withSQLConf(
           SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
           SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsingEnabled.toString) {
-        val query = Seq(s"""{"a":"$oversized","b.c":2}""").toDF("json").select(
+        val query = Seq(s"""{"a":"$oversized","b.c":["$supplementaryChar"]}""").toDF("json").select(
           get_json_object($"json", "$.a"),
           get_json_object($"json", "$['b.c']"))
 
@@ -384,9 +446,11 @@ class JsonFunctionsSuite extends SharedSparkSession {
       rows
     }
 
-    val sharedResult = result(sharedParsingEnabled = true)
-    assert(sharedResult == result(sharedParsingEnabled = false))
-    assert(sharedResult == Seq(Row(null, "2")))
+    withSQLConf(SQLConf.JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8.key -> "true") {
+      val sharedResult = result(sharedParsingEnabled = true)
+      assert(sharedResult == result(sharedParsingEnabled = false))
+      assert(sharedResult == Seq(Row(null, s"""["$supplementaryChar"]""")))
+    }
   }
 
   test("SPARK-47670: shared get_json_object does not return partial malformed results") {

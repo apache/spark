@@ -57,6 +57,27 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(GetJsonObject(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
+  test("SPARK-62118: get_json_object UTF-8 output for escaped and literal surrogate pairs") {
+    val supplementaryChar = new String(Character.toChars(0x1F30A))
+    val snow = 0x96EA.toChar
+    val escaped = "\\uD83C\\uDF0A"
+    val unpaired = "\\uD800x\\uDC00"
+    for (enabled <- Seq(false, true)) {
+      withSQLConf(SQLConf.JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8.key -> enabled.toString) {
+        val rendered = if (enabled) supplementaryChar else escaped
+        val json =
+          s"""{"a":[{"$escaped":"$snow$supplementaryChar","s":"$unpaired"}],"b":"$escaped"}"""
+        val obj = s"""{"$rendered":"$snow$rendered","s":"$unpaired"}"""
+        checkEvaluation(GetJsonObject(Literal(json), Literal("$.a")), s"[$obj]")
+        checkEvaluation(GetJsonObject(Literal(json), Literal("$.b")), supplementaryChar)
+        checkEvaluation(
+          GetJsonObject(BoundReference(0, StringType, true), BoundReference(1, StringType, true)),
+          obj,
+          InternalRow(UTF8String.fromString(json), UTF8String.fromString("$.a[0]")))
+      }
+    }
+  }
+
   test("$.store.bicycle") {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.store.bicycle")),

@@ -69,11 +69,18 @@ import org.apache.spark.util.Utils
   """,
   group = "json_funcs",
   since = "1.5.0")
-case class GetJsonObject(json: Expression, path: Expression)
+case class GetJsonObject(
+    json: Expression,
+    path: Expression,
+    combineUnicodeSurrogates: Boolean = SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
   extends BinaryExpression
   with ExpectsInputTypes
   with DefaultStringProducingExpression {
 
+  def this(json: Expression, path: Expression) =
+    this(json, path, SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
+
+  override protected def stringArgs: Iterator[Any] = children.iterator
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
@@ -86,10 +93,9 @@ case class GetJsonObject(json: Expression, path: Expression)
   final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
-  private lazy val evaluator = if (path.foldable) {
-    new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String])
-  } else {
-    new GetJsonObjectEvaluator()
+  private lazy val evaluator = {
+    val cachedPath = if (path.foldable) path.eval().asInstanceOf[UTF8String] else null
+    GetJsonObjectEvaluator(cachedPath, combineUnicodeSurrogates)
   }
   override def stateful: Boolean = true
 
@@ -104,12 +110,12 @@ case class GetJsonObject(json: Expression, path: Expression)
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
     val foldablePath = ExprUtils.tryEvalFoldable(path)
-    val initEvaluator = foldablePath match {
+    val cachedPathTerm = foldablePath match {
       case Some(cachedPath) if cachedPath != null =>
-        val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
-        s"new $evaluatorClass($refCachedPath)"
-      case _ => s"new $evaluatorClass()"
+        ctx.addReferenceObj("cachedPath", cachedPath)
+      case _ => "null"
     }
+    val initEvaluator = s"new $evaluatorClass($cachedPathTerm, $combineUnicodeSurrogates)"
     val evaluator = ctx.addMutableState(evaluatorClass, "evaluator",
       v => s"""$v = $initEvaluator;""", forceInline = true)
 
@@ -191,12 +197,15 @@ object GetJsonObject {
  */
 case class MultiGetJsonObject(
     json: Expression,
-    fallbackPaths: Seq[String])
+    fallbackPaths: Seq[String],
+    combineUnicodeSurrogates: Boolean = SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
   extends UnaryExpression
   with ExpectsInputTypes {
 
   // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
   require(fallbackPaths.nonEmpty)
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(2)
 
   override def child: Expression = json
 
@@ -228,7 +237,8 @@ case class MultiGetJsonObject(
   @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
     fallbackPaths.map(UTF8String.fromString),
-    simplePaths)
+    simplePaths,
+    combineUnicodeSurrogates)
 
   override def eval(input: InternalRow): Any = {
     evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
@@ -270,9 +280,16 @@ case class MultiGetJsonObject(
   group = "json_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
-case class JsonTuple(children: Seq[Expression])
+case class JsonTuple(
+    children: Seq[Expression],
+    combineUnicodeSurrogates: Boolean = SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
   extends Generator
   with QueryErrorsBase {
+
+  def this(children: Seq[Expression]) =
+    this(children, SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
+
+  override protected def stringArgs: Iterator[Any] = children.iterator
 
   override def nullable: Boolean = {
     // A row is always returned.
@@ -323,7 +340,8 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   @transient
-  private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(foldableFieldNames)
+  private lazy val evaluator: JsonTupleEvaluator =
+    JsonTupleEvaluator(foldableFieldNames, combineUnicodeSurrogates)
   override def stateful: Boolean = true
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
@@ -432,13 +450,16 @@ case class JsonTable(
     // Captured at plan-construction time so column casts do not change behavior if the session's
     // ANSI mode is flipped between building the plan and executing it (matching `Cast`, which
     // fixes its eval mode when the expression is constructed).
-    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled,
+    combineUnicodeSurrogates: Boolean = SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
   extends UnaryExpression
   with Generator
   with TimeZoneAwareExpression
   with CodegenFallback
   with ImplicitCastInputTypes
   with QueryErrorsBase {
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(6)
 
   // Declared via ImplicitCastInputTypes so the analyzer coerces the JSON input to STRING. In
   // particular an untyped SQL NULL (NullType) is cast to STRING rather than rejected, so
@@ -527,7 +548,7 @@ case class JsonTable(
   }
 
   @transient private lazy val rowEvaluator: JsonTableEvaluator =
-    JsonTableEvaluator(containerInstructions, explodeRoot)
+    JsonTableEvaluator(containerInstructions, explodeRoot, combineUnicodeSurrogates)
 
   // Parsed instruction list per column (empty for ordinality columns, which have no path).
   @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
@@ -1101,13 +1122,16 @@ case class JsonQuery(
     wrapper: JsonQueryWrapper,
     quotes: JsonQueryQuotes,
     onEmpty: JsonQueryBehavior,
-    onError: JsonQueryBehavior)
+    onError: JsonQueryBehavior,
+    combineUnicodeSurrogates: Boolean = SQLConf.get.jsonCombineUnicodeSurrogatesInUtf8)
   extends UnaryExpression
   with CodegenFallback
   with ExpectsInputTypes
   with QueryErrorsBase
   with ImplicitlyFormattedAsJson
   with RoutedSqlJsonExpression {
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(7)
 
   override def nullable: Boolean = true
 
@@ -1154,7 +1178,8 @@ case class JsonQuery(
   // Path parsed once (the grammar makes it a string literal). `checkInputDataTypes` guarantees it
   // parses and is wildcard-free, so the evaluator is only built for a valid path.
   @transient private lazy val evaluator: JsonTableEvaluator =
-    JsonTableEvaluator(JsonPathParser.parse(path).getOrElse(Nil), explodeRoot = false)
+    JsonTableEvaluator(JsonPathParser.parse(path).getOrElse(Nil), explodeRoot = false,
+      combineUnicodeSurrogates = combineUnicodeSurrogates)
 
   // Handle the ON EMPTY / ON ERROR case per the configured behavior.
   private def onEmptyResult(): Any = behaviorResult(onEmpty, isEmpty = true)
