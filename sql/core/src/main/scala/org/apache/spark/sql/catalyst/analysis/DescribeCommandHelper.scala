@@ -34,10 +34,12 @@ import org.apache.spark.sql.internal.connector.V1Function
  */
 private[sql] object DescribeCommandHelper {
 
-  /** Rewrites a [[DescribeRelation]] when a V1 command describes its target. */
+  /**
+   * Rewrites a [[DescribeRelation]] when a V1 command describes its target.
+   * Temporary and session-catalog views use the V1 command.
+   */
   def rewriteDescribeRelation(describeRelation: DescribeRelation): LogicalPlan =
     describeRelation match {
-    // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
         resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
         isExtended,
@@ -46,7 +48,16 @@ private[sql] object DescribeCommandHelper {
     case _ => describeRelation
   }
 
-  /** Rewrites a partition description, rejecting a persistent view without a V1 command. */
+  /**
+   * Rewrites a partition description, rejecting a persistent view without a V1 command.
+   *
+   * For `DESCRIBE TABLE <view> PARTITION (...)`, the V1 rewrite only matches session-catalog
+   * views through `ResolvedV1TableOrViewIdentifier`. Non-session V2 views are rejected with
+   * the same `FORBIDDEN_OPERATION` error that V1 raises at runtime in
+   * `DescribeTableCommand.describeDetailedPartitionInfo`. Otherwise, `UnresolvedPartitionSpec`
+   * remains unresolved on the V2 view path, and CheckAnalysis reports a generic
+   * "Found the unresolved operator" INTERNAL_ERROR.
+   */
   def rewriteDescribeTablePartition(
       describeTablePartition: DescribeTablePartition): LogicalPlan = describeTablePartition match {
     case DescribeTablePartition(
@@ -56,12 +67,6 @@ private[sql] object DescribeCommandHelper {
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
-    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
-    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
-    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
-    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
-    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
-    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
     case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
       val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
         .map(quoteIfNeeded).mkString(".")
@@ -69,14 +74,17 @@ private[sql] object DescribeCommandHelper {
     case _ => describeTablePartition
   }
 
-  /** Rewrites a [[DescribeColumn]] when a V1 command describes its target. */
+  /**
+   * Rewrites a [[DescribeColumn]] when a V1 command describes its target.
+   *
+   * For views, `ResolvedPersistentView` exposes the view's schema as its `output`, so
+   * `ResolveReferences` typically resolves the column to an `Attribute`. The legacy
+   * `UnresolvedAttribute` form is also accepted (e.g. the parser referenced a non-existent
+   * column whose resolution was skipped) to support analyzer ordering changes. The unwrap
+   * logic is shared with the non-session V2 view path in `DataSourceV2Strategy`.
+   */
   def rewriteDescribeColumn(describeColumn: DescribeColumn): LogicalPlan = describeColumn match {
     case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
-      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
-      // typically resolves the column to an `Attribute` here. We also accept the legacy
-      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
-      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
       val nameParts = DescribeColumn.extractColumnNameParts(column)
       DescribeColumnCommand(ident, nameParts, isExtended, output)
 
