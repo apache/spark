@@ -2316,8 +2316,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier check or
     // condition drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which
     // must still compute a column just before the first check or condition that reads it, not up
-    // front. The projection split is turned off so the filter over the aliases stays above the
-    // projection.
+    // front.
     val f = udf((x: Long) => x)
     // Returns a primitive, so `r` is non-nullable and gets no inferred IsNotNull: it is first
     // read by a plain condition (`r > 0`, `n + r > 0` or the common `r + 1`).
@@ -2372,8 +2371,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
         SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> threshold,
-        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> threshold) {
         val df = spark.range(10).select(
           f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
           rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
