@@ -4562,6 +4562,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
       "and the k of the first input with it off") {
     import KllMergeAggKRule._
 
+    // Ten exact inputs whose merge compacts.
+    val tenExact = Seq(1300, 1000, 1900, 1100, 1600, 1200, 1800, 1400, 1700, 1500).map((_, 1000))
     // (k, n) of each input, merged in this order, and the expected k with the conf on.
     val examples: Seq[(Seq[(Int, Int)], Int)] = Seq(
       // A compacting input with a smaller k lowers k, also after the first input.
@@ -4571,20 +4573,30 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq((65535, 70000), (8, 9)) -> 8,
       Seq((400, c), (100, c), (1000, c)) -> 100,
       Seq((1000, 10), (400, c), (16, 5), (200, c), (50, 50)) -> 200,
-      // The k of the first input counts, compacting or exact.
+      Seq((65535, 10), (8, c)) -> 8,
+      Seq((200, 10), (100, c), (50, c)) -> 50,
+      Seq((400, c), (200, c), (100, c), (50, c)) -> 50,
+      // The k of the first input counts, compacting or exact. A later compacting input with a
+      // larger k does not raise k.
       Seq((100, 2000), (400, 8000)) -> 100,
       Seq((8, 3), (400, 8000)) -> 8,
+      Seq((8, 3), (65535, 70000)) -> 8,
+      Seq((50, 10), (400, c)) -> 50,
+      Seq((50, c), (1000, c), (400, 10)) -> 50,
       Seq((200, c), (200, 50), (200, c)) -> 200,
       // An exact input after the first never lowers k.
       Seq((400, 8000), (8, 3)) -> 400,
       Seq((200, 4000), (100, 100)) -> 200,
+      Seq((400, c), (8, 8)) -> 400,
+      Seq((1000, 10), (8, 3), (50, 49), (100, 100)) -> 1000,
+      Seq((1000, c), (100, 50), (200, 199)) -> 1000,
       // No input compacts: the k of the first input, also when the result compacts.
       Seq((20, 3), (8, 3)) -> 20,
       Seq((1000, 10), (200, 10), (8, 3)) -> 1000,
       Seq((8, 3), (200, 10), (1000, 10)) -> 8,
       Seq((65535, 10), (8, 3)) -> 65535,
       Seq((100, 60), (200, 60)) -> 100,
-      Seq(1300, 1000, 1900, 1100, 1600, 1200, 1800, 1400, 1700, 1500).map((_, 1000)) -> 1300,
+      tenExact -> 1300,
       // Empty inputs do not take part.
       Seq((8, 0), (400, 8000)) -> 400,
       Seq((8, 0), (400, 3)) -> 400,
@@ -4593,11 +4605,15 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq((20, 3), (8, 0)) -> 20,
       Seq((8, 0), (100, 10), (400, c)) -> 100,
       Seq((50, 0), (8, 0), (1000, c), (16, 3)) -> 1000,
+      Seq((400, c), (8, 0), (200, c)) -> 200,
+      Seq((8, 0), (1000, 10), (8, 3)) -> 1000,
       // Only empty inputs: the k of the first input.
       Seq((1000, 0)) -> 1000,
       Seq((1000, 0), (1000, 0), (1000, 0)) -> 1000,
       Seq((8, 0), (400, 0)) -> 8,
       Seq((1000, 0), (8, 0)) -> 1000,
+      Seq((8, 0), (1000, 0), (400, 0)) -> 8,
+      Seq((65535, 0), (8, 0)) -> 65535,
       // One input.
       Seq((1000, 10)) -> 1000,
       Seq((100, c)) -> 100)
@@ -4615,6 +4631,13 @@ class DataFrameAggregateSuite extends SharedSparkSession
         (k, n)
       }
       inputs -> ruleK(inputs)
+    }
+
+    // No input compacts, but the result does. It still keeps the k of the first input.
+    for (inputs <- Seq(Seq((100, 60), (200, 60)), tenExact)) {
+      val rows = inputs.map { case (k, n) => Some(sketch("bigint", k, n)) }
+      val merged = mergedGlobal("bigint", rows, 1, lowestCompactingK = true)
+      assert(state("bigint", merged) == ((inputs.head._1, inputs.map(_._2.toLong).sum, true)))
     }
 
     val cases = examples ++ random
