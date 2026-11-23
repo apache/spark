@@ -372,7 +372,7 @@ case class StreamingSymmetricHashJoinExec(
     // evict that state by another column or key. Index version 1 orders it by the column or key
     // that the default mode picks, which the legacy mode cannot evict or look rows up by. A
     // checkpoint of an earlier version passes: it restores index version 0, and the join output
-    // watermark check as false, for which the default mode keeps the event time.
+    // watermark check as false, for which the default mode keeps the event time and the shared key.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
     if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
       val sharedKeyOrdinal = findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
@@ -389,8 +389,14 @@ case class StreamingSymmetricHashJoinExec(
                 conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
             }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
           }
-          val key = findStateKeyOrdinalForWatermark(
-            side, leftKeys, rightKeys, usesSharedKeyOrdinal && indexVersion == 0)
+          // Index version 0 holds the shared key, which this run must also use. Index version 1
+          // holds the key of the default mode, which keeps the shared key without the check.
+          val writtenWithSharedKey = if (indexVersion == 0) {
+            usesSharedKeyOrdinal
+          } else {
+            !conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
+          }
+          val key = findStateKeyOrdinalForWatermark(side, leftKeys, rightKeys, writtenWithSharedKey)
             .filterNot(sharedKeyOrdinal.contains).map(i => toSQLExpr(keys(i)))
           column.filterNot(eventTime.contains).map(i => toSQLId(attributes(i).name)).orElse(key)
             .foreach { c =>
@@ -744,8 +750,8 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
-      // A key that the opposite watermark selects can be NULL in a row that an earlier version
-      // or the legacy mode stored. Such a row can never match.
+      // A key that the opposite watermark selects can be NULL in a row that the legacy mode stored
+      // before a switch to the default mode. Such a row can never match.
       case Some(JoinStateKeyWatermarkPredicate(expr @ LessThanOrEqual(key, _), _, _))
           if joinKeyOrdinalForWatermark != findJoinKeyOrdinalForWatermark(leftKeys, rightKeys) =>
         Predicate.create(Or(expr, IsNull(key)), Seq.empty).eval _

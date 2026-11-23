@@ -162,6 +162,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
   }
 
+  // TODO: [SPARK-62001] The state watermarks still assume eviction by the shared key or the event
+  //  time, so they do not bound the rows of an input evicted by another key or column. The join
+  //  output watermark check rejects such a query in append mode only.
   def getStateWatermark(
       leftAttributes: Seq[Attribute],
       rightAttributes: Seq[Attribute],
@@ -387,7 +390,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * watermark, this is [[findJoinKeyOrdinalForWatermark]].
    *
    * TODO(SPARK-62002): a watermarked key that the opposite input's key shifts or truncates, as in
-   * `lb = rb + INTERVAL 1 HOUR`, is not found here, so that side keeps the shared key.
+   * `lb = rb + INTERVAL 1 HOUR`, is not found here, so that side keeps the shared key. So does a
+   * side whose opposite input has no watermarked key, which can still lose matches, as in
+   * `i.adId = c.adId AND i.impTime = c.impTime` with a watermark on `c.clickTime`.
    */
   def findStateKeyOrdinalForWatermark(
       joinSide: JoinSide,

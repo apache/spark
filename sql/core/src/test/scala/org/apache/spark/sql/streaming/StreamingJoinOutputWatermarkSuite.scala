@@ -77,7 +77,12 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     test(s"reject a key-only join before a window aggregation, V$version") {
       withJoinConf(version) {
         val (leftInput, _, result) = countJoined(keyOnly, "leftTime")
-        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+        testStream(result)(AddData(leftInput, (1, 5L)), ExpectFailure[AnalysisException]({ e =>
+          assert(e.getMessage.contains(
+            "the state of the left input of a stream-stream join has no cutoff"))
+          assert(e.getMessage.contains(
+            "Add a range condition that bounds the event time of that input"))
+        }, typeIsSuperClass = true))
       }
     }
 
@@ -412,7 +417,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // An earlier version evicted the left input by la, and emitted the outer row of (60, 700) at
-  // the watermark 490 s, which the aggregation counted. A restarted query keeps that eviction.
+  // the watermark 490 s, which the aggregation counted. A restarted query keeps that eviction, so
+  // the check does not flag the left input.
   test("a join with crossed watermarked keys keeps the earlier eviction from an older checkpoint") {
     withJoinConf(2) {
       withTempDir { checkpoint =>
@@ -440,8 +446,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
             MultiAddData(leftInput, (500, 800))(rightInput, (901, 500)), CheckNewAnswer(),
             AddData(rightInput, (902, 500)), CheckNewAnswer((60L, 1L)))
         }
-        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-          "the state of the left input of a stream-stream join has no cutoff on its event time")))
+        assert(!logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")))
       }
     }
   }

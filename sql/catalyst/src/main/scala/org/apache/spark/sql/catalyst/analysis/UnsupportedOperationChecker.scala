@@ -190,14 +190,13 @@ object UnsupportedOperationChecker extends Logging {
               // An input counts unless the operator's event times come only from other inputs.
               val sources = eventTimeSources(subPlan, j)
               joinInputWithoutStateCutoff(j,
-                  input => sources.forall(_.exists(input.outputSet.contains))).foreach { side =>
-                throwError("Detected pattern of possible 'correctness' issue: the state of the " +
-                  s"$side input of a stream-stream join has no cutoff on its event time, so the " +
-                  "join can emit its old rows below its output watermark, and a later stateful " +
-                  "operator drops them as late. Add a range condition that bounds the event time " +
-                  "of that input by the other input's watermark, or a watermark on the same join " +
-                  "key of both inputs, or set " +
-                  "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
+                  input => sources.forall(_.exists(input.outputSet.contains))).foreach {
+                case (side, remedy) =>
+                  throwError("Detected pattern of possible 'correctness' issue: the state of " +
+                    s"the $side input of a stream-stream join has no cutoff on its event time, " +
+                    "so the join can emit its old rows below its output watermark, and a later " +
+                    s"stateful operator drops them as late. Add $remedy, or set " +
+                    "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
               }
             case _ =>
           }
@@ -216,8 +215,9 @@ object UnsupportedOperationChecker extends Logging {
   // without this check, whose eviction keeps the event time. A left semi join only emits left rows.
   // TODO: An input that earlier versions also evicted by a join key other than its event time is
   //   not checked yet, such as the right input of `leftKey = rightKey AND leftTime = rightTs`.
+  // Returns the side with the remedy that clears it.
   private def joinInputWithoutStateCutoff(
-      join: Join, counts: LogicalPlan => Boolean): Option[String] = join match {
+      join: Join, counts: LogicalPlan => Boolean): Option[(String, String)] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
       Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
@@ -230,14 +230,17 @@ object UnsupportedOperationChecker extends Logging {
               SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK) &&
               StreamingJoinHelper.getStateValueWatermarkColumn(input.output, other.outputSet,
                 condition, Some(1000000)).exists { case (column, _) => !hasEventTimeCol(column) }
-              ) => side
+              ) => side -> ("a range condition that bounds the event time of that input by the " +
+                "other input's watermark, or a watermark on the same join key of both inputs")
         }
     // With allowMultiple, an input is evicted by its equality key that the other input's
     // watermark bounds. Where that is neither the key earlier versions evicted both inputs by
-    // nor the input's event time, its state keeps rows of any event time.
+    // nor the input's event time, its state keeps rows of any event time. A checkpoint written
+    // without this check keeps the key of earlier versions.
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
         if left.isStreaming && right.isStreaming &&
-          SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) =>
+          SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE) &&
+          SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK) =>
       def watermarked(keys: Seq[Expression]): Option[Int] = Some(keys.indexWhere {
         case ne: NamedExpression => ne.metadata.contains(EventTimeWatermark.delayKey)
         case _ => false
@@ -248,7 +251,8 @@ object UnsupportedOperationChecker extends Logging {
         .filter { case (_, _, _, input) => counts(input) }
         .collectFirst {
           case (side, keys, otherKeys, _) if watermarked(otherKeys).exists { i =>
-            !shared.contains(i) && watermarked(Seq(keys(i))).isEmpty } => side
+            !shared.contains(i) && watermarked(Seq(keys(i))).isEmpty } =>
+            side -> "a watermark on the same join key of both inputs"
         }
     case _ => None
   }

@@ -36,7 +36,7 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
   }
 
   // The watermarks are on different equality keys: la on the left and rb on the right. A
-  // negative left b gives a NULL lb.
+  // negative left b gives a NULL lb, and a negative right a a NULL ra.
   private def crossedKeyJoin()
       : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
     val leftInput = MemoryStream[(Int, Int)]
@@ -46,7 +46,7 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
         when($"b" >= 0, timestamp_seconds($"b")).as("lb"))
       .withWatermark("la", "10 seconds")
     val right = rightInput.toDF().toDF("a", "b")
-      .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
+      .select(when($"a" >= 0, timestamp_seconds($"a")).as("ra"), timestamp_seconds($"b").as("rb"))
       .withWatermark("rb", "10 seconds")
     val joined = left.join(right, expr("la = ra AND lb = rb"), "full_outer")
       .select($"la".cast("int"), $"lb".cast("int"), $"ra".cast("int"), $"rb".cast("int"))
@@ -153,6 +153,27 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
     }
   }
 
+  // The right input keeps the shared key ra, with the earlier handling of a NULL in it: the row is
+  // stored and never evicted. State format 4, like earlier versions, emits such a row at once.
+  for (version <- Seq(2, 3)) {
+    test(s"a right row whose shared key is NULL is stored as in earlier versions, V$version") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, joined) = crossedKeyJoin()
+        testStream(joined)(
+          MultiAddData(leftInput, (6, 60))(rightInput, (-1, 50)),
+          CheckNewAnswer(),
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsUpdated == 2
+          },
+          MultiAddData(leftInput, (200, 200))(rightInput, (200, 200)),
+          CheckNewAnswer(Row(200, 200, 200, 200)),
+          // The watermark is 190 s: the left row (6, 60) is evicted by lb, the NULL ra is kept.
+          AddData(leftInput, (300, 300)),
+          CheckNewAnswer(Row(6, 60, null, null)))
+      }
+    }
+  }
+
   // A window aggregation on la after a join on la = ra AND lb = rb, or on la = ra only.
   private def countJoined(crossed: Boolean): (MemoryStream[(Int, Int)], DataFrame) = {
     val leftInput = MemoryStream[(Int, Int)]
@@ -177,9 +198,13 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
         val (leftInput, result) = countJoined(crossed = true)
         testStream(result)(
           AddData(leftInput, (1, 5)),
-          ExpectFailure[AnalysisException](e => assert(e.getMessage.contains(
-            "the state of the left input of a stream-stream join has no cutoff")),
-            typeIsSuperClass = true))
+          ExpectFailure[AnalysisException]({ e =>
+            assert(e.getMessage.contains(
+              "the state of the left input of a stream-stream join has no cutoff"))
+            // A range condition does not clear it.
+            assert(e.getMessage.contains("Add a watermark on the same join key of both inputs, " +
+              "or set"))
+          }, typeIsSuperClass = true))
       }
     }
 
