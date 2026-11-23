@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.time.Duration
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
@@ -565,6 +567,107 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
           // Fails if the key is the second `sym` ("ZZ"), or the join drops its rows.
           assert(asOfRows.nonEmpty && asOfRows.forall(_.getString(0) == "A"))
         case _ => assert(regular.isLeft && regular == asOf, s"$regular vs $asOf")
+      }
+    }
+  }
+
+  // Right key offsets from the left key (offset 0 is the left key) for each case. The tolerance is
+  // 2, so offsets -2 and 2 sit exactly on the tolerance bound.
+  private val toleranceCases: Seq[(String, Seq[Int])] = Seq(
+    "on_bound_before" -> Seq(-2),
+    "on_bound_after" -> Seq(2),
+    "past_bound_before" -> Seq(-3),
+    "past_bound_after" -> Seq(3),
+    "exact_only" -> Seq(0),
+    "exact_and_bounds" -> Seq(-2, 0, 1),
+    "tie_on_bounds" -> Seq(-2, 2),
+    "inside" -> Seq(-1, 2))
+
+  // The right offset the join must pick, or None. Only the match depends on allowExactMatches.
+  // The tolerance bound is always inclusive.
+  private def expectedOffset(
+      direction: String,
+      allowExactMatches: Boolean,
+      offsets: Seq[Int]): Option[Int] = {
+    val matching = offsets.filter { r =>
+      math.abs(r) <= 2 && (direction match {
+        case "backward" => if (allowExactMatches) r <= 0 else r < 0
+        case "forward" => if (allowExactMatches) r >= 0 else r > 0
+        case _ => allowExactMatches || r != 0
+      })
+    }
+    if (matching.isEmpty) {
+      None
+    } else {
+      direction match {
+        case "backward" => Some(matching.max)
+        case "forward" => Some(matching.min)
+        case _ => Some(matching.minBy(r => (math.abs(r), r)))
+      }
+    }
+  }
+
+  private def toleranceJoinResults(
+      keyType: String,
+      direction: String,
+      allowExactMatches: Boolean,
+      cases: Seq[(String, Seq[Int])]): DataFrame = {
+    def key(offset: String): String = keyType match {
+      case "INT" => s"10 + $offset"
+      case "DATE" => s"date_add(DATE'2024-01-10', $offset)"
+      case _ => s"TIMESTAMP'2024-01-10 00:00:00' + make_dt_interval($offset)"
+    }
+    val leftRows = cases.map(c => s"('${c._1}')").mkString(", ")
+    val rightRows = cases.flatMap { case (id, offsets) =>
+      offsets.map(o => s"('$id', $o)")
+    }.mkString(", ")
+    val left = spark.sql(
+      s"SELECT case_id, ${key("0")} AS k FROM VALUES $leftRows AS t(case_id)")
+    val right = spark.sql(
+      s"SELECT case_id, ${key("ro")} AS k, ro FROM VALUES $rightRows AS t(case_id, ro)")
+    val tolerance = if (keyType == "INT") lit(2) else lit(Duration.ofDays(2))
+    left.joinAsOf(
+      right, left.col("k"), right.col("k"), usingColumns = Seq("case_id"),
+      joinType = "left", tolerance = tolerance, allowExactMatches = allowExactMatches,
+      direction = direction
+    ).select(left.col("case_id"), right.col("ro"))
+  }
+
+  for {
+    keyType <- Seq("INT", "DATE", "TIMESTAMP")
+    direction <- Seq("backward", "forward", "nearest")
+  } {
+    test(s"as-of join - tolerance bound is inclusive: $direction, $keyType keys") {
+      for {
+        sortMerge <- Seq(false, true)
+        singlePass <- if (sortMerge) Seq(false, true) else Seq(false)
+        ansi <- Seq(false, true)
+        allowExactMatches <- Seq(false, true)
+      } {
+        withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          // The old rewrite picks an arbitrary row among nearest candidates at equal distance.
+          val cases = toleranceCases.filter { c =>
+            sortMerge || direction != "nearest" || c._1 != "tie_on_bounds"
+          }
+          val expected = cases.map { case (id, offsets) =>
+            Row(id, expectedOffset(direction, allowExactMatches, offsets)
+              .map(Int.box).orNull)
+          }
+          withClue(s"sortMerge=$sortMerge, singlePass=$singlePass, ansi=$ansi, " +
+              s"allowExactMatches=$allowExactMatches: ") {
+            val result = toleranceJoinResults(keyType, direction, allowExactMatches, cases)
+            // checkAnswer re-analyzes the plan with an encoder, which the single-pass analyzer
+            // does not support yet.
+            val mismatch = QueryTest.sameRows(expected, result.collect().toSeq)
+            assert(mismatch.isEmpty, mismatch.getOrElse(""))
+          }
+        }
       }
     }
   }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Coalesce, If, IsNotNull, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Cast, Coalesce, EvalMode, If, IsNotNull, IsNull, Literal, NumericEvalContext, RaiseError}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -344,5 +344,20 @@ class OuterJoinEliminationSuite extends PlanTest {
           x.select($"s").analyze)
       }
     }
+  }
+
+  test("SPARK-62241: remove a left outer join whose right side is unique on its equalities, " +
+    "also on one that is not a join key") {
+    // The ANSI addition can fail, so after the throwable conjunct the equality on it is not a
+    // join key (see `ExtractEquiJoinKeys`). Every row that the join outputs satisfies it, though.
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val throwing = If($"a" < 0, IsNull(RaiseError(Literal("neg"))), Literal(true))
+    val addOne = Add($"b", Literal(1), NumericEvalContext(EvalMode.ANSI))
+    comparePlans(Optimize.execute(
+      x.join(y.groupBy($"d", $"e")($"d", $"e"), LeftOuter,
+        Some(throwing && $"a" === $"d" && addOne === $"e"))
+        .select($"a", $"b", $"c").analyze),
+      x.select($"a", $"b", $"c").analyze)
   }
 }
