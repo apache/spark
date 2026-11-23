@@ -33,11 +33,12 @@ skip it.
 - When writing or changing a test, pin the configs its assertions depend on: runtime SQL configs
   with `withSQLConf` (`self.sql_conf` in Python), static SQL and core configs in the suite's conf
   (`sparkConf` in `SharedSparkSession` suites, `conf` in `SharedSparkContext` suites, `conf()` in
-  Python). Scheduled jobs rerun the suites with other defaults set through env vars, such as the
-  Non-ANSI job (`SPARK_ANSI_SQL_MODE=false`) and the UDS and JDK codegen jobs. The RocksDB UI job
-  keeps the live UI store on disk, and no config switches it back to memory, so a UI or listener
-  test must pass with either store. When a result differs by ANSI mode and both matter, assert
-  both modes instead of pinning one. To check, run the suite with `SPARK_ANSI_SQL_MODE=false`.
+  Python). Scheduled jobs rerun the suites with other defaults set through env vars: Non-ANSI
+  (`SPARK_ANSI_SQL_MODE=false`), UDS (`PYSPARK_UDS_MODE=true`), JDK codegen
+  (`SPARK_CODEGEN_COMPILER=jdk`) and RocksDB UI (`LIVE_UI_LOCAL_STORE_DIR=<dir>`). The RocksDB UI
+  job keeps the live UI store on disk, and no config switches it back to memory, so a UI or
+  listener test must pass with either store. When a result differs by ANSI mode and both matter,
+  assert both modes instead of pinning one. To check, rerun the suite with the job's env var set.
 - Never remove, skip or weaken a failing test (`ignore`, `assume(false)`, `@unittest.skip`, or an
   expected value or golden file updated just to match), or mock the code under test, unless asked.
   Explain each new mock in a code comment.
@@ -54,10 +55,11 @@ skip it.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
   content requires it). When changing Scala, Java or Python code: read
   `.agents/code-conventions.md`, and run its spot-checks before committing.
-- Every new file that `dev/.rat-excludes` does not already match needs the Apache License header,
-  copied from a neighboring file of the same type and placed after the `#!` line of an executable
-  script. If such a file cannot carry one, add it to `dev/.rat-excludes`; the license check in CI
-  fails otherwise.
+- Every new text file that `dev/.rat-excludes` does not already match needs the Apache License
+  header, copied from a neighboring file of the same type and placed after the `#!` line of an
+  executable script; the license check in CI fails otherwise. If one cannot carry a header, such
+  as test data, add a `dev/.rat-excludes` entry that matches no other file or directory name: RAT
+  matches each entry against bare names anywhere in the tree. Binary files need neither.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.
