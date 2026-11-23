@@ -684,11 +684,6 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
     types. See the "Scalar pandas UDFs" section of python/pyspark/sql/transpile.py.
     """
 
-    def _mods(self, *pairs):
-        return self.spark.createDataFrame(
-            self.spark.sparkContext.parallelize(list(pairs), 1), "a bigint, b bigint"
-        )
-
     def test_modulo_by_zero_matches_numpy_missing_value(self):
         for schema, values, return_type in (
             ("a bigint, b bigint", [(5, 0), (None, 0), (7, -3), (-7, 3)], LongType()),
@@ -698,31 +693,30 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
                 df = self.spark.createDataFrame(values, schema)
                 self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
-    def test_modulo_matches_numpy_at_integral_minima(self):
-        for dtype, minimum in (
-            ("tinyint", -(2**7)),
-            ("smallint", -(2**15)),
-            ("int", -(2**31)),
-            ("bigint", LONG_MIN),
-        ):
-            with self.subTest(dtype=dtype):
-                df = self.spark.createDataFrame(
-                    [(minimum, -1), (1, minimum), (minimum, 3)], f"a {dtype}, b {dtype}"
-                )
-                with self.sql_conf(_TRANSPILE_ON):
-                    pudf = self._pandas_udf(modulo, LongType())
-                    self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
-                self._assert_matches_interpreted(modulo, LongType(), df, "a", "b")
-
-    def test_modulo_matches_numpy_with_infinite_or_absorbing_divisors(self):
-        df = self.spark.createDataFrame(
-            [(-1.0, float("inf")), (1.0, -float("inf")), (-1.0, 1e308), (1.0, -1e308)],
-            "a double, b double",
+    def test_modulo_matches_numpy_at_integral_minima_and_infinite_divisors(self):
+        cases = [
+            (f"a {dtype}, b {dtype}", [(minimum, -1), (1, minimum), (minimum, 3)], LongType())
+            for dtype, minimum in (
+                ("tinyint", -(2**7)),
+                ("smallint", -(2**15)),
+                ("int", -(2**31)),
+                ("bigint", LONG_MIN),
+            )
+        ]
+        cases.append(
+            (
+                "a double, b double",
+                [(-1.0, float("inf")), (1.0, -float("inf")), (-1.0, 1e308), (1.0, -1e308)],
+                DoubleType(),
+            )
         )
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = self._pandas_udf(modulo, DoubleType())
-            self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
-        self._assert_matches_interpreted(modulo, DoubleType(), df, "a", "b")
+        for schema, rows, return_type in cases:
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(rows, schema)
+                with self.sql_conf(_TRANSPILE_ON):
+                    pudf = self._pandas_udf(modulo, return_type)
+                    self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+                self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
     def test_narrow_integer_overflow_and_wide_literal(self):
         for dtype, maximum in (("tinyint", 127), ("smallint", 32767), ("int", 2**31 - 1)):

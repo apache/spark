@@ -314,16 +314,9 @@ class AbstractTranspiler(object):
         ``series_semantics`` is True when the arguments are ``pandas.Series`` rather than
         Python scalars (a scalar pandas UDF), which admits only the element-wise subset in
         the module docstring. It has no default on purpose: a transpiler that silently
-        received False for a pandas UDF would apply the Python-scalar lowerings to a Series,
-        turning one that raises ValueError into one that returns values. The trade-off is
-        that a third-party transpiler (registered via
-        ``spark.sql.experimental.optimizer.pyTranspilers``) written to the older
-        signature raises TypeError on the new keyword, which ``_transpile_func`` records
-        as a per-variant failure -- so it now falls back to interpreted Python for EVERY
-        eval type, including the pickled one where it previously worked. That is a
-        fallback, not a wrong answer, and this is an experimental extension point, so
-        requiring the argument (correctness) is preferred over a default
-        (bug-compatibility for an unknown subclass).
+        received False for a pandas UDF would apply the Python-scalar lowerings to a Series.
+        A transpiler written to the older signature therefore fails with TypeError and
+        falls back to interpreted Python, which is safe.
         """
         pass
 
@@ -1890,13 +1883,11 @@ def _transpile_func(
     """
     An experimental internal function that attempts to transpile a callable function.
 
-    ``evalType`` selects the semantics to reproduce, and is required rather than defaulted:
-    the row-at-a-time eval types (``SQL_BATCHED_UDF``, ``SQL_ARROW_BATCHED_UDF``) hand the
-    function Python scalars, while ``SQL_SCALAR_PANDAS_UDF`` hands it ``pandas.Series``, which
-    admits a much smaller subset of bodies (see the module docstring). A default would make
-    the wrong value the quiet one -- a caller that forgot to pass it would get the Python
-    scalar lowerings applied to a Series -- so omitting it is an error instead. The set of
-    eval types allowed to reach here at all lives in ``pyspark.sql.udf``.
+    ``evalType`` selects the semantics to reproduce: the row-at-a-time eval types hand the
+    function Python scalars, while ``SQL_SCALAR_PANDAS_UDF`` hands it ``pandas.Series``,
+    which admits a much smaller subset of bodies (see the module docstring). It is required
+    so that the Python-scalar lowerings are never applied to a Series by omission. The eval
+    types allowed to reach here at all are listed in ``pyspark.sql.udf``.
 
     Returns
     -------

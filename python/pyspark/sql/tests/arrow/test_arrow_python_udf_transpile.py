@@ -601,23 +601,19 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
                     )
 
     def test_modulo_minima_and_large_divisors_match_interpreted(self):
+        # The pickled eval type is pinned against Python's own `%` in test_udf_transpile_unit.
         def modulo(a, b):
             return a % b
 
-        cases = []
-        for dtype, minimum in (
-            ("tinyint", -(2**7)),
-            ("smallint", -(2**15)),
-            ("int", -(2**31)),
-            ("bigint", -(2**63)),
-        ):
-            cases.append(
-                (
-                    f"a {dtype}, b {dtype}",
-                    [(minimum, -1), (1, minimum), (minimum, 3)],
-                    LongType(),
-                )
+        cases = [
+            (f"a {dtype}, b {dtype}", [(minimum, -1), (1, minimum), (minimum, 3)], LongType())
+            for dtype, minimum in (
+                ("tinyint", -(2**7)),
+                ("smallint", -(2**15)),
+                ("int", -(2**31)),
+                ("bigint", -(2**63)),
             )
+        ]
         cases.append(
             (
                 "a double, b double",
@@ -625,21 +621,13 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
                 DoubleType(),
             )
         )
-        for eval_type in (PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
-            for schema, rows, return_type in cases:
-                with self.subTest(eval_type=eval_type, schema=schema):
-                    df = self.spark.createDataFrame(rows, schema)
-                    with self.sql_conf(_TRANSPILE_ON):
-                        pudf = UserDefinedFunction(modulo, return_type, evalType=eval_type)
-                        self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
-                    self._assert_matches_interpreted(
-                        modulo,
-                        return_type,
-                        df,
-                        "a",
-                        "b",
-                        eval_type=eval_type,
-                    )
+        for schema, rows, return_type in cases:
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(rows, schema)
+                with self.sql_conf(_TRANSPILE_ON):
+                    pudf = _arrow_udf(modulo, return_type)
+                    self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+                self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
     def test_numeric_arithmetic_matches_interpreted_arrow(self):
         for dtype, value, return_type in self._INTEGRAL_CASES + self._FLOATING_CASES:
@@ -872,10 +860,7 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
     """Confs that change what the interpreted Arrow path actually computes."""
 
     _LEGACY_PANDAS = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
-    _INT_EXT_DTYPE = "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype"
     _SAFE_ARROW = "spark.sql.execution.pandas.convertToArrowArraySafely"
-    _INT_TO_DECIMAL = "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled"
-    _FALLBACK_ON_UDT = "spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT"
 
     def test_legacy_pandas_conversion_disables_transpilation(self):
         with self.sql_conf({**_TRANSPILE_ON, self._LEGACY_PANDAS: True}):
@@ -916,28 +901,18 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
             "transpiled option rather than use it",
         )
 
-    def test_downcast_raises_on_both_paths_with_safe_arrow_conversion(self):
+    def test_downcast_overflow_raises_transpiled_whatever_the_arrow_safety_conf(self):
+        # With the safe conversion both paths raise. Without it the interpreted Arrow path
+        # wraps silently where the ANSI cast still raises; that is not gated against, since
+        # asking for unsafe conversion together with ANSI is self-contradictory.
         df = self.spark.createDataFrame([(3_000_000,)], schema="a bigint")
-        (on_values, _), (off_values, _) = self._differential(
-            times_thousand, IntegerType(), df, "a", conf={self._SAFE_ARROW: True}
-        )
-        self.assertIs(_RAISED, on_values)
-        self.assertIs(_RAISED, off_values)
-
-    def test_known_divergence_downcast_with_unsafe_arrow_conversion(self):
-        # Not gated against: the conf is internal, defaults safe, and asking for unsafe
-        # conversion together with ANSI is self-contradictory.
-        df = self.spark.createDataFrame([(3_000_000,)], schema="a bigint")
-        (on_values, _), (off_values, _) = self._differential(
-            times_thousand, IntegerType(), df, "a", conf={self._SAFE_ARROW: False}
-        )
-        self.assertIs(_RAISED, on_values, "the transpiled ANSI cast should reject the overflow")
-        self.assertIsNot(
-            _RAISED,
-            off_values,
-            "expected the interpreted Arrow path to wrap silently; if it now raises, this "
-            "divergence is gone and the test should assert agreement",
-        )
+        for safe in (True, False):
+            with self.subTest(convertToArrowArraySafely=safe):
+                (on_values, _), (off_values, _) = self._differential(
+                    times_thousand, IntegerType(), df, "a", conf={self._SAFE_ARROW: safe}
+                )
+                self.assertIs(_RAISED, on_values)
+                self.assertEqual(safe, off_values is _RAISED)
 
 
 if __name__ == "__main__":
