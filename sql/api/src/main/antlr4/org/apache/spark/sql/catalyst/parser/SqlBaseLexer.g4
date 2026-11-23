@@ -16,6 +16,17 @@
 
 lexer grammar SqlBaseLexer;
 
+tokens {
+  // A `?` of a statement that is parsed with optional references (`x?`): it marks the name part
+  // before it as optional, or it is a positional parameter marker. The lexer does not produce
+  // this token. A statement is parsed with QUESTION tokens first, which are positional parameter
+  // markers. Only if the statement is not valid that way and optional references are enabled,
+  // the parser turns the QUESTION tokens of the statement into this token and parses it again,
+  // see `AbstractParser.executeWithTwoStageStrategy`. A statement that is valid without optional
+  // references therefore keeps its meaning.
+  QUESTION_WITH_OPTIONAL_REFERENCES
+}
+
 @header {
 import java.util.ArrayDeque;
 import java.util.Deque;
