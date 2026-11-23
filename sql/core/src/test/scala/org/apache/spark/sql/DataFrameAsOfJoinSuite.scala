@@ -541,16 +541,17 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
   }
 
   // A name that matches two columns of the left side uses the first one, as a regular USING join
-  // does. The old code failed with AMBIGUOUS_REFERENCE.
+  // does. The old code failed with AMBIGUOUS_REFERENCE. The second `sym` holds a value no quote
+  // has, so a join on the wrong column would show.
   gridTest("usingColumns, a name that matches two left columns follows a regular USING join")(
     asOfConfs) { case (singlePass, sortMerge, ansi) =>
     withAsOfConf(singlePass, sortMerge, ansi) {
       val (trades, quotes) = prepareTradesQuotes()
-      val other = Seq((1, "A", 7)).toDF("ts2", "sym", "z").asInstanceOf[classic.DataFrame]
-      val twice = trades.join(other, trades.col("sym") === other.col("sym"))
+      val other = Seq((5, "ZZ", 7)).toDF("ts2", "sym", "z").asInstanceOf[classic.DataFrame]
+      val twice = trades.join(other, trades.col("ts") === other.col("ts2"))
         .asInstanceOf[classic.DataFrame]
-      def attempt(f: => DataFrame): Either[String, Int] =
-        scala.util.Try(f.collect().length).toEither.left.map {
+      def attempt(f: => DataFrame): Either[String, (Seq[String], Seq[Row])] =
+        scala.util.Try { val df = f; (df.columns.toSeq, df.collect().toSeq) }.toEither.left.map {
           case e: AnalysisException => e.getCondition
           case e => e.getClass.getName
         }
@@ -558,8 +559,13 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
       val asOf = attempt(twice.joinAsOf(
         quotes, twice.col("ts"), quotes.col("ts"), usingColumns = Seq("sym"), joinType = "inner",
         tolerance = null, allowExactMatches = true, direction = "backward"))
-      assert(regular.isRight == asOf.isRight, s"$regular vs $asOf")
-      if (regular.isLeft) assert(regular == asOf)
+      (regular, asOf) match {
+        case (Right((regularColumns, _)), Right((asOfColumns, asOfRows))) =>
+          assert(asOfColumns == regularColumns)
+          // Fails if the key is the second `sym` ("ZZ"), or the join drops its rows.
+          assert(asOfRows.nonEmpty && asOfRows.forall(_.getString(0) == "A"))
+        case _ => assert(regular.isLeft && regular == asOf, s"$regular vs $asOf")
+      }
     }
   }
 }
