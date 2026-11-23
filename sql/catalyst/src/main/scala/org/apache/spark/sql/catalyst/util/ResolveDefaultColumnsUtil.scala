@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -296,7 +296,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      finishAnalysisAndFold(analyzed)
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -603,6 +603,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * This is an Optimizer for convert default column expressions to foldable literals.
    */
   object DefaultColumnOptimizer extends Optimizer(DefaultColumnAnalyzer.catalogManager)
+
+  /**
+   * Runs the finish-analysis rules on the plan of a default value and constant-folds it. A `With`,
+   * which NULLIF and BETWEEN build, is not foldable, so its definitions are inlined first, as for
+   * the expressions of a command.
+   */
+  private[sql] def finishAnalysisAndFold(plan: LogicalPlan): LogicalPlan =
+    ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(plan)
+      .mapExpressions(RewriteWithExpression.inlineCommandWiths))
 
   /**
    * This is a FunctionCatalog for performing analysis using built-in functions only. It is a helper

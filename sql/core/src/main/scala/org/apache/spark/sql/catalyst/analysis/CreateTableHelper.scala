@@ -26,7 +26,6 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, RowOrdering}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns => DefaultCols}
@@ -297,7 +296,7 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
       statementType: String): String = {
     validateDefaultValueExpr(defaultValue, statementType, colName, Some(colType))
     val fakePlan = Project(Seq(Alias(defaultValue.child, colName)()), OneRowRelation())
-    val optimizedPlan = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(fakePlan))
+    val optimizedPlan = finishAnalysisAndFold(fakePlan)
     val constantFolded = optimizedPlan.collectFirst {
       case Project(Seq(expr), OneRowRelation()) => trimAliases(expr)
     }.get

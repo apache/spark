@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 
@@ -423,5 +424,22 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     })
     assert(hasLengthCheck,
       "by-position default fill must apply the CHAR/VARCHAR write-side length check")
+  }
+
+  test("SPARK-60029: a default using NULLIF or BETWEEN is constant") {
+    // NULLIF and BETWEEN build a `With`, which is not foldable until its definitions are inlined.
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq("t" -> "parquet", "testcat.ns.t" -> "foo").foreach { case (t, provider) =>
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id INT, a INT DEFAULT nullif(1, 3), " +
+            s"b BOOLEAN DEFAULT (1 + 1) BETWEEN 1 AND 3) USING $provider")
+          sql(s"INSERT INTO $t (id) VALUES (1)")
+          sql(s"ALTER TABLE $t ADD COLUMN c INT DEFAULT nullif(abs(-2), 2)")
+          sql(s"ALTER TABLE $t ALTER COLUMN a SET DEFAULT nullif(2, 3)")
+          sql(s"INSERT INTO $t (id) VALUES (2)")
+          checkAnswer(spark.table(t), Seq(Row(1, 1, true, null), Row(2, 2, true, null)))
+        }
+      }
+    }
   }
 }

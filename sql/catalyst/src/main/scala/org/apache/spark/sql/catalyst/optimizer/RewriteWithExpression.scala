@@ -336,7 +336,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * `e` with every `With` substituted as a command's expressions need, bottom-up for nested ones:
    * each deterministic definition whatever it costs, and any read at most once.
    */
-  private def inlineCommandWiths(e: Expression): Expression =
+  private[sql] def inlineCommandWiths(e: Expression): Expression =
     e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
       case w: With =>
         lazy val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
