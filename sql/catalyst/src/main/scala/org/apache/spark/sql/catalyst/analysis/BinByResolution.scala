@@ -76,7 +76,7 @@ object BinByResolution {
     }
 
     if (!binWidthExpr.foldable) {
-      throw QueryCompilationErrors.binByNonFoldableInputError("BIN WIDTH", binWidthExpr)
+      throw QueryCompilationErrors.nonFoldableClauseInputError("BIN WIDTH", binWidthExpr)
     }
 
     val binWidthMicros: Long = binWidthExpr.dataType match {
@@ -107,7 +107,7 @@ object BinByResolution {
     val originMicros: Long = originExpr match {
       case Some(o) =>
         if (!o.foldable) {
-          throw QueryCompilationErrors.binByNonFoldableInputError("ALIGN TO", o)
+          throw QueryCompilationErrors.nonFoldableClauseInputError("ALIGN TO", o)
         }
         if (o.dataType != rangeType) {
           throw QueryCompilationErrors.binByAlignToTypeMismatchError(o.dataType, rangeType)

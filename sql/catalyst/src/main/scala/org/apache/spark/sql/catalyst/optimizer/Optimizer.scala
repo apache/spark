@@ -374,6 +374,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteAsOfJoin,
       RewriteNearestByJoin,
       EvalInlineTables,
+      EvalGapFillCurrentTimeValues,
       ReplaceTranspose,
       RewriteCollationJoin
     )

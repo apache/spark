@@ -3316,7 +3316,7 @@
   },
   "GAP_FILL_CORRELATED_INPUT" : {
     "message" : [
-      "GAP FILL is not supported on an input that references an outer query."
+      "GAP FILL is not supported on an input that references an outer query. Remove the outer reference from the GAP FILL input."
     ],
     "sqlState" : "0A000"
   },
@@ -3376,7 +3376,7 @@
   },
   "GAP_FILL_STREAMING_NOT_SUPPORTED" : {
     "message" : [
-      "GAP FILL is not supported on streaming input."
+      "GAP FILL is not supported on streaming input. Use GAP FILL in a batch query."
     ],
     "sqlState" : "0A000"
   },
@@ -9784,12 +9784,12 @@
       },
       "GAP_FILL_PARTITION_KEY_TYPE" : {
         "message" : [
-          "GAP FILL with PARTITION BY column <columnName> of type <columnType>."
+          "GAP FILL with PARTITION BY column <columnName> of type <columnType>. Convert the column to a supported type, such as STRING or BINARY, in a select before GAP FILL."
         ]
       },
       "GAP_FILL_TIMESTAMP_NANOS" : {
         "message" : [
-          "GAP FILL with time column <columnName> of type <columnType>."
+          "GAP FILL with time column <columnName> of type <columnType>. Cast the time column to TIMESTAMP or TIMESTAMP_NTZ before GAP FILL."
         ]
       },
       "GEOSPATIAL_DISABLED" : {

@@ -399,16 +399,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
-  def gapFillNonFoldableInputError(clause: String, expr: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-      messageParameters = Map(
-        "sqlExpr" -> toSQLExpr(expr),
-        "inputName" -> toSQLId(clause),
-        "inputType" -> toSQLType(expr.dataType),
-        "inputExpr" -> toSQLExpr(expr)))
-  }
-
   def gapFillInvalidIntervalTypeError(clause: String, expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "GAP_FILL_INVALID_INTERVAL_TYPE",
@@ -557,12 +547,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def binByNonFoldableInputError(inputName: String, expr: Expression): Throwable = {
+  def nonFoldableClauseInputError(clause: String, expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       messageParameters = Map(
         "sqlExpr" -> toSQLExpr(expr),
-        "inputName" -> toSQLId(inputName),
+        "inputName" -> toSQLId(clause),
         "inputType" -> toSQLType(expr.dataType),
         "inputExpr" -> toSQLExpr(expr)))
   }

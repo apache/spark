@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalR
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, TimestampNTZType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, TimestampNTZType}
 
 class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
@@ -189,13 +189,14 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
       timeColumn = Literal(0L, TimestampNTZType),
       valueColumns = Nil,
       fillMethods = Nil,
-      binWidthMicros = MICROS_PER_HOUR,
-      alignTo = 0L,
-      rangeStart = Some(0L),
-      rangeEnd = Some(MICROS_PER_DAY),
-      maxGapMicros = None,
+      binWidth = Literal(MICROS_PER_HOUR, DayTimeIntervalType()),
+      alignTo = Literal(0L, TimestampNTZType),
+      rangeStart = Some(Literal(0L, TimestampNTZType)),
+      rangeEnd = Some(Literal(MICROS_PER_DAY, TimestampNTZType)),
+      maxGap = None,
       outputBinStart = false,
-      outputIsGenerated = false)
+      outputIsGenerated = false,
+      timeZoneId = None)
     val query = t3.lateralJoin(t0.generate(gapFill)).analyze
     comparePlans(Optimize.execute(query), query)
   }

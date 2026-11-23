@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.time.{Duration, LocalDate, LocalDateTime}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime}
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GapFillGenerator, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, CurrentDate, CurrentTimestamp, DayOfMonth, Exists, Expression, GapFillGenerator, If, IsNull, Literal, LocalTimestamp, OuterReference, OuterScopeReference}
+import org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary
+import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical.{GapFillColumn, GapFillMethod, GapFillOutputColumn, Generate, LocalRelation, LogicalPlan, Project, UnresolvedGapFill}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_HOUR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
@@ -88,6 +90,11 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
   private def generatorOf(plan: LogicalPlan): GapFillGenerator =
     analyze(plan).collectFirst { case Generate(g: GapFillGenerator, _, _, _, _, _) => g }.get
 
+  /** Evaluates the values of `generator` as the optimizer does, with the current time `instant`. */
+  private def evalAt(generator: GapFillGenerator, instant: String): GapFillGenerator =
+    GapFillResolution.evalCurrentTimeValues(ComputeCurrentTime.applyForExpression(
+      generator, Instant.parse(instant)).asInstanceOf[GapFillGenerator])
+
   private def expectError(
       plan: LogicalPlan,
       condition: String,
@@ -110,6 +117,18 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
   test("an unresolved clause column gets the unresolved column error") {
     expectError(gapFill(timeColumn = "nope"), "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`nope`", "proposal" -> "`p`, `d`, `m`, `s`, `ts`"))
+    // A function name that the input does not have is not a column either.
+    expectError(gapFill(partitionColumns = Seq("current_user")),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`current_user`", "proposal" -> "`ts`, `ltz`, `s`, `d`, `day`"))
+    expectError(gapFill(fill = Seq("user" -> GapFillMethod.ForwardFill)),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`user`", "proposal" -> "`s`, `d`, `m`, `p`, `ts`"))
+    // An input column with the name of a function is a column.
+    val named = LocalRelation($"current_user".string, $"ts".timestampNTZ)
+    val generator = generatorOf(unresolved(named).copy(
+      partitionColumns = Seq(UnresolvedAttribute.quotedString("current_user"))))
+    assert(generator.partitionColumns == named.output.take(1))
   }
 
   test("a type error in a clause value gets the type error") {
@@ -155,19 +174,34 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
     assert(projectList.map(_.name) == Seq("v", "p", "ts", "bin_start", "gen"))
     assert(generate.requiredChildOutput == Seq(p))
     assert(analyzed.output(1) == p)
-    val Seq(newV, _, newTs, binStart, isGenerated) = analyzed.output
+    val Seq(newV, _, newTs, newBinStart, newIsGenerated) = analyzed.output
     Seq(v -> newV, ts -> newTs).foreach { case (in, out) =>
       assert(out.exprId != in.exprId)
       assert(out.dataType == in.dataType && out.nullable && out.qualifier == Seq("t"))
     }
-    assert(binStart.dataType == TimestampNTZType && binStart.nullable)
-    assert(binStart.qualifier.isEmpty && isGenerated.qualifier.isEmpty)
-    assert(isGenerated.dataType == BooleanType && !isGenerated.nullable)
-    assert(generate.generatorOutput == Seq(newTs, newV, binStart, isGenerated))
+    assert(newBinStart.dataType == TimestampNTZType && newBinStart.nullable)
+    assert(newBinStart.qualifier.isEmpty && newIsGenerated.qualifier.isEmpty)
+    assert(newIsGenerated.dataType == BooleanType && !newIsGenerated.nullable)
+    assert(generate.generatorOutput == Seq(newTs, newV, newBinStart, newIsGenerated))
     assert(generator.partitionColumns == Seq(p))
     assert(generator.timeColumn == ts && generator.valueColumns == Seq(v))
     assert(generator.elementSchema.map(_.dataType) ==
       Seq(TimestampNTZType, IntegerType, TimestampNTZType, BooleanType))
+    // The clause can spell a column in another letter case. The output keeps the input names.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val output = analyze(gapFill(Seq("P"), "TS", Seq("V" -> GapFillMethod.ForwardFill))).output
+      assert(output.map(_.name) == input.output.map(_.name))
+    }
+    // An input that lists a column twice gives one value column, and both copies read it.
+    val twice = analyze(unresolved(t.select($"p", $"ts", $"v", $"v")).copy(
+      partitionColumns = Seq($"p")))
+    val Project(_, twiceGenerate @ Generate(twiceGenerator: GapFillGenerator, _, _, _, _, _)) =
+      (twice: @unchecked)
+    val Seq(_, _, inV, inV2) = twiceGenerate.child.output
+    assert(inV2 == inV && twiceGenerator.valueColumns == Seq(inV))
+    val Seq(_, twiceTs, twiceV, twiceV2) = twice.output
+    assert(twiceV2 == twiceV && twiceV.exprId != inV.exprId)
+    assert(twiceGenerate.generatorOutput == Seq(twiceTs, twiceV))
   }
 
   test("BIN_START and IS_GENERATED are added only when asked for") {
@@ -187,12 +221,11 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
       rangeStartExpr = Some(ntz("2026-01-01T00:00:00")),
       rangeEndExpr = Some(ntz("2026-01-02T00:00:00")),
       maxGapExpr = Some(minutes(40))))
-    val start = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("2026-01-01T00:00:00"))
-    assert(generator.binWidthMicros == 15 * MICROS_PER_MINUTE)
-    assert(generator.alignTo == start + 5 * MICROS_PER_MINUTE)
-    assert(generator.rangeStart.contains(start))
-    assert(generator.rangeEnd.contains(start + MICROS_PER_DAY))
-    assert(generator.maxGapMicros.contains(40 * MICROS_PER_MINUTE))
+    assert(generator.binWidth == minutes(15))
+    assert(generator.alignTo == ntz("2026-01-01T00:05:00"))
+    assert(generator.rangeStart.contains(ntz("2026-01-01T00:00:00")))
+    assert(generator.rangeEnd.contains(ntz("2026-01-02T00:00:00")))
+    assert(generator.maxGap.contains(minutes(40)))
     assert(generator.valueColumns.map(_.sql) == Seq("v", "w", "s", "d", "m", "day", "ltz"))
     assert(generator.fillMethods == Seq(GapFillMethod.Linear, GapFillMethod.Constant(Literal("1")),
       GapFillMethod.Null, GapFillMethod.ForwardFill, GapFillMethod.Null, GapFillMethod.Null,
@@ -200,19 +233,20 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
   }
 
   test("the default ALIGN TO is the 1970-01-01 bin start of the time column type") {
-    assert(generatorOf(gapFill()).alignTo == 0L)
+    assert(generatorOf(gapFill()).alignTo == Literal(0L, TimestampNTZType))
     assert(generatorOf(gapFill(timeColumn = "day", binWidth = Literal(Duration.ofDays(1))))
-      .alignTo == 0L)
+      .alignTo == Literal(0, DateType))
     Seq("UTC", "America/Los_Angeles").foreach { zone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
         assert(generatorOf(gapFill(timeColumn = "ltz")).alignTo ==
-          DateTimeUtils.daysToMicros(0, DateTimeUtils.getZoneId(zone)))
+          Literal(DateTimeUtils.daysToMicros(0, DateTimeUtils.getZoneId(zone)), TimestampType))
       }
     }
     val days = generatorOf(gapFill(timeColumn = "day", binWidth = Literal(Duration.ofDays(1)))
       .copy(rangeStartExpr = Some(Literal(LocalDate.of(1970, 1, 3))),
         rangeEndExpr = Some(Literal(LocalDate.of(1970, 1, 5)))))
-    assert(days.rangeStart.contains(2L) && days.rangeEnd.contains(4L))
+    assert(days.rangeStart.contains(Literal(2, DateType)))
+    assert(days.rangeEnd.contains(Literal(4, DateType)))
   }
 
   test("the element schema follows the types of the generator children") {
@@ -319,6 +353,89 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
         "currentValue" -> "INTERVAL '-0 00:01:00' DAY TO SECOND"))
   }
 
+  test("a clause value with a current time function is evaluated and checked after analysis") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC", SQLConf.ANSI_ENABLED.key -> "true") {
+      val now = LocalTimestamp()
+      val at = "2026-01-01T00:00:00Z"
+      val generator = generatorOf(gapFill(
+        fill = Seq("ltz" -> GapFillMethod.Constant(CurrentTimestamp())),
+        binWidth = now - ntz("2025-12-31T23:45:00")).copy(
+        originExpr = Some(now),
+        rangeStartExpr = Some(ntz("2025-12-31T00:00:00")),
+        rangeEndExpr = Some(now),
+        maxGapExpr = Some(now - ntz("2025-12-31T23:00:00"))))
+      // Analysis evaluates only the value without a current time function.
+      val GapFillMethod.Constant(constant) = generator.fillMethods.last: @unchecked
+      assert(Seq(generator.binWidth, generator.alignTo, generator.rangeEnd.get,
+        generator.maxGap.get, constant).forall(!_.isInstanceOf[Literal]))
+      assert(generator.rangeStart.contains(ntz("2025-12-31T00:00:00")))
+      val evaluated = evalAt(generator, at)
+      assert(evaluated.binWidth == minutes(15))
+      assert(evaluated.alignTo == ntz("2026-01-01T00:00:00"))
+      assert(evaluated.rangeStart.contains(ntz("2025-12-31T00:00:00")))
+      assert(evaluated.rangeEnd.contains(ntz("2026-01-01T00:00:00")))
+      assert(evaluated.maxGap.contains(minutes(60)))
+      assert(evaluated.fillMethods.last == GapFillMethod.Constant(Literal(Instant.parse(at))))
+
+      // The type of such a value is still checked during analysis.
+      expectError(gapFill().copy(originExpr = Some(CurrentDate())),
+        "GAP_FILL_ARGUMENT_TYPE_MISMATCH",
+        Map("clause" -> "ALIGN TO", "argType" -> "\"DATE\"", "timeType" -> "\"TIMESTAMP_NTZ\""))
+      // Its value errors come after the analysis errors.
+      expectError(gapFill(fill = Seq("w" -> GapFillMethod.Linear), binWidth = now - now),
+        "GAP_FILL_LINEAR_TYPE_MISMATCH", Map("columnName" -> "`w`", "columnType" -> "\"STRING\""))
+
+      // The errors show the value with the current time in it.
+      def evalError(plan: LogicalPlan): SparkThrowable =
+        intercept[Exception](evalAt(generatorOf(plan), at)).asInstanceOf[SparkThrowable]
+      val nowSql = "TIMESTAMP_NTZ '2026-01-01 00:00:00'"
+      val zero = "INTERVAL '0 00:00:00' DAY TO SECOND"
+      // BIN WIDTH comes before the range.
+      checkError(
+        exception = evalError(gapFill(binWidth = now - now).copy(
+          rangeStartExpr = Some(now), rangeEndExpr = Some(ntz("2025-12-31T00:00:00")))),
+        condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+        parameters = Map("exprName" -> "`BIN WIDTH`", "sqlExpr" -> s"\"($nowSql - $nowSql)\"",
+          "valueRange" -> s"($zero, INTERVAL '3652058 00:00:00' DAY TO SECOND]",
+          "currentValue" -> zero))
+      checkError(
+        exception = evalError(gapFill(timeColumn = "day",
+          binWidth = now - ntz("2025-12-31T23:00:00"))),
+        condition = "GAP_FILL_INVALID_DATE_BIN_WIDTH",
+        parameters = Map("binWidth" -> "INTERVAL '0 01:00:00' DAY TO SECOND"))
+      checkError(
+        exception = evalError(gapFill().copy(maxGapExpr = Some(now - now))),
+        condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+        parameters = Map("exprName" -> "`MAX GAP`", "sqlExpr" -> s"\"($nowSql - $nowSql)\"",
+          "valueRange" -> s"($zero, INTERVAL '106751991 04:00:54.775807' DAY TO SECOND]",
+          "currentValue" -> zero))
+      val nullAt = If(IsNull(now), now, Literal(null, TimestampNTZType))
+      Seq(
+        "ALIGN TO" -> gapFill().copy(originExpr = Some(nullAt)),
+        "range_start" -> gapFill().copy(rangeStartExpr = Some(nullAt), rangeEndExpr = Some(now)),
+        "range_end" -> gapFill().copy(rangeStartExpr = Some(now), rangeEndExpr = Some(nullAt))
+      ).foreach { case (clause, plan) =>
+        checkError(
+          exception = evalError(plan),
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+          parameters = Map("exprName" -> s"`$clause`",
+            "sqlExpr" -> s"\"(IF(($nowSql IS NULL), $nowSql, NULL))\""))
+      }
+      checkError(
+        exception = evalError(gapFill().copy(
+          rangeStartExpr = Some(now), rangeEndExpr = Some(ntz("2025-12-31T00:00:00")))),
+        condition = "GAP_FILL_INVALID_RANGE",
+        parameters =
+          Map("rangeStart" -> nowSql, "rangeEnd" -> "TIMESTAMP_NTZ '2025-12-31 00:00:00'"))
+      checkError(
+        exception = evalError(gapFill(fill = Seq("d" ->
+          GapFillMethod.Constant(Literal(1) / (DayOfMonth(CurrentDate()) * 0))))),
+        condition = "DIVIDE_BY_ZERO",
+        parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
+        queryContext = Array(ExpectedContext("", -1, -1)))
+    }
+  }
+
   test("GAP_FILL_INVALID_DATE_BIN_WIDTH") {
     expectError(gapFill(timeColumn = "day", binWidth = Literal(Duration.ofHours(36))),
       "GAP_FILL_INVALID_DATE_BIN_WIDTH",
@@ -330,17 +447,96 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
     expectError(gapFill(fill = Seq("v" -> GapFillMethod.Constant(Literal(true)))),
       "GAP_FILL_CONSTANT_TYPE_MISMATCH",
       Map("valueType" -> "\"BOOLEAN\"", "columnType" -> "\"INT\"", "columnName" -> "`v`"))
+    // The implicit cast follows the ANSI mode: only the ANSI rules cast a STRING to BOOLEAN.
+    val stringOnBoolean = unresolved(LocalRelation($"ts".timestampNTZ, $"b".boolean)).copy(
+      fillColumns = Seq(GapFillColumn($"b", GapFillMethod.Constant(Literal("true")))))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      assert(generatorOf(stringOnBoolean).fillMethods ==
+        Seq(GapFillMethod.Constant(Literal(true))))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      expectError(stringOnBoolean, "GAP_FILL_CONSTANT_TYPE_MISMATCH",
+        Map("valueType" -> "\"STRING\"", "columnType" -> "\"BOOLEAN\"", "columnName" -> "`b`"))
+    }
+    // A day-time interval of another type is not truncated to the column type, also in an ARRAY.
+    val day = DayTimeIntervalType(DayTimeIntervalType.DAY)
+    val hour = DayTimeIntervalType(DayTimeIntervalType.HOUR)
+    val intervals = LocalRelation($"ts".timestampNTZ, AttributeReference("d", day)(),
+      AttributeReference("a", ArrayType(day, containsNull = false))())
+    Seq(
+      ("d", Literal.create(Duration.ofHours(36), hour), "\"INTERVAL HOUR\"", "\"INTERVAL DAY\""),
+      ("a", Literal.create(Seq(Duration.ofHours(36)), ArrayType(hour, containsNull = false)),
+        "\"ARRAY<INTERVAL HOUR>\"", "\"ARRAY<INTERVAL DAY>\"")
+    ).foreach { case (column, value, valueType, columnType) =>
+      val plan = unresolved(intervals).copy(fillColumns =
+        Seq(GapFillColumn(UnresolvedAttribute(column), GapFillMethod.Constant(value))))
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          expectError(plan, "GAP_FILL_CONSTANT_TYPE_MISMATCH", Map("valueType" -> valueType,
+            "columnType" -> columnType, "columnName" -> s"`$column`"))
+        }
+      }
+    }
   }
 
-  test("a CONSTANT is cast to a string column with another collation") {
+  test("a CONSTANT is cast to a string column with another collation, also in an ARRAY") {
     val collated = StringType("UTF8_LCASE")
-    val input = LocalRelation($"ts".timestampNTZ, AttributeReference("c", collated)())
-    val plan = unresolved(input)
-      .copy(fillColumns = Seq(GapFillColumn($"c", GapFillMethod.Constant(Literal("x")))))
+    val collatedArray = ArrayType(collated, containsNull = false)
+    val input = LocalRelation($"ts".timestampNTZ, AttributeReference("c", collated)(),
+      AttributeReference("a", collatedArray)())
+    val plan = unresolved(input).copy(fillColumns = Seq(
+      GapFillColumn($"c", GapFillMethod.Constant(Literal("x"))),
+      GapFillColumn($"a", GapFillMethod.Constant(
+        Literal.create(Seq("x"), ArrayType(StringType, containsNull = false))))))
     Seq("true", "false").foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
-        assert(generatorOf(plan).fillMethods ==
-          Seq(GapFillMethod.Constant(Literal.create("x", collated))))
+        assert(generatorOf(plan).fillMethods == Seq(
+          GapFillMethod.Constant(Literal.create("x", collated)),
+          GapFillMethod.Constant(Literal.create(Seq("x"), collatedArray))))
+      }
+    }
+  }
+
+  test("a CONSTANT that can hold a NULL inside lets its column hold one") {
+    val ints = ArrayType(IntegerType, containsNull = false)
+    val intMap = MapType(StringType, IntegerType, valueContainsNull = false)
+    val struct = new StructType().add("x", IntegerType, nullable = false)
+    val input = LocalRelation($"ts".timestampNTZ, AttributeReference("a", ints)(),
+      AttributeReference("m", intMap)(), AttributeReference("s", struct)(),
+      AttributeReference("b", ints)(), AttributeReference("t", struct)())
+    val values = Seq(
+      Literal.create(Seq(null), ints.asNullable),
+      Literal.create(Map("k" -> null), intMap.asNullable),
+      Literal.create(Row(null), struct.asNullable),
+      // A value type that allows no NULL inside keeps the column type, also when a field name has
+      // another letter case.
+      Literal.create(Seq(1), ints),
+      Literal.create(Row(1), new StructType().add("X", IntegerType, nullable = false)))
+    val fill = Seq("a", "m", "s", "b", "t").zip(values).map { case (column, value) =>
+      GapFillColumn(UnresolvedAttribute(column), GapFillMethod.Constant(value))
+    }
+    val plan = unresolved(input).copy(fillColumns = fill)
+    // The same values with a current time function, which the optimizer evaluates.
+    val later = plan.copy(fillColumns = fill.zip(values).map { case (column, value) =>
+      column.copy(method = GapFillMethod.Constant(If(IsNull(CurrentDate()), value, value)))
+    })
+    val types = Seq(ints.asNullable, intMap.asNullable, struct.asNullable, ints, struct)
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        val constants = values.zip(types).map { case (value, dataType) =>
+          GapFillMethod.Constant(Literal(value.value, dataType))
+        }
+        Seq(plan, later).foreach { gapFill =>
+          val analyzed = analyze(gapFill)
+          val generator = generatorOf(analyzed)
+          assert(generator.elementSchema.map(_.dataType) == TimestampNTZType +: types)
+          assert(analyzed.output.map(_.dataType) == TimestampNTZType +: types)
+          assert(evalAt(generator, "2026-01-01T00:00:00Z").fillMethods == constants)
+        }
+        assert(generatorOf(later).fillMethods.forall {
+          case GapFillMethod.Constant(value) => !value.isInstanceOf[Literal]
+          case _ => false
+        })
       }
     }
   }
@@ -398,17 +594,32 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
       DoubleType, FloatType, StringType("UTF8_LCASE"), MapType(IntegerType, IntegerType),
       VariantType, CalendarIntervalType, ArrayType(FloatType), GeometryType(4326),
       GeographyType(4326), StructType.fromDDL("a INT, b ARRAY<DOUBLE>"),
-      new ExamplePointUDT).foreach { keyType =>
+      new ExamplePointUDT, FileType.external, ArrayType(FileType.external)).foreach { keyType =>
       val plan = unresolved(LocalRelation(AttributeReference("k", keyType)(), $"ts".timestampNTZ))
         .copy(partitionColumns = Seq($"k"))
       expectError(plan, "UNSUPPORTED_FEATURE.GAP_FILL_PARTITION_KEY_TYPE",
         Map("columnName" -> "`k`", "columnType" -> toSQLType(keyType)))
     }
-    Seq(StringType, IntegerType, DecimalType(10, 2), StructType.fromDDL("a INT, b STRING"))
-      .foreach { keyType =>
-        analyze(unresolved(LocalRelation(AttributeReference("k", keyType)(), $"ts".timestampNTZ))
-          .copy(partitionColumns = Seq($"k")))
-      }
+    // The SQL type of GroupableUDT is INT.
+    Seq(StringType, IntegerType, DecimalType(10, 2), StructType.fromDDL("a INT, b STRING"),
+      ArrayType(IntegerType), new GroupableUDT).foreach { keyType =>
+      analyze(unresolved(LocalRelation(AttributeReference("k", keyType)(), $"ts".timestampNTZ))
+        .copy(partitionColumns = Seq($"k")))
+    }
+    // The message says what to do instead, and doing it works. A GEOMETRY has no cast to STRING,
+    // but st_asbinary converts it to BINARY.
+    val doubleKey = LocalRelation($"k".double, $"ts".timestampNTZ)
+    val e = intercept[AnalysisException](
+      analyze(unresolved(doubleKey).copy(partitionColumns = Seq($"k"))))
+    assert(e.getMessage == "[UNSUPPORTED_FEATURE.GAP_FILL_PARTITION_KEY_TYPE] The feature is not " +
+      "supported: GAP FILL with PARTITION BY column `k` of type \"DOUBLE\". Convert the column " +
+      "to a supported type, such as STRING or BINARY, in a select before GAP FILL. SQLSTATE: 0A000")
+    val geometry = LocalRelation(AttributeReference("g", GeometryType(4326))(), $"ts".timestampNTZ)
+    Seq(
+      doubleKey.select(Cast($"k", StringType).as("k"), $"ts"),
+      geometry.select(new ST_AsBinary($"g").as("k"), $"ts")).foreach { input =>
+      analyze(unresolved(input).copy(partitionColumns = Seq($"k")))
+    }
   }
 
   test("UNSUPPORTED_FEATURE.GAP_FILL_TIMESTAMP_NANOS for every nanosecond timestamp type") {
@@ -417,6 +628,17 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
         val plan = unresolved(LocalRelation(AttributeReference("ts", timeType)()))
         expectError(plan, "UNSUPPORTED_FEATURE.GAP_FILL_TIMESTAMP_NANOS",
           Map("columnName" -> "`ts`", "columnType" -> toSQLType(timeType)))
+      }
+    // The message says what to do instead, and doing it works.
+    val e = intercept[AnalysisException](
+      analyze(unresolved(LocalRelation(AttributeReference("ts", TimestampNTZNanosType(9))()))))
+    assert(e.getMessage == "[UNSUPPORTED_FEATURE.GAP_FILL_TIMESTAMP_NANOS] The feature is not " +
+      "supported: GAP FILL with time column `ts` of type \"TIMESTAMP_NTZ(9)\". Cast the time " +
+      "column to TIMESTAMP or TIMESTAMP_NTZ before GAP FILL. SQLSTATE: 0A000")
+    Seq(TimestampNTZNanosType(9) -> TimestampNTZType, TimestampLTZNanosType(9) -> TimestampType)
+      .foreach { case (nanosType, microsType) =>
+        val nanos = LocalRelation(AttributeReference("t", nanosType)())
+        analyze(unresolved(nanos.select(Cast($"t", microsType).as("ts"))))
       }
   }
 
@@ -437,6 +659,11 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`nope`",
         "proposal" -> "`p`, `d`, `m`, `s`, `ts`"))
+    expectError(
+      gapFill(partitionColumns = Seq("s.a"), fill = Seq("current_date" -> GapFillMethod.Null)),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`current_date`",
+        "proposal" -> "`day`, `d`, `ltz`, `ts`, `m`"))
   }
 
   test("error order: a nested FILL column before the time column type") {
@@ -538,6 +765,27 @@ class ResolveGapFillSuite extends AnalysisTest with QueryErrorsBase {
       unresolved(nanos).copy(partitionColumns = Seq($"d")),
       "UNSUPPORTED_FEATURE.GAP_FILL_PARTITION_KEY_TYPE",
       Map("columnName" -> "`d`", "columnType" -> "\"DOUBLE\""))
+  }
+
+  test("GAP_FILL_CORRELATED_INPUT for a subquery of the input that refers past the input") {
+    val generate = analyze(gapFill()).collectFirst { case g: Generate => g }.get
+    def withSubquery(subquery: Exists): Generate =
+      generate.copy(child = generate.child.where(subquery))
+    val c = $"c".int
+    // With nested correlation, a subquery lists a column that comes from neither its plan nor
+    // the plan that holds it as an OuterScopeReference. No rule makes one yet, so the plan is
+    // built by hand.
+    checkError(
+      exception = intercept[AnalysisException] {
+        getAnalyzer.checkAnalysis(withSubquery(
+          Exists(LocalRelation(c), outerAttrs = Seq(OuterScopeReference($"o".int)))))
+      },
+      condition = "GAP_FILL_CORRELATED_INPUT",
+      parameters = Map.empty)
+    // A subquery that refers to a column of the input is fine.
+    val v = generate.child.output.find(_.name == "v").get
+    getAnalyzer.checkAnalysis(withSubquery(
+      Exists(LocalRelation(c).where(c === OuterReference(v)), outerAttrs = Seq(v))))
   }
 
   test("an input column that is not a partition column must not pass through") {

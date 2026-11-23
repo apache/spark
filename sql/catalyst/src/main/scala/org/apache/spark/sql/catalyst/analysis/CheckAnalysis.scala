@@ -245,9 +245,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     false
   }
 
-  /** The columns of a GAP FILL clause that are not resolved. */
+  /**
+   * The PARTITION BY, ORDER BY and FILL columns of a GAP FILL clause that are not resolved. Names
+   * in the values, such as BIN WIDTH or a CONSTANT, are left out, because they can also name a
+   * function such as `current_date` or a session variable, which are not input columns.
+   */
   private def unresolvedClauseColumns(g: UnresolvedGapFill): Seq[UnresolvedAttribute] =
-    g.expressions.flatMap(_.collect { case a: UnresolvedAttribute => a })
+    (g.partitionColumns ++ (g.timeColumn +: g.fillColumns.map(_.column))).collect {
+      case a: UnresolvedAttribute => a
+    }
 
   private def failUnresolvedAttribute(
       operator: LogicalPlan,
@@ -527,10 +533,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           s"V2Reference should be resolved during analysis: ${r.name}")
 
       // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
-      // resolves in a later batch leaves the node here with unresolved clause columns that the
-      // input has, and GAP FILL is not supported. A clause column that the input does not have
-      // is then reported as unresolved. Over an input that resolved in time, every clause error
-      // goes on to the checks below, which report the first one in clause order.
+      // resolves in a later batch leaves the node here with unresolved PARTITION BY, ORDER BY or
+      // FILL columns that the input has, and GAP FILL is not supported. Such a column that the
+      // input does not have is then reported as unresolved. Over an input that resolved in time,
+      // every clause error goes on to the checks below, which report the first one in clause
+      // order.
       case g: UnresolvedGapFill if g.childrenResolved && unresolvedClauseColumns(g).exists(
           a => g.child.resolve(a.nameParts, g.conf.resolver).isDefined) =>
         unresolvedClauseColumns(g).find { a =>

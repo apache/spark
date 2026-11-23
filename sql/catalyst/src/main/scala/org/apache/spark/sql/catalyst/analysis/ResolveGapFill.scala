@@ -40,6 +40,8 @@ object ResolveGapFill extends Rule[LogicalPlan] {
     case _: UnresolvedGapFill if !conf.getConf(SQLConf.GAP_FILL_ENABLED) =>
       throw QueryCompilationErrors.gapFillNotSupportedError()
     case g: UnresolvedGapFill if g.childrenResolved && g.expressions.forall(_.resolved) =>
-      GapFillResolution.resolve(g)
+      withPosition(g) {
+        GapFillResolution.resolve(g)
+      }
   }
 }

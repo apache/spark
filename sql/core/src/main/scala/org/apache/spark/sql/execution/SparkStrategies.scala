@@ -1165,6 +1165,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case u @ logical.UnionLoop(id, anchor, recursion, _, limit, maxDepth) =>
         execution.UnionLoopExec(id, anchor, recursion, u.output, limit, maxDepth) :: Nil
       case logical.Generate(_: GapFillGenerator, _, _, _, _, _) =>
+        // TODO(SPARK-61276): plan GAP FILL with its physical operator once it is added.
         throw new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.GAP_FILL")
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(

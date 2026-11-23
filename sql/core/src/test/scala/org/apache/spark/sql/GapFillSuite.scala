@@ -18,18 +18,18 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime}
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{GapFillGenerator, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, GapFillGenerator, Literal}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{GapFillMethod, Generate, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MINUTE
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_MINUTE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.CharType
+import org.apache.spark.sql.types.{CharType, DateType, DayTimeIntervalType, TimestampNTZType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class GapFillSuite extends QueryTest with SharedSparkSession {
@@ -141,6 +141,131 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
         s"SELECT * FROM ($input) GAP FILL (ORDER BY a BIN WIDTH 1 FILL (nope NULL))",
         "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map("objectName" -> "`nope`", "proposal" -> "`a`, `col`, `cnt`"), "nope")
+      // A name in a value, such as a function or a session variable, also waits for the input.
+      // It is not an input column, so it is not reported as unresolved.
+      withSessionVariable("w") {
+        sql("DECLARE VARIABLE w INT DEFAULT 1")
+        Seq("BIN WIDTH w", "BIN WIDTH 1 ALIGN TO current_date",
+            "BIN WIDTH 1 FILL (cnt CONSTANT current_date)").foreach { clause =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.sql(s"SELECT * FROM ($input) GAP FILL (ORDER BY a $clause)")
+            },
+            condition = "UNSUPPORTED_FEATURE.GAP_FILL",
+            parameters = Map.empty[String, String])
+        }
+      }
+      // The missing column is reported, not the function name that comes before it.
+      checkAnalysisError(
+        s"SELECT * FROM ($input) GAP FILL (ORDER BY a BIN WIDTH 1 ALIGN TO current_date " +
+          "FILL (nope NULL))",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map("objectName" -> "`nope`", "proposal" -> "`a`, `col`, `cnt`"), "nope")
+      // A missing ORDER BY column is reported, also when a value names an input column.
+      checkAnalysisError(
+        s"SELECT * FROM ($input) GAP FILL (ORDER BY nope BIN WIDTH a)",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map("objectName" -> "`nope`", "proposal" -> "`a`, `col`, `cnt`"), "nope")
+    }
+  }
+
+  test("a session variable or a function name is not a GAP FILL column") {
+    withReadings {
+      withSessionVariable("w") {
+        sql("DECLARE VARIABLE w INT DEFAULT 1")
+        val bins = "BIN WIDTH INTERVAL 15 MINUTES"
+        Seq(
+          (s"PARTITION BY w ORDER BY ts $bins", "w", "`w`", "`p`, `v`, `ts`"),
+          (s"PARTITION BY system.session.w ORDER BY ts $bins", "system.session.w",
+            "`system`.`session`.`w`", "`readings`.`p`, `readings`.`v`, `readings`.`ts`"),
+          (s"ORDER BY w $bins", "w", "`w`", "`p`, `v`, `ts`"),
+          (s"ORDER BY ts $bins FILL (w FFILL)", "w", "`w`", "`p`, `v`, `ts`"),
+          (s"PARTITION BY session_user ORDER BY ts $bins", "session_user", "`session_user`",
+            "`ts`, `p`, `v`")).foreach { case (clause, fragment, name, proposal) =>
+          checkAnalysisError(
+            s"SELECT * FROM readings GAP FILL ($clause)",
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            Map("objectName" -> name, "proposal" -> proposal),
+            fragment)
+        }
+        // An input column with the name of a session variable is a column.
+        val generator = generatorOf(
+          s"SELECT * FROM (SELECT p, ts, v AS w FROM readings) GAP FILL (ORDER BY ts $bins " +
+            "FILL (w FFILL))")
+        assert(generator.fillMethods == Seq(GapFillMethod.Null, GapFillMethod.ForwardFill))
+      }
+    }
+  }
+
+  test("a whole clause value can be a session variable or a function name") {
+    withReadings {
+      withSessionVariable("bw", "mg") {
+        sql("DECLARE VARIABLE bw INTERVAL DAY TO SECOND DEFAULT INTERVAL '15' MINUTE")
+        sql("DECLARE VARIABLE mg INTERVAL DAY TO SECOND DEFAULT INTERVAL '1' HOUR")
+        // Parentheses around the name keep the name as the whole value.
+        Seq("bw", "(bw)").foreach { binWidth =>
+          val generator = generatorOf(
+            s"SELECT * FROM readings GAP FILL (ORDER BY ts BIN WIDTH $binWidth MAX GAP mg)")
+          assert(generator.binWidth == Literal(Duration.ofMinutes(15)))
+          assert(generator.maxGap.contains(Literal(Duration.ofHours(1))))
+        }
+      }
+      val query = "SELECT current_date() AS today, * FROM (SELECT CAST(ts AS DATE) AS d " +
+        "FROM readings) GAP FILL (ORDER BY d BIN WIDTH INTERVAL 1 DAY ALIGN TO current_date " +
+        "RANGE BETWEEN current_date AND current_date)"
+      val plan = sql(query).queryExecution.optimizedPlan
+      val today = plan.collectFirst { case p: Project => p.projectList.head }.get match {
+        case Alias(Literal(days: Int, DateType), "today") => days
+      }
+      val generator = generateOf(plan).generator.asInstanceOf[GapFillGenerator]
+      assert(generator.alignTo == Literal(today, DateType))
+      assert(generator.rangeStart.contains(Literal(today, DateType)))
+      assert(generator.rangeEnd.contains(Literal(today, DateType)))
+    }
+  }
+
+  test("a view knows the session variables that GAP FILL clause values read") {
+    withReadings {
+      withSessionVariable("bw", "n") {
+        sql("DECLARE VARIABLE bw INTERVAL DAY TO SECOND DEFAULT INTERVAL '15' MINUTE")
+        sql("DECLARE VARIABLE n INT DEFAULT 3")
+        // A temporary view analyzes its text again when it is read, so it reads the variables
+        // again, as a view with SELECT n does.
+        Seq("bw", "bw + INTERVAL '0' MINUTE").foreach { binWidth =>
+          withTempView("gap_fill_view") {
+            sql("CREATE TEMPORARY VIEW gap_fill_view AS SELECT * FROM readings GAP FILL (" +
+              s"PARTITION BY p ORDER BY ts BIN WIDTH $binWidth FILL (v CONSTANT n))")
+            sql("SET VAR bw = INTERVAL '30' MINUTE")
+            sql("SET VAR n = 5")
+            val generator = generatorOf("SELECT * FROM gap_fill_view")
+            assert(generator.binWidth == Literal(Duration.ofMinutes(30)))
+            assert(generator.fillMethods == Seq(GapFillMethod.Constant(Literal(5))))
+          }
+        }
+        // A persisted view cannot read a session variable.
+        withTable("gap_fill_view_input") {
+          sql(s"CREATE TABLE gap_fill_view_input USING parquet AS $readings")
+          Seq(
+            "BIN WIDTH bw" -> "bw",
+            "BIN WIDTH bw + INTERVAL '0' MINUTE" -> "bw",
+            "BIN WIDTH INTERVAL 15 MINUTES FILL (v CONSTANT n)" -> "n").foreach {
+            case (values, variable) =>
+              withView("gap_fill_persisted_view") {
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    sql("CREATE VIEW gap_fill_persisted_view AS SELECT * FROM " +
+                      s"gap_fill_view_input GAP FILL (PARTITION BY p ORDER BY ts $values)")
+                  },
+                  condition = "INVALID_TEMP_OBJ_REFERENCE",
+                  parameters = Map(
+                    "obj" -> "VIEW",
+                    "objName" -> "`spark_catalog`.`default`.`gap_fill_persisted_view`",
+                    "tempObj" -> "VARIABLE",
+                    "tempObjName" -> s"`$variable`"))
+              }
+          }
+        }
+      }
     }
   }
 
@@ -151,29 +276,90 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
           "ALIGN TO TIMESTAMP_NTZ '2026-01-01 00:10:00' - INTERVAL 5 MINUTES " +
           "RANGE BETWEEN TIMESTAMP_NTZ '2026-01-02 00:00:00' - INTERVAL 1 DAY " +
           "AND to_timestamp_ntz('2026-01-01 01:00:00') FILL (v CONSTANT nvl(NULL, 1)))")
-      val start = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse("2026-01-01T00:00:00"))
-      assert(generator.alignTo == start + 5 * MICROS_PER_MINUTE)
-      assert(generator.rangeStart.contains(start))
-      assert(generator.rangeEnd.contains(start + 60 * MICROS_PER_MINUTE))
+      def ntz(s: String): Literal = Literal(LocalDateTime.parse(s))
+      assert(generator.alignTo == ntz("2026-01-01T00:05:00"))
+      assert(generator.rangeStart.contains(ntz("2026-01-01T00:00:00")))
+      assert(generator.rangeEnd.contains(ntz("2026-01-01T01:00:00")))
       assert(generator.fillMethods == Seq(GapFillMethod.Null, GapFillMethod.Constant(Literal(1))))
       sql("SELECT * FROM (SELECT CAST(ts AS DATE) AS d FROM readings) GAP FILL (ORDER BY d " +
         "BIN WIDTH INTERVAL 1 DAY RANGE BETWEEN to_date('2026-01-01') AND DATE '2026-01-03')")
     }
   }
 
-  test("the current time functions of a clause see one time") {
+  test("the clause values that read the current time see the time of the whole query") {
     withReadings {
-      def query(range: String): String =
-        s"SELECT * FROM readings GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES $range)"
-      val generator = generatorOf(query("RANGE BETWEEN localtimestamp() AND localtimestamp()"))
-      assert(generator.rangeStart.isDefined && generator.rangeStart == generator.rangeEnd)
-      // The values are the current time, so only their form is checked.
+      withTempView("gap_fill_now") {
+        val now = "localtimestamp()"
+        val gapFillNow = "SELECT * FROM (SELECT p, ts, v, ts AS t FROM readings) GAP FILL (" +
+          s"PARTITION BY p ORDER BY ts BIN WIDTH $now - ($now - INTERVAL 15 MINUTES) " +
+          s"ALIGN TO $now RANGE BETWEEN $now - INTERVAL 1 DAY AND $now " +
+          s"MAX GAP $now - ($now - INTERVAL 1 HOUR) FILL (t CONSTANT $now))"
+        // A temporary view of a DataFrame keeps its analyzed plan, so each query that reads it
+        // must still get its own time.
+        sql(gapFillNow).createOrReplaceTempView("gap_fill_now")
+        Seq(s"($gapFillNow)", "gap_fill_now").foreach { input =>
+          val plan = sql(s"SELECT $now AS now, * FROM $input").queryExecution.optimizedPlan
+          val time = plan.collectFirst { case p: Project => p.projectList.head }.get match {
+            case Alias(Literal(micros: Long, TimestampNTZType), "now") => micros
+          }
+          val generator = generateOf(plan).generator
+          // ALIGN TO, range_start, range_end and the CONSTANT, in clause order.
+          assert(generator.collect { case Literal(micros: Long, TimestampNTZType) => micros } ==
+            Seq(time, time - MICROS_PER_DAY, time, time))
+          // BIN WIDTH and MAX GAP.
+          assert(generator.collect { case Literal(micros: Long, _: DayTimeIntervalType) => micros }
+            == Seq(15 * MICROS_PER_MINUTE, 60 * MICROS_PER_MINUTE))
+        }
+      }
+      // Such a value is checked when the optimizer evaluates it. It is the current time, so
+      // only the form of the values is checked.
+      val query = "SELECT * FROM readings GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES " +
+        "RANGE BETWEEN localtimestamp() + INTERVAL 1 MICROSECOND AND localtimestamp())"
+      val df = sql(query)
+      // The error points at the GAP FILL clause, as an error of the analyzer does.
+      val start = query.indexOf("GAP FILL")
       checkError(
-        exception = intercept[AnalysisException](sql(
-          query("RANGE BETWEEN localtimestamp() + INTERVAL 1 MICROSECOND AND localtimestamp()"))),
+        exception = intercept[AnalysisException](df.queryExecution.optimizedPlan),
         condition = "GAP_FILL_INVALID_RANGE",
         parameters = Map("rangeStart" -> "TIMESTAMP_NTZ '.+'", "rangeEnd" -> "TIMESTAMP_NTZ '.+'"),
-        matchPVals = true)
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(query.substring(start), start, query.length - 1)))
+      // A cast of a special datetime string gets the date of the whole query too, both in a
+      // clause value and when a CONSTANT is cast to its column type. So does a TIME CONSTANT
+      // that is cast to the TIMESTAMP_NTZ type of its column.
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          val query = "SELECT current_date() AS today, * FROM (SELECT CAST(ts AS DATE) AS d, " +
+            "CAST(ts AS DATE) AS d2, ts AS t FROM readings) GAP FILL (ORDER BY d " +
+            "BIN WIDTH INTERVAL 1 DAY RANGE BETWEEN CAST('yesterday' AS DATE) AND " +
+            "CAST('today' AS DATE) FILL (d2 CONSTANT 'today', t CONSTANT TIME '00:05:00'))"
+          // Analysis keeps them as expressions, so that the optimizer evaluates them.
+          val analyzed = generatorOf(query)
+          val kept = (analyzed.rangeStart ++ analyzed.rangeEnd).toSeq ++
+            analyzed.fillMethods.collect { case GapFillMethod.Constant(value) => value }
+          assert(kept.size == 4 && kept.forall(!_.isInstanceOf[Literal]))
+          // The optimizer gives the same values to a GAP FILL in a subquery.
+          Seq(query, s"SELECT current_date() AS today WHERE EXISTS ($query)",
+              s"SELECT current_date() AS today, (SELECT max(d2) FROM ($query)) AS d2").foreach {
+            sqlText =>
+              val plan = sql(sqlText).queryExecution.optimizedPlan
+              val today = plan.collectFirst { case p: Project => p.projectList.head }.get match {
+                case Alias(Literal(days: Int, DateType), "today") => days
+              }
+              val generators = plan.collectWithSubqueries {
+                case Generate(generator: GapFillGenerator, _, _, _, _, _) => generator
+              }
+              assert(generators.size == 1)
+              val generator = generators.head
+              assert(generator.rangeStart.contains(Literal(today - 1, DateType)))
+              assert(generator.rangeEnd.contains(Literal(today, DateType)))
+              assert(generator.fillMethods == Seq(
+                GapFillMethod.Constant(Literal(today, DateType)),
+                GapFillMethod.Constant(Literal(
+                  today * MICROS_PER_DAY + 5 * MICROS_PER_MINUTE, TimestampNTZType))))
+          }
+        }
+      }
     }
   }
 
@@ -214,6 +400,10 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a CONSTANT on a CHAR or VARCHAR column is padded and checked as an INSERT does") {
+    val createTable = "CREATE TABLE gap_fill_char_constant (ts TIMESTAMP_NTZ, c CHAR(5), " +
+      "w VARCHAR(2)) USING parquet"
+    def fill(columns: String, input: String = "gap_fill_char_constant"): String =
+      s"SELECT * FROM $input GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES FILL ($columns))"
     // The last two keep CHAR and VARCHAR as their own types in the plan.
     Seq(
       Nil,
@@ -221,11 +411,8 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
       Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { confs =>
       withSQLConf((SQLConf.GAP_FILL_ENABLED.key -> "true") +: confs: _*) {
         withTable("gap_fill_char_constant") {
-          sql("CREATE TABLE gap_fill_char_constant (ts TIMESTAMP_NTZ, c CHAR(5), w VARCHAR(2)) " +
-            "USING parquet")
+          sql(createTable)
           val schema = spark.table("gap_fill_char_constant").schema
-          def fill(columns: String): String = "SELECT * FROM gap_fill_char_constant GAP FILL (" +
-            s"ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES FILL ($columns))"
           assert(generatorOf(fill("c CONSTANT 'ab', w CONSTANT 'xy'")).fillMethods == Seq(
             GapFillMethod.Constant(Literal.create("ab   ", schema("c").dataType)),
             GapFillMethod.Constant(Literal.create("xy", schema("w").dataType))))
@@ -235,6 +422,50 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
             exception = intercept[SparkRuntimeException](sql(fill("w CONSTANT 'xyz'"))),
             condition = "EXCEED_LIMIT_LENGTH",
             parameters = Map("limit" -> "2"))
+        }
+      }
+    }
+    // With first-class types a CAST also makes a CHAR or VARCHAR column. Its type is then only in
+    // its data type, not in its metadata as for a table column.
+    val castInput =
+      "(SELECT ts, CAST('a' AS CHAR(5)) AS c, CAST('b' AS VARCHAR(2)) AS w FROM readings)"
+    Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
+      .foreach { conf =>
+        withReadings {
+          withSQLConf(conf.key -> "true") {
+            assert(generatorOf(fill("c CONSTANT 'ab', w CONSTANT 'xy'", castInput)).fillMethods ==
+              Seq(
+                GapFillMethod.Constant(Literal.create("ab   ", CharType(5))),
+                GapFillMethod.Constant(Literal.create("xy", VarcharType(2)))))
+            checkError(
+              exception = intercept[SparkRuntimeException](
+                sql(fill("w CONSTANT 'xyz'", castInput))),
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
+        }
+      }
+    // The legacy conf alone takes the value as a STRING, as an INSERT does. The columns still
+    // have CHAR and VARCHAR as their raw types, as the table is made with the default confs.
+    withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "true") {
+      withTable("gap_fill_char_constant") {
+        sql(createTable)
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+          val schema = spark.table("gap_fill_char_constant").schema
+          assert(CharVarcharUtils.getRawType(schema("c").metadata).contains(CharType(5)))
+          assert(generatorOf(fill("c CONSTANT 'ab'")).fillMethods == Seq(
+            GapFillMethod.Constant(Literal.create("ab", schema("c").dataType)),
+            GapFillMethod.Null))
+          assert(generatorOf(fill("w CONSTANT 'xyz'")).fillMethods == Seq(
+            GapFillMethod.Null,
+            GapFillMethod.Constant(Literal.create("xyz", schema("w").dataType))))
+          // First-class CHAR and VARCHAR types still check the value.
+          withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+            checkError(
+              exception = intercept[SparkRuntimeException](sql(fill("w CONSTANT 'xyz'"))),
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
         }
       }
     }
@@ -260,17 +491,19 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "true") {
       val using = "VALUES ('p1', TIMESTAMP_NTZ '2026-01-01 00:00:00', 1) AS t1(k, ts, v) " +
         "JOIN VALUES ('p1', 2) AS t2(k, w) USING (k)"
+      val partitionBy = "GAP FILL (PARTITION BY t2.k ORDER BY ts BIN WIDTH INTERVAL 1 HOUR)"
       checkAnalysisError(
-        s"SELECT * FROM $using GAP FILL (PARTITION BY t2.k ORDER BY ts BIN WIDTH INTERVAL 1 HOUR)",
+        s"SELECT * FROM $using $partitionBy",
         "GAP_FILL_COLUMNS_NOT_IN_INPUT",
-        Map("columnName" -> "`t2`.`k`", "clause" -> "PARTITION BY"))
+        Map("columnName" -> "`t2`.`k`", "clause" -> "PARTITION BY"), partitionBy)
       // A column that is not in the input comes before a nested column in an earlier clause.
+      val fill =
+        "GAP FILL (PARTITION BY s.a ORDER BY ts BIN WIDTH INTERVAL 1 HOUR FILL (t2.k NULL))"
       checkAnalysisError(
         "SELECT * FROM VALUES ('p1', named_struct('a', 1), TIMESTAMP_NTZ '2026-01-01 00:00:00') " +
-          "AS t1(k, s, ts) JOIN VALUES ('p1') AS t2(k) USING (k) GAP FILL (PARTITION BY s.a " +
-          "ORDER BY ts BIN WIDTH INTERVAL 1 HOUR FILL (t2.k NULL))",
+          s"AS t1(k, s, ts) JOIN VALUES ('p1') AS t2(k) USING (k) $fill",
         "GAP_FILL_COLUMNS_NOT_IN_INPUT",
-        Map("columnName" -> "`t2`.`k`", "clause" -> "FILL"))
+        Map("columnName" -> "`t2`.`k`", "clause" -> "FILL"), fill)
       val gapFilled = s"$using GAP FILL (PARTITION BY k ORDER BY ts BIN WIDTH INTERVAL 1 HOUR)"
       assert(sql(s"SELECT * FROM $gapFilled").columns.toSeq == Seq("k", "ts", "v", "w"))
       sql(s"SELECT t1.k, k FROM $gapFilled")
@@ -291,10 +524,10 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
         val path = new File(dir, "readings").getCanonicalPath
         sql(readings).write.parquet(path)
         val input = s"parquet.`$path`"
-        checkAnalysisError(
-          s"SELECT * FROM $input GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES " +
-            "FILL (_metadata FFILL))",
-          "GAP_FILL_COLUMNS_NOT_IN_INPUT", Map("columnName" -> "`_metadata`", "clause" -> "FILL"))
+        val fillMetadata =
+          "GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES FILL (_metadata FFILL))"
+        checkAnalysisError(s"SELECT * FROM $input $fillMetadata", "GAP_FILL_COLUMNS_NOT_IN_INPUT",
+          Map("columnName" -> "`_metadata`", "clause" -> "FILL"), fillMetadata)
         val gapFilled = s"$input $gapFill"
         Seq(
           s"SELECT _metadata FROM $gapFilled",
@@ -374,24 +607,39 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
     withReadings {
       Seq("", "PARTITION BY p").foreach { partitionBy =>
         val clause = s"GAP FILL ($partitionBy ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES)"
-        checkAnalysisError(
-          "SELECT * FROM VALUES ('p1') AS o(p), LATERAL (" +
-            s"SELECT * FROM (SELECT * FROM readings WHERE readings.p = o.p) $clause)",
-          "GAP_FILL_CORRELATED_INPUT", Map.empty, clause)
+        val query = "SELECT * FROM VALUES ('p1') AS o(p), LATERAL (" +
+          s"SELECT * FROM (SELECT * FROM readings WHERE readings.p = o.p) $clause)"
+        checkAnalysisError(query, "GAP_FILL_CORRELATED_INPUT", Map.empty, clause)
+        // The message says what to do instead.
+        assert(intercept[AnalysisException](sql(query)).getMessage.startsWith(
+          "[GAP_FILL_CORRELATED_INPUT] GAP FILL is not supported on an input that references " +
+          "an outer query. Remove the outer reference from the GAP FILL input. SQLSTATE: 0A000;"))
       }
       // A clause column of the outer query is not a column of the input.
+      val outerPartitionBy = "GAP FILL (PARTITION BY o.p ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES)"
       checkAnalysisError(
-        "SELECT * FROM VALUES ('p1') AS o(p), LATERAL (" +
-          "SELECT * FROM readings " +
-          "GAP FILL (PARTITION BY o.p ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES))",
+        s"SELECT * FROM VALUES ('p1') AS o(p), LATERAL (SELECT * FROM readings $outerPartitionBy)",
         "GAP_FILL_COLUMNS_NOT_IN_INPUT",
-        Map("columnName" -> "`o`.`p`", "clause" -> "PARTITION BY"))
+        Map("columnName" -> "`o`.`p`", "clause" -> "PARTITION BY"), outerPartitionBy)
+      // So is a nested field of one. Under HAVING the field resolves without an alias. It comes
+      // before a nested column of the input in an earlier clause.
+      val outer = "(SELECT named_struct('a', 'p1') AS s) AS o"
+      val nestedClause =
+        "GAP FILL (PARTITION BY n.a ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES FILL (s.a NULL))"
+      val sub = s"SELECT 1 FROM (SELECT *, named_struct('a', 1) AS n FROM readings) $nestedClause"
+      Seq(
+        s"SELECT * FROM $outer WHERE EXISTS ($sub)",
+        s"SELECT count(*) FROM $outer GROUP BY s HAVING EXISTS ($sub)").foreach { query =>
+        checkAnalysisError(query, "GAP_FILL_COLUMNS_NOT_IN_INPUT",
+          Map("columnName" -> "`o`.`s`", "clause" -> "FILL"), nestedClause)
+      }
       // A clause error comes first.
+      val timeClause = "GAP FILL (ORDER BY v BIN WIDTH INTERVAL 15 MINUTES)"
       checkAnalysisError(
         "SELECT * FROM VALUES ('p1') AS o(p), LATERAL (" +
-          "SELECT * FROM (SELECT * FROM readings WHERE readings.p = o.p) " +
-          "GAP FILL (ORDER BY v BIN WIDTH INTERVAL 15 MINUTES))",
-        "GAP_FILL_TIME_TYPE_MISMATCH", Map("columnName" -> "`v`", "columnType" -> "\"INT\""))
+          s"SELECT * FROM (SELECT * FROM readings WHERE readings.p = o.p) $timeClause)",
+        "GAP_FILL_TIME_TYPE_MISMATCH", Map("columnName" -> "`v`", "columnType" -> "\"INT\""),
+        timeClause)
       // An outer reference above GAP FILL is fine.
       sql(s"SELECT * FROM VALUES (90) AS o(v) WHERE EXISTS (" +
         s"SELECT 1 FROM readings $gapFill AS g WHERE g.v = o.v)")
@@ -405,11 +653,16 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
         val clause = "GAP FILL (ORDER BY timestamp BIN WIDTH INTERVAL 1 MINUTE)"
         checkAnalysisError(s"SELECT * FROM rates $clause",
           "GAP_FILL_STREAMING_NOT_SUPPORTED", Map.empty, clause)
+        // The message says what to do instead.
+        assert(intercept[AnalysisException](sql(s"SELECT * FROM rates $clause"))
+          .getMessage.startsWith("[GAP_FILL_STREAMING_NOT_SUPPORTED] GAP FILL is not supported " +
+          "on streaming input. Use GAP FILL in a batch query. SQLSTATE: 0A000;"))
         // A clause error comes first.
+        val timeClause = "GAP FILL (ORDER BY value BIN WIDTH INTERVAL 1 MINUTE)"
         checkAnalysisError(
-          "SELECT * FROM rates GAP FILL (ORDER BY value BIN WIDTH INTERVAL 1 MINUTE)",
+          s"SELECT * FROM rates $timeClause",
           "GAP_FILL_TIME_TYPE_MISMATCH",
-          Map("columnName" -> "`value`", "columnType" -> "\"BIGINT\""))
+          Map("columnName" -> "`value`", "columnType" -> "\"BIGINT\""), timeClause)
       }
     }
   }

@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, CastSupport, GapFillResolution, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -110,6 +110,25 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
             cause = ex)
       }
     }
+}
+
+/**
+ * Evaluates the GAP FILL clause values that ComputeCurrentTime or SpecialDatetimeValues change,
+ * such as current_date() or CAST('today' AS DATE). The analyzer evaluates the other values. This
+ * rule runs after both, so such a value sees the same time as the rest of the query, also when an
+ * analyzed plan is used again, as by a temporary view of a DataFrame.
+ *
+ * It does not enter subquery plans, because SpecialDatetimeValues does not either. FinishAnalysis
+ * runs both rules on each subquery plan later, in this order.
+ */
+object EvalGapFillCurrentTimeValues extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithPruning(_.containsPattern(GENERATE)) {
+      case g @ Generate(gapFill: GapFillGenerator, _, _, _, _, _) => withPosition(g) {
+        g.copy(generator = GapFillResolution.evalCurrentTimeValues(gapFill))
+      }
+    }
+  }
 }
 
 /**

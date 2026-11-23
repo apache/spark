@@ -167,9 +167,9 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
-    // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
-    // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
-    // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
+    // `ResolveIdentifierClause` and `GapFillResolution`). A temporary view, temporary ALTER VIEW,
+    // or CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored
+    // view text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
     // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
     // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
     // the v1 runnable commands call while executing and the v2 commands reach during analysis via
@@ -177,8 +177,8 @@ case class AnalysisContext(
     // the persisted paths simply discard the set. SQL function creation consumes it the same way
     // (SPARK-59970): a persistent function rejects the names, or discards them under the legacy
     // flag, and a temporary function stores them as informational metadata in its
-    // `referredTempVariableNames` property. The single-pass resolver has no IDENTIFIER-clause
-    // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
+    // `referredTempVariableNames` property. The single-pass resolver resolves neither IDENTIFIER
+    // clauses nor GAP FILL, so there is no single-pass writer to keep in sync. LinkedHashSet keeps
     // insertion order so the recorded names (and any error naming them) are deterministic when more
     // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
@@ -1977,6 +1977,11 @@ class Analyzer(
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
+
+      // A GAP FILL clause column must name a column, not a session variable or a function.
+      case g: UnresolvedGapFill =>
+        GapFillResolution.resolveExpressions(
+          g, resolveExpressionByPlanChildren(_, g, includeLastResort = true))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
