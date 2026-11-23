@@ -30,7 +30,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   join condition limits how long a row of that input can match only through that column or cast,
   for example through `expiry` in `rightTime BETWEEN leftTime AND expiry`, or through
   `CAST(leftDate AS TIMESTAMP)`. Earlier versions evicted by the event time, and could emit outer
-  join rows too early and lose matches. Such a join can emit rows below its output watermark,
+  join rows too early and lose matches. A cast that can fail, from STRING, FLOAT or DOUBLE in
+  ANSI mode or from VARIANT unless in TRY mode, and a cast of an expression over a column, such as
+  `CAST(expirySec + 3600 AS TIMESTAMP)`, keep the earlier eviction by the event time. Such a join
+  can emit rows below its output watermark,
   which still assumes eviction by the event time, so in append mode a new query fails when an
   operator that drops late rows by an event time that can come from that input follows it, as
   described below for an input whose state is never evicted, unless the condition also bounds the

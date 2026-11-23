@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, EvalMode, Expression, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, EvalMode, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, DayTimeIntervalType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, TimestampNTZType, TimestampType, VariantType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -100,6 +101,25 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           AttributeSet(Seq(rightTime)), Some(stringCast(mode) > rightTime), Some(10000L))
           .map(_._1) === picked)
     }
+    // Nor is a cast from VARIANT, unless in TRY mode.
+    val leftVariant = AttributeReference("leftVariant", VariantType)()
+    def variantCast(mode: EvalMode.Value): Cast =
+      Cast(leftVariant, TimestampType, Some("UTC"), mode)
+    Seq(EvalMode.ANSI -> None, EvalMode.LEGACY -> None,
+        EvalMode.TRY -> Some(variantCast(EvalMode.TRY))).foreach { case (mode, picked) =>
+      assert(StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, leftVariant),
+        AttributeSet(Seq(rightTime)), Some(variantCast(mode) > rightTime), Some(10000L))
+        .map(_._1) === picked)
+    }
+    // A cast is bounded only by a comparison of the cast itself, not by another expression of
+    // its column, such as a cast of interval arithmetic or a cast to DOUBLE.
+    val ntzCastPlusTwoHours = Cast(TimestampAddInterval(leftNtz,
+      Literal(new CalendarInterval(0, 0, 7200000000L))), TimestampType, Some("UTC"))
+    assert(column(rightTime >= ntzCast && rightTime <= ntzCastPlusTwoHours) === None)
+    val flag = AttributeReference("flag", BooleanType)()
+    assert(StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, leftString, flag),
+      AttributeSet(Seq(rightTime)), Some((rightTime <= stringCast(EvalMode.LEGACY) || flag) &&
+        Cast(rightTime, DoubleType) < Cast(leftString, DoubleType)), Some(10000L)) === None)
 
     // Among other TIMESTAMP columns, the first in input order wins.
     val deadline = AttributeReference("deadline", TimestampType)()
