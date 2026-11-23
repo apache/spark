@@ -2354,12 +2354,12 @@ class SparkSession(SparkConversionMixin):
         :class:`SparkContext`, such as with ``--files``. Without Spark Connect, these are all the
         files added to the :class:`SparkContext`, also by other sessions. With Spark Connect, these
         are the files added to this session and those added to the server outside of any session,
-        but not those of the other sessions, which servers before Spark 4.4 also list. A file
+        but not those of the other sessions, which servers before Spark 4.5 also list. A file
         uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
         server, and one added with ``ADD FILE`` as :attr:`SparkContext.listFiles` lists it, such as
         by the path it was added with when the server runs in local mode.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -2398,12 +2398,12 @@ class SparkSession(SparkConversionMixin):
         added with. Without Spark Connect, these are all the archives added to the
         :class:`SparkContext`, also by other sessions. With Spark Connect, these are the archives
         added to this session and those added to the server outside of any session, but not those
-        of the other sessions, which servers before Spark 4.4 also list. An archive uploaded with
+        of the other sessions, which servers before Spark 4.5 also list. An archive uploaded with
         :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
         added with ``ADD ARCHIVE`` as :attr:`SparkContext.listArchives` lists it, such as by the
         path it was added with when the server runs in local mode.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------

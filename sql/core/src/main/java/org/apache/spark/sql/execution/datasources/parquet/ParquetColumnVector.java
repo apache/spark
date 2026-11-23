@@ -85,17 +85,8 @@ final class ParquetColumnVector {
       }
       // For Parquet tables whose columns have associated DEFAULT values, this reader must return
       // those values instead of NULL when the corresponding columns are not present in storage.
-      // Here we write the 'defaultValue' to each element in the new WritableColumnVector using
-      // the appendObjects method. This delegates to some specific append* method depending on the
-      // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
-      // appendFloats method.
-      if (vector.appendObjects(capacity, defaultValue).isEmpty()) {
-        throw new IllegalArgumentException("Cannot assign default column value to result " +
-          "column batch in vectorized Parquet reader because the data type is not supported: " +
-          defaultValue);
-      } else {
-        vector.setIsConstant();
-      }
+      vector.appendObjects(capacity, defaultValue);
+      vector.setIsConstant();
     }
 
     if (column.variantFileType().isDefined()) {

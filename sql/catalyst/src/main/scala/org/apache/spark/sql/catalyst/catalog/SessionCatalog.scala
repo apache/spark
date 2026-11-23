@@ -1904,6 +1904,14 @@ class SessionCatalog(
       function = function,
       applySessionOverrides = false,
       alwaysSetAnsiValue = true)
+    // Except that, like for the body of a view or a SQL table function, an explicit setting of the
+    // caller decides whether the body may have optional references (`x?`), since their resolution
+    // does not check the config.
+    val callerConf = SQLConf.get
+    if (callerConf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION) &&
+        callerConf.contains(SQLConf.OPTIONAL_REFERENCES_ENABLED.key)) {
+      conf.setConf(SQLConf.OPTIONAL_REFERENCES_ENABLED, callerConf.optionalReferencesEnabled)
+    }
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
