@@ -188,22 +188,30 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
-  // A cast that can fail in ANSI mode is not picked, so eviction never evaluates it, and the
-  // input keeps the eviction by its event time.
+  // A cast that can fail is not picked, so eviction never evaluates it, and the input keeps the
+  // eviction by its event time: a cast from STRING or DOUBLE in ANSI mode, and one from VARIANT
+  // in any mode but TRY. By default the optimizer moves a VARIANT cast below the join, where it
+  // is evaluated on every row on the base branch too, so these cases keep it in the condition.
   for {
     version <- Seq(2, 4)
-    source <- Seq("string", "double")
+    (source, ansi) <- Seq(("string", true), ("double", true), ("variant", true),
+      ("variant", false))
   } {
-    test(s"a $source column cast to TIMESTAMP in ANSI mode is not evaluated by eviction, " +
+    test(s"a $source column cast to TIMESTAMP with ANSI mode $ansi is not evaluated by eviction, " +
         s"V$version") {
       withJoinConf(version) {
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
-            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString,
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+            SQLConf.PUSH_VARIANT_INTO_SCAN_PULL_OUT_EXTRACTIONS.key -> "false") {
           val leftInput = MemoryStream[(Int, Long, String)]
           val rightInput = MemoryStream[(Int, Long)]
           val left = leftInput.toDF().toDF("leftKey", "start", "end")
             .select($"leftKey", timestamp_seconds($"start").as("leftTime"),
-              (if (source == "string") $"end" else $"end".cast("double")).as("leftExpiry"))
+              (source match {
+                case "string" => $"end"
+                case "double" => $"end".cast("double")
+                case _ => parse_json($"end")
+              }).as("leftExpiry"))
             .withWatermark("leftTime", "60 seconds")
           val right = rightInput.toDF().toDF("rightKey", "time")
             .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
@@ -211,8 +219,11 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
           val result = left.join(right, expr("leftKey = rightKey AND " +
               "rightTime BETWEEN leftTime AND CAST(leftExpiry AS TIMESTAMP)"), "left_outer")
             .select($"leftKey", $"rightTime".cast("long"), $"leftTime".cast("long"))
-          val (invalid, valid) =
-            if (source == "string") ("n/a", "1970-01-01 00:26:40") else ("NaN", "1600")
+          val (invalid, valid) = source match {
+            case "string" => ("n/a", "1970-01-01 00:26:40")
+            case "double" => ("NaN", "1600")
+            case _ => ("{\"a\": 1}", "\"1970-01-01 00:26:40\"")
+          }
           testStream(result)(
             // No right row has the key of the row whose value does not cast.
             StreamProgressLockedActions(Seq(

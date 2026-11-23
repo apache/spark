@@ -136,17 +136,29 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
         references.contains(a)
     }
-    // A cast that can fail, from STRING, FLOAT or DOUBLE in ANSI mode, is not picked: eviction
-    // would evaluate it on every row, but the condition only against rows that can match.
-    def canFail(a: Attribute, mode: EvalMode.Value) = mode == EvalMode.ANSI &&
-      (a.dataType.isInstanceOf[StringType] || a.dataType == FloatType || a.dataType == DoubleType)
+    // A cast that can fail, from STRING, FLOAT or DOUBLE in ANSI mode, or from VARIANT unless in
+    // TRY mode, is not picked: eviction would evaluate it on every row, but the condition only
+    // against rows that can match.
+    def canFail(a: Attribute, mode: EvalMode.Value) = a.dataType match {
+      case _: StringType | FloatType | DoubleType => mode == EvalMode.ANSI
+      case _: VariantType => mode != EvalMode.TRY
+      case _ => false
+    }
     val casts = joinCondition.toSeq.flatMap(_.collect {
       case c @ Cast(a: Attribute, TimestampType, _, mode)
           if inputAttributes.exists(_.semanticEquals(a)) && !canFail(a, mode) => c
     })
-    (candidates ++ casts).iterator.flatMap { e =>
-      getStateValueWatermark(e.references, attributesWithEventWatermark, joinCondition,
-        eventWatermark).map(e -> _)
+    (candidates ++ casts).iterator.flatMap {
+      // A cast is solved as itself, so that only a comparison of the cast bounds it, not another
+      // expression of its column.
+      case c: Cast =>
+        val cast = AttributeReference("cast", TimestampType)()
+        getStateValueWatermark(AttributeSet(cast), attributesWithEventWatermark,
+          joinCondition.map(_.transform { case e if e.semanticEquals(c) => cast }),
+          eventWatermark).map(c -> _)
+      case e =>
+        getStateValueWatermark(e.references, attributesWithEventWatermark, joinCondition,
+          eventWatermark).map(e -> _)
     }.nextOption()
   }
 
