@@ -7532,6 +7532,7 @@ object SQLConf {
         "partition columns. Archive entries grow their buffers as content is read instead of " +
         "allocating the size declared in their headers up front.")
       .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -7541,6 +7542,7 @@ object SQLConf {
       .doc("Minimum listed file length for the binary file reader to copy content from its " +
         "stream in bounded chunks instead of materializing an intermediate whole-file array.")
       .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "must not be negative")
       .createWithDefaultString("256MB")
@@ -7554,6 +7556,7 @@ object SQLConf {
         s"${BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE.key} bytes. The stream is read to " +
         "its end even when its content length differs from the listed file length.")
       .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
