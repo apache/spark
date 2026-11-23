@@ -296,12 +296,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     // These live in dedicated CatalogTable fields and `properties` may not hold them; keep the
     // fields unless a change names the key.
-    val comment = if (namesProperty(changes, TableCatalog.PROP_COMMENT)) {
+    val comment = if (affectsProperty(changes, TableCatalog.PROP_COMMENT)) {
       properties.get(TableCatalog.PROP_COMMENT)
     } else {
       catalogTable.comment
     }
-    val collation = if (namesProperty(changes, TableCatalog.PROP_COLLATION)) {
+    val collation = if (affectsProperty(changes, TableCatalog.PROP_COLLATION)) {
       properties.get(TableCatalog.PROP_COLLATION)
     } else {
       catalogTable.collation
@@ -333,7 +333,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     null // Return null to save the `loadTable` call for ALTER TABLE.
   }
 
-  private def namesProperty(changes: Seq[TableChange], property: String): Boolean = {
+  private def affectsProperty(changes: Seq[TableChange], property: String): Boolean = {
     changes.exists {
       case set: TableChange.SetProperty => set.property == property
       case remove: TableChange.RemoveProperty => remove.property == property
