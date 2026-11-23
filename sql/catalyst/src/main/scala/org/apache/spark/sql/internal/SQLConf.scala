@@ -7114,7 +7114,7 @@ object SQLConf {
         "rows. When disabled (default), such a left row is kept once, with NULLs for the " +
         "columns of the lateral subquery. It only takes effect when " +
         s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
-      .version("4.5.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
