@@ -187,6 +187,49 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("not-found search paths preserve the analyzer's error formatter") {
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def toSQLId(names: Seq[String]): String = "CUSTOM_PATH:" + names.mkString(".")
+    }
+    val manager = analyzer.catalogManager
+    val catalogPath = manager.currentCatalog.name() +: manager.currentNamespace.toSeq
+    val queryPath = manager.sqlResolutionPathEntries(catalogPath.head, catalogPath.tail)
+      .map(entry => "CUSTOM_PATH:" + entry.mkString("."))
+    val ddlPath = Seq("CUSTOM_PATH:system.session", "CUSTOM_PATH:" + catalogPath.mkString("."))
+
+    def checkTarget(target: LogicalPlan, relationName: String, path: Seq[String]): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](analyzer.checkAnalysis(target)),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map(
+          "relationName" -> relationName,
+          "searchPath" -> path.mkString("[", ", ", "]")))
+    }
+
+    checkTarget(UnresolvedTable(Seq("missing"), "ALTER TABLE"), "`missing`", ddlPath)
+    checkTarget(
+      UnresolvedTableOrView(
+        Seq("missing"),
+        "DESCRIBE TABLE",
+        allowTempView = true,
+        tableNotFoundSearchPathMode = UnresolvedTableOrViewSearchPathMode.QueryLike),
+      "`missing`",
+      queryPath)
+    checkTarget(
+      UnresolvedRelation(Seq("system", "session", "missing")),
+      "`system`.`session`.`missing`",
+      Seq("CUSTOM_PATH:system.session"))
+  }
+
+  test("temporary-view not-found paths do not evaluate the catalog path") {
+    val path = NotFoundErrorSearchPath.forUnresolvedRelation(
+      catalogManager = SimpleAnalyzer.catalogManager,
+      multipartIdentifier = Seq("system", "session", "missing"),
+      catalogPath = fail("The temporary-view path does not need the current catalog"),
+      errors = QueryCompilationErrors)
+    assert(path == Seq("`system`.`session`"))
+  }
+
   test("resolve a table specification without changing option evaluation or other fields") {
     val specification = UnresolvedTableSpec(
       properties = Map("property" -> "value"),

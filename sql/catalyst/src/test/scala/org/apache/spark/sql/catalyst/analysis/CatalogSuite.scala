@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, DummyCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, MetadataBuilder, StringType, StructType, VarcharType}
 
@@ -58,6 +61,75 @@ class CatalogSuite extends AnalysisTest {
       assert(resolved.catalog == expectedCatalog)
       assert(resolved.identifier.name() == "TaBlE")
       assert(resolved.output.isEmpty)
+    }
+  }
+
+  test("resolve namespaces uses the current catalog and gives catalog names precedence") {
+    withSQLConf(
+      "spark.sql.catalog.test" -> classOf[DummyCatalog].getName,
+      "spark.sql.catalog.other" -> classOf[DummyCatalog].getName) {
+      val catalogManager = getAnalyzer.catalogManager
+      val resolveCatalogs = new ResolveCatalogs(catalogManager)
+      catalogManager.setCurrentCatalog("test")
+      val catalog = catalogManager.currentCatalog
+      val other = catalogManager.catalog("other")
+
+      assert(resolveCatalogs(UnresolvedNamespace(Nil)) ==
+        ResolvedNamespace(catalog, Nil))
+      assert(resolveCatalogs(CurrentNamespace) ==
+        ResolvedNamespace(catalog, Seq("a", "b")))
+      assert(resolveCatalogs(UnresolvedNamespace(Seq("ns", "nested"))) ==
+        ResolvedNamespace(catalog, Seq("ns", "nested")))
+      assert(resolveCatalogs(UnresolvedNamespace(Seq("other"))) ==
+        ResolvedNamespace(other, Nil))
+      assert(resolveCatalogs(UnresolvedNamespace(Seq("other", "ns"), fetchMetadata = true)) ==
+        ResolvedNamespace(other, Seq("ns")))
+
+      catalogManager.setCurrentCatalog("other")
+      assert(resolveCatalogs(UnresolvedNamespace(Nil)) ==
+        ResolvedNamespace(other, Nil))
+    }
+  }
+
+  test("namespace resolution preserves currentCatalog overrides") {
+    withSQLConf("spark.sql.catalog.other" -> classOf[DummyCatalog].getName) {
+      val catalogManager = getAnalyzer.catalogManager
+      val other = catalogManager.catalog("other")
+      assert(catalogManager.currentCatalog != other)
+      val resolveCatalogs = new ResolveCatalogs(catalogManager) {
+        override def currentCatalog: CatalogPlugin = other
+      }
+
+      assert(resolveCatalogs(UnresolvedNamespace(Nil)) == ResolvedNamespace(other, Nil))
+      assert(resolveCatalogs(UnresolvedNamespace(Seq("unknown", "nested"))) ==
+        ResolvedNamespace(other, Seq("unknown", "nested")))
+    }
+  }
+
+  test("resolve namespaces fetches metadata only when requested") {
+    withSQLConf("spark.sql.catalog.test" -> classOf[InMemoryTableCatalog].getName) {
+      val catalogManager = getAnalyzer.catalogManager
+      val resolution = new CatalogIdentifierResolution(catalogManager)
+      val resolveCatalogs = new ResolveCatalogs(catalogManager)
+      val catalog = catalogManager.catalog("test").asInstanceOf[InMemoryTableCatalog]
+      val metadata = Map("comment" -> "namespace metadata")
+      catalog.createNamespace(Array("ns"), metadata.asJava)
+      val unresolved = UnresolvedNamespace(Seq("test", "ns"), fetchMetadata = true)
+      val expected = ResolvedNamespace(catalog, Seq("ns"), metadata)
+
+      assert(resolution.resolveNamespace(catalog, Seq("ns"), fetchMetadata = true) == expected)
+      assert(resolution.resolveNamespace(catalog, Seq("ns"), fetchMetadata = false) ==
+        ResolvedNamespace(catalog, Seq("ns")))
+      assert(resolveCatalogs(unresolved) == expected)
+
+      assert(resolution.resolveNamespace(catalog, Seq("missing"), fetchMetadata = false) ==
+        ResolvedNamespace(catalog, Seq("missing")))
+      checkError(
+        exception = intercept[NoSuchNamespaceException] {
+          resolution.resolveNamespace(catalog, Seq("missing"), fetchMetadata = true)
+        },
+        condition = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`test`.`missing`"))
     }
   }
 

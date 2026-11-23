@@ -148,9 +148,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
     case UnresolvedNamespace(Seq(), fetchMetadata) =>
-      resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+      catalogIdentifierResolution.resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
-      resolveNamespace(catalog, ns, fetchMetadata)
+      catalogIdentifierResolution.resolveNamespace(catalog, ns, fetchMetadata)
   }
 
   private def resolveIdentifier(
@@ -199,21 +199,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     } else {
       val CatalogAndIdentifier(catalog, ident) = nameParts
       ResolvedIdentifier(catalog, ident)
-    }
-  }
-
-  private def resolveNamespace(
-      catalog: CatalogPlugin,
-      ns: Seq[String],
-      fetchMetadata: Boolean): ResolvedNamespace = {
-    catalog match {
-      case supportsNS: SupportsNamespaces if fetchMetadata =>
-        ResolvedNamespace(
-          catalog,
-          ns,
-          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
-      case _ =>
-        ResolvedNamespace(catalog, ns)
     }
   }
 

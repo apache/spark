@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
 
 /**
- * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
+ * Resolves command target names to a [[ResolvedIdentifier]] or [[ResolvedNamespace]]
+ * for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     extends LookupCatalog with SQLConfHelper {
@@ -66,6 +69,22 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
         replaceCharVarcharWithString(col.dataType)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
+    }
+  }
+
+  /** Resolves a namespace target, loading metadata only when requested and supported. */
+  def resolveNamespace(
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
     }
   }
 }

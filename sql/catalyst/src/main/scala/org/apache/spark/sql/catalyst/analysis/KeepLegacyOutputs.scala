@@ -37,12 +37,19 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
           val newOutput = s.output.head.withName("database") +: s.output.tail
           s.copy(output = newOutput)
         case d: DescribeNamespace =>
-          assert(d.output.length == 2)
-          d.copy(output = Seq(d.output.head.withName("database_description_item"),
-            d.output.last.withName("database_description_value")))
+          keepLegacyDescribeNamespaceOutput(d)
         case s: ShowTableProperties if s.propertyKey.isDefined =>
            s.copy(output = Seq(s.output.last))
       }
     }
+  }
+
+  /** Renames namespace output to its legacy names; the caller applies the legacy-schema gate. */
+  def keepLegacyDescribeNamespaceOutput(
+      describeNamespace: DescribeNamespace): DescribeNamespace = {
+    assert(describeNamespace.output.length == 2)
+    describeNamespace.copy(output = Seq(
+      describeNamespace.output.head.withName("database_description_item"),
+      describeNamespace.output.last.withName("database_description_value")))
   }
 }
