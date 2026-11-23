@@ -49,7 +49,7 @@ class AlterViewSchemaBindingSuite
       val viewName = "v_evolution_stale_names"
       val view = s"$catalog.$namespace.$viewName"
       // Names left over from an older write, with fewer and with more columns than the schema.
-      Seq(Seq("c1", "c2"), Seq("c1", "c2", "c3", "c4")).foreach { staleNames =>
+      Seq(Seq("a", "b"), Seq("a", "b", "c", "d")).foreach { staleNames =>
         withView(view) {
           sql(s"CREATE VIEW $view WITH SCHEMA EVOLUTION AS SELECT 1 AS c1, 2 AS c2, 3 AS c3")
           setStoredQueryColumnNames(viewName, staleNames)
