@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{DataFrame, Row}
+import java.io.File
+
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -79,6 +84,73 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
             CheckNewAnswer(),
             AddData(rightInput, (1, end)),
             CheckNewAnswer(Row(1, start, end)))
+        }
+      }
+    }
+  }
+
+  // Removes the conf from the latest offset log entry, as versions without it wrote it.
+  private def removeCheckJoinOutputWatermark(checkpoint: File): Unit = {
+    val key = SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key
+    val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
+    val log = new OffsetSeqLog(spark, offsetsPath)
+    val (batchId, offsets) = log.getLatest().get
+    val updated = offsets match {
+      case o: OffsetSeq =>
+        assert(o.metadataOpt.exists(_.conf.contains(key)))
+        o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+      case o: OffsetMap =>
+        assert(o.metadata.conf.contains(key))
+        o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+    }
+    val path = new Path(offsetsPath, batchId.toString)
+    assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+    assert(log.add(batchId, updated))
+  }
+
+  private val negativeSign = "leftKey = rightKey AND CAST(lt AS LONG) + CAST(rt AS LONG) > 100"
+
+  // A checkpoint written before this change keeps the rule of earlier versions: the outer join is
+  // accepted at the restart, and the negative-sign conjunct gives the left input the cutoff
+  // 100 s minus the watermark. It evicts the left row (8, 21) at the watermark 4 s, so the later
+  // right row (8, 80) finds no match, as in earlier versions.
+  for (version <- Seq(2, 4); joinType <- Seq("inner", "left_outer")) {
+    test(s"a restart from a checkpoint of an earlier version keeps the earlier cutoffs, " +
+        s"V$version $joinType") {
+      withJoinStateVersion(version) {
+        withTempDir { checkpoint =>
+          val (leftInput, rightInput, left, right) = inputs()
+          val joined = left.join(right, expr(negativeSign), joinType)
+            .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+          val start = StartStream(checkpointLocation = checkpoint.getCanonicalPath)
+          // The rule of earlier versions writes the checkpoint, as an earlier version would.
+          def outer(rows: Row*): Seq[Row] = if (joinType == "inner") Nil else rows
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key -> "false") {
+            testStream(joined)(start,
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (1, 5L)), AddData(rightInput, (9, 5L)))),
+              CheckNewAnswer(outer(Row(1, 5L, null)): _*),
+              StopStream)
+          }
+          removeCheckJoinOutputWatermark(checkpoint)
+          testStream(joined)(start,
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 21L)), AddData(rightInput, (9, 21L)))),
+            CheckNewAnswer(outer(Row(8, 21L, null)): _*),
+            AddData(rightInput, (8, 80L)),
+            CheckNewAnswer())
+        }
+      }
+    }
+  }
+
+  for (version <- Seq(2, 4)) {
+    test(s"a new outer join whose only range condition has a negative sign fails analysis, " +
+        s"V$version") {
+      withJoinStateVersion(version) {
+        val (_, _, left, right) = inputs()
+        intercept[AnalysisException] {
+          left.join(right, expr(negativeSign), "left_outer").writeStream.format("noop").start()
         }
       }
     }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -74,6 +75,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      solver reads inexactly (see [[isInexactConjunct]]), or
    *                                      when every cutoff is solved for another column than the
    *                                      input's event time, which has none of its own.
+   *                                      By default false only for a query restarted from a
+   *                                      checkpoint written before the join output watermark
+   *                                      check, which keeps the rule of earlier versions.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -81,7 +85,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      risingCutoffsOnly: Boolean = true): Option[Long] = {
+      risingCutoffsOnly: Boolean = risingCutoffsByDefault): Option[Long] = {
     val cutoffs = conjunctCutoffs(attributesToFindStateWatermarkFor, attributesWithEventWatermark,
       joinCondition, eventWatermark, risingCutoffsOnly)
     val cutoff = cutoffs.map(_._1).reduceOption((x, y) => Math.min(x, y))
@@ -164,6 +168,11 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }))
     case _ => false
   }
+
+  // A query restarted from a checkpoint written before the join output watermark check keeps the
+  // rule of earlier versions, so its eviction, output watermark and analysis do not change.
+  private def risingCutoffsByDefault: Boolean =
+    SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
 
   // Whether a cast can round or drop digits that the solver, which reads every cast as exact,
   // keeps, so that a cutoff solved through it can evict rows that still match.
