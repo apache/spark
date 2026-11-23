@@ -1592,6 +1592,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertTrue(reasons, f"{func} fell back without saying why")
         return u, reasons
 
+    def _fallback_vals(self, func, return_type, schema, rows, needle):
+        """Assert ``func`` falls back for a reason containing ``needle``, and return
+        what the interpreted UDF computes over ``rows``.
+
+        Asserting the reason makes a fallback for some new and unrelated cause fail
+        loudly instead of passing on the interpreted values alone.
+        """
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(func, return_type)
+            self.assertIn(needle, reasons)
+            df = self.spark.createDataFrame(rows, schema)
+            return [r[0] for r in df.select(u(*df.columns)).collect()]
+
     def _transpiled_udf(self, func, return_type):
         """A UDF asserted to have produced options; naming the fallback reason if not.
 
@@ -2852,7 +2865,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_annotation_category_map_and_array(self):
         # dict/Dict/Mapping -> "map", list/List -> "array": bare, subscripted,
-        # typing.-qualified or stringized (SPARK-55219). Sequence pins nothing.
+        # typing.-qualified or stringized (SPARK-55219). Sequence pins nothing. A
+        # list naming its element type pins an element-aware category, recursively;
+        # Optional[X] / X | None pin what X does.
         import ast as _ast
 
         from pyspark.sql.transpile import _annotation_category
@@ -2878,6 +2893,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ('"the input value"', None),  # unparseable text is untyped, not an error
             ("set", None),
             ("torch.float", None),
+            ("List[str]", "array<string>"),
+            ("typing.List[float]", "array<float>"),
+            ("list[bool]", "array<bool>"),
+            ("list[bytes]", "array<binary>"),
+            ("list[list[int]]", "array<array<integer>>"),
+            ("list[dict]", "array<map>"),
+            ("list[list]", "array<array>"),
+            ("list[Any]", "array"),
+            ("list[Sequence[int]]", "array"),  # an element that pins nothing
+            ("list[int, str]", "array"),
+            ("list[Optional[int]]", "array<integer>"),
+            ("list[int | None]", "array<integer>"),
+            ("list['int']", "array<integer>"),
+            ("\"list[list['str']]\"", "array<array<string>>"),
+            ("Optional[list[int]]", "array<integer>"),
+            ("typing.Optional[list[int]]", "array<integer>"),
+            ("list[int] | None", "array<integer>"),
+            ("Optional[int]", "integer"),
+            ("None | str", "string"),
+            ('"Optional[bytes]"', "binary"),
+            ("Optional", None),
+            ("int | str", None),
+            ("Optional[Sequence[int]]", None),
+            ("Union[list[int], None]", None),  # left untyped, see the TODO
         ]:
             with self.subTest(ann=ann):
                 fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
@@ -3090,12 +3129,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 ),
             ):
                 with self.subTest(func=func.__name__):
-                    u, reasons = self._fallback_reason(func, BooleanType())
-                    # Assert the REASON names the map/array guard, so a fallback
-                    # for some new and unrelated cause fails here loudly.
-                    self.assertIn(needle, reasons)
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+                    self.assertEqual(
+                        self._fallback_vals(func, BooleanType(), schema, rows, needle), expected
+                    )
 
     def test_udf_transpile_complex_conditional_branches_fall_back(self):
         def array_null(a: list, b: list, c: bool):
@@ -3104,60 +3140,48 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def map_null(a: dict, b: dict, c: bool):
             return 1 if (a if c else b) is None else 0
 
-        with self.sql_conf(_TRANSPILE_ON):
-            for func, return_type, schema, rows, expected in (
-                (
-                    array_null,
-                    BooleanType(),
-                    "a array<string>, b array<string>, c boolean",
-                    [(["x"], ["y"], True), (None, ["y"], True)],
-                    [False, True],
-                ),
-                (
-                    array_null,
-                    BooleanType(),
-                    "a array<int>, b array<binary>, c boolean",
-                    [([1], [bytearray(b"x")], True)],
-                    [False],
-                ),
-                (
-                    map_null,
-                    LongType(),
-                    "a map<string,string>, b map<string,int>, c boolean",
-                    [({"x": "y"}, {"x": 1}, True), (None, {"x": 1}, True)],
-                    [0, 1],
-                ),
-            ):
-                with self.subTest(schema=schema):
-                    u, reasons = self._fallback_reason(func, return_type)
-                    self.assertIn("if/else branches have a `map`/`array` operand", reasons)
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+        needle = "if/else branches have a `map`/`array` operand"
+        for func, return_type, schema, rows, expected in (
+            (
+                array_null,
+                BooleanType(),
+                "a array<string>, b array<string>, c boolean",
+                [(["x"], ["y"], True), (None, ["y"], True)],
+                [False, True],
+            ),
+            (
+                array_null,
+                BooleanType(),
+                "a array<int>, b array<binary>, c boolean",
+                [([1], [bytearray(b"x")], True)],
+                [False],
+            ),
+            (
+                map_null,
+                LongType(),
+                "a map<string,string>, b map<string,int>, c boolean",
+                [({"x": "y"}, {"x": 1}, True), (None, {"x": 1}, True)],
+                [0, 1],
+            ),
+        ):
+            with self.subTest(schema=schema):
+                self.assertEqual(
+                    self._fallback_vals(func, return_type, schema, rows, needle), expected
+                )
 
-    def test_udf_transpile_ternary_comparison_is_boolean(self):
-        # A comparison on a ternary is a bool. Classified numeric, it passed the
-        # return-type check for LongType and lowered to cast(bool as bigint) = 0/1,
-        # where the interpreted UDF returns NULL for a bool result.
+    def test_udf_transpile_comparison_of_comparisons_is_boolean(self):
+        # A comparison whose operands are comparisons, ternaries, string predicates
+        # or `and` / `or` is a bool. Classified numeric, it passed the return-type
+        # check for LongType and lowered to cast(bool as bigint) = 0/1 where the
+        # interpreted UDF returns NULL, and as an if test or arithmetic operand it
+        # failed ANSI analysis instead of falling back. Covered on map, array and
+        # scalar columns.
         def ternary_is_none(a: int, b: int, c: bool):
             return (a if c else b) is None
 
-        rows = [(1, 2, True), (None, 2, True), (1, None, False)]
-        with self.sql_conf(_TRANSPILE_ON):
-            u, reasons = self._fallback_reason(ternary_is_none, LongType())
-            self.assertIn("a bool-typed lowering does not match", reasons)
-            df = self.spark.createDataFrame(rows, "a long, b long, c boolean")
-            self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], [None] * 3)
-        self.assertEqual(
-            self._vals(ternary_is_none, BooleanType(), "a long, b long, c boolean", rows),
-            [False, True, True],
-        )
+        def prefixes_differ(a: str, b: str):
+            return a.startswith("x") != b.startswith("x")
 
-    def test_udf_transpile_comparison_of_comparisons_is_boolean(self):
-        # A comparison whose operands are comparisons or `and` / `or` is a bool.
-        # Classified numeric, it passed the return-type check for LongType and
-        # lowered to cast(bool as bigint) = 0/1 where the interpreted UDF returns
-        # NULL, and as an if test or arithmetic operand it failed ANSI analysis
-        # instead of falling back. Covered on map, array and scalar columns.
         def map_nulls_differ(a: dict, b: dict):
             return (a is None) != (b is None)
 
@@ -3187,26 +3211,32 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         scalar_rows = [(1, 2), (None, 2), (None, None)]
         mixed_schema = "a array<int>, b long, c long"
         mixed_rows = [([1], 1, 2), ([1], 1, -2), (None, 20, 30)]
+        ternary_schema = "a long, b long, c boolean"
+        ternary_rows = [(1, 2, True), (None, 2, True), (1, None, False)]
+        string_schema = "a string, b string"
+        string_rows = [("xa", "xb"), ("xa", "b"), ("a", "b")]
         # The interpreted LongType converter nulls a bool; `bool * int` is an int.
         bool_typed = "a bool-typed lowering"
         nulls = [None, None, None]
-        with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows, needle, expected in (
-                (map_nulls_differ, map_schema, map_rows, bool_typed, nulls),
-                (array_nulls_differ, array_schema, array_rows, bool_typed, nulls),
-                (scalar_nulls_differ, scalar_schema, scalar_rows, bool_typed, nulls),
-                (map_is_none_is_none, "a map<string,int>", [({"x": 1},)], bool_typed, [None]),
-                (map_nulls_differ_times_two, map_schema, map_rows, "Mult", [0, 2, 0]),
-                (signs_match, mixed_schema, mixed_rows, bool_typed, nulls),
-                (both_positive_matches, mixed_schema, mixed_rows, bool_typed, nulls),
-            ):
-                with self.subTest(func=func.__name__, schema=schema):
-                    u, reasons = self._fallback_reason(func, LongType())
-                    self.assertIn(needle, reasons)
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+        for func, schema, rows, needle, expected in (
+            (ternary_is_none, ternary_schema, ternary_rows, bool_typed, nulls),
+            (prefixes_differ, string_schema, string_rows, bool_typed, nulls),
+            (map_nulls_differ, map_schema, map_rows, bool_typed, nulls),
+            (array_nulls_differ, array_schema, array_rows, bool_typed, nulls),
+            (scalar_nulls_differ, scalar_schema, scalar_rows, bool_typed, nulls),
+            (map_is_none_is_none, "a map<string,int>", [({"x": 1},)], bool_typed, [None]),
+            (map_nulls_differ_times_two, map_schema, map_rows, "Mult", [0, 2, 0]),
+            (signs_match, mixed_schema, mixed_rows, bool_typed, nulls),
+            (both_positive_matches, mixed_schema, mixed_rows, bool_typed, nulls),
+        ):
+            with self.subTest(func=func.__name__, schema=schema):
+                self.assertEqual(
+                    self._fallback_vals(func, LongType(), schema, rows, needle), expected
+                )
 
         for func, schema, rows, expected in (
+            (ternary_is_none, ternary_schema, ternary_rows, [False, True, True]),
+            (prefixes_differ, string_schema, string_rows, [False, True, False]),
             (map_nulls_differ, map_schema, map_rows, [False, True, False]),
             (array_nulls_differ, array_schema, array_rows, [False, True, False]),
             (scalar_nulls_differ, scalar_schema, scalar_rows, [False, True, False]),
@@ -3275,43 +3305,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ):
                 with self.subTest(func=func.__name__):
                     self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
-
-    def test_annotation_category_element_aware_array(self):
-        # A list annotation naming its element type pins an element-aware category,
-        # recursively; Optional[X] / X | None pin what X does.
-        import ast as _ast
-
-        from pyspark.sql.transpile import _annotation_category
-
-        for ann, expected in [
-            ("list[int]", "array<integer>"),
-            ("List[str]", "array<string>"),
-            ("typing.List[float]", "array<float>"),
-            ("list[bool]", "array<bool>"),
-            ("list[bytes]", "array<binary>"),
-            ("list[list[int]]", "array<array<integer>>"),
-            ("list[dict]", "array<map>"),
-            ("list[list]", "array<array>"),
-            ("list[Any]", "array"),
-            ("list[Sequence[int]]", "array"),  # an element that pins nothing
-            ("list[int, str]", "array"),
-            ("list[Optional[int]]", "array<integer>"),
-            ("list[int | None]", "array<integer>"),
-            ("list['int']", "array<integer>"),
-            ("\"list[list['str']]\"", "array<array<string>>"),
-            ("Optional[list[int]]", "array<integer>"),
-            ("typing.Optional[list[int]]", "array<integer>"),
-            ("list[int] | None", "array<integer>"),
-            ("Optional[int]", "integer"),
-            ("None | str", "string"),
-            ('"Optional[bytes]"', "binary"),
-            ("Optional", None),
-            ("int | str", None),
-            ("Optional[Sequence[int]]", None),
-        ]:
-            with self.subTest(ann=ann):
-                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
-                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
 
     def test_element_aware_array_category_predicates(self):
         from pyspark.sql.transpile import (
@@ -3528,14 +3521,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ),
         ):
             with self.subTest(func=func.__name__):
-                with self.sql_conf(_TRANSPILE_ON):
-                    u, reasons = self._fallback_reason(func, BooleanType())
-                    self.assertIn(needle, reasons)
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual(
-                        [r[0] for r in df.select(u(*df.columns)).collect()],
-                        [func(*row) for row in rows],
-                    )
+                self.assertEqual(
+                    self._fallback_vals(func, BooleanType(), schema, rows, needle),
+                    [func(*row) for row in rows],
+                )
 
     def test_udf_transpile_element_aware_array_branches(self):
         # Two branches of one element-aware array category (or one and None) have
@@ -3573,14 +3562,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (unknown_element, "a array<int>, b array<binary>, c boolean", [([1], None, False)]),
         ):
             with self.subTest(func=func.__name__):
-                with self.sql_conf(_TRANSPILE_ON):
-                    u, reasons = self._fallback_reason(func, BooleanType())
-                    self.assertIn("if/else branches have a `map`/`array` operand", reasons)
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual(
-                        [r[0] for r in df.select(u(*df.columns)).collect()],
-                        [func(*row) for row in rows],
-                    )
+                self.assertEqual(
+                    self._fallback_vals(
+                        func, BooleanType(), schema, rows, "if/else branches have a `map`/`array`"
+                    ),
+                    [func(*row) for row in rows],
+                )
 
     def test_udf_transpile_integer_eq_no_nan_guard(self):
         # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never

@@ -192,16 +192,24 @@ def _is_complex_cat(cat: Optional[str]) -> bool:
     return cat in ("map", "array") or _array_element_cat(cat) is not None
 
 
+def _array_leaf_cat(cat: Optional[str]) -> Optional[str]:
+    """The innermost element category of an ``"array<c>"``, through any nesting
+    (``"array<array<string>>"`` -> ``"string"``), or ``None`` when ``cat`` is not
+    an element-aware array."""
+    elem = _array_element_cat(cat)
+    while (inner := _array_element_cat(elem)) is not None:
+        elem = inner
+    return elem
+
+
 def _is_fully_known_array_cat(cat: Optional[str]) -> bool:
     """True for an ``"array<c>"`` whose element category is known all the way
     down and is not a map: ``"array<integer>"`` or ``"array<array<string>>"``,
     but not ``"array"``, ``"array<array>"`` or ``"array<map>"``. Two such
     operands of the same category share an analysis-valid common type, so a
     lowered CASE WHEN over them type-checks."""
-    elem = _array_element_cat(cat)
-    if elem is None:
-        return False
-    return not _is_complex_cat(elem) or _is_fully_known_array_cat(elem)
+    leaf = _array_leaf_cat(cat)
+    return leaf is not None and not _is_complex_cat(leaf)
 
 
 # Element categories whose Spark `=` agrees with Python's `==`, NULL elements
@@ -214,10 +222,22 @@ _EQUATABLE_ELEMENT_CATS = frozenset(("integer", "string", "bool", "binary"))
 def _is_equatable_array_cat(cat: Optional[str]) -> bool:
     """True for an ``"array<c>"`` that ``==``/``!=`` can lower to Spark's ``=``:
     ``c`` is in ``_EQUATABLE_ELEMENT_CATS`` or is itself such an array."""
-    elem = _array_element_cat(cat)
-    if elem is None:
-        return False
-    return elem in _EQUATABLE_ELEMENT_CATS or _is_equatable_array_cat(elem)
+    return _array_leaf_cat(cat) in _EQUATABLE_ELEMENT_CATS
+
+
+def _complex_operands_ok(
+    pred: Callable[[Optional[str]], bool],
+    lc: Optional[str],
+    rc: Optional[str],
+    left: Optional[ast.AST],
+    right: Optional[ast.AST],
+) -> bool:
+    """For two operands, at least one a ``map``/``array``: ``pred`` holds for the
+    complex operand's category, and the other operand is the same category or a
+    ``None`` literal -- not an operand whose category is merely unknown, which
+    could be anything."""
+    cat, other = (lc, right) if _is_complex_cat(lc) else (rc, left)
+    return pred(cat) and (lc == rc or _is_none_literal(other))
 
 
 class AbstractTranspiler(object):
@@ -272,21 +292,17 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
         case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
             # len() always returns an int: CPython raises if __len__ returns anything else.
             return True
+        # A ternary and `and` / `or` yield one of their operands, and a bool is
+        # basic. Without these, a comparison on them (`(a if c else b) is None`,
+        # `(a is None) != (b is None)`) was not seen as boolean and fell to
+        # `_category`'s numeric catch-all, so a bool body passed the return-type
+        # check for a numeric return type.
         case ast.IfExp(body=body, orelse=orelse):
-            # A ternary yields one of its branches. Without this, a comparison on
-            # one (`(a if c else b) is None`) was not seen as boolean and fell to
-            # `_category`'s numeric catch-all, so a bool body passed the
-            # return-type check for a numeric return type.
             return _is_definitely_basic_type(body) and _is_definitely_basic_type(orelse)
-        case ast.Compare(left=left, comparators=comparators):
-            # A comparison of basic operands is a bool, and `and` / `or` yield one
-            # of their operands. Without these, a comparison of comparisons
-            # (`(a is None) != (b is None)`) was not seen as boolean and fell to
-            # `_category`'s numeric catch-all, so a bool body passed the
-            # return-type check for a numeric return type.
-            return all(_is_definitely_basic_type(v) for v in [left] + comparators)
         case ast.BoolOp(values=values):
             return all(_is_definitely_basic_type(v) for v in values)
+        case _ if _is_definitely_boolean(node):
+            return True
         case _:
             return False
 
@@ -547,12 +563,9 @@ class CatalystTranspiler(AbstractTranspiler):
             # branch unifies with either. Anything else -- a map, an array whose
             # element type is not known, or an operand whose category is unknown
             # -- may have no common type, failing analysis instead of falling back.
-            def compatible(cat: Optional[str], other: Optional[ast.AST]) -> bool:
-                return _is_fully_known_array_cat(cat) and (
-                    _is_none_literal(other) or self._safe_category(params, other) == cat
-                )
-
-            if not (compatible(body_cat, else_node) or compatible(else_cat, body_node)):
+            if not _complex_operands_ok(
+                _is_fully_known_array_cat, body_cat, else_cat, body_node, else_node
+            ):
                 raise UnsupportedOperationException(
                     "if/else branches have a `map`/`array` operand without a "
                     "matching element-aware array category on the other side; "
@@ -629,15 +642,8 @@ class CatalystTranspiler(AbstractTranspiler):
                     "or fail analysis, so the transpiler falls back to interpreted Python"
                 )
         if _is_complex_cat(lc) or _is_complex_cat(rc):
-            # A map is not orderable, so `=` fails analysis -- even vs None, which
-            # coerces to MapType first. A bare "array" says nothing about the element
-            # type (map elements fail the same way), nor the elements' collation, so
-            # it is refused too (SPARK-55219). An element-aware array is lowered when
-            # its elements compare in Spark as in Python and the other operand is
-            # the same category (checked above) or a None literal -- not an operand
-            # whose category is merely unknown, which could be anything.
-            other = right_node if _is_complex_cat(lc) else left_node
-            if not (_is_equatable_array_cat(lc or rc) and (lc == rc or _is_none_literal(other))):
+            # See the docstring: maps and bare arrays are always refused.
+            if not _complex_operands_ok(_is_equatable_array_cat, lc, rc, left_node, right_node):
                 raise UnsupportedOperationException(
                     f"`==`/`!=` has a `map`/`array` operand ({lc} vs {rc}); Spark's "
                     "`=` fails analysis or diverges from Python there, so the "
@@ -1433,10 +1439,10 @@ def _annotation_candidates(annotation: Optional[ast.AST]) -> List[str]:
     is a ``Sequence`` too, so pinning it to an array alone would drop the option
     a string column matches. Anything else is untyped and is tried as each
     numeric and string variant."""
+    annotation = _strip_optional(annotation)
     cat = _annotation_category(annotation)
     if cat is not None:
         return [cat]
-    annotation = _strip_optional(annotation)
     if _annotation_name(annotation) == "Sequence":
         return [_array_annotation_category(annotation), "string"]
     return ["integer", "float", "string"]

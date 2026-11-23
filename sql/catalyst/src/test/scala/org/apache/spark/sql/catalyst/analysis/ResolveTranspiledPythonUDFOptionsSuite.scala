@@ -89,33 +89,18 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
   }
 
   test("keeps a map/array option only for a matching map/array column") {
-    // `def f(x: dict, y: int): return y + 1` (SPARK-55219). AttributeReference directly
-    // because the `$"a".map(...)` DSL collides with TreeNode.map.
-    val n = $"b".long
-    val opt = Add(n, Literal(1L))
-    val mapT = MapType(StringType, StringType)
-    val arrT = ArrayType(StringType)
-    Seq(("map", mapT, arrT), ("array", arrT, mapT)).foreach {
-      case (category, dt, otherDt) =>
-        def node(first: AttributeReference): TranspiledPythonUDF = TranspiledPythonUDF(
-          "udf", pyUDF(Seq(first, n)), List(opt), List(List(category, "numeric")))
-        val c = AttributeReference("a", dt)()
-        val pruned = prune(node(c), LocalRelation(c, n))
-        assert(pruned.transpiledOptions == List(opt))
-        assert(pruned.optionInputCategories.isEmpty)
-        Seq($"a".string, AttributeReference("a", otherDt)()).foreach { wrong =>
-          assert(prune(node(wrong), LocalRelation(wrong, n)).transpiledOptions.isEmpty)
-        }
-    }
-  }
-
-  test("matches an element-aware array category only by its element type") {
-    // `def f(x: list[int], y: int): return y + 1`: "array<c>" matches an ArrayType whose
-    // element type matches c, recursively, under the same rules as a top-level c.
+    // `def f(x: dict, y: int): return y + 1` (SPARK-55219). An element-aware "array<c>"
+    // (`x: list[int]`) matches an ArrayType whose element type matches c, recursively,
+    // under the same rules as a top-level c. AttributeReference directly because the
+    // `$"a".map(...)` DSL collides with TreeNode.map.
     val n = $"b".long
     val opt = Add(n, Literal(1L))
     val lcase = StringType("UTF8_LCASE")
+    val mapT = MapType(StringType, StringType)
+    val arrT = ArrayType(StringType)
     val cases: Seq[(String, Seq[DataType], Seq[DataType])] = Seq(
+      ("map", Seq(mapT), Seq(StringType, arrT)),
+      ("array", Seq(arrT), Seq(StringType, mapT)),
       ("array<integer>",
         Seq(ArrayType(IntegerType), ArrayType(LongType, containsNull = false)),
         Seq(ArrayType(DoubleType), ArrayType(DecimalType(10, 2)), ArrayType(StringType),
@@ -149,7 +134,10 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
         val c = AttributeReference("a", dt)()
         val node = TranspiledPythonUDF(
           "udf", pyUDF(Seq(c, n)), List(opt), List(List(category, "numeric")))
-        prune(node, LocalRelation(c, n)).transpiledOptions == List(opt)
+        val pruned = prune(node, LocalRelation(c, n))
+        val kept = pruned.transpiledOptions == List(opt)
+        if (kept) assert(pruned.optionInputCategories.isEmpty)
+        kept
       }
       matching.foreach(dt => assert(keeps(dt), s"$category should match $dt"))
       other.foreach(dt => assert(!keeps(dt), s"$category should not match $dt"))
