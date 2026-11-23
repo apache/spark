@@ -68,6 +68,23 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
    */
   protected def parse[T](command: String, withOptionalReferences: Boolean)(
       toResult: SqlBaseParser => T): T = {
+    val currentOrigin = CurrentOrigin.get
+    currentOrigin.positionMapper match {
+      case Some(mapper) if mapper.substitutedText != command =>
+        val originalOrigin = currentOrigin.copy(
+          startIndex = currentOrigin.startIndex.map(mapper.mapToOriginal),
+          stopIndex = currentOrigin.stopIndex.map(mapper.mapStopToOriginal),
+          sqlText = Some(mapper.originalText),
+          positionMapper = None)
+        CurrentOrigin.withOrigin(originalOrigin) {
+          parseCommand(command, withOptionalReferences)(toResult)
+        }
+      case _ => parseCommand(command, withOptionalReferences)(toResult)
+    }
+  }
+
+  private def parseCommand[T](command: String, withOptionalReferences: Boolean)(
+      toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
@@ -83,16 +100,26 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
       AbstractParser.restartWithOptionalReferences(parser, tokenStream)
     }
 
+    // Error positions are reported in original SQL coordinates when parameters were substituted,
+    // so show the original text as the command to keep the "== SQL ==" arrow on the right line.
+    val reportedCommand = CurrentOrigin.get.positionMapper match {
+      case Some(mapper) if mapper.substitutedText == command => mapper.originalText
+      case _ => command
+    }
+
     try {
       AbstractParser.executeWithTwoStageStrategy(parser, tokenStream, toResult)
     } catch {
       case e: ParseException if e.command.isDefined =>
+        if (e.command.contains(command) && reportedCommand != command) {
+          throw e.withCommand(reportedCommand)
+        }
         throw e
       case e: ParseException =>
-        throw e.withCommand(command)
+        throw e.withCommand(reportedCommand)
       case e: SparkThrowable with WithOrigin =>
         throw new ParseException(
-          command = Option(command),
+          command = Option(reportedCommand),
           start = e.origin,
           errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
@@ -166,19 +193,53 @@ case object ParseErrorListener extends BaseErrorListener {
       e: RecognitionException): Unit = {
     val start = offendingSymbol match {
       case token: CommonToken =>
-        Origin(Some(line), Some(token.getCharPositionInLine))
+        SparkParserUtils.position(token)
       case _ =>
-        Origin(Some(line), Some(charPositionInLine))
+        SparkParserUtils.position(line, charPositionInLine)
+    }
+    val queryContext = offendingSymbol match {
+      case token: Token =>
+        originalTokenContext(token, start).getOrElse(ParseException.getQueryContext())
+      case _ => ParseException.getQueryContext()
     }
     e match {
       case sre: SparkRecognitionException if sre.errorClass.isDefined =>
-        throw new ParseException(None, start, sre.errorClass.get, sre.messageParameters)
+        throw new ParseException(
+          None,
+          start,
+          sre.errorClass.get,
+          sre.messageParameters,
+          queryContext)
       case _ =>
         throw new ParseException(
           command = None,
           start = start,
           errorClass = "PARSE_SYNTAX_ERROR",
-          messageParameters = Map("error" -> msg, "hint" -> ""))
+          messageParameters = Map("error" -> msg, "hint" -> ""),
+          queryContext = queryContext)
+    }
+  }
+
+  /**
+   * When the statement was parsed after parameter substitution, build a query context that covers
+   * the offending token in the original SQL text. A token inside a substituted value maps to the
+   * whole parameter marker. Returns None when there is no position mapper or the mapped range is
+   * not a valid range of the original text.
+   */
+  private def originalTokenContext(token: Token, start: Origin): Option[Array[QueryContext]] = {
+    val currentOrigin = CurrentOrigin.get
+    currentOrigin.positionMapper.flatMap { mapper =>
+      val originalStart = mapper.mapToOriginal(token.getStartIndex)
+      val originalStop = math.max(originalStart, mapper.mapStopToOriginal(token.getStopIndex))
+      val context = SQLQueryContext(
+        start.line,
+        start.startPosition,
+        Some(originalStart),
+        Some(originalStop),
+        Some(mapper.originalText),
+        currentOrigin.objectType,
+        currentOrigin.objectName)
+      Some(context).filter(_.isValid).map(c => Array[QueryContext](c))
     }
   }
 }

@@ -185,8 +185,13 @@ class SingleStatementExec(
    *   SQL query text.
    */
   def getText: String = {
-    assert(origin.sqlTextSlice.isDefined)
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.positionMapper match {
+      case Some(mapper) =>
+        mapper.originalFragment(origin.startIndex.get, origin.stopIndex.get)
+      case None =>
     origin.sqlTextSlice.get
+  }
   }
 
   /**

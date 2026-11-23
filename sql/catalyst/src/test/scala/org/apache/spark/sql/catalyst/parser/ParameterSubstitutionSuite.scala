@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.antlr.v4.runtime.CommonToken
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 
 /**
  * Test suite for the new parameter substitution architecture.
@@ -135,8 +137,12 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val emoji = new String(Character.toChars(0x1F4AA)) // supplementary char (2 UTF-16 code units)
     val context = NamedParameterContext(Map("team" -> Literal("abc")))
     val sql = s"SELECT '${emoji}' AS a FROM T WHERE :team IS NULL"
-    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, mapper, _) =
+      ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${emoji}' AS a FROM T WHERE 'abc' IS NULL")
+    val whereStart = result.codePointCount(0, result.indexOf("WHERE"))
+    val whereStop = result.codePointCount(0, result.length) - 1
+    assert(mapper.originalFragment(whereStart, whereStop) === "WHERE :team IS NULL")
   }
 
   test("ParameterHandler - positional parameter with emoji in SQL") {
@@ -185,6 +191,113 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(ctx.stopIndex === original.codePointCount(0, original.length) - 1)
   }
 
+  test("origin range inside a shorter or longer replacement maps to the parameter marker") {
+    Seq("longParameter" -> "x", "p" -> "a much longer value").foreach { case (name, value) =>
+      val marker = s":$name"
+      val original = s"SELECT $marker"
+      val ParameterSubstitution(substituted, _, mapper, _) =
+        ParameterHandler.substituteParameters(
+          original,
+          NamedParameterContext(Map(name -> Literal(value))))
+      val replacementStart = "SELECT ".length
+      val origin = Origin(
+        sqlText = Some(substituted),
+        startIndex = Some(replacementStart),
+        stopIndex = Some(substituted.length - 1),
+        positionMapper = Some(mapper))
+      val context = origin.context.asInstanceOf[SQLQueryContext]
+      assert(context.fragment === marker)
+      assert(context.startIndex === original.indexOf(marker))
+      assert(context.stopIndex === original.length - 1)
+    }
+  }
+
+  test("PositionMapper maps line and column in Unicode and multiline SQL") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val marker = ":longParameter"
+    val replacement = "'first\nsecond'"
+    val original = s"SELECT '$emoji'\nFROM $marker, missing"
+    val substituted = s"SELECT '$emoji'\nFROM $replacement, missing"
+    val markerStart = original.codePointCount(0, original.indexOf(marker))
+    val mapper = PositionMapper(
+      original,
+      substituted,
+      List(
+        Substitution(ParameterLocation(markerStart, markerStart + marker.length), replacement)))
+    val missingCharIndex = substituted.indexOf("missing")
+    val missingStart = substituted.codePointCount(0, missingCharIndex)
+    val substitutedLineStart = substituted.lastIndexOf('\n', missingCharIndex - 1) + 1
+    val substitutedLine = substituted.substring(0, substitutedLineStart).count(_ == '\n') + 1
+    val substitutedPosition = substituted.codePointCount(substitutedLineStart, missingCharIndex)
+    val linePrefix = original.substring(original.indexOf("FROM"), original.indexOf("missing"))
+    val expectedPosition = linePrefix.codePointCount(0, linePrefix.length)
+    assert(mapper.mapToOriginalLineAndPosition(missingStart) === (2, expectedPosition))
+    assert(
+      mapper.mapLineAndPositionToOriginal(substitutedLine, substitutedPosition) ===
+        (2, expectedPosition))
+  }
+
+  test("ParseErrorListener maps positions through the parameter mapper") {
+    val original = "SELECT 'prefix':longParameter, missing"
+    Seq[Any](1, "a much longer value").foreach { value =>
+      val ParameterSubstitution(substituted, _, mapper, _) =
+        ParameterHandler.substituteParameters(
+          original,
+          NamedParameterContext(Map("longParameter" -> Literal(value))))
+      val substitutedStart = substituted.indexOf("missing")
+      val token = new CommonToken(0)
+      token.setStartIndex(substitutedStart)
+      token.setStopIndex(substitutedStart + "missing".length - 1)
+      token.setLine(1)
+      token.setCharPositionInLine(substitutedStart)
+
+      val exception = CurrentOrigin.withOrigin(Origin(positionMapper = Some(mapper))) {
+        intercept[ParseException] {
+          ParseErrorListener.syntaxError(
+            null,
+            token,
+            1,
+            substitutedStart,
+            "test syntax error",
+            null)
+        }
+      }
+      assert(mapper.mapToOriginal(substitutedStart) === original.indexOf("missing"))
+      assert(exception.line === Some(1))
+      assert(exception.startPosition === Some(original.indexOf("missing")))
+      val context = exception.getQueryContext.head.asInstanceOf[SQLQueryContext]
+      assert(context.fragment === "missing")
+    }
+  }
+
+  test("parse error inside a replacement underlines the marker in the original SQL") {
+    val original = "SELECT :a, CAST(1 AS DECIMAL(:second))"
+    val marker = ":second"
+    val ParameterSubstitution(substituted, _, mapper, _) =
+      ParameterHandler.substituteParameters(
+        original,
+        NamedParameterContext(Map("a" -> Literal("abc\ndef"), "second" -> Literal("not_int"))))
+    val withoutOuterContext = Origin(positionMapper = Some(mapper))
+    val withOuterContext = withoutOuterContext.copy(
+      sqlText = Some(substituted),
+      startIndex = Some(0),
+      stopIndex = Some(substituted.codePointCount(0, substituted.length) - 1))
+    Seq(withoutOuterContext, withOuterContext).foreach { origin =>
+      val exception = CurrentOrigin.withOrigin(origin) {
+        intercept[ParseException] {
+          CatalystSqlParser.parsePlan(substituted)
+        }
+      }
+      assert(exception.line === Some(1))
+      assert(exception.startPosition === Some(original.indexOf(marker)))
+      val context = exception.getQueryContext.head.asInstanceOf[SQLQueryContext]
+      assert(context.sqlText === Some(original))
+      assert(context.fragment === marker)
+      assert(exception.getMessage.contains(
+        s"$original\n${" " * original.indexOf(marker)}${"^" * marker.length}\n"))
+    }
+  }
+
   test("PositionMapper maps past a supplementary replacement in code points") {
     val emoji = new String(Character.toChars(0x1F600))
     val original = "SELECT :p AS a, DATE 'bad'"
@@ -192,6 +305,18 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
       original, NamedParameterContext(Map("p" -> Literal(emoji))))
     val dateInSubstituted = substituted.codePointCount(0, substituted.indexOf("DATE"))
     assert(mapper.mapToOriginal(dateInSubstituted) === original.indexOf("DATE"))
+  }
+
+  test("PositionMapper accounts for quote-adjacent separator spaces") {
+    val original = "SELECT 'prefix':hello, missing"
+    val ParameterSubstitution(substituted, _, mapper, _) =
+      ParameterHandler.substituteParameters(
+        original,
+        NamedParameterContext(Map("hello" -> Literal("value"))))
+    assert(substituted === "SELECT 'prefix' 'value', missing")
+    val missingStart = substituted.indexOf("missing")
+    assert(mapper.mapToOriginal(missingStart) === original.indexOf("missing"))
+    assert(mapper.originalFragment(0, substituted.length - 1) === original)
   }
 
   test("Large parameter set") {

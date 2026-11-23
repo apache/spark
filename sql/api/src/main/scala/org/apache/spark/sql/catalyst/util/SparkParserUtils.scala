@@ -188,8 +188,25 @@ trait SparkParserUtils {
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
-    val opt = Option(token)
-    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
+    Option(token) match {
+      case Some(value) =>
+        CurrentOrigin.get.positionMapper match {
+          case Some(mapper) =>
+            val mapped = mapper.mapToOriginalLineAndPosition(value.getStartIndex)
+            Origin(Some(mapped._1), Some(mapped._2))
+          case None =>
+            Origin(Some(value.getLine), Some(value.getCharPositionInLine))
+        }
+      case None => Origin()
+    }
+  }
+
+  /** Get an origin from a one-based line and zero-based column. */
+  def position(line: Int, startPosition: Int): Origin = {
+    val mapped = CurrentOrigin.get.positionMapper
+      .map(_.mapLineAndPositionToOriginal(line, startPosition))
+      .getOrElse((line, startPosition))
+    Origin(Some(mapped._1), Some(mapped._2))
   }
 
   /**
@@ -238,20 +255,27 @@ trait SparkParserUtils {
     // Get the current origin to check for position mapper.
     val currentOrigin = CurrentOrigin.get
 
-    // Don't map positions yet - store them as-is along with the mapper.
-    // Position mapping will be applied when creating query context for errors.
-    val (text, mapper) = currentOrigin.positionMapper match {
-      case Some(mapper) =>
-        // Store the mapper for later mapping.
-        (Some(mapper.originalText), Some(mapper))
-      case None =>
-        // No position mapper - use SQL text as-is.
-        (Some(sqlText), None)
+    // Keep indexes in the substituted text and map them when creating query context for errors.
+    // Map line and column now because AnalysisException exposes them directly.
+    // Store the text that was actually parsed (sqlText), so startIndex/stopIndex from the
+    // parser tokens refer to this string. We use sqlText regardless of whether a position
+    // mapper is present so that indices always match the stored string; the mapper (when
+    // present) is used later in Origin.context for error reporting only. For parameterized
+    // SQL, sqlText is the substituted string.
+    val text = Some(sqlText)
+    val mapper = currentOrigin.positionMapper
+
+    val (line, startPosition) = (startOpt, mapper) match {
+      case (Some(token), Some(positionMapper)) =>
+        val mapped = positionMapper.mapToOriginalLineAndPosition(token.getStartIndex)
+        (Some(mapped._1), Some(mapped._2))
+      case _ =>
+        (startOpt.map(_.getLine), startOpt.map(_.getCharPositionInLine))
     }
 
     Origin(
-      line = startOpt.map(_.getLine),
-      startPosition = startOpt.map(_.getCharPositionInLine),
+      line = line,
+      startPosition = startPosition,
       startIndex = startOpt.map(_.getStartIndex),
       stopIndex = stopOpt.map(_.getStopIndex),
       sqlText = text,
