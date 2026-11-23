@@ -158,14 +158,18 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * Checks, in append mode, for an operator that drops late rows after a stream-stream join that
-   * emits the rows of an input whose state has no cutoff, as
+   * Checks, in append mode, for an operator that drops late rows after a stream-stream join, when
+   * its event time can come from an input of the join whose state has no cutoff, as
    * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
-   * plan, whose join conditions eviction uses, with its CTE references inlined: the optimizer
-   * keeps some CTE definitions, such as MATERIALIZED ones, whose joins would be missed. A query
-   * from a checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   * plan, whose join conditions eviction uses, and in which the optimizer has replaced every CTE
+   * reference, MATERIALIZED ones included. A query from a checkpoint without
+   * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    // TODO: Update mode is not checked, although its aggregations also drop late rows.
+    if (outputMode != InternalOutputModes.Append) {
+      return
+    }
     // A stream-stream join without an equality predicate fails in planning with its own error.
     val hasJoinWithoutEquality = plan.exists {
       case j @ Join(l, r, _, _, _) => l.isStreaming && r.isStreaming &&
@@ -179,8 +183,7 @@ object UnsupportedOperationChecker extends Logging {
       SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
     try {
       plan.foreach { subPlan =>
-        // TODO: Update mode is not checked, although its aggregations also drop late rows.
-        if (outputMode == InternalOutputModes.Append && dropsLateRows(subPlan)) {
+        if (dropsLateRows(subPlan)) {
           subPlan.foreach {
             case j: Join if j ne subPlan =>
               // An input counts unless the operator's event times come only from other inputs.
@@ -223,31 +226,40 @@ object UnsupportedOperationChecker extends Logging {
     case _ => None
   }
 
-  // The columns of `join`'s output that the event-time columns of `operator`'s input are computed
-  // from, or None when the path from the operator down to the join has a node other than a
-  // projection, a filter, a watermark or an expansion, such as the one of a sliding window.
+  // The columns of `join`'s output that the event-time columns by which `operator` drops late rows
+  // are computed from: an aggregation's grouping columns, or else its input's columns. Projections
+  // and the expansion of a sliding window map their columns to the columns they read; any other
+  // node that is not stateful is followed into the one child that outputs all the traced columns.
+  // None for any other path, such as one through another stateful operator.
   private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
     def trace(plan: LogicalPlan, attrs: AttributeSet): Option[AttributeSet] = plan match {
       case p if p eq join => Some(attrs)
       case Project(list, child) =>
         trace(child, AttributeSet(list.filter(e => attrs.contains(e.toAttribute))
           .flatMap(_.references)))
-      case Filter(_, child) => trace(child, attrs)
-      case w: EventTimeWatermark => trace(w.child, attrs)
       case Expand(projections, output, child) =>
         trace(child, AttributeSet(output.indices.filter(i => attrs.contains(output(i)))
           .flatMap(i => projections.flatMap(_(i).references))))
+      case p if !isStatefulOperation(p) =>
+        p.children.filter(c => attrs.subsetOf(c.outputSet)) match {
+          case Seq(child) => trace(child, attrs)
+          case _ => None
+        }
       case _ => None
     }
     operator.children.find(_.exists(_ eq join)).flatMap { child =>
-      trace(child, AttributeSet(child.output.filter(hasEventTimeCol)))
+      val eventTimes = operator match {
+        case a: Aggregate => a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol)
+        case _ => child.output.filter(hasEventTimeCol)
+      }
+      // An operator without such a column filters none of the join's rows.
+      if (eventTimes.isEmpty) Some(AttributeSet.empty) else trace(child, AttributeSet(eventTimes))
     }
   }
 
-  // A stateful operator that drops the input rows below its watermark for late rows. Its
-  // physical operator filters by an event-time column of its input, so it needs one.
-  private def dropsLateRows(p: LogicalPlan): Boolean = p.isStreaming &&
-    p.children.exists(_.output.exists(hasEventTimeCol)) && (p match {
+  // A stateful operator that drops the input rows below its watermark for late rows, by an
+  // event-time column of its input.
+  private def dropsLateRows(p: LogicalPlan): Boolean = p.isStreaming && (p match {
       case _: Aggregate | _: Distinct | _: Deduplicate | _: DeduplicateWithinWatermark => true
       case Join(left, right, _, _, _) => left.isStreaming && right.isStreaming
       case f: FlatMapGroupsWithState => f.timeout == GroupStateTimeout.EventTimeTimeout

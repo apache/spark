@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -1115,6 +1116,33 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       } else {
         check()
       }
+    }
+  }
+
+  // Each of these passes only because of one condition: the left semi join emits only its left
+  // input, an operator whose input has no event time filters no joined row, and a join input
+  // without an event time emits none. A union with the same child twice is a path that the trace
+  // cannot follow.
+  Seq[(String, LogicalPlan)](
+    "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime), {
+      val semi = Join(TestStreamingRelation(Seq(leftKey, leftTime)),
+        TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
+        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE)
+      Union(Seq(semi, semi))
+    }),
+    "an operator whose input has no event time" ->
+      Deduplicate(Seq(leftKey), Aggregate(Seq(leftKey), Seq(leftKey), keyOnlyJoin)),
+    "a watermark above a join of inputs without one" -> {
+      val (lt, rt) = (leftTime.withMetadata(Metadata.empty), rightTime.withMetadata(Metadata.empty))
+      val watermarked = EventTimeWatermark(java.util.UUID.randomUUID(), lt,
+        new CalendarInterval(0, 0, 1000000L),
+        joinOf(Seq(leftKey, lt), Seq(rightKey, rt), leftKey === rightKey))
+      val time = watermarked.output.find(_.semanticEquals(lt)).get
+      Aggregate(Seq(time), Seq(time), watermarked)
+    }
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: accept $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
     }
   }
 

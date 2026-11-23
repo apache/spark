@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -31,8 +31,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A stateful operator after a stream-stream join whose state of an input has no cutoff. The join
- * forwards its input watermark, so the operator would drop the old rows that the join emits.
+ * A stateful operator after a stream-stream join whose state of an input has no cutoff. The join's
+ * output watermark ignores that input, so the operator would drop the old rows the join emits.
  */
 class StreamingJoinOutputWatermarkSuite extends StreamTest {
   import testImplicits._
@@ -60,6 +60,10 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       .select($"window.start".cast("long"), $"count")
     (leftInput, rightInput, result)
   }
+
+  private def windowCount(joined: DataFrame, time: String): DataFrame =
+    joined.groupBy(window(col(time), "10 seconds")).count()
+      .select($"window.start".cast("long"), $"count")
 
   private val keyOnly = "leftKey = rightKey"
   private val oneSidedRange = "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 10 SECONDS"
@@ -99,14 +103,72 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       }
     }
 
-    test(s"reject a range join bounded on one side only before a node that the check does " +
-        s"not follow, V$version") {
+    // The check follows the event time of the aggregation, and only that column, through these
+    // shapes, so each runs with the time of the bounded left input and fails with the right one.
+    Seq[(String, (DataFrame, DataFrame, String) => DataFrame, Seq[Row], Seq[Row])](
+      ("a repartition", (l, r, t) => windowCount(l.join(r, expr(oneSidedRange)).repartition(2), t),
+        Seq(Row(0L, 1L)), Seq(Row(40L, 2L))),
+      ("a join with a static table", (l, r, t) => windowCount(l.join(r, expr(oneSidedRange))
+        .join(Seq(1, 2, 3).toDF("staticKey"), $"leftKey" === $"staticKey"), t),
+        Seq(Row(0L, 1L)), Seq(Row(40L, 2L))),
+      ("a MATERIALIZED CTE", (l, r, t) => {
+        l.createOrReplaceTempView("l")
+        r.createOrReplaceTempView("r")
+        spark.sql(s"WITH j AS MATERIALIZED (SELECT * FROM l JOIN r ON $oneSidedRange) " +
+          s"SELECT CAST(w.start AS BIGINT), count(*) FROM " +
+          s"(SELECT window($t, '10 seconds') AS w FROM j) GROUP BY w")
+      }, Seq(Row(0L, 1L)), Seq(Row(40L, 2L))),
+      ("a sliding window", (l, r, t) => l.join(r, expr(oneSidedRange))
+        .groupBy(window(col(t), "10 seconds", "5 seconds")).count()
+        .select($"window.start".cast("long"), $"count"),
+        Seq(Row(0L, 1L), Row(5L, 1L)), Seq(Row(35L, 2L), Row(40L, 2L))),
+      ("an aggregate function of the other input's time", (l, r, t) => l.join(r,
+        expr(oneSidedRange)).groupBy(window(col(t), "10 seconds"))
+        .agg(count("*").as("count"), max($"rightTime").cast("long").as("maxRightTime"))
+        .select($"window.start".cast("long"), $"count", $"maxRightTime"),
+        Seq(Row(0L, 1L, 8L)), Seq(Row(40L, 2L, 41L)))
+    ).foreach { case (shape, query, firstWindows, secondWindows) =>
+      test(s"a range join bounded on one side only before $shape, V$version") {
+        withJoinConf(version) {
+          withTempView("l", "r") {
+            val (leftInput, left) = input("left")
+            val (rightInput, right) = input("right")
+            testStream(query(left, right, "leftTime"))(
+              MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer(),
+              MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer(),
+              AddData(rightInput, (2, 41L)), CheckNewAnswer(firstWindows: _*),
+              MultiAddData(leftInput, (3, 100L))(rightInput, (3, 100L)), CheckNewAnswer(),
+              AddData(rightInput, (3, 101L)), CheckNewAnswer(secondWindows: _*))
+            val (otherLeftInput, otherLeft) = input("left")
+            val (_, otherRight) = input("right")
+            testStream(query(otherLeft, otherRight, "rightTime"))(
+              AddData(otherLeftInput, (1, 5L)), expectRejected("right"))
+          }
+        }
+      }
+    }
+
+    test(s"a range join bounded on one side only before a typed flatMapGroupsWithState with an " +
+        s"event-time timeout, V$version") {
       withJoinConf(version) {
-        val (leftInput, left) = input("left")
-        val (_, right) = input("right")
-        val result = left.join(right, expr(oneSidedRange)).repartition(2)
-          .groupBy(window($"leftTime", "10 seconds")).count()
-        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("right"))
+        def query(time: String)
+            : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], Dataset[(Int, Int)]) = {
+          val (leftInput, left) = input("left")
+          val (rightInput, right) = input("right")
+          val joined = left.join(right, expr(oneSidedRange)).select($"leftKey", col(time))
+          (leftInput, rightInput, joined.as[(Int, Timestamp)].groupByKey(_._1)
+            .flatMapGroupsWithState(OutputMode.Append(), GroupStateTimeout.EventTimeTimeout()) {
+              (key: Int, rows: Iterator[(Int, Timestamp)], _: GroupState[Int]) =>
+                Iterator(key -> rows.size)
+            })
+        }
+        val (leftInput, rightInput, accepted) = query("leftTime")
+        testStream(accepted)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer((1, 1)),
+          MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), CheckNewAnswer((2, 1)),
+          AddData(rightInput, (2, 41L)), CheckNewAnswer((2, 1)))
+        val (otherLeftInput, _, rejected) = query("rightTime")
+        testStream(rejected)(AddData(otherLeftInput, (1, 5L)), expectRejected("right"))
       }
     }
 
