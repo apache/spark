@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.planning.{ExtractAllEquiJoinKeys, ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -266,12 +266,12 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
           allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = right))
 
-    case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
-        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+    case p @ Project(_, ExtractAllEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
+        if right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) &&
           p.references.subsetOf(left.outputSet) =>
       p.copy(child = left)
-    case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
-        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+    case p @ Project(_, ExtractAllEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
+        if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) &&
           p.references.subsetOf(right.outputSet) =>
       p.copy(child = right)
   }
