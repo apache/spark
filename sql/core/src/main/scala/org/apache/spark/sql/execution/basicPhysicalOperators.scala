@@ -202,12 +202,12 @@ trait GeneratePredicateHelper extends PredicateHelper {
   }
 
   /**
-   * With `spark.sql.optimizer.evaluateNotNullChecksInOrder` (SPARK-60329), returns the placement
-   * of `notNullPreds` before `otherPreds`, or None without the config. A check can be generated
-   * at its position when it cannot raise itself and does not evaluate a computation that can. A
-   * conjunct moves the checks that precede it when evaluating it can be observed: it `mayRaise`,
-   * or evaluates a computation that can. `inputExprCode` must be the input variables of the
-   * predicate before any code is generated for it: a variable whose code is not empty is
+   * With `spark.sql.optimizer.evaluateNotNullChecksInOrder` (SPARK-60329), returns the placement of
+   * `notNullPreds` before `otherPreds`, or None without the config or without a check. A check can
+   * be generated at its position when it cannot raise itself and does not evaluate a computation
+   * that can. A conjunct moves the checks that precede it when evaluating it can be observed: it
+   * `mayRaise`, or evaluates a computation that can. `inputExprCode` must be the input variables of
+   * the predicate before any code is generated for it: a variable whose code is not empty is
    * evaluated on demand, so a check or a conjunct on its column evaluates the expression that
    * computes it, see `deferredMayRaise`. Each column is judged once.
    */
@@ -216,7 +216,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
       otherPreds: Seq[Expression],
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode]): Option[NotNullCheckPlacement] = {
-    if (conf.evaluateNotNullChecksInOrder) {
+    // Without a check to place, `precedingNotNullChecks` never reads the placement.
+    if (conf.evaluateNotNullChecksInOrder && notNullPreds.nonEmpty) {
       val deferred = deferredInputs(inputAttrs, inputExprCode)
       val raisingDeferred = mutable.HashMap.empty[Attribute, Boolean]
       def computesRaising(e: Expression): Boolean = e.references.exists { a =>
@@ -349,20 +350,22 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * generated at its position when the difference is observable:
    *
    *  - With `spark.sql.optimizer.evaluateNotNullChecksInOrder`, before a conjunct that
-   *    `placement` moves the checks before, the pending checks up to the first one that it does
-   *    not allow at its position, see `notNullCheckPlacement` (SPARK-60329). A check after that
-   *    one stays lazy too: generated before it, it could drop a row on which the earlier check
-   *    raises an error, as `And.eval` does.
-   *    Such a check only drops a row before an error the conjunct raises on it, as `And.eval`
-   *    does. With the config, `InferFiltersFromConstraints` places an inferred check just before
-   *    the first conjunct at which the conjuncts so far imply it, so it does not load its column
-   *    any earlier.
+   *    `placement` moves the checks before, the pending checks that it allows at their position,
+   *    see `notNullCheckPlacement` (SPARK-60329). Such a check only drops a row before an error
+   *    the conjunct raises on it, as `And.eval` does. With the config,
+   *    `InferFiltersFromConstraints` places an inferred check just before the first conjunct at
+   *    which the conjuncts so far imply it, so it does not load its column any earlier. A check
+   *    that is not allowed at its position keeps the lazy placement, so on a row on which it
+   *    raises, a check after it can drop the row first, where `And.eval` raises the error of the
+   *    earlier check. Codegen then raises less than `And.eval`, as it does when a later conjunct
+   *    drops such a row.
    *  - With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts
    *    after it are evaluated in the order of the condition: a FALSE IsNotNull check drops the
    *    row before an error a later conjunct raises on it (SPARK-60315). Once a conjunct that can
    *    be NULL has been generated (`afterNullable`), all the pending checks before a conjunct
    *    are generated when it or one of them `mayRaise`. The conjuncts before the first one that
-   *    can be NULL are never reached after a NULL conjunct.
+   *    can be NULL are never reached after a NULL conjunct, so the checks before them keep the
+   *    lazy placement.
    *
    * The exception to the order is a check on a column, or on an expression over the column, that
    * a later conjunct references: the check on the column is generated before the first such
@@ -389,7 +392,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     } else if (afterNullable && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
       pending
     } else if (placement.exists(_.movesChecks(k))) {
-      pending.takeWhile { case (_, idx) => placement.get.atPosition(idx) }
+      pending.filter { case (_, idx) => placement.get.atPosition(idx) }
     } else {
       Nil
     }

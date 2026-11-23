@@ -1926,8 +1926,11 @@ object SQLConf {
         "infers from the condition is placed just before the first conjunct at which the " +
         "conjuncts so far imply it, instead of at the front of the condition, so with " +
         "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
-        "function conjuncts that precede that one. A predicate pushed down to a DSv2 data " +
-        "source is still evaluated before the others, by the source or after the scan, while " +
+        "function conjuncts that precede that one, and after the ones that can raise an " +
+        "error: for example, an inferred `isnotnull(x)` no longer drops a row with a NULL `x` " +
+        "before `y + 1 > 0` raises on it in `y + 1 > 0 AND x > 0`. A predicate pushed down " +
+        "to a DSv2 data source is still evaluated before the others, by the source or after " +
+        "the scan, while " +
         "after the scan of a DSv1 source, a pushed predicate that the source does not handle " +
         "is evaluated after the ones that cannot be pushed down. When false, with whole-stage " +
         "codegen, a check is evaluated just before the first conjunct that references its " +

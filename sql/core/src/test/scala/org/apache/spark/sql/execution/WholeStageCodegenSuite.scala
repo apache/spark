@@ -3950,18 +3950,27 @@ class WholeStageCodegenSuite extends SharedSparkSession
             // row before the check does, while codegen off evaluates the check first.
             withSQLConf(notNullChecksInOrder) {
               val raisingCheck = "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND y + 1 > 0"
-              // A check that cannot raise, after one that can, stays lazy too: generated before
-              // the overflowing conjunct, the FALSE `x IS NOT NULL` would drop the first row on
-              // which the cast check, written before it, raises with codegen off.
+              if (codegen) {
+                checkArithmeticOverflow(raisingCheck)
+              } else {
+                checkCastInvalidInput(raisingCheck)
+              }
+              // A check that cannot raise is still generated at its position after one that
+              // stays lazy. It drops the first row before the overflowing conjunct, where codegen
+              // off raises the error of the cast check, written before it: codegen raises less,
+              // as when a later conjunct drops such a row.
               val afterRaisingCheck = "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND " +
                 "x IS NOT NULL AND y + 1 > 0"
-              Seq(raisingCheck, afterRaisingCheck).foreach { query =>
-                if (codegen) {
-                  checkArithmeticOverflow(query)
-                } else {
-                  checkCastInvalidInput(query)
-                }
+              if (codegen) {
+                checkAnswer(sql(afterRaisingCheck), Row(0))
+              } else {
+                checkCastInvalidInput(afterRaisingCheck)
               }
+              // `upper(s)` is not declared total, so its check keeps the lazy placement, but it
+              // is TRUE on the first row, and the check on `x` after it drops the row before the
+              // overflowing conjunct, with codegen on and off.
+              checkAnswer(sql("SELECT a FROM t WHERE upper(s) IS NOT NULL AND x IS NOT NULL AND " +
+                "y + 1 > 0"), Row(0))
             }
           }
         }
@@ -4053,6 +4062,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
           case _ => false
         })
         checkAnswer(limited, Row(0))
+        // So does a filter below in the same stage. Its nondeterministic condition keeps it from
+        // being combined with the one above.
+        val filtered = spark.table("t").select("a", "x", "y")
+          .where("monotonically_increasing_id() >= 0").where("x IS NOT NULL AND y + 1 > 0")
+          .select("a")
+        assert(filtered.queryExecution.executedPlan.exists {
+          case w: WholeStageCodegenExec => w.collect { case f: FilterExec => f }.length == 2
+          case _ => false
+        })
+        checkAnswer(filtered, Row(0))
         // The aggregate evaluates its inputs before its FILTER clause, here `c`, which
         // `x * 2` computes, so the check on it is generated before the overflowing `y + 1 > 0`.
         // `rand()` keeps the projection from collapsing into the aggregate.

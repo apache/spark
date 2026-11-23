@@ -2374,8 +2374,11 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(
       plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
-    // The new filters go ahead of the condition, so one over a column that can fail (see
-    // `failableOutput`) would compute that column on rows a conjunct of the condition drops.
+    // The new filters go ahead of the condition, or, with
+    // `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct at
+    // which the conjuncts so far imply it, see `withInferredPredicates`. Either way, one over a
+    // column that can fail (see `failableOutput`) would compute that column on rows that the
+    // conjuncts after it drop, so such a column gets none.
     case filter @ Filter(condition, child) =>
       val canAdd: Expression => Boolean =
         if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
@@ -2449,8 +2452,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * which the conjuncts so far, with the constraints of `child`, imply it, so that evaluating the
    * condition in its order does not evaluate it before the conjuncts that precede that one, whose
    * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`, or in
-   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints of the filter are computed for each
-   * prefix of the condition until every predicate is placed.
+   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints only grow with the prefix, so the first
+   * implying prefix of each predicate is found by a binary search over the prefixes, and the
+   * constraints of each prefix are computed once. The condition is rebuilt as a balanced tree, as
+   * the parser builds a long chain of `AND`.
    */
   private def withInferredPredicates(
       inferred: Seq[Expression],
@@ -2458,18 +2463,25 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       child: LogicalPlan): Expression = {
     if (conf.evaluateNotNullChecksInOrder) {
       val conjuncts = splitConjunctivePredicates(condition)
+      val implied = mutable.HashMap.empty[Int, ExpressionSet]
+      def impliedBy(k: Int): ExpressionSet = implied.getOrElseUpdate(k,
+        Filter(conjuncts.take(k + 1).reduce(And), child).constraints)
       val placed = Array.fill(conjuncts.length)(Seq.empty[Expression])
-      var remaining = inferred
-      var k = 0
-      while (remaining.nonEmpty && k < conjuncts.length) {
-        val implied = Filter(conjuncts.take(k + 1).reduce(And), child).constraints
-        val (now, later) = remaining.partition(implied.contains)
-        placed(k) = now
-        remaining = later
-        k += 1
+      // Places `preds`, each implied by the first `hi + 1` conjuncts and not by the first `lo`.
+      // The whole condition implies every inferred predicate, since they come from the
+      // constraints of the filter.
+      def place(preds: Seq[Expression], lo: Int, hi: Int): Unit = if (preds.nonEmpty) {
+        if (lo == hi) {
+          placed(lo) = preds
+        } else {
+          val mid = (lo + hi) / 2
+          val (atOrBefore, after) = preds.partition(impliedBy(mid).contains)
+          place(atOrBefore, lo, mid)
+          place(after, mid + 1, hi)
+        }
       }
-      // The whole condition implies every inferred predicate, so `remaining` is empty here.
-      (conjuncts.zip(placed).flatMap { case (c, ps) => ps :+ c } ++ remaining).reduce(And)
+      place(inferred, 0, conjuncts.length - 1)
+      buildBalancedPredicate(conjuncts.zip(placed).flatMap { case (c, ps) => ps :+ c }, And)
     } else {
       And(inferred.reduce(And), condition)
     }
