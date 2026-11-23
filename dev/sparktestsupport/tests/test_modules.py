@@ -227,3 +227,21 @@ class ModuleDefinitionsTests(unittest.TestCase):
 
     def test_sql_changes_do_not_select_rust_sdk_tests(self):
         self.assertNotIn(modules.rust_sdk, determine_modules_to_test([modules.sql]))
+
+    def test_lint_java_inputs_select_lint_java_module(self):
+        for filename in (
+            "core/src/main/java/org/apache/spark/JobExecutionStatus.java",
+            "common/tags/src/main/scala/org/apache/spark/annotation/package-info.java",
+            "dev/checkstyle.xml",
+            "dev/java-file-header",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.lint_java, changed_modules)
+                self.assertNotIn(modules.root, changed_modules)
+
+    def test_scala_changes_do_not_select_lint_java_module(self):
+        changed_modules = determine_modules_for_files(
+            ["core/src/main/scala/org/apache/spark/SparkContext.scala"]
+        )
+        self.assertNotIn(modules.lint_java, changed_modules)
