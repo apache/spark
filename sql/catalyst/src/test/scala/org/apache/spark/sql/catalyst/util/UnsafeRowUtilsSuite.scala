@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.TestUDT
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType, TestUDT}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
