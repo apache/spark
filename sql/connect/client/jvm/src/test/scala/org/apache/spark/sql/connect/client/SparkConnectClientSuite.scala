@@ -420,7 +420,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     classOf[UnsupportedOperationException],
     classOf[SparkUpgradeException]).map(_.getName)
 
-  // Entries whose exception type keeps the cause rebuilt from the server's error chain.
+  // Entries that keep the cause rebuilt from the server's error chain when the client renders the
+  // error. Each entry handles the cause the same way when the client cannot render the error, so
+  // the DateTimeException and NoSuchNamespaceException entries drop it in both cases, although
+  // their exception types can carry a cause.
   private val withCause = Set(
     classOf[AnalysisException].getName,
     classOf[TableAlreadyExistsException].getName,
