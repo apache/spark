@@ -670,7 +670,8 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     (leftInput, rightInput, joined)
   }
 
-  test("V4 restart from an older checkpoint fails when the opposite watermark picks another key") {
+  test("V4 restart from a checkpoint without the index version fails when the opposite watermark " +
+      "picks another key") {
     withJoinConf(4) {
       withTempDir { checkpoint =>
         val (leftInput, rightInput, joined) = crossedKeyJoin()
@@ -719,6 +720,58 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
               })
           }
         }
+      }
+    }
+  }
+
+  // Without the join output watermark check, the default mode keeps the shared key, as the legacy
+  // mode does.
+  test("V4 restart in the legacy mode of a crossed-key join without the join output watermark " +
+      "check") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, joined) = crossedKeyJoin()
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key -> "false") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
+            CheckNewAnswer(),
+            StopStream)
+        }
+        assert(indexVersion(checkpoint) === Some("1"))
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(rightInput, (5, 50)),
+            CheckNewAnswer(Row(5, 50, 5, 50)))
+        }
+      }
+    }
+  }
+
+  // A checkpoint of an earlier version records neither conf, so the join keeps the shared key and
+  // its earlier results.
+  test("V4 restart of a crossed-key join from a checkpoint of an earlier version") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, joined) = crossedKeyJoin()
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
+            CheckNewAnswer(),
+            MultiAddData(leftInput, (60, 100))(rightInput, (70, 50)),
+            CheckNewAnswer(),
+            StopStream)
+        }
+        removeConfs(checkpoint, indexVersionKey,
+          SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key)
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(leftInput, (70, 100)),
+          CheckNewAnswer(Row(5, 50, null, null)),
+          AddData(rightInput, (5, 50)),
+          CheckNewAnswer(Row(null, null, 5, 50)))
       }
     }
   }

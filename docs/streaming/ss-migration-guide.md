@@ -49,15 +49,16 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 - Since Spark 4.5, a stream-stream join whose inputs have watermarks on different equality keys, for
   example `la = ra AND lb = rb` with watermarks on `la` and `rb`, evicts the state of each input by
   the key that the opposite input's watermark bounds. Earlier versions evicted both by the same key
-  and could lose matches. In append mode, a new query fails when an operator that drops late rows
-  follows such a join, because the state of an input evicted by a key other than its event time
-  keeps rows of any event time. A row whose new eviction key is NULL, such as a left row with a NULL
-  `lb`, can never match: an outer join now emits it when it arrives. A NULL in `ra` keeps the
-  earlier handling. A query restarted from a checkpoint of an earlier version keeps evicting both
-  inputs by the same key, with the earlier handling of NULL keys; start it with a new checkpoint to
-  use the new rule. With state format version 4, such a join cannot restart after a change of
-  `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint. With
-  `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
+  and could lose matches. In append mode, a new query fails when an operator that drops late rows,
+  by an event time that can come from an input evicted by a key other than its event time, follows
+  such a join, because the state of that input keeps rows of any event time. Add a watermark on the
+  same join key of both inputs to run such a query. A row whose new eviction key is NULL, such as a
+  left row with a NULL `lb`, can never match: an outer join now emits it when it arrives. A NULL in
+  `ra` keeps the earlier handling. A query restarted from a checkpoint of an earlier version keeps
+  evicting both inputs by the same key, with the earlier handling of NULL keys; start it with a new
+  checkpoint to use the new rule. With state format version 4, such a join cannot restart after a
+  change of `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint.
+  With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
   behavior.
 
 - Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is
