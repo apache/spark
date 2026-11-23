@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.time.Duration
+
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DecimalType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -106,9 +108,70 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       assert(cutoff(leftTime.cast(dataType) >= rightTime.cast(dataType) - 5 &&
         leftTime.cast(LongType) > 10) === expected, dataType)
     }
+    // A cast to DECIMAL keeps every digit of a TIMESTAMP only with a scale of 6 or more, and a cast
+    // from DECIMAL only with a scale at least that of its input. One from DOUBLE can round.
+    Seq[(Expression => Expression, Option[Long])](
+        (_.cast(DecimalType(16, 5)), Some(10000L)),
+        (_.cast(DecimalType(20, 6)).cast(DecimalType(20, 3)), Some(10000L)),
+        (_.cast(DoubleType).cast(DecimalType(20, 6)), Some(10000L)),
+        (_.cast(DecimalType(20, 6)).cast(DecimalType(22, 6)), Some(94999L)))
+      .foreach { case (cast, expected) =>
+        assert(cutoff(cast(leftTime) >= cast(rightTime) - 5 &&
+          leftTime.cast(LongType) > 10) === expected, cast(leftTime))
+      }
     // The sum gives no cutoff that rises with the watermark, so it does not count.
     assert(cutoff(leftTime > rightTime &&
       leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === Some(100000L))
+  }
+
+  test("a cutoff through whole days in a time zone whose offset changes keeps the earlier " +
+      "minimum") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def cutoff(condition: Expression, risingCutoffsOnly: Boolean = true): Option[Long] =
+      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(leftTime)),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L), risingCutoffsOnly)
+    def plus(time: Expression, interval: Duration, zone: String): Expression =
+      TimestampAddInterval(time, Literal(interval), Some(zone))
+    val day = Duration.ofDays(1)
+    Seq(leftTime.cast(LongType) > 10,
+        leftTime.cast(LongType) + rightTime.cast(LongType) > 100).foreach { cap =>
+      Seq[String => Expression](
+          zone => rightTime <= plus(leftTime, day, zone),
+          zone => leftTime >= plus(rightTime, day.negated(), zone)).foreach { bound =>
+        val la = bound("America/Los_Angeles") && cap
+        assert(cutoff(la) === cutoff(la, risingCutoffsOnly = false), la)
+        assert(cutoff(la) !== Some(13599999L), la)
+        // UTC has a fixed offset, so a day lasts 24 hours.
+        assert(cutoff(bound("UTC") && cap) === Some(13599999L), bound("UTC"))
+      }
+      // Less than a day is added as an exact number of microseconds.
+      assert(cutoff(rightTime <= plus(leftTime, Duration.ofHours(23), "America/Los_Angeles") &&
+        cap) === Some(17199999L))
+    }
+  }
+
+  test("state value watermark column skips another column with an inexact cutoff when the " +
+      "event time is held back") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def column(condition: Expression): Option[Attribute] =
+      StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, expiry),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L)).map(_._1)
+    val inexact = expiry.cast(LongType) >= rightTime.cast(LongType)
+    val dayInterval =
+      rightTime <= TimestampAddInterval(expiry, Literal(Duration.ofDays(1)), Some("Europe/Paris"))
+    Seq(leftTime.cast(LongType) > 10,
+        leftTime.cast(LongType) + rightTime.cast(LongType) > 100).foreach { cap =>
+      assert(column(inexact && cap) === None, cap)
+      assert(column(dayInterval && cap) === None, cap)
+      assert(column(rightTime <= expiry && cap) === Some(expiry), cap)
+    }
+    // Without a cap on the event time, the inexact cutoff on expiry is all there is.
+    assert(column(inexact) === Some(expiry))
   }
 
   test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {

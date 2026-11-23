@@ -160,11 +160,13 @@ object UnsupportedOperationChecker extends Logging {
   /**
    * Checks, in append mode, for an operator that drops late rows after a stream-stream join, when
    * its event time can come from an input of the join that has a watermark but no state cutoff on
-   * its event time, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It
-   * takes the optimized plan, whose join conditions eviction uses, and in which the optimizer has
-   * replaced every CTE reference, MATERIALIZED ones included. A query from a checkpoint without
-   * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning, and its join keeps
-   * evicting by the event time an input that would otherwise be evicted by another column.
+   * its event time, even by the rule of earlier versions, which the join's output watermark keeps,
+   * or that the join evicts by another column, as [[checkStreamingQueryGlobalWatermarkLimit]] does
+   * for other operators. It takes the optimized plan, whose join conditions eviction uses, and in
+   * which the optimizer has replaced every CTE reference, MATERIALIZED ones included. A query from
+   * a checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning, and
+   * its join keeps evicting by the event time an input that would otherwise be evicted by another
+   * column.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     // TODO: Update mode is not checked, although its aggregations also drop late rows.
@@ -209,11 +211,13 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
-  // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
-  // it: no watermark in the join keys, and no range condition that bounds the input by the
-  // watermark of the other input. With allowMultiple, an input that eviction picks another column
-  // for counts too, since its state keeps rows of any event time, unless the checkpoint was written
-  // without this check, whose eviction keeps the event time. A left semi join only emits left rows.
+  // An input of a stream-stream join with an event time but no state cutoff, even from the
+  // constant-only and negative-sign conjuncts that earlier versions took and that the join's
+  // output watermark still takes: no watermark in the join keys, and no range condition that
+  // bounds the input by the watermark of the other input. With allowMultiple, an input that
+  // eviction picks another column for counts too, since its state keeps rows of any event time,
+  // unless the checkpoint was written without this check, whose eviction keeps the event time. A
+  // left semi join only emits left rows.
   // TODO: An input evicted by a join key other than its event time is not checked yet, such as
   //   the right input of `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs.
   private def joinInputWithoutStateCutoff(
