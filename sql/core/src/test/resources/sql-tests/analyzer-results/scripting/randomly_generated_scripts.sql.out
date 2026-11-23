@@ -317,7 +317,7 @@ BEGIN
         DECLARE v_product_name STRING;
         DECLARE v_supplier_id INT;
         DECLARE v_action_taken STRING;
-        FOR product AS SELECT p.product_id, p.product_name, p.supplier_id, p.product_quantity FROM products p JOIN suppliers s ON p.supplier_id = s.supplier_id LIMIT 5 DO
+        FOR product AS SELECT p.product_id, p.product_name, p.supplier_id, p.product_quantity FROM products p JOIN suppliers s ON p.supplier_id = s.supplier_id ORDER BY ALL NULLS LAST LIMIT 5 DO
             SET v_product_id = product.product_id;
             SET v_product_name = product.product_name;
             SET v_supplier_id = product.supplier_id;
@@ -327,7 +327,7 @@ BEGIN
                         SET v_action_taken = 'Restock needed';
                         SET v_low_stock_products = v_low_stock_products + 1;
                         INSERT INTO orders (order_id, customer_id, order_date, order_status, order_total, order_tax, order_discount, order_shipping)
-                        VALUES (v_product_id * 1000, (SELECT MIN(customer_id) FROM customers), CURRENT_TIMESTAMP, 'Restock', (SELECT product_cost FROM products WHERE product_id = v_product_id) * 10, 0.0, 0.0, 0.0);
+                        VALUES (v_product_id * 1000, (SELECT MIN(customer_id) FROM customers), TIMESTAMP '2025-10-01 00:00:00', 'Restock', (SELECT product_cost FROM products WHERE product_id = v_product_id) * 10, 0.0, 0.0, 0.0);
                         INSERT INTO order_items (order_item_id, order_id, product_id, item_quantity, item_price_per_unit, item_discount, item_tax, item_total)
                         VALUES (v_product_id * 100 + 1, v_product_id * 1000, v_product_id, 10, (SELECT product_cost FROM products WHERE product_id = v_product_id), 0.0, 0.0, (SELECT product_cost FROM products WHERE product_id = v_product_id) * 10);
                     ELSE
@@ -341,7 +341,7 @@ BEGIN
                         BEGIN
                             DECLARE v_temp_id INT;
                             SET v_temp_id = (SELECT COALESCE(MAX(supplier_id), 0) + 1 FROM suppliers);
-                            INSERT INTO suppliers VALUES (v_temp_id, 'Temp Supplier', 'Temp Contact', 'Temp Role', 'temp@temp.com', '555-0000', NULL, 'Temp Address', NULL, NULL, 'Temp City', 'TX', '00000', 'USA', 'South', 'Temporary', 'http://temp.com', CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP, 3.0, true);
+                            INSERT INTO suppliers VALUES (v_temp_id, 'Temp Supplier', 'Temp Contact', 'Temp Role', 'temp@temp.com', '555-0000', NULL, 'Temp Address', NULL, NULL, 'Temp City', 'TX', '00000', 'USA', 'South', 'Temporary', 'http://temp.com', TIMESTAMP '2025-10-01 00:00:00', NULL, TIMESTAMP '2025-10-01 00:00:00', 3.0, true);
                         END;
                     END IF;
                 END;
@@ -359,7 +359,7 @@ BEGIN
     DECLARE v_state_count INT;
     DECLARE v_city_shortage_found BOOLEAN DEFAULT false;
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Geo error'); END;
-    city_loop: FOR city AS SELECT DISTINCT customer_city FROM customers LIMIT 3 DO
+    city_loop: FOR city AS SELECT DISTINCT customer_city FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
         SET v_city_count = (SELECT COUNT(*) FROM customers WHERE customer_city = city.customer_city);
         state_scope: BEGIN
             DECLARE v_state STRING;
@@ -368,7 +368,7 @@ BEGIN
                 SET v_state_count = (SELECT COUNT(*) FROM customers WHERE customer_state = v_state);
                 L1: BEGIN
                     DECLARE v_region_ok BOOLEAN DEFAULT true;
-                    FOR region AS SELECT DISTINCT supplier_region FROM suppliers LIMIT 1 DO
+                    FOR region AS SELECT DISTINCT supplier_region FROM suppliers ORDER BY ALL NULLS LAST LIMIT 1 DO
                         IF region.supplier_region IS NULL THEN
                             SET v_region_ok = false;
                         END IF;
@@ -386,14 +386,14 @@ BEGIN
                 BEGIN
                     DECLARE v_new_customer_id INT;
                     SET v_new_customer_id = (SELECT COALESCE(MAX(customer_id), 0) + 1 FROM customers);
-                    INSERT INTO customers VALUES (v_new_customer_id, 'New Customer', 'new@customer.com', '555-1111', '555 Place', city.customer_city, (SELECT DISTINCT customer_state FROM customers WHERE customer_city = city.customer_city LIMIT 1), '00000', 'USA', 'Retail', CURRENT_TIMESTAMP, 0.0, NULL, NULL, NULL, true, true, 0.0, NULL, NULL);
+                    INSERT INTO customers VALUES (v_new_customer_id, 'New Customer', 'new@customer.com', '555-1111', '555 Place', city.customer_city, (SELECT DISTINCT customer_state FROM customers WHERE customer_city = city.customer_city ORDER BY ALL NULLS LAST LIMIT 1), '00000', 'USA', 'Retail', TIMESTAMP '2025-10-01 00:00:00', 0.0, NULL, NULL, NULL, true, true, 0.0, NULL, NULL);
                 END;
             END IF;
             WHILE v_employee_id < 3 DO
                 SET v_employee_id = v_employee_id + 1;
                 BEGIN
                     DECLARE v_customer_address STRING;
-                    SET v_customer_address = (SELECT customer_address_1 FROM customers WHERE customer_city = city.customer_city LIMIT 1);
+                    SET v_customer_address = (SELECT customer_address_1 FROM customers WHERE customer_city = city.customer_city ORDER BY ALL NULLS LAST LIMIT 1);
                     IF v_customer_address IS NULL THEN
                         SET v_customer_address = 'Unknown';
                     END IF;
@@ -416,19 +416,19 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Orders processing error'); END;
     customer_block: BEGIN
         DECLARE v_customer_threshold INT DEFAULT 2;
-        FOR cust AS SELECT customer_id, customer_name FROM customers LIMIT 5 DO
+        FOR cust AS SELECT customer_id, customer_name FROM customers ORDER BY ALL NULLS LAST LIMIT 5 DO
             SET v_customer_id = cust.customer_id;
             SET v_total_orders = (SELECT COUNT(*) FROM orders WHERE customer_id = cust.customer_id);
             SET v_last_order_date = (SELECT MAX(order_date) FROM orders WHERE customer_id = cust.customer_id);
             IF v_total_orders < v_customer_threshold THEN
                 SET v_order_id = (SELECT COALESCE(MAX(order_id), 0) + 1 FROM orders);
                 INSERT INTO orders (order_id, customer_id, order_date, order_status, order_total, order_tax, order_discount, order_shipping)
-                VALUES (v_order_id, v_customer_id, CURRENT_TIMESTAMP, 'New', 10.0, 1.0, 0.0, 2.0);
+                VALUES (v_order_id, v_customer_id, TIMESTAMP '2025-10-01 00:00:00', 'New', 10.0, 1.0, 0.0, 2.0);
                 L1: BEGIN
                     DECLARE v_item_id INT;
                     SET v_product_count = (SELECT COUNT(*) FROM products);
                     IF v_product_count > 0 THEN
-                        FOR prod AS SELECT product_id FROM products LIMIT 3 DO
+                        FOR prod AS SELECT product_id FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
                             SET v_item_id = (SELECT COALESCE(MAX(order_item_id), 0) + 1 FROM order_items);
                             INSERT INTO order_items (order_item_id, order_id, product_id, item_quantity, item_price_per_unit, item_discount, item_tax, item_total)
                             VALUES (v_item_id, v_order_id, prod.product_id, 1, (SELECT product_price FROM products WHERE product_id = prod.product_id), 0.0, 0.0, (SELECT product_price FROM products WHERE product_id = prod.product_id));
@@ -438,21 +438,21 @@ BEGIN
             ELSE
                 L2: BEGIN
                     DECLARE v_days_since_last_order INT;
-                    SET v_days_since_last_order = DATEDIFF(DAY, v_last_order_date, CURRENT_TIMESTAMP);
+                    SET v_days_since_last_order = DATEDIFF(DAY, v_last_order_date, TIMESTAMP '2025-10-01 00:00:00');
                     IF v_days_since_last_order > 30 THEN
                         L3: BEGIN
                             DECLARE v_random_product_id INT;
-                            SET v_random_product_id = (SELECT product_id FROM products LIMIT 1);
+                            SET v_random_product_id = (SELECT product_id FROM products ORDER BY ALL NULLS LAST LIMIT 1);
                             INSERT INTO order_items (order_item_id, order_id, product_id, item_quantity, item_price_per_unit, item_discount, item_tax, item_total)
                             VALUES ((SELECT COALESCE(MAX(order_item_id), 0) + 1 FROM order_items), (SELECT MIN(order_id) FROM orders WHERE customer_id = v_customer_id), v_random_product_id, 1, (SELECT product_price FROM products WHERE product_id = v_random_product_id), 0.0, 0.0, (SELECT product_price FROM products WHERE product_id = v_random_product_id));
                         END L3;
-                        SET v_last_order_date = CURRENT_TIMESTAMP;
+                        SET v_last_order_date = TIMESTAMP '2025-10-01 00:00:00';
                     ELSE
                         BEGIN
                             DECLARE v_orders_to_delete INT;
                             SET v_orders_to_delete = (SELECT COUNT(*) FROM orders WHERE order_status = 'Processing' AND customer_id = v_customer_id);
                             WHILE v_orders_to_delete > 1 DO
-                                DELETE FROM orders WHERE order_id IN (SELECT order_id FROM orders WHERE order_status = 'Processing' AND customer_id = v_customer_id LIMIT 1);
+                                DELETE FROM orders WHERE order_id IN (SELECT order_id FROM orders WHERE order_status = 'Processing' AND customer_id = v_customer_id ORDER BY ALL NULLS LAST LIMIT 1);
                                 SET v_orders_to_delete = v_orders_to_delete - 1;
                             END WHILE;
                         END;
@@ -493,7 +493,7 @@ BEGIN
         DECLARE v_emp_count INT DEFAULT 0;
         DECLARE v_manager_id INT;
         SET v_manager_id = (SELECT MIN(employee_id) FROM employees WHERE employee_position = 'Manager');
-        FOR emp AS SELECT employee_id, employee_name, employee_position FROM employees LIMIT 4 DO
+        FOR emp AS SELECT employee_id, employee_name, employee_position FROM employees ORDER BY ALL NULLS LAST LIMIT 4 DO
             SET v_employee_name = emp.employee_name;
             SET v_emp_count = v_emp_count + 1;
             L1: BEGIN
@@ -508,10 +508,10 @@ BEGIN
                         DECLARE v_subordinates INT;
                         SET v_subordinates = (SELECT COUNT(*) FROM employees WHERE employee_manager_id = emp.employee_id);
                         IF v_subordinates > 0 THEN
-                            FOR sub_emp AS SELECT employee_id, employee_name FROM employees WHERE employee_manager_id = emp.employee_id LIMIT 2 DO
+                            FOR sub_emp AS SELECT employee_id, employee_name FROM employees WHERE employee_manager_id = emp.employee_id ORDER BY ALL NULLS LAST LIMIT 2 DO
                                 L3: BEGIN
                                     DECLARE v_name_part STRING;
-                                    SET v_name_part = (SELECT CONCAT(split(sub_emp.employee_name, ' ')[0], '_', ROUND(RANDOM() * 100)));
+                                    SET v_name_part = (SELECT CONCAT(split(sub_emp.employee_name, ' ')[0], '_', ROUND(RANDOM(0) * 100)));
                                     INSERT INTO customers (customer_id, customer_name, customer_email, customer_phone, customer_address_1, customer_city, customer_state, customer_zip, customer_country, customer_active_status)
                                     VALUES (sub_emp.employee_id + 9999, v_name_part, CONCAT(v_name_part, '@company.com'), '555-8888', '123 HR St', 'HQ City', 'CA', '00000', 'USA', true);
                                 END L3;
@@ -523,7 +523,7 @@ BEGIN
                         SET v_emp_count = v_emp_count + 1;
                         L4: BEGIN
                             DECLARE v_todays_date STRING;
-                            SET v_todays_date = DATE_FORMAT(CURRENT_TIMESTAMP, 'yyyy-MM-dd');
+                            SET v_todays_date = DATE_FORMAT(TIMESTAMP '2025-10-01 00:00:00', 'yyyy-MM-dd');
                             INSERT INTO suppliers (supplier_id, supplier_name, supplier_contact, supplier_contact_role, supplier_contact_email, supplier_contact_phone_1, supplier_address_1, supplier_city, supplier_state, supplier_zip, supplier_country, supplier_region, supplier_main_products, supplier_active)
                             VALUES (emp.employee_id + 10000, CONCAT('Emp_', emp.employee_id), emp.employee_name, 'Employee', CONCAT(emp.employee_name, '@temp.com'), '555-9999', '123 Emp St', 'Emp City', 'CA', '00001', 'USA', 'West', 'Misc', true);
                         END L4;
@@ -545,7 +545,7 @@ BEGIN
     prod_category: BEGIN
         DECLARE v_category_count INT;
         SET v_category_count = (SELECT COUNT(DISTINCT product_category) FROM products);
-        FOR cat AS SELECT DISTINCT product_category FROM products LIMIT 3 DO
+        FOR cat AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_category = cat.product_category;
             SET v_total_reviews = (SELECT SUM(product_reviews) FROM products WHERE product_category = cat.product_category);
             IF v_total_reviews > 0 THEN
@@ -558,7 +558,7 @@ BEGIN
                         IF v_average_rating > 4.5 AND v_price_range > 50 THEN
                             L2: BEGIN
                                 DECLARE v_updated_products INT DEFAULT 0;
-                                FOR prod AS SELECT product_id FROM products WHERE product_category = cat.product_category LIMIT 2 DO
+                                FOR prod AS SELECT product_id FROM products WHERE product_category = cat.product_category ORDER BY ALL NULLS LAST LIMIT 2 DO
                                     UPDATE products SET product_price = product_price * 0.95, product_description = CONCAT('***Premium*** ', product_description) WHERE product_id = prod.product_id;
                                     SET v_updated_products = v_updated_products + 1;
                                 END FOR;
@@ -567,7 +567,7 @@ BEGIN
                             BEGIN
                                 DECLARE v_new_product_id INT;
                                 SET v_new_product_id = (SELECT COALESCE(MAX(product_id), 0) + 1 FROM products);
-                                INSERT INTO products VALUES (v_new_product_id, 'New ' || v_category, v_category, 49.99, 39.99, 2, 'Widgets Co', 'Sales', '123 Widget St', 30, 'Black', 'Medium', 1.5, 'New arrival', 5.0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, 0.0, 0.19);
+                                INSERT INTO products VALUES (v_new_product_id, 'New ' || v_category, v_category, 49.99, 39.99, 2, 'Widgets Co', 'Sales', '123 Widget St', 30, 'Black', 'Medium', 1.5, 'New arrival', 5.0, 0, TIMESTAMP '2025-10-01 00:00:00', TIMESTAMP '2025-10-01 00:00:00', true, 0.0, 0.19);
                             END;
                         END IF;
                     END;
@@ -591,7 +591,7 @@ BEGIN
                 DECLARE v_missing_color STRING;
                 SET v_missing_color = 'Red';
                 IF NOT EXISTS (SELECT 1 FROM products WHERE product_color = v_missing_color) THEN
-                    INSERT INTO products VALUES ((SELECT COALESCE(MAX(product_id), 0) + 1 FROM products), 'Rare ' || v_missing_color, 'Special', 99.99, 69.99, 1, 'Acme Inc', 'Sales', '123 Rare St', 2, v_missing_color, 'Unique', 2.0, 'Extremely rare', 5.0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, 0.0, 0.21);
+                    INSERT INTO products VALUES ((SELECT COALESCE(MAX(product_id), 0) + 1 FROM products), 'Rare ' || v_missing_color, 'Special', 99.99, 69.99, 1, 'Acme Inc', 'Sales', '123 Rare St', 2, v_missing_color, 'Unique', 2.0, 'Extremely rare', 5.0, 0, TIMESTAMP '2025-10-01 00:00:00', TIMESTAMP '2025-10-01 00:00:00', true, 0.0, 0.21);
                 END IF;
             END L4;
         END IF;
@@ -611,13 +611,13 @@ BEGIN
     main_office: BEGIN
         DECLARE v_total_offices INT;
         SET v_total_offices = (SELECT COUNT(DISTINCT customer_city) FROM customers);
-        FOR city AS SELECT DISTINCT customer_city FROM customers LIMIT 2 DO
+        FOR city AS SELECT DISTINCT customer_city FROM customers ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_wrong_city_found = true;
             IF city.customer_city LIKE '%ville' THEN
                 SET v_wrong_city_found = false;
                 L1: BEGIN
                     DECLARE v_region_check BOOLEAN DEFAULT true;
-                    FOR supplier_region AS SELECT supplier_region FROM suppliers WHERE supplier_region LIKE '%est%' LIMIT 1 DO
+                    FOR supplier_region AS SELECT supplier_region FROM suppliers WHERE supplier_region LIKE '%est%' ORDER BY ALL NULLS LAST LIMIT 1 DO
                         IF supplier_region IS NULL THEN
                             SET v_region_check = false;
                         END IF;
@@ -668,7 +668,7 @@ BEGIN
                             'hq@supplier.com',
                             '555-1111',
                             '123 Main St',
-                            (SELECT employee_city FROM employees WHERE employee_state = v_hq_state LIMIT 1),
+                            (SELECT employee_city FROM employees WHERE employee_state = v_hq_state ORDER BY ALL NULLS LAST LIMIT 1),
                             v_hq_state,
                             '00000',
                             'USA',
@@ -695,7 +695,7 @@ BEGIN
 
     BEGIN
         DECLARE v_limit_orders INT DEFAULT 3;
-        FOR status AS SELECT DISTINCT order_status FROM orders LIMIT 2 DO
+        FOR status AS SELECT DISTINCT order_status FROM orders ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_order_counter = (SELECT COUNT(*) FROM orders WHERE order_status = status.order_status);
             IF v_order_counter > 0 THEN
                 L1: BEGIN
@@ -722,7 +722,7 @@ BEGIN
                             ) VALUES (
                                 v_new_order_id,
                                 (SELECT MAX(customer_id) FROM customers),
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 status.order_status,
                                 100.0,
                                 10.0,
@@ -745,7 +745,7 @@ BEGIN
                 ) VALUES (
                     (SELECT COALESCE(MAX(order_id), 0) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers),
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     v_fake_status,
                     10.0,
                     1.0,
@@ -768,7 +768,7 @@ BEGIN
     DECLARE v_contact_orders INT DEFAULT 0;
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier contact management error'); END;
 
-    supplier_loop: FOR supplier AS SELECT supplier_id, supplier_active, supplier_contact FROM suppliers LIMIT 3 DO
+    supplier_loop: FOR supplier AS SELECT supplier_id, supplier_active, supplier_contact FROM suppliers ORDER BY ALL NULLS LAST LIMIT 3 DO
         SET v_supplier_id = supplier.supplier_id;
         SET v_supplier_active = supplier.supplier_active;
         IF v_supplier_active THEN
@@ -797,15 +797,15 @@ BEGIN
                             'Supplementary product',
                             4.0,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
                         );
                         BEGIN
                             DECLARE v_days_since_last_order INT;
-                            SET v_days_since_last_order = DATEDIFF(DAY, (SELECT MAX(product_launch_date) FROM products WHERE supplier_id = v_supplier_id), CURRENT_TIMESTAMP);
+                            SET v_days_since_last_order = DATEDIFF(DAY, (SELECT MAX(product_launch_date) FROM products WHERE supplier_id = v_supplier_id), TIMESTAMP '2025-10-01 00:00:00');
                             IF v_days_since_last_order > 30 THEN
                                 L2: BEGIN
                                     DECLARE v_temp_id INT;
@@ -878,7 +878,7 @@ BEGIN
                             FROM order_items oi
                             JOIN products p ON oi.product_id = p.product_id
                             WHERE p.supplier_id = v_supplier_id
-                            LIMIT 1
+                            ORDER BY ALL NULLS LAST LIMIT 1
                         );
                         SET v_inactive_supplier_orders = v_inactive_supplier_orders - 1;
                     UNTIL v_inactive_supplier_orders = 0 END REPEAT;
@@ -901,7 +901,7 @@ BEGIN
     L0: BEGIN
         DECLARE v_total_emp INT;
         SET v_total_emp = (SELECT COUNT(*) FROM employees);
-        FOR emp AS SELECT employee_id, employee_commission FROM employees LIMIT 3 DO
+        FOR emp AS SELECT employee_id, employee_commission FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_employee_id = emp.employee_id;
             SET v_employee_commission = emp.employee_commission;
             L1: BEGIN
@@ -939,7 +939,7 @@ BEGIN
     DECLARE v_customer_total DOUBLE DEFAULT 0.0;
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Customer order calculation error'); END;
 
-    customer_category_loop: FOR category AS SELECT DISTINCT customer_type FROM customers LIMIT 2 DO
+    customer_category_loop: FOR category AS SELECT DISTINCT customer_type FROM customers ORDER BY ALL NULLS LAST LIMIT 2 DO
         SET v_customer_category = category.customer_type;
         SET v_order_count = (SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = v_customer_category);
         IF v_order_count > 0 THEN
@@ -951,7 +951,7 @@ BEGIN
                         SET v_customer_total = v_customer_total + v_average_order;
                         BEGIN
                             DECLARE v_order_limit INT DEFAULT 3;
-                            FOR order_row AS SELECT o.order_id FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = v_customer_category LIMIT v_order_limit DO
+                            FOR order_row AS SELECT o.order_id FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = v_customer_category ORDER BY ALL NULLS LAST LIMIT v_order_limit DO
                                 BEGIN
                                     DECLARE v_order_items_count INT;
                                     SET v_order_items_count = (SELECT COUNT(*) FROM order_items WHERE order_id = order_row.order_id);
@@ -972,7 +972,7 @@ BEGIN
                             REPEAT
                                 SET v_customer_total = v_customer_total + 10.0;
                                 INSERT INTO orders (order_id, customer_id, order_date, order_status, order_total, order_tax, order_discount, order_shipping)
-                                VALUES ((SELECT MAX(order_id) + 1 FROM orders), (SELECT MIN(customer_id) FROM customers WHERE customer_type = v_customer_category), CURRENT_TIMESTAMP, 'Low Value', 10.0, 1.0, 0.0, 2.0);
+                                VALUES ((SELECT MAX(order_id) + 1 FROM orders), (SELECT MIN(customer_id) FROM customers WHERE customer_type = v_customer_category), TIMESTAMP '2025-10-01 00:00:00', 'Low Value', 10.0, 1.0, 0.0, 2.0);
                                 SET v_order_count = v_order_count + 1;
                             UNTIL v_customer_total > 100 END REPEAT;
                         END L3;
@@ -988,7 +988,7 @@ BEGIN
                 DECLARE v_new_order_id INT;
                 SET v_new_order_id = (SELECT MAX(order_id) + 1 FROM orders);
                 INSERT INTO orders (order_id, customer_id, order_date, order_status, order_total, order_tax, order_discount, order_shipping)
-                VALUES (v_new_order_id, (SELECT MIN(customer_id) FROM customers), CURRENT_TIMESTAMP, 'Auto Insert', 15.0, 1.5, 0.0, 2.5);
+                VALUES (v_new_order_id, (SELECT MIN(customer_id) FROM customers), TIMESTAMP '2025-10-01 00:00:00', 'Auto Insert', 15.0, 1.5, 0.0, 2.5);
             END;
         END IF;
     END L4;
@@ -1017,7 +1017,7 @@ BEGIN
                             BEGIN
                                 DECLARE v_new_id INT;
                                 SET v_new_id = (SELECT COALESCE(MAX(employee_id), 0) + 1 FROM employees);
-                                INSERT INTO employees VALUES (v_new_id, 'New Emp ' || v_new_id, 'new' || v_new_id || '@company.com', '555-0000', 'Intern', 'Ops', CURRENT_TIMESTAMP, NULL, 30000.0, 0.0, v_max_manager_id, '123 New St', NULL, 'Newtown', 'CA', '00000', 'USA', CURRENT_TIMESTAMP, 'Male', 'Single', 0);
+                                INSERT INTO employees VALUES (v_new_id, 'New Emp ' || v_new_id, 'new' || v_new_id || '@company.com', '555-0000', 'Intern', 'Ops', TIMESTAMP '2025-10-01 00:00:00', NULL, 30000.0, 0.0, v_max_manager_id, '123 New St', NULL, 'Newtown', 'CA', '00000', 'USA', TIMESTAMP '2025-10-01 00:00:00', 'Male', 'Single', 0);
                                 SET v_employee_count = v_employee_count + 1;
                             END;
                         END WHILE;
@@ -1029,7 +1029,7 @@ BEGIN
                 BEGIN
                     DECLARE v_temp_id INT;
                     SET v_temp_id = v_max_manager_id + 1;
-                    INSERT INTO employees VALUES (v_temp_id, 'Manager ' || v_temp_id, 'manager' || v_temp_id || '@company.com', '555-0000', 'Manager', 'HR', CURRENT_TIMESTAMP, NULL, 60000.0, 0.0, NULL, '123 Mgmt St', NULL, 'Newtown', 'CA', '00000', 'USA', CURRENT_TIMESTAMP, 'Male', 'Married', 1);
+                    INSERT INTO employees VALUES (v_temp_id, 'Manager ' || v_temp_id, 'manager' || v_temp_id || '@company.com', '555-0000', 'Manager', 'HR', TIMESTAMP '2025-10-01 00:00:00', NULL, 60000.0, 0.0, NULL, '123 Mgmt St', NULL, 'Newtown', 'CA', '00000', 'USA', TIMESTAMP '2025-10-01 00:00:00', 'Male', 'Married', 1);
                     SET v_manager_exists = true;
                     SET v_max_manager_id = v_temp_id;
                 END;
@@ -1040,7 +1040,7 @@ BEGIN
         DECLARE v_low_level_emp INT DEFAULT 0;
         REPEAT
             SET v_low_level_emp = v_low_level_emp + 1;
-            INSERT INTO employees VALUES (v_low_level_emp + 10, 'Temp Emp ' || v_low_level_emp, 'temp' || v_low_level_emp || '@company.com', '555-0000', 'Temp', 'Temp', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 20000.0, 0.0, NULL, '123 Temp St', NULL, 'Temp City', 'TX', '00000', 'USA', CURRENT_TIMESTAMP, 'Female', 'Single', 0);
+            INSERT INTO employees VALUES (v_low_level_emp + 10, 'Temp Emp ' || v_low_level_emp, 'temp' || v_low_level_emp || '@company.com', '555-0000', 'Temp', 'Temp', TIMESTAMP '2025-10-01 00:00:00', TIMESTAMP '2025-10-01 00:00:00', 20000.0, 0.0, NULL, '123 Temp St', NULL, 'Temp City', 'TX', '00000', 'USA', TIMESTAMP '2025-10-01 00:00:00', 'Female', 'Single', 0);
         UNTIL v_low_level_emp > 2 END REPEAT;
     END L2;
 END
@@ -1057,7 +1057,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_max_orders INT DEFAULT 3;
-        FOR city AS SELECT DISTINCT order_shipping_city FROM orders LIMIT 2 DO
+        FOR city AS SELECT DISTINCT order_shipping_city FROM orders ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_shipping_city = city.order_shipping_city;
             SET v_shipping_cost = (SELECT SUM(order_shipping) FROM orders WHERE order_shipping_city = v_shipping_city);
             IF v_shipping_cost > 5 THEN
@@ -1081,11 +1081,11 @@ BEGIN
                                 '555-0000',
                                 '123 Main St',
                                 v_shipping_city,
-                                (SELECT DISTINCT order_shipping_state FROM orders WHERE order_shipping_city = v_shipping_city LIMIT 1),
+                                (SELECT DISTINCT order_shipping_state FROM orders WHERE order_shipping_city = v_shipping_city ORDER BY ALL NULLS LAST LIMIT 1),
                                 '00000',
                                 'USA',
                                 'Retail',
-                                CURRENT_TIMESTAMP, 0.0, NULL, NULL, NULL, true, true, 0.0, NULL, NULL
+                                TIMESTAMP '2025-10-01 00:00:00', 0.0, NULL, NULL, NULL, true, true, 0.0, NULL, NULL
                             );
                         END;
                     END IF;
@@ -1104,7 +1104,7 @@ BEGIN
                             ) VALUES (
                                 v_new_order_id,
                                 (SELECT MIN(customer_id) FROM customers),
-                                CURRENT_TIMESTAMP, 'Local Insert', 10.0, 1.0, 0.0, 2.0,
+                                TIMESTAMP '2025-10-01 00:00:00', 'Local Insert', 10.0, 1.0, 0.0, 2.0,
                                 v_shipping_city, 'TX', '00000', 'USA'
                             );
                             SET v_shipping_orders = v_shipping_orders + 1;
@@ -1128,7 +1128,7 @@ BEGIN
     L0: BEGIN
         DECLARE v_supplier_count INT;
         SET v_supplier_count = (SELECT COUNT(*) FROM suppliers WHERE supplier_active = true);
-        FOR supplier AS SELECT supplier_id, supplier_contact, supplier_rating FROM suppliers WHERE supplier_active = true LIMIT 2 DO
+        FOR supplier AS SELECT supplier_id, supplier_contact, supplier_rating FROM suppliers WHERE supplier_active = true ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_supplier_contact_count = v_supplier_contact_count + 1;
             L1: BEGIN
                 DECLARE v_supplier_orders INT;
@@ -1162,8 +1162,8 @@ BEGIN
                             'New supplier item',
                             4.0,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -1218,9 +1218,9 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_emp_count INT DEFAULT 0;
-        FOR emp AS SELECT employee_id, employee_hire_date, employee_salary FROM employees LIMIT 3 DO
+        FOR emp AS SELECT employee_id, employee_hire_date, employee_salary FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_employee_hire_year = YEAR(emp.employee_hire_date);
-            SET v_employee_tenure_years = DATEDIFF(YEAR, emp.employee_hire_date, CURRENT_TIMESTAMP);
+            SET v_employee_tenure_years = DATEDIFF(YEAR, emp.employee_hire_date, TIMESTAMP '2025-10-01 00:00:00');
             SET v_salary_bin = FLOOR(emp.employee_salary / 20000.0) + 1;
             IF v_employee_tenure_years > 1 AND v_employee_tenure_years <= 7 THEN
                 L1: BEGIN
@@ -1252,7 +1252,7 @@ BEGIN
             ELSE
                 L3: BEGIN
                     DECLARE v_year_diff INT;
-                    SET v_year_diff = (SELECT DATEDIFF(YEAR, MIN(employee_hire_date), CURRENT_TIMESTAMP) FROM employees);
+                    SET v_year_diff = (SELECT DATEDIFF(YEAR, MIN(employee_hire_date), TIMESTAMP '2025-10-01 00:00:00') FROM employees);
                     WHILE v_year_diff > 5 DO
                         SET v_year_diff = v_year_diff - 1;
                         INSERT INTO employees VALUES (
@@ -1262,7 +1262,7 @@ BEGIN
                             '555-0000',
                             'Tenure',
                             'Tenure',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             35000.0,
                             0.0,
@@ -1273,7 +1273,7 @@ BEGIN
                             'CA',
                             '00000',
                             'USA',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Male',
                             'Single',
                             0
@@ -1285,7 +1285,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -1297,7 +1297,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_order_source_count INT DEFAULT 0;
-        FOR source AS SELECT DISTINCT order_source FROM orders LIMIT 2 DO
+        FOR source AS SELECT DISTINCT order_source FROM orders ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_order_source = source.order_source;
             SET v_order_total = (SELECT SUM(order_total) FROM orders WHERE order_source = source.order_source);
             IF v_order_source = 'Web' OR v_order_source = 'Mobile' THEN
@@ -1305,7 +1305,7 @@ BEGIN
                     REPEAT
                         SET v_order_source_count = v_order_source_count + 1;
                         SET v_order_date = (SELECT MAX(order_date) FROM orders WHERE order_source = source.order_source);
-                        IF v_order_date < DATEADD(DAY, -30, CURRENT_TIMESTAMP) THEN
+                        IF v_order_date < DATEADD(DAY, -30, TIMESTAMP '2025-10-01 00:00:00') THEN
                             BEGIN
                                 INSERT INTO orders (
                                     order_id, customer_id, order_date, order_status, order_total,
@@ -1313,7 +1313,7 @@ BEGIN
                                 ) VALUES (
                                     (SELECT MAX(order_id) + 1 FROM orders),
                                     (SELECT MIN(customer_id) FROM customers),
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     'Recent Web',
                                     50.0,
                                     5.0,
@@ -1321,10 +1321,10 @@ BEGIN
                                     5.0,
                                     source.order_source
                                 );
-                                SET v_order_date = CURRENT_TIMESTAMP;
+                                SET v_order_date = TIMESTAMP '2025-10-01 00:00:00';
                             END;
                         END IF;
-                    UNTIL v_order_source_count > 1 OR v_order_date > DATEADD(DAY, -30, CURRENT_TIMESTAMP) END REPEAT;
+                    UNTIL v_order_source_count > 1 OR v_order_date > DATEADD(DAY, -30, TIMESTAMP '2025-10-01 00:00:00') END REPEAT;
                 END L1;
             ELSE
                 BEGIN
@@ -1335,7 +1335,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Generated',
                         30.0,
                         3.0,
@@ -1358,7 +1358,7 @@ BEGIN
                 ) VALUES (
                     (SELECT MAX(order_id) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers),
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     'Fake Source',
                     15.0,
                     1.5,
@@ -1384,7 +1384,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_target_value DOUBLE DEFAULT 500.0;
-        FOR cust AS SELECT customer_id, customer_active_status FROM customers LIMIT 3 DO
+        FOR cust AS SELECT customer_id, customer_active_status FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_customer_active = cust.customer_active_status;
             SET v_customer_lifetime_value = (SELECT SUM(order_total) FROM orders WHERE customer_id = cust.customer_id);
             SET v_customer_order_count = (SELECT COUNT(*) FROM orders WHERE customer_id = cust.customer_id);
@@ -1399,7 +1399,7 @@ BEGIN
                                 ) VALUES (
                                     (SELECT MAX(order_id) + 1 FROM orders),
                                     cust.customer_id,
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     'LTV Boost',
                                     40.0,
                                     4.0,
@@ -1441,7 +1441,7 @@ BEGIN
                                 ) VALUES (
                                     (SELECT MAX(order_id) + 1 FROM orders),
                                     (SELECT MIN(customer_id) FROM customers WHERE customer_active_status = false),
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     'Reactivation',
                                     20.0,
                                     2.0,
@@ -1470,7 +1470,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_supplier_count INT DEFAULT 2;
-        FOR region AS SELECT DISTINCT supplier_region FROM suppliers LIMIT 2 DO
+        FOR region AS SELECT DISTINCT supplier_region FROM suppliers ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_region_to_boost = region.supplier_region;
             SET v_supplier_region_count = (SELECT COUNT(*) FROM suppliers WHERE supplier_region = v_region_to_boost);
             IF v_supplier_region_count > v_min_supplier_count THEN
@@ -1506,8 +1506,8 @@ BEGIN
                                 'Region product',
                                 3.5,
                                 0,
-                                CURRENT_TIMESTAMP,
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 true,
                                 0.0,
                                 0.19
@@ -1554,9 +1554,9 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_emp_count INT DEFAULT 0;
-        FOR emp AS SELECT employee_id, employee_birth_date, employee_city FROM employees LIMIT 3 DO
+        FOR emp AS SELECT employee_id, employee_birth_date, employee_city FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_employee_birth_year = YEAR(emp.employee_birth_date);
-            SET v_employee_age = DATEDIFF(YEAR, emp.employee_birth_date, CURRENT_TIMESTAMP);
+            SET v_employee_age = DATEDIFF(YEAR, emp.employee_birth_date, TIMESTAMP '2025-10-01 00:00:00');
             SET v_employee_city = emp.employee_city;
             IF v_employee_age < 30 THEN
                 L1: BEGIN
@@ -1572,7 +1572,7 @@ BEGIN
                                 '555-0000',
                                 'Junior',
                                 'Ops',
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 NULL,
                                 35000.0,
                                 0.0,
@@ -1580,10 +1580,10 @@ BEGIN
                                 '123 Jun St',
                                 NULL,
                                 v_employee_city,
-                                (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city LIMIT 1),
+                                (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city ORDER BY ALL NULLS LAST LIMIT 1),
                                 '00000',
                                 'USA',
-                                DATEADD(YEAR, -(FLOOR(RAND() * 10) + 20), CURRENT_TIMESTAMP),
+                                DATEADD(YEAR, -(FLOOR(RAND(0) * 10) + 20), TIMESTAMP '2025-10-01 00:00:00'),
                                 'Male',
                                 'Single',
                                 0
@@ -1609,11 +1609,11 @@ BEGIN
                                         '555-0001',
                                         '123 Age St',
                                         v_employee_city,
-                                        (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city LIMIT 1),
+                                        (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city ORDER BY ALL NULLS LAST LIMIT 1),
                                         '00000',
                                         'USA',
                                         'Senior',
-                                        CURRENT_TIMESTAMP,
+                                        TIMESTAMP '2025-10-01 00:00:00',
                                         0.0,
                                         NULL,
                                         NULL,
@@ -1629,7 +1629,7 @@ BEGIN
                         ELSE
                             L2: BEGIN
                                 DECLARE v_new_birth_year INT;
-                                SET v_new_birth_year = v_employee_birth_year - (FLOOR(RAND() * 5) + 1);
+                                SET v_new_birth_year = v_employee_birth_year - (FLOOR(RAND(0) * 5) + 1);
                                 INSERT INTO employees VALUES (
                                     (SELECT MAX(employee_id) + 1 FROM employees),
                                     'Filler Emp',
@@ -1637,7 +1637,7 @@ BEGIN
                                     '555-0000',
                                     'Filler',
                                     'Ops',
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     NULL,
                                     30000.0,
                                     0.0,
@@ -1645,10 +1645,10 @@ BEGIN
                                     '123 Filler St',
                                     NULL,
                                     v_employee_city,
-                                    (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city LIMIT 1),
+                                    (SELECT DISTINCT employee_state FROM employees WHERE employee_city = v_employee_city ORDER BY ALL NULLS LAST LIMIT 1),
                                     '00000',
                                     'USA',
-                                    MAKE_DATE(v_new_birth_year, MONTH(CURRENT_TIMESTAMP), DAY(CURRENT_TIMESTAMP)),
+                                    MAKE_DATE(v_new_birth_year, MONTH(TIMESTAMP '2025-10-01 00:00:00'), DAY(TIMESTAMP '2025-10-01 00:00:00')),
                                     'Female',
                                     'Single',
                                     0
@@ -1672,7 +1672,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Product cohort error'); END;
 
     L0: BEGIN
-        FOR product AS SELECT product_id, product_launch_date, product_name, product_is_active FROM products LIMIT 3 DO
+        FOR product AS SELECT product_id, product_launch_date, product_name, product_is_active FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_launch_year = YEAR(product.product_launch_date);
             L1: BEGIN
                 IF product.product_is_active = true THEN
@@ -1731,7 +1731,7 @@ BEGIN
                                     0.0,
                                     0,
                                     MAKE_DATE(v_product_launch_year, v_launch_month, 1),
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     true,
                                     0.0,
                                     0.21
@@ -1756,16 +1756,16 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Cost adjustment error'); END;
 
     L0: BEGIN
-        FOR product AS SELECT product_id, product_cost, product_last_update, product_is_active FROM products LIMIT 3 DO
-            SET v_last_update_days = DATEDIFF(DAY, product.product_last_update, CURRENT_TIMESTAMP);
+        FOR product AS SELECT product_id, product_cost, product_last_update, product_is_active FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
+            SET v_last_update_days = DATEDIFF(DAY, product.product_last_update, TIMESTAMP '2025-10-01 00:00:00');
             SET v_product_is_active = product.product_is_active;
             L1: BEGIN
                 IF v_product_is_active = true AND v_last_update_days > 60 THEN
                     L2: BEGIN
                         REPEAT
                             SET v_product_cost_change = v_product_cost_change + 0.05;
-                            UPDATE products SET product_cost = product_cost * (1.0 + v_product_cost_change), product_last_update = CURRENT_TIMESTAMP WHERE product_id = product.product_id;
-                            SET v_last_update_days = DATEDIFF(DAY, product.product_last_update, CURRENT_TIMESTAMP);
+                            UPDATE products SET product_cost = product_cost * (1.0 + v_product_cost_change), product_last_update = TIMESTAMP '2025-10-01 00:00:00' WHERE product_id = product.product_id;
+                            SET v_last_update_days = DATEDIFF(DAY, product.product_last_update, TIMESTAMP '2025-10-01 00:00:00');
                         UNTIL v_product_cost_change > 0.15 OR v_last_update_days < 10 END REPEAT;
                     END L2;
                 ELSE
@@ -1808,7 +1808,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_order_limit INT DEFAULT 3;
-        FOR region AS SELECT DISTINCT order_shipping_region FROM orders LIMIT 2 DO
+        FOR region AS SELECT DISTINCT order_shipping_region FROM orders ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_region = region.order_shipping_region;
             SET v_order_shipping_cost = (SELECT SUM(order_shipping) FROM orders WHERE order_shipping_region = v_region);
             IF v_order_shipping_cost > 10 THEN
@@ -1874,7 +1874,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_products_per_color INT DEFAULT 2;
-        FOR color AS SELECT DISTINCT product_color FROM products LIMIT 3 DO
+        FOR color AS SELECT DISTINCT product_color FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_color = color.product_color;
             SET v_color_count = (SELECT COUNT(*) FROM products WHERE product_color = v_product_color);
             IF v_color_count < v_min_products_per_color THEN
@@ -1896,8 +1896,8 @@ BEGIN
                         'Extra color',
                         4.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -1936,8 +1936,8 @@ BEGIN
                                 'Low price option',
                                 3.0,
                                 0,
-                                CURRENT_TIMESTAMP,
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 true,
                                 0.05,
                                 0.19
@@ -1962,7 +1962,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_tax_month DOUBLE DEFAULT 100.0;
-        FOR order_row AS SELECT order_id, order_total, order_tax, order_date, order_status FROM orders LIMIT 3 DO
+        FOR order_row AS SELECT order_id, order_total, order_tax, order_date, order_status FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_total_tax = order_row.order_total + order_row.order_tax;
             SET v_order_date_month = MONTH(order_row.order_date);
             IF v_order_date_month % 2 = 0 THEN
@@ -2032,7 +2032,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Completed',
                         50.0,
                         5.0,
@@ -2057,7 +2057,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Product size error'); END;
 
     L0: BEGIN
-        FOR size AS SELECT DISTINCT product_size FROM products LIMIT 3 DO
+        FOR size AS SELECT DISTINCT product_size FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_size = size.product_size;
             SET v_size_count = (SELECT COUNT(*) FROM products WHERE product_size = v_product_size);
             IF v_size_count < v_min_size_count THEN
@@ -2080,8 +2080,8 @@ BEGIN
                             'Extra ' || v_product_size || ' product',
                             3.5,
                             8,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -2118,7 +2118,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Department error'); END;
 
     L0: BEGIN
-        FOR dept AS SELECT DISTINCT employee_department FROM employees LIMIT 3 DO
+        FOR dept AS SELECT DISTINCT employee_department FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
                     SET v_department = dept.employee_department;
 SET v_dept_emp_count = (SELECT COUNT(*) FROM employees WHERE employee_department = v_department);
             SET v_dept_avg_salary = (SELECT AVG(employee_salary) FROM employees WHERE employee_department = v_department);
@@ -2132,7 +2132,7 @@ SET v_dept_emp_count = (SELECT COUNT(*) FROM employees WHERE employee_department
                             '555-0000',
                             'Member',
                             v_department,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             35000.0,
                             0.0,
@@ -2143,7 +2143,7 @@ SET v_dept_emp_count = (SELECT COUNT(*) FROM employees WHERE employee_department
                             'CA',
                             '00000',
                             'USA',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Female',
                             'Single',
                             0
@@ -2182,7 +2182,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Product review analysis error'); END;
 
     L0: BEGIN
-        FOR product AS SELECT product_id, product_rating, product_reviews FROM products LIMIT 3 DO
+        FOR product AS SELECT product_id, product_rating, product_reviews FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_rating = product.product_rating;
             IF product.product_reviews < 10 THEN
                 REPEAT
@@ -2221,7 +2221,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('City shipping error'); END;
 
     L0: BEGIN
-        FOR city AS SELECT DISTINCT order_shipping_city FROM orders LIMIT 3 DO
+        FOR city AS SELECT DISTINCT order_shipping_city FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_shipping_city = city.order_shipping_city;
             SET v_order_volume = (SELECT COUNT(*) FROM orders WHERE order_shipping_city = v_order_shipping_city);
             IF v_order_volume > 1 THEN
@@ -2259,7 +2259,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Volume Insert',
                             12.0,
                             1.2,
@@ -2286,7 +2286,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Employee hierarchy error'); END;
 
     L0: BEGIN
-        FOR emp AS SELECT employee_id, employee_salary, employee_manager_id FROM employees LIMIT 3 DO
+        FOR emp AS SELECT employee_id, employee_salary, employee_manager_id FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_employee_salary = emp.employee_salary;
             SET v_employee_manager_id = emp.employee_manager_id;
             IF v_employee_manager_id IS NOT NULL THEN
@@ -2326,7 +2326,7 @@ BEGIN
                                 '555-0000',
                                 'Subordinate',
                                 'HR',
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 NULL,
                                 30000.0,
                                 0.0,
@@ -2337,7 +2337,7 @@ BEGIN
                                 'CA',
                                 '00000',
                                 'USA',
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 'Male',
                                 'Single',
                                 0
@@ -2362,16 +2362,16 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Order backlog error'); END;
 
     L0: BEGIN
-        FOR order_row AS SELECT order_id, order_date, order_status FROM orders LIMIT 3 DO
+        FOR order_row AS SELECT order_id, order_date, order_status FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_creation_date = order_row.order_date;
             SET v_order_status = order_row.order_status;
-            SET v_order_days_pending = DATEDIFF(DAY, v_order_creation_date, CURRENT_TIMESTAMP);
+            SET v_order_days_pending = DATEDIFF(DAY, v_order_creation_date, TIMESTAMP '2025-10-01 00:00:00');
             IF v_order_days_pending > 5 AND v_order_status = 'Processing' THEN
                 L1: BEGIN
                     REPEAT
                         UPDATE orders SET order_status = 'Pending', order_shipping = order_shipping + 1.0 WHERE order_id = order_row.order_id;
                         SET v_order_creation_date = (SELECT order_date FROM orders WHERE order_id = order_row.order_id);
-                        SET v_order_days_pending = DATEDIFF(DAY, v_order_creation_date, CURRENT_TIMESTAMP);
+                        SET v_order_days_pending = DATEDIFF(DAY, v_order_creation_date, TIMESTAMP '2025-10-01 00:00:00');
                     UNTIL v_order_days_pending < 3 END REPEAT;
                 END L1;
             ELSEIF v_order_days_pending > 30 AND v_order_status = 'Pending' THEN
@@ -2379,13 +2379,13 @@ BEGIN
                     WHILE v_order_days_pending > 10 DO
                         SET v_order_status = 'Cancelled';
                         UPDATE orders SET order_status = v_order_status, order_shipping = 0.0 WHERE order_id = order_row.order_id;
-                        SET v_order_days_pending = DATEDIFF(DAY, (SELECT order_date FROM orders WHERE order_id = order_row.order_id), CURRENT_TIMESTAMP);
+                        SET v_order_days_pending = DATEDIFF(DAY, (SELECT order_date FROM orders WHERE order_id = order_row.order_id), TIMESTAMP '2025-10-01 00:00:00');
                     END WHILE;
                 END L2;
             ELSE
                 BEGIN
                     DECLARE v_backlog_order_count INT;
-                    SET v_backlog_order_count = (SELECT COUNT(*) FROM orders WHERE order_status = 'Processing' AND DATEDIFF(DAY, order_date, CURRENT_TIMESTAMP) > 5);
+                    SET v_backlog_order_count = (SELECT COUNT(*) FROM orders WHERE order_status = 'Processing' AND DATEDIFF(DAY, order_date, TIMESTAMP '2025-10-01 00:00:00') > 5);
                     IF v_backlog_order_count > 0 THEN
                         L3: BEGIN
                             REPEAT
@@ -2401,7 +2401,7 @@ BEGIN
                                 ) VALUES (
                                     (SELECT MAX(order_id) + 1 FROM orders),
                                     (SELECT MIN(customer_id) FROM customers),
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     'Escalated',
                                     20.0,
                                     2.0,
@@ -2429,18 +2429,18 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Order item error'); END;
 
     L0: BEGIN
-        FOR order_item AS SELECT order_item_id, item_status FROM order_items LIMIT 3 DO
+        FOR order_item AS SELECT order_item_id, item_status FROM order_items ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_item_id = order_item.order_item_id;
             SET v_order_item_status = order_item.item_status;
             IF v_order_item_status = 'Shipped' THEN
                 SET v_shipped_item_count = v_shipped_item_count + 1;
                 L1: BEGIN
                     DECLARE v_item_shipping_delay INT;
-                    SET v_item_shipping_delay = (SELECT DATEDIFF(DAY, (SELECT item_shipping_date FROM order_items WHERE order_item_id = v_order_item_id), CURRENT_TIMESTAMP));
+                    SET v_item_shipping_delay = (SELECT DATEDIFF(DAY, (SELECT item_shipping_date FROM order_items WHERE order_item_id = v_order_item_id), TIMESTAMP '2025-10-01 00:00:00'));
                     IF v_item_shipping_delay > 7 THEN
                         REPEAT
                             UPDATE order_items SET item_discount = item_discount + 0.05 WHERE order_item_id = v_order_item_id;
-                            SET v_item_shipping_delay = (SELECT DATEDIFF(DAY, (SELECT item_shipping_date FROM order_items WHERE order_item_id = v_order_item_id), CURRENT_TIMESTAMP));
+                            SET v_item_shipping_delay = (SELECT DATEDIFF(DAY, (SELECT item_shipping_date FROM order_items WHERE order_item_id = v_order_item_id), TIMESTAMP '2025-10-01 00:00:00'));
                         UNTIL v_item_shipping_delay < 4 END REPEAT;
                     END IF;
                 END L1;
@@ -2471,7 +2471,7 @@ BEGIN
                             1.0,
                             11.0,
                             'Shipped',
-                            CAST(CURRENT_TIMESTAMP AS DATE)
+                            CAST(TIMESTAMP '2025-10-01 00:00:00' AS DATE)
                         );
                         SET v_shipped_item_count = v_shipped_item_count + 1;
                     UNTIL v_shipped_item_count > 0 END REPEAT;
@@ -2491,7 +2491,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier contact error'); END;
 
     L0: BEGIN
-        FOR supplier AS SELECT supplier_id, supplier_active, supplier_contact_email FROM suppliers LIMIT 3 DO
+        FOR supplier AS SELECT supplier_id, supplier_active, supplier_contact_email FROM suppliers ORDER BY ALL NULLS LAST LIMIT 3 DO
             IF supplier.supplier_active = true AND supplier.supplier_contact_email IS NOT NULL THEN
                 SET v_active_supplier_count = v_active_supplier_count + 1;
                 L1: BEGIN
@@ -2522,8 +2522,8 @@ BEGIN
                                 'New supplier item',
                                 4.0,
                                 0,
-                                CURRENT_TIMESTAMP,
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 true,
                                 0.0,
                                 0.19
@@ -2548,7 +2548,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_discount_category STRING DEFAULT 'GENERAL';
-        FOR category AS SELECT DISTINCT product_category FROM products LIMIT 2 DO
+        FOR category AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_product_discount_avg = (SELECT AVG(product_discount) FROM products WHERE product_category = category.product_category);
             IF v_product_discount_avg > 0.1 THEN
                 L1: BEGIN
@@ -2579,8 +2579,8 @@ BEGIN
                             'Maximum discount',
                             0.0,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.9,
                             0.19
@@ -2605,7 +2605,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Employee diversity error'); END;
 
     L0: BEGIN
-        FOR gender AS SELECT DISTINCT employee_gender FROM employees LIMIT 2 DO
+        FOR gender AS SELECT DISTINCT employee_gender FROM employees ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_employee_gender = gender.employee_gender;
             SET v_gender_count = (SELECT COUNT(*) FROM employees WHERE employee_gender = v_employee_gender);
             IF v_gender_count < v_min_gender_emp THEN
@@ -2618,7 +2618,7 @@ BEGIN
                             '555-0000',
                             'Balancer',
                             'HR',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             40000.0,
                             0.0,
@@ -2629,7 +2629,7 @@ BEGIN
                             'CA',
                             '00000',
                             'USA',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             v_employee_gender,
                             'Single',
                             0
@@ -2651,7 +2651,7 @@ BEGIN
                 '555-0000',
                 v_fill_role,
                 v_fill_role,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 NULL,
                 30000.0,
                 0.0,
@@ -2662,13 +2662,13 @@ BEGIN
                 'CA',
                 '00000',
                 'USA',
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Female',
                 'Married',
                 1
             );
             SET v_fill_role = v_fill_role || '_R';
-        UNTIL (SELECT COUNT(*) FROM employees WHERE employee_position = 'Filler') > 1 END REPEAT;
+        UNTIL (SELECT COUNT(*) FROM employees WHERE employee_position LIKE 'Filler%') > 1 END REPEAT;
     END L2;
 END
 -- !query analysis
@@ -2683,7 +2683,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Channel analysis error'); END;
 
     L0: BEGIN
-        FOR channel AS SELECT DISTINCT order_channel FROM orders LIMIT 3 DO
+        FOR channel AS SELECT DISTINCT order_channel FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_channel = channel.order_channel;
             SET v_channel_orders = (SELECT COUNT(*) FROM orders WHERE order_channel = v_order_channel);
             SET v_channel_returns = (SELECT COUNT(*) FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_channel = v_order_channel AND oi.item_status = 'Returned');
@@ -2751,7 +2751,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Channel Fill',
                             15.0,
                             1.5,
@@ -2779,7 +2779,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_orders_per_type INT DEFAULT 2;
-FOR customer_type AS SELECT DISTINCT customer_type FROM customers LIMIT 3 DO
+FOR customer_type AS SELECT DISTINCT customer_type FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
                      SET v_customer_type = customer_type.customer_type;
 SET v_type_order_count = (SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = v_customer_type);
             SET v_type_customer_count = (SELECT COUNT(*) FROM customers WHERE customer_type = v_customer_type);
@@ -2798,7 +2798,7 @@ SET v_type_order_count = (SELECT COUNT(*) FROM orders o JOIN customers c ON o.cu
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers WHERE customer_type = v_customer_type),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Type Fill',
                             18.0,
                             1.8,
@@ -2822,7 +2822,7 @@ END L1;
                             '00000',
                             'USA',
                             v_customer_type,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             0.0,
                             NULL,
                             NULL,
@@ -2841,7 +2841,7 @@ END FOR;
 END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2854,7 +2854,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_zip_orders INT DEFAULT 3;
-        FOR zip AS SELECT DISTINCT customer_zip FROM customers LIMIT 2 DO
+        FOR zip AS SELECT DISTINCT customer_zip FROM customers ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_zip_code = zip.customer_zip;
             SET v_zip_orders = (SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_zip = v_zip_code);
             SET v_zip_customers = (SELECT COUNT(*) FROM customers WHERE customer_zip = v_zip_code);
@@ -2873,7 +2873,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers WHERE customer_zip = v_zip_code),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Zip Fill',
                             20.0,
                             2.0,
@@ -2897,7 +2897,7 @@ BEGIN
                             v_zip_code,
                             'USA',
                             'Retail',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             0.0,
                             NULL,
                             NULL,
@@ -2940,7 +2940,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_max_discount_region_order DOUBLE DEFAULT 100.0;
-        FOR shipping_region AS SELECT DISTINCT order_shipping_region FROM orders LIMIT 2 DO
+        FOR shipping_region AS SELECT DISTINCT order_shipping_region FROM orders ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_order_shipping_region = shipping_region.order_shipping_region;
             SET v_region_shipping_total = (SELECT SUM(order_shipping) FROM orders WHERE order_shipping_region = v_order_shipping_region);
             IF v_region_shipping_total > 20 AND v_region_shipping_total < 50 THEN
@@ -2974,8 +2974,8 @@ BEGIN
                                     'Region special',
                                     4.0,
                                     0,
-                                    CURRENT_TIMESTAMP,
-                                    CURRENT_TIMESTAMP,
+                                    TIMESTAMP '2025-10-01 00:00:00',
+                                    TIMESTAMP '2025-10-01 00:00:00',
                                     true,
                                     0.15,
                                     0.19
@@ -3000,7 +3000,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Region Fill',
                             22.0,
                             2.2,
@@ -3028,7 +3028,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_orders_per_domain INT DEFAULT 1;
-        FOR customer AS SELECT SUBSTRING(customer_email, POSITION('@' IN customer_email)) AS domain, customer_id FROM customers LIMIT 3 DO
+        FOR customer AS SELECT SUBSTRING(customer_email, POSITION('@' IN customer_email)) AS domain, customer_id FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_customer_email_domain = customer.domain;
             SET v_domain_customer_count = (SELECT COUNT(*) FROM customers WHERE customer_email LIKE '%' || v_customer_email_domain);
             SET v_domain_order_count = (SELECT COUNT(*) FROM orders WHERE customer_id IN (SELECT customer_id FROM customers WHERE customer_email LIKE '%' || v_customer_email_domain));
@@ -3047,7 +3047,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             customer.customer_id,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Domain Fill',
                             15.0,
                             1.5,
@@ -3104,7 +3104,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_dept_size INT DEFAULT 2;
-        FOR department AS SELECT DISTINCT employee_department FROM employees LIMIT 3 DO
+        FOR department AS SELECT DISTINCT employee_department FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_department_emp_count = (SELECT COUNT(*) FROM employees WHERE employee_department = department.employee_department);
             SET v_department_avg_yearly_salary = (SELECT AVG(employee_salary) FROM employees WHERE employee_department = department.employee_department);
             IF v_department_emp_count > v_min_dept_size THEN
@@ -3130,7 +3130,7 @@ BEGIN
                         '555-0000',
                         'Member',
                         department.employee_department,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         NULL,
                         45000.0,
                         0.0,
@@ -3141,7 +3141,7 @@ BEGIN
                         'CA',
                         '00000',
                         'USA',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Female',
                         'Single',
                         0
@@ -3165,7 +3165,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_status_orders INT DEFAULT 2;
-        FOR order_stat AS SELECT DISTINCT order_status FROM orders LIMIT 3 DO
+        FOR order_stat AS SELECT DISTINCT order_status FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_status = order_stat.order_status;
             SET v_status_count = (SELECT COUNT(*) FROM orders WHERE order_status = v_order_status);
             SET v_status_order_total = (SELECT SUM(order_total) FROM orders WHERE order_status = v_order_status);
@@ -3184,7 +3184,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             v_order_status,
                             15.0,
                             1.5,
@@ -3210,7 +3210,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -3222,7 +3222,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_dept_diversity INT DEFAULT 2;
-        FOR dept AS SELECT DISTINCT employee_department FROM employees LIMIT 3 DO
+        FOR dept AS SELECT DISTINCT employee_department FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_dept_name = dept.employee_department;
             SET v_emp_department_size_counts = (SELECT COUNT(*) FROM employees WHERE employee_department = v_dept_name);
             IF v_emp_department_size_counts < v_min_dept_diversity THEN
@@ -3235,7 +3235,7 @@ BEGIN
                             '555-0000',
                             'Balancer',
                             v_dept_name,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             35000.0,
                             0.0,
@@ -3254,7 +3254,7 @@ BEGIN
                     UNTIL v_emp_department_size_counts >= v_min_dept_diversity END REPEAT;
                 END L1;
             END IF;
-            SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, CURRENT_TIMESTAMP)) FROM employees WHERE employee_department = v_dept_name);
+            SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM employees WHERE employee_department = v_dept_name);
             IF v_dept_average_age IS NULL THEN
                 L2: BEGIN
                     REPEAT
@@ -3265,7 +3265,7 @@ BEGIN
                             '555-0000',
                             'Age',
                             v_dept_name,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             30000.0,
                             0.0,
@@ -3276,12 +3276,12 @@ BEGIN
                             'CA',
                             '00000',
                             'USA',
-                            DATEADD(YEAR, -30, CURRENT_TIMESTAMP),
+                            DATEADD(YEAR, -30, TIMESTAMP '2025-10-01 00:00:00'),
                             'Female',
                             'Married',
                             1
                         );
-                        SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, CURRENT_TIMESTAMP)) FROM employees WHERE employee_department = v_dept_name);
+                        SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM employees WHERE employee_department = v_dept_name);
                     UNTIL v_dept_average_age IS NOT NULL END REPEAT;
                 END L2;
             ELSEIF v_dept_average_age < 30 THEN
@@ -3294,7 +3294,7 @@ BEGIN
                             '555-0000',
                             'Senior',
                             v_dept_name,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             55000.0,
                             0.0,
@@ -3305,12 +3305,12 @@ BEGIN
                             'CA',
                             '00000',
                             'USA',
-                            DATEADD(YEAR, -40, CURRENT_TIMESTAMP),
+                            DATEADD(YEAR, -40, TIMESTAMP '2025-10-01 00:00:00'),
                             'Male',
                             'Married',
                             3
                         );
-                        SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, CURRENT_TIMESTAMP)) FROM employees WHERE employee_department = v_dept_name);
+                        SET v_dept_average_age = (SELECT AVG(DATEDIFF(YEAR, employee_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM employees WHERE employee_department = v_dept_name);
                     UNTIL v_dept_average_age > 30 END REPEAT;
                 END L3;
             END IF;
@@ -3329,7 +3329,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier product error'); END;
 
     L0: BEGIN
-        FOR supplier AS SELECT supplier_id, supplier_main_products FROM suppliers LIMIT 3 DO
+        FOR supplier AS SELECT supplier_id, supplier_main_products FROM suppliers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_supplier_type = supplier.supplier_main_products;
             SET v_supplier_product_count = (SELECT COUNT(*) FROM products WHERE supplier_id = supplier.supplier_id AND product_category = v_supplier_type);
             IF v_supplier_product_count < v_products_per_type_min THEN
@@ -3352,8 +3352,8 @@ BEGIN
                             'Type product',
                             3.5,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -3381,7 +3381,7 @@ BEGIN
                         SELECT supplier_main_products
                         FROM suppliers
                         WHERE supplier_id = products.supplier_id
-                        LIMIT 1
+                        ORDER BY ALL NULLS LAST LIMIT 1
                     )
                     WHERE product_id = (
                         SELECT MIN(product_id)
@@ -3415,7 +3415,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_zip_min_orders_total DOUBLE DEFAULT 100.0;
-        FOR zip AS SELECT DISTINCT customer_zip FROM customers LIMIT 3 DO
+        FOR zip AS SELECT DISTINCT customer_zip FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_zip_code = zip.customer_zip;
             SET v_customer_zip_orders_total = (
                 SELECT SUM(order_total)
@@ -3441,7 +3441,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers WHERE customer_zip = v_zip_code),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Zip Revenue',
                             20.0,
                             2.0,
@@ -3475,7 +3475,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_device_orders INT DEFAULT 1;
-        FOR device AS SELECT DISTINCT order_device FROM orders LIMIT 3 DO
+        FOR device AS SELECT DISTINCT order_device FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_device_type = device.order_device;
             SET v_device_order_count = (SELECT COUNT(*) FROM orders WHERE order_device = v_order_device_type);
             IF v_device_order_count < v_min_device_orders THEN
@@ -3494,7 +3494,7 @@ BEGIN
                         ) VALUES (
                             (SELECT MAX(order_id) + 1 FROM orders),
                             (SELECT MIN(customer_id) FROM customers),
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             'Device Fill',
                             15.0,
                             1.5,
@@ -3522,7 +3522,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_products_margin_check INT DEFAULT 2;
-        FOR product AS SELECT product_id, product_cost, product_discount FROM products LIMIT 3 DO
+        FOR product AS SELECT product_id, product_cost, product_discount FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_cost = product.product_cost;
             SET v_product_discount = product.product_discount;
             L1: BEGIN
@@ -3552,7 +3552,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -3563,7 +3563,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Order item counting error'); END;
 
     L0: BEGIN
-        FOR order_id_row AS SELECT order_id FROM orders LIMIT 3 DO
+        FOR order_id_row AS SELECT order_id FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_id = order_id_row.order_id;
             SET v_order_total = (SELECT order_total FROM orders WHERE order_id = v_order_id);
             SET v_order_item_count = (SELECT COUNT(*) FROM order_items WHERE order_id = v_order_id);
@@ -3619,7 +3619,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_payment_update_needed BOOLEAN DEFAULT false;
-        FOR payment_row AS SELECT order_id, order_total, order_tax, order_payment_status FROM orders LIMIT 3 DO
+        FOR payment_row AS SELECT order_id, order_total, order_tax, order_payment_status FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_payment_balance = payment_row.order_total + payment_row.order_tax;
             SET v_payment_status = payment_row.order_payment_status;
             IF v_payment_status = 'Pending' AND v_order_payment_balance > 20 THEN
@@ -3680,7 +3680,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MAX(customer_id) FROM customers),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Generated',
                         25.0,
                         2.5,
@@ -3707,7 +3707,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier region error'); END;
 
     L0: BEGIN
-        FOR region AS SELECT DISTINCT supplier_region FROM suppliers LIMIT 3 DO
+        FOR region AS SELECT DISTINCT supplier_region FROM suppliers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_region_to_balance = region.supplier_region;
             SET v_region_suppliers_current = (SELECT COUNT(*) FROM suppliers WHERE supplier_active = true AND supplier_region = v_region_to_balance);
             IF v_region_suppliers_current < v_suppliers_per_region_target THEN
@@ -3728,7 +3728,7 @@ BEGIN
                             v_region_to_balance,
                             'Diverse',
                             'http://regional.com',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             NULL,
                             4.0,
@@ -3761,7 +3761,7 @@ BEGIN
                         CONCAT('Region_', v_no_region_suppliers_count + 1),
                         'General',
                         'http://newregion.com',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         NULL,
                         NULL,
                         4.5,
@@ -3786,7 +3786,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_color_products INT DEFAULT 2;
-        FOR color AS SELECT DISTINCT product_color FROM products LIMIT 3 DO
+        FOR color AS SELECT DISTINCT product_color FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_color_to_boost = color.product_color;
             SET v_color_product_count = (SELECT COUNT(*) FROM products WHERE product_color = v_color_to_boost);
             IF v_color_product_count < v_min_color_products THEN
@@ -3809,8 +3809,8 @@ BEGIN
                             'Diverse color',
                             4.0,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.05,
                             0.19
@@ -3850,8 +3850,8 @@ BEGIN
                         'Expanding diversity',
                         3.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -3900,7 +3900,7 @@ BEGIN
                         v_origin_to_activate,
                         'General',
                         'http://exports.com',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         NULL,
                         NULL,
                         4.0,
@@ -3923,8 +3923,8 @@ BEGIN
                         'Imported',
                         4.5,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -3954,8 +3954,8 @@ BEGIN
                         'Diverse',
                         4.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -3980,7 +3980,7 @@ BEGIN
     L0: BEGIN
         DECLARE v_min_orders_per_city INT DEFAULT 1;
         DECLARE v_min_suppliers_per_city INT DEFAULT 1;
-        FOR city AS SELECT DISTINCT customer_city FROM customers LIMIT 3 DO
+        FOR city AS SELECT DISTINCT customer_city FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_customer_city = city.customer_city;
             SET v_city_order_count = (SELECT COUNT(*) FROM orders WHERE customer_id IN (SELECT customer_id FROM customers WHERE customer_city = v_customer_city));
             IF v_city_order_count = 0 THEN
@@ -3997,7 +3997,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers WHERE customer_city = v_customer_city),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'City Fill',
                         25.0,
                         2.5,
@@ -4024,7 +4024,7 @@ BEGIN
                             v_customer_city,
                             'General',
                             'http://city.com',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             NULL,
                             NULL,
                             4.0,
@@ -4097,8 +4097,8 @@ BEGIN
                         'Size variety',
                         3.5,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.05,
                         0.19
@@ -4109,7 +4109,7 @@ BEGIN
             END L1;
         END IF;
         L2: BEGIN
-            FOR size AS SELECT DISTINCT product_size FROM products LIMIT 1 DO
+            FOR size AS SELECT DISTINCT product_size FROM products ORDER BY ALL NULLS LAST LIMIT 1 DO
                 SET v_product_size = size.product_size;
                 IF (SELECT COUNT(*) FROM products WHERE product_size = v_product_size) < 2 THEN
                     BEGIN
@@ -4132,8 +4132,8 @@ BEGIN
                                 'Extra size',
                                 4.0,
                                 0,
-                                CURRENT_TIMESTAMP,
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 true,
                                 0.0,
                                 0.19
@@ -4160,7 +4160,7 @@ BEGIN
     L0: BEGIN
         DECLARE v_min_orders_per_country INT DEFAULT 1;
         DECLARE v_min_suppliers_per_country INT DEFAULT 1;
-        FOR country AS SELECT DISTINCT customer_country FROM customers LIMIT 3 DO
+        FOR country AS SELECT DISTINCT customer_country FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_customer_country = country.customer_country;
             SET v_country_order_count = (SELECT COUNT(*) FROM orders WHERE customer_id IN (SELECT customer_id FROM customers WHERE customer_country = v_customer_country));
             IF v_country_order_count < v_min_orders_per_country THEN
@@ -4177,7 +4177,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers WHERE customer_country = v_customer_country),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Country Fill',
                         20.0,
                         2.0,
@@ -4202,7 +4202,7 @@ BEGIN
                             '00000',
                             v_customer_country,
                             'Retail',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             0.0,
                             NULL,
                             NULL,
@@ -4234,7 +4234,7 @@ BEGIN
                         v_customer_country,
                         'General',
                         'http://supplier.com',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         NULL,
                         NULL,
                         4.0,
@@ -4258,7 +4258,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_category_weight_count INT DEFAULT 3;
-        FOR category AS SELECT DISTINCT product_category FROM products LIMIT 3 DO
+        FOR category AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_category = category.product_category;
             SET v_category_weights = (SELECT COUNT(*) FROM products WHERE product_category = v_product_category AND product_weight IS NOT NULL);
             IF v_category_weights < v_min_category_weight_count THEN
@@ -4284,8 +4284,8 @@ BEGIN
                                 'Weighted item',
                                 3.0,
                                 0,
-                                CURRENT_TIMESTAMP,
-                                CURRENT_TIMESTAMP,
+                                TIMESTAMP '2025-10-01 00:00:00',
+                                TIMESTAMP '2025-10-01 00:00:00',
                                 true,
                                 0.0,
                                 0.19
@@ -4315,7 +4315,7 @@ BEGIN
         SET v_no_opt_in_count = (SELECT COUNT(*) FROM customers WHERE customer_opt_in_newsletter = false);
         IF v_no_opt_in_count > v_opt_in_count THEN
             L1: BEGIN
-                FOR customer AS SELECT customer_id FROM customers WHERE customer_opt_in_newsletter = false LIMIT 2 DO
+                FOR customer AS SELECT customer_id FROM customers WHERE customer_opt_in_newsletter = false ORDER BY ALL NULLS LAST LIMIT 2 DO
                     IF v_no_opt_in_count > v_opt_in_count THEN
                     BEGIN
                         UPDATE customers
@@ -4339,7 +4339,7 @@ BEGIN
                             '00000',
                             'USA',
                             'Retail',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             0.0,
                             NULL,
                             NULL,
@@ -4371,10 +4371,10 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_cities_for_age_diversity INT DEFAULT 3;
-        FOR city AS SELECT DISTINCT customer_city FROM customers LIMIT v_min_cities_for_age_diversity DO
+        FOR city AS SELECT DISTINCT customer_city FROM customers ORDER BY ALL NULLS LAST LIMIT v_min_cities_for_age_diversity DO
             SET v_customer_city = city.customer_city;
             BEGIN
-                SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, CURRENT_TIMESTAMP)) FROM customers WHERE customer_city = v_customer_city);
+                SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM customers WHERE customer_city = v_customer_city);
                 IF v_average_customer_age IS NULL THEN
                     INSERT INTO customers VALUES (
                         (SELECT MAX(customer_id) + 1 FROM customers),
@@ -4387,10 +4387,10 @@ BEGIN
                         '00000',
                         'USA',
                         'Retail',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         0.0,
                         NULL,
-                        DATEADD(YEAR, -35, CURRENT_TIMESTAMP),
+                        DATEADD(YEAR, -35, TIMESTAMP '2025-10-01 00:00:00'),
                         NULL,
                         true,
                         true,
@@ -4398,7 +4398,7 @@ BEGIN
                         NULL,
                         NULL
                     );
-                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, CURRENT_TIMESTAMP)) FROM customers WHERE customer_city = v_customer_city);
+                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM customers WHERE customer_city = v_customer_city);
                 END IF;
                 IF v_average_customer_age < 25 THEN
                     INSERT INTO customers VALUES (
@@ -4412,10 +4412,10 @@ BEGIN
                         '00000',
                         'USA',
                         'Retail',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         0.0,
                         NULL,
-                        DATEADD(YEAR, -50, CURRENT_TIMESTAMP),
+                        DATEADD(YEAR, -50, TIMESTAMP '2025-10-01 00:00:00'),
                         NULL,
                         true,
                         true,
@@ -4423,7 +4423,7 @@ BEGIN
                         NULL,
                         NULL
                     );
-                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, CURRENT_TIMESTAMP)) FROM customers WHERE customer_city = v_customer_city);
+                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM customers WHERE customer_city = v_customer_city);
                 END IF;
                 IF v_average_customer_age > 40 THEN
                     INSERT INTO customers VALUES (
@@ -4437,10 +4437,10 @@ BEGIN
                         '00000',
                         'USA',
                         'Retail',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         0.0,
                         NULL,
-                        DATEADD(YEAR, -20, CURRENT_TIMESTAMP),
+                        DATEADD(YEAR, -20, TIMESTAMP '2025-10-01 00:00:00'),
                         NULL,
                         true,
                         true,
@@ -4448,7 +4448,7 @@ BEGIN
                         NULL,
                         NULL
                     );
-                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, CURRENT_TIMESTAMP)) FROM customers WHERE customer_city = v_customer_city);
+                    SET v_average_customer_age = (SELECT AVG(DATEDIFF(YEAR, customer_birth_date, TIMESTAMP '2025-10-01 00:00:00')) FROM customers WHERE customer_city = v_customer_city);
                 END IF;
             END;
         END FOR;
@@ -4467,7 +4467,7 @@ BEGIN
 
     L0: BEGIN
         DECLARE v_min_reviews_per_category INT DEFAULT 1;
-        FOR category AS SELECT DISTINCT product_category FROM products LIMIT 3 DO
+        FOR category AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_reviews_per_category = (SELECT SUM(product_reviews) FROM products WHERE product_category = category.product_category);
             SET v_product_rating = (SELECT AVG(product_rating) FROM products WHERE product_category = category.product_category);
             L1: BEGIN
@@ -4490,8 +4490,8 @@ BEGIN
                             'Filled with reviews',
                             4.0,
                             25,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -4527,7 +4527,7 @@ BEGIN
         DECLARE v_min_description_length INT DEFAULT 20;
         DECLARE v_max_description_length INT DEFAULT 100;
         DECLARE v_target_descriptive_products INT DEFAULT 5;
-        FOR product AS SELECT product_id, product_description FROM products LIMIT 3 DO
+        FOR product AS SELECT product_id, product_description FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_id = product.product_id;
             SET v_product_description = product.product_description;
             SET v_description_length = LENGTH(v_product_description);
@@ -4577,8 +4577,8 @@ BEGIN
                         'This product has a long, detailed, and diverse description to maintain variability in the dataset.',
                         4.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -4605,7 +4605,7 @@ BEGIN
         SET v_order_item_status_nulls = (SELECT COUNT(*) FROM order_items WHERE item_status IS NULL);
         IF v_order_item_status_nulls > 0 THEN
             L1: BEGIN
-                FOR order_item AS SELECT order_id, order_item_id FROM order_items WHERE item_status IS NULL LIMIT 2 DO
+                FOR order_item AS SELECT order_id, order_item_id FROM order_items WHERE item_status IS NULL ORDER BY ALL NULLS LAST LIMIT 2 DO
                     SET v_order_id = order_item.order_id;
                     SET v_order_item_id = order_item.order_item_id;
                     BEGIN
@@ -4655,10 +4655,10 @@ BEGIN
     L0: BEGIN
         SET v_prime_customer_count = (SELECT COUNT(*) FROM customers WHERE customer_is_prime_member = true);
         IF v_prime_customer_count < v_min_prime_customers THEN
-            FOR cust AS SELECT customer_id FROM customers WHERE customer_is_prime_member IS NULL LIMIT v_min_prime_customers DO
+            FOR cust AS SELECT customer_id FROM customers WHERE customer_is_prime_member IS NULL ORDER BY ALL NULLS LAST LIMIT v_min_prime_customers DO
                 UPDATE customers
                 SET customer_is_prime_member = true,
-                    customer_prime_customer_since = CURRENT_TIMESTAMP
+                    customer_prime_customer_since = TIMESTAMP '2025-10-01 00:00:00'
                 WHERE customer_id = cust.customer_id;
                 SET v_customer_is_prime = true;
             END FOR;
@@ -4674,7 +4674,7 @@ BEGIN
                     '00000',
                     'USA',
                     'Retail',
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     0.0,
                     NULL,
                     NULL,
@@ -4682,7 +4682,7 @@ BEGIN
                     true,
                     true,
                     0.0,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     NULL,
                     true
                 );
@@ -4702,7 +4702,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Department commission error'); END;
 
     L0: BEGIN
-        FOR dept AS SELECT DISTINCT employee_department FROM employees LIMIT 2 DO
+        FOR dept AS SELECT DISTINCT employee_department FROM employees ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_employee_department = dept.employee_department;
             SET v_department_commission_total = (SELECT SUM(employee_commission) FROM employees WHERE employee_department = v_employee_department);
             BEGIN
@@ -4752,7 +4752,7 @@ BEGIN
     L0: BEGIN
         SET v_customizable_order_items_count = (SELECT COUNT(*) FROM order_items WHERE item_customization IS NOT NULL);
         IF v_customizable_order_items_count < v_min_customizable_items THEN
-            FOR oi AS SELECT order_item_id FROM order_items WHERE item_customization IS NULL LIMIT v_min_customizable_items DO
+            FOR oi AS SELECT order_item_id FROM order_items WHERE item_customization IS NULL ORDER BY ALL NULLS LAST LIMIT v_min_customizable_items DO
                 UPDATE order_items
                 SET item_customization = CASE
                                             WHEN MOD(oi.order_item_id, 2) = 0 THEN 'Engraved'
@@ -4824,7 +4824,7 @@ BEGIN
         SET v_empty_orders = (SELECT COUNT(*) FROM orders o WHERE NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.order_id));
         IF v_empty_orders > 0 THEN
             L1: BEGIN
-                FOR empty_order AS SELECT order_id FROM orders o WHERE NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.order_id) LIMIT 2 DO
+                FOR empty_order AS SELECT order_id FROM orders o WHERE NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.order_id) ORDER BY ALL NULLS LAST LIMIT 2 DO
                     SET v_order_status = (SELECT order_status FROM orders WHERE order_id = empty_order.order_id);
                     L2: BEGIN
                         CASE
@@ -4873,7 +4873,7 @@ BEGIN
                             ELSE
                                 BEGIN
                                     DECLARE v_product_id INT;
-                                    SET v_product_id = (SELECT product_id FROM products WHERE product_category = 'Specialty' LIMIT 1);
+                                    SET v_product_id = (SELECT product_id FROM products WHERE product_category = 'Specialty' ORDER BY ALL NULLS LAST LIMIT 1);
                                     IF v_product_id IS NULL THEN
                                         SET v_product_id = (SELECT MIN(product_id) FROM products);
                                     END IF;
@@ -4897,7 +4897,7 @@ BEGIN
                                         2.0,
                                         22.0,
                                         CASE
-                                            WHEN RANDOM() > 0.5 THEN 'Shipped'
+                                            WHEN RANDOM(0) > 0.5 THEN 'Shipped'
                                             ELSE 'Processing'
                                         END
                                     );
@@ -4925,7 +4925,7 @@ BEGIN
         SET v_supplier_site_count = (SELECT COUNT(*) FROM suppliers WHERE supplier_website IS NOT NULL);
         IF v_supplier_site_count < 5 THEN
             L1: BEGIN
-                FOR s1 AS SELECT supplier_id FROM suppliers WHERE supplier_website IS NULL OR supplier_website = '' LIMIT 3 DO
+                FOR s1 AS SELECT supplier_id FROM suppliers WHERE supplier_website IS NULL OR supplier_website = '' ORDER BY ALL NULLS LAST LIMIT 3 DO
                     SET v_site_char_length = (SELECT LENGTH(supplier_website) FROM suppliers WHERE supplier_id = s1.supplier_id);
                     IF v_site_char_length < v_min_site_length THEN
                         L2: BEGIN
@@ -4957,7 +4957,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Inventory movement error'); END;
 
     L0: BEGIN
-        FOR cat AS SELECT DISTINCT product_category FROM products LIMIT 3 DO
+        FOR cat AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_product_units_sold = (SELECT SUM(oi.item_quantity) FROM order_items oi JOIN products p ON oi.product_id = p.product_id WHERE p.product_category = cat.product_category);
             SET v_category_products_sold = (SELECT COUNT(DISTINCT p.product_id) FROM order_items oi JOIN products p ON oi.product_id = p.product_id WHERE p.product_category = cat.product_category);
             IF v_product_units_sold < 10 THEN
@@ -4980,8 +4980,8 @@ BEGIN
                             'Fast mover',
                             4.5,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -5026,7 +5026,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier-product match error'); END;
 
     L0: BEGIN
-        FOR sup AS SELECT supplier_id, supplier_main_products FROM suppliers LIMIT 2 DO
+        FOR sup AS SELECT supplier_id, supplier_main_products FROM suppliers ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_supplier_product_match = (SELECT COUNT(*) FROM products p WHERE p.supplier_id = sup.supplier_id AND p.product_category = sup.supplier_main_products);
             IF v_supplier_product_match = 0 THEN
                 L1: BEGIN
@@ -5049,8 +5049,8 @@ BEGIN
                             'Supplier-matched',
                             4.2,
                             0,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
+                            TIMESTAMP '2025-10-01 00:00:00',
                             true,
                             0.0,
                             0.19
@@ -5076,7 +5076,7 @@ BEGIN
                 SELECT supplier_main_products
                 FROM suppliers
                 WHERE supplier_id = products.supplier_id
-            ) || '%' LIMIT 2 DO
+            ) || '%' ORDER BY ALL NULLS LAST LIMIT 2 DO
                 IF EXISTS (
                     SELECT 1
                     FROM suppliers
@@ -5095,7 +5095,7 @@ BEGIN
     END L2;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5108,9 +5108,9 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Tenure salary error'); END;
 
     L0: BEGIN
-        FOR emp AS SELECT employee_id, employee_salary, employee_hire_date FROM employees LIMIT 3 DO
+        FOR emp AS SELECT employee_id, employee_salary, employee_hire_date FROM employees ORDER BY ALL NULLS LAST LIMIT 3 DO
             IF emp.employee_hire_date IS NOT NULL THEN
-                SET v_employee_tenure_years = DATEDIFF(YEAR, emp.employee_hire_date, CURRENT_TIMESTAMP);
+                SET v_employee_tenure_years = DATEDIFF(YEAR, emp.employee_hire_date, TIMESTAMP '2025-10-01 00:00:00');
                 SET v_employee_salary = emp.employee_salary;
                 IF v_employee_tenure_years > v_tenure_threshold THEN
                     UPDATE employees
@@ -5134,7 +5134,7 @@ BEGIN
                 '555-0000',
                 'Associate',
                 'Operations',
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 NULL,
                 40000.0,
                 0.0,
@@ -5145,7 +5145,7 @@ BEGIN
                 'CA',
                 '00000',
                 'USA',
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Other',
                 'Single',
                 0
@@ -5154,7 +5154,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -5165,7 +5165,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Region isolation error'); END;
 
     L0: BEGIN
-        FOR region AS SELECT DISTINCT order_shipping_region FROM orders LIMIT 3 DO
+        FOR region AS SELECT DISTINCT order_shipping_region FROM orders ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_order_shipping_region = region.order_shipping_region;
             SET v_region_order_count = (SELECT COUNT(*) FROM orders WHERE order_shipping_region = v_order_shipping_region);
             IF v_region_order_count < v_max_isolation_level THEN
@@ -5183,7 +5183,7 @@ BEGIN
                             '00000',
                             v_order_shipping_region,
                             'Wholesale',
-                            CURRENT_TIMESTAMP,
+                            TIMESTAMP '2025-10-01 00:00:00',
                             0.0,
                             NULL,
                             NULL,
@@ -5208,7 +5208,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers WHERE customer_country = v_order_shipping_region),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Regional Isolation',
                         30.0,
                         3.0,
@@ -5240,7 +5240,7 @@ BEGIN
         );
         IF v_country_tax_rates < 4 AND (SELECT COUNT(DISTINCT order_shipping_country) FROM orders) > 2 THEN
             L1: BEGIN
-                FOR country_tax_pair AS SELECT DISTINCT order_shipping_country FROM orders WHERE order_tax = 0 LIMIT 4 DO
+                FOR country_tax_pair AS SELECT DISTINCT order_shipping_country FROM orders WHERE order_tax = 0 ORDER BY ALL NULLS LAST LIMIT 4 DO
                     SET v_order_tax_percent = CASE
                         WHEN country_tax_pair.order_shipping_country = 'USA' THEN 0.08
                         WHEN country_tax_pair.order_shipping_country = 'UK' THEN 0.20
@@ -5261,7 +5261,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Tax Diversity',
                         50.0,
                         ROUND(50.0 * v_order_tax_percent, 2),
@@ -5290,7 +5290,7 @@ BEGIN
     L0: BEGIN
         SET v_products_without_reviews = (SELECT COUNT(*) FROM products WHERE product_reviews = 0 OR product_reviews IS NULL);
         IF v_products_without_reviews > 0 THEN
-            FOR product_no_reviews AS SELECT product_id FROM products WHERE product_reviews = 0 OR product_reviews IS NULL LIMIT 3 DO
+            FOR product_no_reviews AS SELECT product_id FROM products WHERE product_reviews = 0 OR product_reviews IS NULL ORDER BY ALL NULLS LAST LIMIT 3 DO
                 SET v_product_id = product_no_reviews.product_id;
                 SET v_product_reviews = (SELECT product_reviews FROM products WHERE product_id = v_product_id);
                 IF v_product_reviews < v_review_threshold THEN
@@ -5319,8 +5319,8 @@ BEGIN
                 'Waiting for first review',
                 0.0,
                 0,
-                CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
+                TIMESTAMP '2025-10-01 00:00:00',
                 true,
                 0.0,
                 0.19
@@ -5341,9 +5341,9 @@ BEGIN
     L0: BEGIN
         SET v_customer_active_missing = (SELECT COUNT(*) FROM customers WHERE customer_active_status IS NULL);
         IF v_customer_active_missing > 0 THEN
-            FOR cust_missing_active AS SELECT customer_id FROM customers WHERE customer_active_status IS NULL LIMIT 3 DO
+            FOR cust_missing_active AS SELECT customer_id FROM customers WHERE customer_active_status IS NULL ORDER BY ALL NULLS LAST LIMIT 3 DO
                 UPDATE customers
-                SET customer_active_status = (DATEDIFF(DAY, customer_membership_date, CURRENT_TIMESTAMP) < 365)
+                SET customer_active_status = (DATEDIFF(DAY, customer_membership_date, TIMESTAMP '2025-10-01 00:00:00') < 365)
                 WHERE customer_id = cust_missing_active.customer_id;
                 SET v_temp_active_set = true;
             END FOR;
@@ -5360,7 +5360,7 @@ BEGIN
                 '00000',
                 'USA',
                 'Retail',
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 0.0,
                 NULL,
                 NULL,
@@ -5388,7 +5388,7 @@ BEGIN
     L0: BEGIN
         SET v_customer_type_count = (SELECT COUNT(DISTINCT customer_type) FROM customers);
         IF v_customer_type_count < 5 THEN
-            FOR type_boost AS SELECT DISTINCT customer_type FROM customers LIMIT 3 DO
+            FOR type_boost AS SELECT DISTINCT customer_type FROM customers ORDER BY ALL NULLS LAST LIMIT 3 DO
                 SET v_orders_by_type = (SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = type_boost.customer_type);
                 IF v_orders_by_type < 2 THEN
                     INSERT INTO orders (
@@ -5403,7 +5403,7 @@ BEGIN
                     ) VALUES (
                         (SELECT MAX(order_id) + 1 FROM orders),
                         (SELECT MIN(customer_id) FROM customers WHERE customer_type = type_boost.customer_type),
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         'Type Filler',
                         15.0,
                         1.5,
@@ -5413,7 +5413,7 @@ BEGIN
                 END IF;
             END FOR;
         ELSE
-            SET v_low_diversity_type = (SELECT customer_type FROM customers GROUP BY customer_type ORDER BY COUNT(*) LIMIT 1);
+            SET v_low_diversity_type = (SELECT customer_type FROM customers GROUP BY customer_type ORDER BY COUNT(*), customer_type LIMIT 1);
             IF (SELECT COUNT(*) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_type = v_low_diversity_type) < 1 THEN
                 INSERT INTO orders (
                     order_id,
@@ -5427,7 +5427,7 @@ BEGIN
                 ) VALUES (
                     (SELECT MAX(order_id) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers WHERE customer_type = v_low_diversity_type),
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     'Type Revival',
                     10.0,
                     1.0,
@@ -5452,11 +5452,11 @@ BEGIN
     L0: BEGIN
         SET v_order_item_offer_count = (SELECT COUNT(*) FROM order_items WHERE item_offer_code IS NOT NULL);
         IF v_order_item_offer_count < 2 THEN
-            FOR order_item_no_offer AS SELECT order_item_id FROM order_items WHERE item_offer_code IS NULL LIMIT 2 DO
+            FOR order_item_no_offer AS SELECT order_item_id FROM order_items WHERE item_offer_code IS NULL ORDER BY ALL NULLS LAST LIMIT 2 DO
                 UPDATE order_items
                 SET item_offer_code = CASE
-                                        WHEN RANDOM() > 0.7 THEN 'SPRING24'
-                                        WHEN RANDOM() > 0.3 THEN 'FALLWINTER'
+                                        WHEN RANDOM(0) > 0.7 THEN 'SPRING24'
+                                        WHEN RANDOM(0) > 0.3 THEN 'FALLWINTER'
                                         ELSE 'SUMMER2025'
                                      END
                 WHERE order_item_id = order_item_no_offer.order_item_id;
@@ -5485,12 +5485,12 @@ BEGIN
         SET v_employee_dept_stagnant = (
             SELECT COUNT(*)
             FROM employees
-            WHERE employee_hire_date < DATEADD(YEAR, -5, CURRENT_TIMESTAMP)
+            WHERE employee_hire_date < DATEADD(YEAR, -5, TIMESTAMP '2025-10-01 00:00:00')
               AND employee_department = (
                   SELECT employee_department
                   FROM employees
                   GROUP BY employee_department
-                  ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) DESC
+                  ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) DESC, employee_department
                   LIMIT 1
               )
         );
@@ -5499,7 +5499,7 @@ BEGIN
                 SELECT employee_department
                 FROM employees
                 GROUP BY employee_department
-                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) DESC
+                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) DESC, employee_department
                 LIMIT 1
             );
             INSERT INTO employees VALUES (
@@ -5509,7 +5509,7 @@ BEGIN
                 '555-0000',
                 'Associate',
                 v_dept_stagnant_name,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 NULL,
                 45000.0,
                 0.0,
@@ -5520,7 +5520,7 @@ BEGIN
                 'CA',
                 '00000',
                 'USA',
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Other',
                 'Single',
                 0
@@ -5540,7 +5540,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Supplier-product linkage error'); END;
 
     L0: BEGIN
-        FOR sup AS SELECT supplier_id FROM suppliers LIMIT 3 DO
+        FOR sup AS SELECT supplier_id FROM suppliers ORDER BY ALL NULLS LAST LIMIT 3 DO
             SET v_products_per_supplier = (SELECT COUNT(*) FROM products WHERE supplier_id = sup.supplier_id);
             IF v_products_per_supplier < v_supplier_product_min THEN
                 BEGIN
@@ -5563,8 +5563,8 @@ BEGIN
                         'Supplier item',
                         3.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -5631,8 +5631,8 @@ BEGIN
                     'Big sale',
                     4.0,
                     0,
-                    CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
+                    TIMESTAMP '2025-10-01 00:00:00',
                     true,
                     0.3,
                     0.19
@@ -5655,12 +5655,12 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Product timestamp error'); END;
 
     L0: BEGIN
-        SET v_last_product_update_days = (SELECT MAX(DATEDIFF(DAY, product_last_update, CURRENT_TIMESTAMP)) FROM products);
-        SET v_products_needing_update = (SELECT COUNT(*) FROM products WHERE product_last_update IS NULL OR DATEDIFF(DAY, product_last_update, CURRENT_TIMESTAMP) > v_freshness_target);
+        SET v_last_product_update_days = (SELECT MAX(DATEDIFF(DAY, product_last_update, TIMESTAMP '2025-10-01 00:00:00')) FROM products);
+        SET v_products_needing_update = (SELECT COUNT(*) FROM products WHERE product_last_update IS NULL OR DATEDIFF(DAY, product_last_update, TIMESTAMP '2025-10-01 00:00:00') > v_freshness_target);
         IF v_last_product_update_days > v_freshness_target AND v_products_needing_update > 0 THEN
-            FOR product_stale AS SELECT product_id FROM products WHERE product_last_update IS NULL OR DATEDIFF(DAY, product_last_update, CURRENT_TIMESTAMP) > v_freshness_target LIMIT 3 DO
+            FOR product_stale AS SELECT product_id FROM products WHERE product_last_update IS NULL OR DATEDIFF(DAY, product_last_update, TIMESTAMP '2025-10-01 00:00:00') > v_freshness_target ORDER BY ALL NULLS LAST LIMIT 3 DO
                 UPDATE products
-                SET product_last_update = CURRENT_TIMESTAMP,
+                SET product_last_update = TIMESTAMP '2025-10-01 00:00:00',
                     product_description = CONCAT(product_description, ' | Fresh')
                 WHERE product_id = product_stale.product_id;
             END FOR;
@@ -5668,7 +5668,7 @@ BEGIN
     END L0;
 
     BEGIN
-        IF (SELECT COUNT(*) FROM products WHERE product_last_update > DATEADD(DAY, -3, CURRENT_TIMESTAMP)) < 2 THEN
+        IF (SELECT COUNT(*) FROM products WHERE product_last_update > DATEADD(DAY, -3, TIMESTAMP '2025-10-01 00:00:00')) < 2 THEN
             REPEAT
                 INSERT INTO products VALUES (
                     (SELECT MAX(product_id) + 1 FROM products),
@@ -5687,13 +5687,13 @@ BEGIN
                     'Fresh item',
                     4.5,
                     0,
-                    CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
+                    TIMESTAMP '2025-10-01 00:00:00',
                     true,
                     0.0,
                     0.19
                 );
-            UNTIL (SELECT COUNT(*) FROM products WHERE product_last_update > DATEADD(DAY, -3, CURRENT_TIMESTAMP)) >= 2
+            UNTIL (SELECT COUNT(*) FROM products WHERE product_last_update > DATEADD(DAY, -3, TIMESTAMP '2025-10-01 00:00:00')) >= 2
             END REPEAT;
         END IF;
     END;
@@ -5737,7 +5737,7 @@ BEGIN
                 ) VALUES (
                     (SELECT MAX(order_id) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers),
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     'Low Value',
                     v_order_total_min / 2.0,
                     0.0,
@@ -5768,7 +5768,7 @@ BEGIN
                 SELECT employee_department
                 FROM employees
                 GROUP BY employee_department
-                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) DESC
+                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) DESC, employee_department
                 LIMIT 1
             )
         );
@@ -5779,7 +5779,7 @@ BEGIN
                 SELECT employee_department
                 FROM employees
                 GROUP BY employee_department
-                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) ASC
+                ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) ASC, employee_department
                 LIMIT 1
             )
         );
@@ -5792,7 +5792,7 @@ BEGIN
                         SELECT employee_department
                         FROM employees
                         GROUP BY employee_department
-                        ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) DESC
+                        ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) DESC, employee_department
                         LIMIT 1
                     )
                 );
@@ -5802,7 +5802,7 @@ BEGIN
                         SELECT employee_department
                         FROM employees
                         GROUP BY employee_department
-                        ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, CURRENT_TIMESTAMP)) ASC
+                        ORDER BY AVG(DATEDIFF(YEAR, employee_hire_date, TIMESTAMP '2025-10-01 00:00:00')) ASC, employee_department
                         LIMIT 1
                     )
                     WHERE employee_id = v_transfer_employee_id;
@@ -5871,7 +5871,7 @@ BEGIN
                         v_most_imbalanced_region,
                         'Balancer',
                         'http://balancer.com',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         NULL,
                         NULL,
                         4.5,
@@ -5894,8 +5894,8 @@ BEGIN
                         'Region balancer',
                         3.0,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -5933,7 +5933,7 @@ BEGIN
                 ) VALUES (
                     (SELECT MAX(order_id) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers),
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     'Bulk',
                     120.0,
                     12.0,
@@ -6003,7 +6003,7 @@ BEGIN
         SET v_customer_company_flag_count = (SELECT COUNT(*) FROM customers WHERE JSON_EXTRACT(customer_metadata, V_COMPANY_FLAG_KEY) = 'true');
         IF v_customer_company_flag_count < 2 THEN
             L1: BEGIN
-                FOR cust AS SELECT customer_id FROM customers WHERE JSON_EXTRACT(customer_metadata, V_COMPANY_FLAG_KEY) IS NULL OR JSON_EXTRACT(customer_metadata, V_COMPANY_FLAG_KEY) = 'false' LIMIT 2 DO
+                FOR cust AS SELECT customer_id FROM customers WHERE JSON_EXTRACT(customer_metadata, V_COMPANY_FLAG_KEY) IS NULL OR JSON_EXTRACT(customer_metadata, V_COMPANY_FLAG_KEY) = 'false' ORDER BY ALL NULLS LAST LIMIT 2 DO
                     UPDATE customers
                     SET customer_metadata = JSON_SET(customer_metadata, '$.' || V_COMPANY_FLAG_KEY, 'true')
                     WHERE customer_id = cust.customer_id;
@@ -6034,7 +6034,7 @@ BEGIN
     L0: BEGIN
         SET v_order_item_with_comments = (SELECT COUNT(*) FROM order_items WHERE item_notes IS NOT NULL AND item_notes != '');
         IF v_order_item_with_comments < 3 THEN
-            FOR oi AS SELECT order_item_id FROM order_items WHERE item_notes IS NULL OR item_notes = '' LIMIT 3 DO
+            FOR oi AS SELECT order_item_id FROM order_items WHERE item_notes IS NULL OR item_notes = '' ORDER BY ALL NULLS LAST LIMIT 3 DO
                 UPDATE order_items
                 SET item_notes = CASE
                                     WHEN MOD(oi.order_item_id, 2) = 0 THEN 'Custom request'
@@ -6062,7 +6062,7 @@ BEGIN
         SET v_product_tags_count = (SELECT COUNT(*) FROM products WHERE JSON_EXTRACT(product_metadata, '$.tags') IS NOT NULL AND JSON_EXTRACT(product_metadata, '$.tags') != '[]');
         IF v_product_tags_count < 3 THEN
             L1: BEGIN
-                FOR prod AS SELECT product_id, product_metadata FROM products LIMIT 3 DO
+                FOR prod AS SELECT product_id, product_metadata FROM products ORDER BY ALL NULLS LAST LIMIT 3 DO
                     IF JSON_EXTRACT(prod.product_metadata, '$.tags') IS NULL OR JSON_EXTRACT(prod.product_metadata, '$.tags') = '[]' THEN
                         UPDATE products
                         SET product_metadata = JSON_SET(
@@ -6097,8 +6097,8 @@ BEGIN
                 'Tagged',
                 4.0,
                 0,
-                CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
+                TIMESTAMP '2025-10-01 00:00:00',
                 true,
                 0.0,
                 0.19,
@@ -6121,7 +6121,7 @@ BEGIN
         SET v_different_workflows = (SELECT COUNT(DISTINCT order_workflow_type) FROM orders WHERE order_workflow_type IS NOT NULL);
         IF v_different_workflows < 2 THEN
             L1: BEGIN
-                FOR ord AS SELECT order_id FROM orders WHERE order_workflow_type IS NULL LIMIT 2 DO
+                FOR ord AS SELECT order_id FROM orders WHERE order_workflow_type IS NULL ORDER BY ALL NULLS LAST LIMIT 2 DO
                     UPDATE orders
                     SET order_workflow_type = CASE
                                                 WHEN MOD(ord.order_id, 2) = 0 THEN 'fast_track'
@@ -6146,7 +6146,7 @@ BEGIN
             ) VALUES (
                 (SELECT MAX(order_id) + 1 FROM orders),
                 (SELECT MIN(customer_id) FROM customers),
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Custom Workflow',
                 12.0,
                 1.2,
@@ -6191,8 +6191,8 @@ BEGIN
                     'Supplier inactive',
                     0.0,
                     0,
-                    CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
+                    TIMESTAMP '2025-10-01 00:00:00',
                     true,
                     0.5,
                     0.19
@@ -6217,7 +6217,7 @@ BEGIN
                     'Test',
                     'General',
                     NULL,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
                     NULL,
                     NULL,
                     2.5,
@@ -6242,10 +6242,10 @@ BEGIN
         SET v_returns_to_cover = (SELECT COUNT(*) FROM order_items WHERE item_status = 'Returned');
         IF v_returns_to_cover < 2 THEN
             L1: BEGIN
-                FOR oi AS SELECT order_item_id FROM order_items WHERE item_status != 'Returned' LIMIT 2 DO
+                FOR oi AS SELECT order_item_id FROM order_items WHERE item_status != 'Returned' ORDER BY ALL NULLS LAST LIMIT 2 DO
                     UPDATE order_items
                     SET item_status = 'Returned',
-                        item_return_date = CURRENT_TIMESTAMP
+                        item_return_date = TIMESTAMP '2025-10-01 00:00:00'
                     WHERE order_item_id = oi.order_item_id;
                     SET v_returns_to_cover = v_returns_to_cover + 1;
                 END FOR;
@@ -6274,7 +6274,7 @@ BEGIN
                 1.0,
                 11.0,
                 'Returned',
-                CURRENT_TIMESTAMP
+                TIMESTAMP '2025-10-01 00:00:00'
             );
         END IF;
     END L0;
@@ -6304,7 +6304,7 @@ BEGIN
                     JOIN orders o ON c.customer_id = o.customer_id
                     WHERE o.order_discount = 0
                     GROUP BY c.customer_id
-                    LIMIT 2
+                    ORDER BY ALL NULLS LAST LIMIT 2
                 DO
                     UPDATE orders
                     SET order_discount = 0.1,
@@ -6328,7 +6328,7 @@ BEGIN
             ) VALUES (
                 (SELECT MAX(order_id) + 1 FROM orders),
                 (SELECT MIN(customer_id) FROM customers WHERE NOT EXISTS (SELECT 1 FROM orders WHERE customer_id = customers.customer_id)),
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Discount Provided',
                 25.0,
                 2.5,
@@ -6350,7 +6350,7 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Critical category error'); END;
 
     L0: BEGIN
-        FOR category AS SELECT DISTINCT product_category FROM products WHERE product_category != 'General' LIMIT 2 DO
+        FOR category AS SELECT DISTINCT product_category FROM products WHERE product_category != 'General' ORDER BY ALL NULLS LAST LIMIT 2 DO
             SET v_critical_category_products = (SELECT COUNT(*) FROM products WHERE product_category = category.product_category);
             IF v_critical_category_products < v_supplier_product_threshold THEN
                 WHILE v_critical_category_products < v_supplier_product_threshold DO
@@ -6371,8 +6371,8 @@ BEGIN
                         'Critical',
                         4.5,
                         0,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
+                        TIMESTAMP '2025-10-01 00:00:00',
                         true,
                         0.0,
                         0.19
@@ -6383,7 +6383,7 @@ BEGIN
             END IF;
         END FOR;
         IF v_extra_promos_flag = true THEN
-            FOR category AS SELECT DISTINCT product_category FROM products LIMIT 1 DO
+            FOR category AS SELECT DISTINCT product_category FROM products ORDER BY ALL NULLS LAST LIMIT 1 DO
                 IF NOT EXISTS (SELECT 1 FROM order_items oi JOIN products p ON oi.product_id = p.product_id WHERE p.product_category = category.product_category) THEN
                     INSERT INTO order_items (
                         order_item_id,
@@ -6425,11 +6425,11 @@ BEGIN
         IF v_order_item_status_preprocessing >= 1 THEN
             UPDATE order_items
             SET item_status = 'Processing',
-                item_delivery_date = CURRENT_TIMESTAMP
+                item_delivery_date = TIMESTAMP '2025-10-01 00:00:00'
             WHERE order_item_id = (SELECT MIN(order_item_id) FROM order_items WHERE item_status = 'Preprocessing');
             SET v_order_item_status_aging = true;
         END IF;
-        IF v_order_item_status_aging = false AND (SELECT COUNT(*) FROM customers WHERE customer_last_order_date > DATEADD(DAY, -7, CURRENT_TIMESTAMP)) < 2 THEN
+        IF v_order_item_status_aging = false AND (SELECT COUNT(*) FROM customers WHERE customer_last_order_date > DATEADD(DAY, -7, TIMESTAMP '2025-10-01 00:00:00')) < 2 THEN
             INSERT INTO orders (
                 order_id,
                 customer_id,
@@ -6442,7 +6442,7 @@ BEGIN
             ) VALUES (
                 (SELECT MAX(order_id) + 1 FROM orders),
                 (SELECT MIN(customer_id) FROM customers),
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
                 'Item Status Flow',
                 15.0,
                 1.5,
@@ -6490,9 +6490,9 @@ BEGIN
         SET v_product_missing_weight = (SELECT COUNT(*) FROM products WHERE product_weight IS NULL AND product_category NOT LIKE '%Accessories%');
         IF v_product_missing_weight > 0 THEN
             L1: BEGIN
-                FOR prod AS SELECT product_id FROM products WHERE product_weight IS NULL AND product_category NOT LIKE '%Accessories%' LIMIT v_min_weight_products DO
+                FOR prod AS SELECT product_id FROM products WHERE product_weight IS NULL AND product_category NOT LIKE '%Accessories%' ORDER BY ALL NULLS LAST LIMIT v_min_weight_products DO
                     UPDATE products
-                    SET product_weight = ROUND(RAND() * 2 + 0.2, 2)
+                    SET product_weight = ROUND(RAND(0) * 2 + 0.2, 2)
                     WHERE product_id = prod.product_id;
                     SET v_product_weight_coverage = true;
                 END FOR;
@@ -6516,8 +6516,8 @@ BEGIN
                 'Weighted sample',
                 3.5,
                 0,
-                CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
+                TIMESTAMP '2025-10-01 00:00:00',
                 true,
                 0.0,
                 0.19
@@ -6540,7 +6540,7 @@ BEGIN
         SET v_customer_opt_in_newsletter_count = (SELECT COUNT(*) FROM customers WHERE customer_opt_in_newsletter = true);
         IF v_customer_opt_in_newsletter_count < v_min_opt_in_variety THEN
             L1: BEGIN
-                FOR cust AS SELECT customer_id FROM customers WHERE customer_opt_in_newsletter IS NULL LIMIT v_min_opt_in_variety DO
+                FOR cust AS SELECT customer_id FROM customers WHERE customer_opt_in_newsletter IS NULL ORDER BY ALL NULLS LAST LIMIT v_min_opt_in_variety DO
                     UPDATE customers
                     SET customer_opt_in_newsletter = true
                     WHERE customer_id = cust.customer_id;
@@ -6558,7 +6558,7 @@ BEGIN
                         '00000',
                         'USA',
                         'Retail',
-                        CURRENT_TIMESTAMP,
+                        TIMESTAMP '2025-10-01 00:00:00',
                         0.0,
                         NULL,
                         NULL,
@@ -6599,7 +6599,7 @@ BEGIN
                 FROM suppliers s
                 WHERE s.supplier_main_products IS NOT NULL
                   AND s.supplier_main_products != 'General'
-                LIMIT 1
+                ORDER BY ALL NULLS LAST LIMIT 1
             DO
                 INSERT INTO products VALUES (
                     (SELECT MAX(product_id) + 1 FROM products),
@@ -6620,8 +6620,8 @@ BEGIN
                     'Supplier-product diversity',
                     3.0,
                     0,
-                    CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP,
+                    TIMESTAMP '2025-10-01 00:00:00',
+                    TIMESTAMP '2025-10-01 00:00:00',
                     true,
                     0.0,
                     0.19
@@ -6662,8 +6662,8 @@ BEGIN
                 'Bundle to bundle',
                 4.0,
                 0,
-                CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP,
+                TIMESTAMP '2025-10-01 00:00:00',
+                TIMESTAMP '2025-10-01 00:00:00',
                 true,
                 0.0,
                 0.19
@@ -6713,7 +6713,7 @@ BEGIN
     L0: BEGIN
         SET v_foreign_customer_count = (SELECT COUNT(*) FROM customers WHERE customer_country != 'USA');
         IF v_foreign_customer_count < v_min_foreign_customers THEN
-            FOR country AS SELECT DISTINCT supplier_country FROM suppliers WHERE supplier_country != 'USA' LIMIT 2 DO
+            FOR country AS SELECT DISTINCT supplier_country FROM suppliers WHERE supplier_country != 'USA' ORDER BY ALL NULLS LAST LIMIT 2 DO
                 INSERT INTO customers (
                     customer_id,
                     customer_name,
