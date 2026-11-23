@@ -1370,9 +1370,21 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
     case _ => arg.deterministic && CollapseProject.isCheap(arg)
   }
 
-  private def isPythonUDFWithEvalType(e: Expression, evalType: Int): Boolean = e match {
-    case u: PythonUDF => u.evalType == evalType
-    case _ => false
+  /**
+   * The enabled conf, if any, under which the interpreted path hands a UDF of this eval type
+   * values the transpiler does not model: the legacy pandas conversion turns an integer column
+   * holding a NULL into NaN for an Arrow-optimized UDF, and the int extension dtype keeps a NaN
+   * result of a scalar pandas UDF as NaN rather than NULL. udf.py refuses to transpile under
+   * either, but both can be set after the UDF was built.
+   */
+  private def conflictingPythonConversionConf(udf: Expression): Option[String] = udf match {
+    case u: PythonUDF if u.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF &&
+        conf.legacyPandasConversionUDF =>
+      Some(SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key)
+    case u: PythonUDF if u.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF &&
+        conf.preferIntExtDtype =>
+      Some(SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key)
+    case _ => None
   }
 
   /**
@@ -1402,6 +1414,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
         // Every branch that turns the call down leaves the Python UDF in place and keeps walking
         // its arguments, which may hold transpilable calls of their own.
         def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+        lazy val conversionConf = conflictingPythonConversionConf(s.pythonUDFExpr)
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
         // but if someone changed it while running we'll want to strip the nodes out.
         if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
@@ -1415,29 +1428,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           keepPython
-        } else if (conf.legacyPandasConversionUDF &&
-            isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_ARROW_BATCHED_UDF)) {
-          // The legacy pandas conversion routes an Arrow-optimized UDF's inputs and outputs
-          // through pandas, changing what the Python function receives -- an integer column
-          // with NULLs arrives as float64 NaN, so `x is None` is False where a transpiled
-          // isnull() is true. udf.py refuses to transpile when this is set, but it can also
-          // be enabled after the UDF was built, so re-check here like the ANSI gate above.
+        } else if (conversionConf.isDefined) {
           logWarning(log"Skipping Python UDF transpilation: " +
-            log"${MDC(LogKeys.CONFIG,
-              SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key)} is enabled, which " +
-            log"changes the coercion an Arrow-optimized Python UDF sees. Falling back to " +
-            log"interpreted Python.")
-          keepPython
-        } else if (conf.preferIntExtDtype &&
-            isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_SCALAR_PANDAS_UDF)) {
-          // This conf makes integral inputs masked arrays whose derived results can retain
-          // NaN. The default numpy-backed conversion masks NaN to NULL. Re-check the Python
-          // construction gate because the conf can change after the UDF was built.
-          logWarning(log"Skipping Python UDF transpilation: " +
-            log"${MDC(LogKeys.CONFIG,
-              SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key)} is enabled, which " +
-            log"changes whether a NaN result of a scalar pandas UDF reaches Spark as NaN or " +
-            log"as NULL. Falling back to interpreted Python.")
+            log"${MDC(LogKeys.CONFIG, conversionConf.get)} is enabled, which changes the " +
+            log"values this Python UDF sees.")
           keepPython
         } else if (!callIsIntact(s)) {
           // PullOutNondeterministic moves a nondeterministic call into a projection below and

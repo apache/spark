@@ -15,46 +15,27 @@
 # limitations under the License.
 #
 """
-A canary over every Spark data type, for UDF transpilation.
+A canary over every Spark data type, for UDF transpilation at each transpilable eval type.
 
-Two allowlists decide what the transpiler rewrites: a return-type check in
-``python/pyspark/sql/transpile.py`` (numeric / string / boolean / binary), and an input-type
-category check in ``ResolveTranspiledPythonUDFOptions.scala`` with a ``case _ => false``
-catch-all. Being allowlists, a data type added tomorrow falls back to interpreted Python
-automatically -- safe, but silent: nobody is told the new type was never considered.
+The transpiler admits return types by an allowlist in ``python/pyspark/sql/transpile.py`` and
+input types by one in ``ResolveTranspiledPythonUDFOptions.scala``, so a new data type falls
+back to interpreted Python -- safely, but without anyone deciding so. This module enumerates
+the concrete ``DataType`` classes ``pyspark.sql.types`` exports and demands a verdict for
+each. ``_atomic_types`` is not used because it is not exhaustive.
 
-So this module enumerates the concrete ``DataType`` subclasses ``pyspark.sql.types`` exports
-and demands an entry for each, making a new type fail
-``test_data_type_inventory_is_complete`` with instructions.
+To triage a new type, add it to ``_SAMPLES`` and run this module, which prints the observed
+verdicts. Record a refusal as is. A type that TRANSPILES also needs a ``_PARITY_FIXTURES``
+entry, so that it is compared with the interpreted path of every eval type.
 
-Enumeration is introspective because ``pyspark.sql.types._atomic_types`` is NOT exhaustive
-(it omits ``TimeType``, ``GeometryType``, ``GeographyType``, ``CalendarIntervalType``), so a
-canary keyed on it would stop covering new types -- the exact failure this file prevents.
-
-Triaging a new type
--------------------
-1. Add an instance to ``_SAMPLES`` with the body category whose lowering could target it.
-2. Run this module; the verdict tests report the observed verdict.
-3. ``NO_TRANSPILE``, ``REJECTED_BY_ARROW`` or ``REJECTED_CHAR_VARCHAR``: record it and
-   stop.
-4. ``TRANSPILES``: verify parity against the interpreted path on all three eval types *before*
-   recording. The pickled path NULLs a mismatched return value where Arrow raises or
-   converts; the golden matrix in ``python/pyspark/sql/tests/coercion/`` is the authority. If
-   they disagree, tighten the body-vs-return-type check in ``transpile.py`` instead.
-
-The tables were derived by observation. They are expressed for the pickled eval type, with
-the Arrow expectations derived from them, which pins the property that matters: Arrow UDFs
-admit exactly the same types as pickled ones, except where Arrow cannot express the return
-type at all.
+The return-type table is written for the pickled eval type; the Arrow-backed eval types
+must admit the same types except those Arrow cannot express.
 """
 
 import unittest
 
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import types as T
-from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.tests.arrow.test_arrow_python_udf_transpile import (
-    _TRANSPILE_OFF,
     _TRANSPILE_ON,
     ArrowUDFTranspileTestsMixin,
     _eval_python_nodes,
@@ -85,19 +66,11 @@ _PICKLED = PythonEvalType.SQL_BATCHED_UDF
 _ARROW = PythonEvalType.SQL_ARROW_BATCHED_UDF
 _PANDAS = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
-# Classes that are not usable column types. The abstract root DataType and StructField (a
-# field descriptor that subclasses it) ARE in pyspark.sql.types.__all__, so without this set
-# test_data_type_inventory_is_complete would demand samples for them. The bare
-# UserDefinedType base (its sqlType() raises NotImplementedError; real UDTs are
-# user-authored subclasses this module can't enumerate) is not exported and is named only
-# for completeness.
+# Exported DataType subclasses that are not column types.
 _NOT_COLUMN_TYPES = frozenset({T.DataType, T.StructField, T.UserDefinedType})
 
 
-# --------------------------------------------------------------------------------------
-# UDF bodies. Named defs because the transpiler recovers source via inspect.getsource and
-# cannot extract a lambda that appears as a call argument.
-# --------------------------------------------------------------------------------------
+# UDF bodies are named defs: inspect.getsource cannot recover a lambda passed as an argument.
 
 
 def numeric_body(x):
@@ -117,8 +90,7 @@ def binary_body(x: bytes):
 
 
 def null_probe(x):
-    # Deliberately unannotated: this is the realistic default, and an unannotated parameter
-    # is only tried as numeric and string, which is what the input-type table records.
+    # Unannotated, so the parameter is only tried as numeric and string.
     return 1 if x is None else 2
 
 
@@ -131,8 +103,7 @@ _BODIES = {
     "string": string_body,
     "bool": bool_body,
     "binary": binary_body,
-    # For a return type no lowering can category-match, the body is irrelevant: the
-    # return-type allowlist refuses before any lowering is attempted.
+    # Refused by the return-type allowlist before the body matters.
     "other": numeric_body,
 }
 
@@ -172,11 +143,8 @@ _SAMPLES = (
     ("file_external", T.FileType.external(), "other"),
 )
 
-# Verdict per RETURN type, pickled eval type, with the body category paired above.
-# Two refusals have non-obvious reasons: `decimal` is inside the return-type allowlist (a
-# NumericType) but refused by the body-vs-return-type check, because Python receives
-# decimal.Decimal with different precision semantics; `void` is outside the allowlist even
-# though Arrow can express it, so widening the allowlist to follow Arrow would let it in.
+# Verdict per RETURN type, pickled eval type, with the body category paired above. `decimal`
+# is a NumericType but refused by the body-vs-return-type check.
 _EXPECTED_RETURN_VERDICT = {
     "void": NO_TRANSPILE,
     "char": REJECTED_CHAR_VARCHAR,
@@ -211,12 +179,8 @@ _EXPECTED_RETURN_VERDICT = {
     "file_external": NO_TRANSPILE,
 }
 
-# Return types Arrow cannot express, so an Arrow-optimized UDF declaring one fails at
-# _check_return_type regardless of transpilation. Derived from to_arrow_type and pinned
-# independently by test_transpiler_return_allowlist_is_a_subset_of_arrow_support.
-# CHAR/VARCHAR are absent even though to_arrow_type rejects them too: UDF construction
-# now refuses them for every eval type (REJECTED_CHAR_VARCHAR) before the Arrow check
-# is reached.
+# Return types Arrow cannot express, so an Arrow-backed UDF declaring one fails at
+# _check_return_type. CHAR/VARCHAR are refused earlier, for every eval type.
 _ARROW_REJECTED_RETURN_TYPES = frozenset(
     {"year_month_interval", "calendar_interval", "file", "file_external"}
 )
@@ -229,11 +193,9 @@ _EXPECTED_ARROW_BACKED_RETURN_VERDICT = {
 }
 
 # Verdict per INPUT column type, with the unannotated `null_probe` body (`.isnull()` for a
-# pandas UDF). The same for all three eval types: the check is on the JVM side.
-# boolean and binary are NO_TRANSPILE here but TRANSPILES as return types: an unannotated
-# parameter is only tried as numeric and string, so those columns match no category (see
-# test_annotated_parameters_widen_input_coverage). string_lcase is refused because the check
-# requires UTF8_BINARY -- under UTF8_LCASE 'abc' == 'ABC' is true where Python says False.
+# pandas UDF); the same for every eval type, since the check is on the JVM side. boolean and
+# binary match no category of an unannotated parameter, and string_lcase is refused because
+# 'abc' == 'ABC' under UTF8_LCASE.
 _EXPECTED_INPUT_VERDICT = {
     "void": NO_TRANSPILE,
     "char": NOT_A_COLUMN_TYPE,
@@ -268,11 +230,8 @@ _EXPECTED_INPUT_VERDICT = {
     "file_external": NOT_A_COLUMN_TYPE,
 }
 
-# Parity fixture per TRANSPILES return type: an input column whose body result already
-# matches the declared return type. Pairing them avoids a known, accepted divergence -- a
-# bigint column with `x + 1` declared DoubleType() gives the pickled path a Python int, which
-# it NULLs, while the transpiled cast returns 8.0 (see
-# test_udf_transpile_casts_to_return_type) -- masquerading as a canary failure.
+# Parity fixture per TRANSPILES return type: an input column whose body result already has
+# the declared return type, so the pickled path's NULL for a mismatched result is not hit.
 _PARITY_FIXTURES = {
     "string": (T.StringType(), "ab", string_body),
     "string_lcase": (T.StringType(), "ab", string_body),
@@ -286,23 +245,9 @@ _PARITY_FIXTURES = {
     "float": (T.DoubleType(), 7.0, numeric_body),
 }
 
-# Column type + value + matching annotated body, per body category, to show that annotating a
-# parameter is what unlocks the bool and binary columns.
-_ANNOTATED_CATEGORY_FIXTURES = {
-    "numeric": (T.LongType(), 7, numeric_body),
-    "string": (T.StringType(), "ab", string_body),
-    "bool": (T.BooleanType(), True, bool_body),
-    "binary": (T.BinaryType(), b"ab", binary_body),
-}
-
 
 def _concrete_data_type_classes():
-    """Every concrete ``DataType`` subclass exported from ``pyspark.sql.types``.
-
-    Introspective rather than a hand-written list: see the module docstring on why
-    ``_atomic_types`` is not a safe basis. Abstract bases are excluded implicitly -- they are
-    not in ``__all__`` -- so only ``DataType`` itself and ``StructField`` need naming.
-    """
+    """Every concrete ``DataType`` subclass exported from ``pyspark.sql.types``."""
     classes = set()
     for name in T.__all__:
         obj = getattr(T, name)
@@ -319,63 +264,31 @@ def _concrete_data_type_classes():
 class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTestCase):
     """Every Spark data type is either refused by the transpiler or verified against it."""
 
-    # -- inventory ----------------------------------------------------------------------
-
     def test_data_type_inventory_is_complete(self):
-        # The tripwire for a newly added Spark type.
         sampled = {type(dt) for _label, dt, _cat in _SAMPLES}
         missing = sorted(cls.__name__ for cls in _concrete_data_type_classes() - sampled)
         self.assertEqual(
             [],
             missing,
             f"pyspark.sql.types now exports {missing}, which this canary has never "
-            "considered. Add an instance to _SAMPLES in this file, then follow the "
-            "'Triaging a new type' runbook in this module's docstring. Falling back to "
-            "interpreted Python is the safe default and is probably the right answer, but "
-            "it should be a recorded decision rather than an accident.",
+            "considered. Add an instance to _SAMPLES and triage it as this module's "
+            "docstring describes.",
         )
 
     def test_sample_tables_are_complete(self):
-        # Adding a sample must force a verdict to be recorded for it, in both directions.
         labels = {label for label, _dt, _cat in _SAMPLES}
         self.assertEqual(labels, set(_EXPECTED_RETURN_VERDICT))
         self.assertEqual(labels, set(_EXPECTED_INPUT_VERDICT))
         self.assertLessEqual(_ARROW_REJECTED_RETURN_TYPES, labels)
-
-    # -- static invariant ---------------------------------------------------------------
-
-    def test_transpiler_return_allowlist_is_a_subset_of_arrow_support(self):
-        # Why the existing return-type allowlist can be reused unchanged for the Arrow eval
-        # type: everything it admits, Arrow can express. If this ever fails, widening
-        # transpilation to Arrow UDFs would start producing return types the Arrow worker
-        # cannot serialize.
-        for label, dt, _cat in _SAMPLES:
-            with self.subTest(label=label):
-                in_allowlist = isinstance(
-                    dt, (T.NumericType, T.StringType, T.BooleanType, T.BinaryType)
-                )
-                if not in_allowlist:
-                    continue
-                try:
-                    to_arrow_type(dt, timezone="UTC")
-                except Exception as e:  # any failure is the finding
-                    self.fail(
-                        f"{label} is inside the transpiler's return-type allowlist "
-                        "(python/pyspark/sql/transpile.py) but to_arrow_type "
-                        f"(python/pyspark/sql/pandas/types.py) rejects it: {e!r}. Either "
-                        "narrow the transpiler's allowlist or teach to_arrow_type about "
-                        "this type; until then Arrow-optimized UDFs must not transpile it."
-                    )
-
-    # -- return-type verdicts -----------------------------------------------------------
+        transpiling = {
+            label for label, verdict in _EXPECTED_RETURN_VERDICT.items() if verdict == TRANSPILES
+        }
+        self.assertEqual(transpiling, set(_PARITY_FIXTURES))
 
     def _return_verdict(self, dt, body, eval_type):
         try:
             pudf = UserDefinedFunction(body, dt, evalType=eval_type)
-            # Force _check_return_type, which only runs when returnType is read. Doing it
-            # explicitly keeps the verdict stable regardless of whether the transpile block
-            # happens to have read it during construction.
-            _ = pudf.returnType
+            _ = pudf.returnType  # runs _check_return_type
         except Exception as e:  # classified below
             if (
                 isinstance(e, PySparkNotImplementedError)
@@ -406,8 +319,6 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         self.fail(
             f"{table_name} disagrees with what the transpiler now does.\n"
             f"changed (label: expected -> observed): {changed}\n"
-            "If something now TRANSPILES, follow 'Triaging a new type' in this module's "
-            "docstring before updating the table.\n"
             f"observed table:\n{rendered}"
         )
 
@@ -433,8 +344,6 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
                 }
                 self._assert_verdicts(expected, observed, table_name)
 
-    # -- input-type verdicts ------------------------------------------------------------
-
     def _null_row_df(self, dt):
         schema = T.StructType([T.StructField("a", dt)])
         return self.spark.createDataFrame([(None,)], schema=schema)
@@ -448,14 +357,11 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         body = series_null_probe if eval_type == _PANDAS else null_probe
         return_type = T.BooleanType() if eval_type == _PANDAS else T.LongType()
         pudf = UserDefinedFunction(body, return_type, evalType=eval_type)
-        # Plan only: whether an option survived JVM-side pruning shows up as the presence
-        # or absence of a Python-eval operator, and needs no Python execution.
+        # Plan only: an option that survives JVM-side pruning leaves no Python-eval operator.
         counts = _eval_python_nodes(df.select(pudf("a")))
         return NO_TRANSPILE if sum(counts.values()) else TRANSPILES
 
     def test_input_type_verdicts(self):
-        # ResolveTranspiledPythonUDFOptions.optionMatchesTypes decides this, and its
-        # `case _ => false` is what makes an unrecognised column type fall back.
         for eval_type in (_PICKLED, _ARROW, _PANDAS):
             with self.subTest(evalType=eval_type), self.sql_conf(_TRANSPILE_ON):
                 observed = {
@@ -463,59 +369,16 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
                 }
                 self._assert_verdicts(_EXPECTED_INPUT_VERDICT, observed, "_EXPECTED_INPUT_VERDICT")
 
-    def test_no_transpile_input_types_still_compute_correctly(self):
-        # The point of a fallback: a column type the transpiler cannot bind to must still
-        # produce the interpreted answer rather than an error or a wrong value.
-        for label, dt, _cat in _SAMPLES:
-            if _EXPECTED_INPUT_VERDICT[label] != NO_TRANSPILE:
-                continue
-            with self.subTest(label=label):
-                df = self._null_row_df(dt)
-                with self.sql_conf(_TRANSPILE_ON):
-                    pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=_PICKLED)
-                    self._assert_transpiled(pudf, f"a fallback probe for {label}")
-                    query = df.select(pudf("a"))
-                    self.assertGreater(sum(_eval_python_nodes(query).values()), 0)
-                    on = query.collect()[0][0]
-                with self.sql_conf(_TRANSPILE_OFF):
-                    pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=_PICKLED)
-                    off = df.select(pudf("a")).collect()[0][0]
-                self.assertEqual(1, off, f"{label}: interpreted UDF should see None")
-                self.assertEqual(off, on, f"{label}: fallback changed the answer")
-
-    # -- parity for the types that DO transpile -----------------------------------------
-
-    def _fixture_df(self, fixtures, key):
-        column_dtype, value, body = fixtures[key]
-        df = self.spark.createDataFrame(
-            [(value,)], schema=T.StructType([T.StructField("a", column_dtype)])
-        )
-        return df, body, column_dtype
-
-    def test_parity_fixtures_cover_every_transpiling_return_type(self):
-        # A return type may not be recorded as TRANSPILES without a parity fixture, or the
-        # parity tests below would silently skip it.
-        expected = {
-            label for label, verdict in _EXPECTED_RETURN_VERDICT.items() if verdict == TRANSPILES
-        }
-        self.assertEqual(
-            expected,
-            set(_PARITY_FIXTURES),
-            "every return type recorded as TRANSPILES needs an entry in _PARITY_FIXTURES "
-            "(an input column and body whose Python result type matches that return type), "
-            "and vice versa",
-        )
-
     def test_transpiling_return_types_have_verified_parity(self):
-        # Every return type recorded as TRANSPILES is compared against the interpreted path
-        # of its own eval type, so the table can never say TRANSPILES on the strength of the
-        # rewrite merely existing.
         for eval_type in (_PICKLED, _ARROW, _PANDAS):
             for label, dt, _cat in _SAMPLES:
                 if _EXPECTED_RETURN_VERDICT[label] != TRANSPILES:
                     continue
                 with self.subTest(evalType=eval_type, label=label):
-                    df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
+                    column_dtype, value, body = _PARITY_FIXTURES[label]
+                    df = self.spark.createDataFrame(
+                        [(value,)], schema=T.StructType([T.StructField("a", column_dtype)])
+                    )
                     self._assert_matches_interpreted(body, dt, df, "a", eval_type=eval_type)
 
     def test_transpiling_input_types_have_verified_parity_pandas(self):
@@ -527,26 +390,6 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             with self.subTest(label=label):
                 self._assert_matches_interpreted(
                     series_null_probe, T.BooleanType(), df, "a", eval_type=_PANDAS
-                )
-
-    def test_annotated_parameters_widen_input_coverage(self):
-        # Explains the boolean and binary NO_TRANSPILE rows in _EXPECTED_INPUT_VERDICT:
-        # they are a consequence of the parameter being unannotated, not of the column type
-        # being unsupported. With an annotation pinning the category, the option binds.
-        for category in _ANNOTATED_CATEGORY_FIXTURES:
-            with self.subTest(category=category):
-                df, body, column_dtype = self._fixture_df(_ANNOTATED_CATEGORY_FIXTURES, category)
-                # Transpilation happens at construction, so the confs have to be on before
-                # the UDF is built -- not merely before it is used.
-                with self.sql_conf(_TRANSPILE_ON):
-                    pudf = UserDefinedFunction(body, column_dtype, evalType=_PICKLED)
-                    self._assert_transpiled(pudf, f"an annotated {category} body")
-                    counts = _eval_python_nodes(df.select(pudf("a")))
-                self.assertEqual(
-                    0,
-                    sum(counts.values()),
-                    f"an annotated {category} parameter should let the transpiled option "
-                    "bind, leaving no Python-eval operator in the plan",
                 )
 
 

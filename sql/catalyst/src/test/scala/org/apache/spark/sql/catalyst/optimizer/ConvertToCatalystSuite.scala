@@ -271,7 +271,6 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-
   test("falls back for a scalar pandas UDF when the int extension dtype is enabled") {
     // Integral inputs become masked arrays whose derived results can retain NaN, unlike
     // the default numpy-backed conversion. Re-check when the conf changes after construction.
@@ -293,7 +292,6 @@ class ConvertToCatalystSuite extends PlanTest {
       }
     }
   }
-
 
   test("apply(plan) reaches TranspiledPythonUDF nodes below the root") {
     // Regression test for the traversal bug where ``plan.mapExpressions`` only
