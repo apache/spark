@@ -792,112 +792,79 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       m.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")))
   }
 
-  test("SPARK-61843: repeats inside the default list are applied as listed") {
-    // Only cross-config overlap is de-duplicated; repeats within one config are applied as
-    // listed, as documented and as spark.sql.extensions already behaves.
-    val appender = new LogAppender("SPARK-61843 disjoint lists")
+  /**
+   * Runs `f` on a session built from the two extension lists and returns the logged warnings
+   * about an entry listed in both.
+   */
+  private def withExtensionLists(
+      defaultList: Seq[Class[_]],
+      userList: Seq[Class[_]] = Seq.empty)(f: SparkSession => Unit): Seq[String] = {
+    val appender = new LogAppender("SPARK-61843 extension lists")
     withLogAppender(appender) {
-      val session = SparkSession.builder()
+      val builder = SparkSession.builder()
         .master("local[1]")
-        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, Seq(
-          classOf[MyExtensions].getCanonicalName,
-          classOf[MyExtensions].getCanonicalName).mkString(","))
-        .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions2].getCanonicalName)
-        .getOrCreate()
-      try {
-        val rules = session.sessionState.analyzer.extendedResolutionRules
-        assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
-          Seq(MyRule(session), MyRule(session), MyRule2(session)))
-      } finally {
-        stop(session)
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key,
+          defaultList.map(_.getCanonicalName).mkString(","))
+      if (userList.nonEmpty) {
+        builder.config(SPARK_SESSION_EXTENSIONS.key, userList.map(_.getCanonicalName).mkString(","))
       }
+      val session = builder.getOrCreate()
+      try f(session) finally stop(session)
     }
-    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      .count(m => m.contains(classOf[MyExtensions].getCanonicalName) &&
-        m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key))
-    assert(warnings === 0)
+    appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")).toSeq
   }
 
-  test("SPARK-61843: a default-list entry also listed by the user is dropped and warned once") {
-    val appender = new LogAppender("SPARK-61843 shared extension warning")
-    withLogAppender(appender) {
-      val session = SparkSession.builder()
-        .master("local[1]")
-        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, Seq(
-          classOf[MyExtensions].getCanonicalName,
-          classOf[MyExtensions].getCanonicalName).mkString(","))
-        .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
-        .getOrCreate()
-      try {
-        assert(
-          session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) === 1)
-      } finally {
-        stop(session)
-      }
+  test("SPARK-61843: repeats inside the default list are applied as listed") {
+    // Only an entry listed in both configs is de-duplicated.
+    val warnings = withExtensionLists(
+        Seq(classOf[MyExtensions], classOf[MyExtensions]), Seq(classOf[MyExtensions2])) { session =>
+      val rules = session.sessionState.analyzer.extendedResolutionRules
+      assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
+        Seq(MyRule(session), MyRule(session), MyRule2(session)))
     }
-    // One warning per overlapping class, not one per default-list occurrence.
-    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      .count(m => m.contains(classOf[MyExtensions].getCanonicalName) &&
-        m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key))
-    assert(warnings === 1)
+    assert(warnings.isEmpty)
+  }
+
+  test("SPARK-61843: an entry in both lists is dropped from the default list and warned once") {
+    val warnings = withExtensionLists(
+        Seq(classOf[MyExtensions], classOf[MyExtensions]), Seq(classOf[MyExtensions])) { session =>
+      assert(
+        session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) === 1)
+    }
+    // One warning per class, not one per default-list occurrence.
+    assert(warnings.size === 1)
   }
 
   test("SPARK-61843: spark.sql.extensions shows only the user list") {
-    // MyExtensions2Duplicate injects no parser, so SET is still parsed by the dialect that
-    // implements it; an injected parser delegates only to the base one and rejects SET.
-    val className = classOf[MyExtensions2Duplicate].getCanonicalName
-    val defaultOnly = SparkSession.builder()
-      .master("local[1]")
-      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, className)
-      .getOrCreate()
-    try {
-      // The default list alone applies the extension, it does not merely leave the key unset.
-      val myFunction2 = FunctionIdentifier(
-        "myfunction2",
-        Some(CatalogManager.BUILTIN_NAMESPACE),
-        Some(CatalogManager.SYSTEM_CATALOG_NAME))
-      assert(defaultOnly.sessionState.functionRegistry.lookupFunctionBuilder(myFunction2) ===
-        Some(MyExtensions2Duplicate.myFunction._3))
-      assert(defaultOnly.conf.getOption(SPARK_SESSION_EXTENSIONS.key).isEmpty)
-      assert(defaultOnly.sql(s"SET ${SPARK_SESSION_EXTENSIONS.key}").collect() ===
-        Array(Row(SPARK_SESSION_EXTENSIONS.key, "<undefined>")))
-    } finally {
-      stop(defaultOnly)
+    // SET is parsed by SparkSqlParser, so use an extension that injects no parser.
+    val ext = classOf[MyExtensions2Duplicate]
+    val key = SPARK_SESSION_EXTENSIONS.key
+    withExtensionLists(Seq(ext)) { session =>
+      // The default list alone applies the extension.
+      assert(session.sql("SELECT myFunction2()").head().getInt(0) === 5)
+      assert(session.conf.getOption(key).isEmpty)
+      assert(session.sql(s"SET $key").collect() === Array(Row(key, "<undefined>")))
     }
-
-    val withUser = SparkSession.builder()
-      .master("local[1]")
-      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, className)
-      .config(SPARK_SESSION_EXTENSIONS.key, className)
-      .getOrCreate()
-    try {
-      assert(withUser.conf.getOption(SPARK_SESSION_EXTENSIONS.key) === Some(className))
-      assert(withUser.sql(s"SET ${SPARK_SESSION_EXTENSIONS.key}").collect() ===
-        Array(Row(SPARK_SESSION_EXTENSIONS.key, className)))
-    } finally {
-      stop(withUser)
+    withExtensionLists(Seq(ext), Seq(ext)) { session =>
+      assert(session.conf.getOption(key) === Some(ext.getCanonicalName))
+      assert(session.sql(s"SET $key").collect() === Array(Row(key, ext.getCanonicalName)))
     }
   }
 
   test("SPARK-61843: the default list cannot be set at runtime") {
     val key = SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key
     val value = classOf[MyExtensions].getCanonicalName
-    val session = SparkSession.builder().master("local[1]").getOrCreate()
-    try {
-      checkError(
-        exception = intercept[AnalysisException](session.sql(s"SET $key=$value")),
-        condition = "CANNOT_MODIFY_STATIC_CONFIG",
-        parameters = Map("key" -> s"\"$key\""))
-      checkError(
-        exception = intercept[AnalysisException](session.conf.set(key, value)),
-        condition = "CANNOT_MODIFY_STATIC_CONFIG",
-        parameters = Map("key" -> s"\"$key\""))
-      checkError(
-        exception = intercept[AnalysisException](session.conf.unset(key)),
-        condition = "CANNOT_MODIFY_STATIC_CONFIG",
-        parameters = Map("key" -> s"\"$key\""))
-    } finally {
-      stop(session)
+    withSession(Seq.empty) { session =>
+      Seq[() => Unit](
+        () => session.sql(s"SET $key=$value"),
+        () => session.conf.set(key, value),
+        () => session.conf.unset(key)).foreach { modify =>
+        checkError(
+          exception = intercept[AnalysisException](modify()),
+          condition = "CANNOT_MODIFY_STATIC_CONFIG",
+          parameters = Map("key" -> s"\"$key\""))
+      }
     }
   }
 
