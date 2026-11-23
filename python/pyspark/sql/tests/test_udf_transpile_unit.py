@@ -3307,11 +3307,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
 
     def test_element_aware_array_category_predicates(self):
+        import ast as _ast
+
         from pyspark.sql.transpile import (
+            _EQUATABLE_ELEMENT_CATS,
+            _SCALAR_ELEMENT_CATS,
             _array_element_cat,
+            _complex_operands_ok,
             _is_complex_cat,
-            _is_equatable_array_cat,
-            _is_fully_known_array_cat,
         )
 
         self.assertEqual(_array_element_cat("array<array<integer>>"), "array<integer>")
@@ -3321,6 +3324,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(_is_complex_cat(cat), cat)
         for cat in ("integer", "string", None):
             self.assertFalse(_is_complex_cat(cat), cat)
+        # Whether two operands of `cat` may lower, as if/else branches (known
+        # element type) and as `==` operands (equatable element type).
         for cat, known, equatable in [
             ("array<integer>", True, True),
             ("array<string>", True, True),
@@ -3333,11 +3338,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("array<array>", False, False),
             ("array", False, False),
             ("map", False, False),
-            ("integer", False, False),
+            ("integer", True, True),  # not complex: left to the scalar checks
         ]:
             with self.subTest(cat=cat):
-                self.assertEqual(_is_fully_known_array_cat(cat), known)
-                self.assertEqual(_is_equatable_array_cat(cat), equatable)
+                args = (cat, cat, _ast.Name("a"), _ast.Name("b"))
+                self.assertEqual(_complex_operands_ok(_SCALAR_ELEMENT_CATS, *args), known)
+                self.assertEqual(_complex_operands_ok(_EQUATABLE_ELEMENT_CATS, *args), equatable)
+        # Against an operand of unknown category, only a None literal is accepted.
+        none, name = _ast.Constant(None), _ast.Name("b")
+        cat = "array<integer>"
+        self.assertTrue(_complex_operands_ok(_SCALAR_ELEMENT_CATS, cat, None, name, none))
+        self.assertTrue(_complex_operands_ok(_SCALAR_ELEMENT_CATS, None, cat, none, name))
+        self.assertFalse(_complex_operands_ok(_SCALAR_ELEMENT_CATS, cat, None, name, name))
 
     def test_udf_transpile_element_aware_array_input_categories(self):
         # An element-aware option is kept only for an array column whose elements
@@ -3355,6 +3367,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "array<int>": [([1, None], 1), ([], 2), (None, 3)],
             "array<bigint>": [([1, None], 1), ([], 2), (None, 3)],
             "array<string>": [(["x", None], 1), ([], 2), (None, 3)],
+            "array<string collate UTF8_LCASE>": [(["x", None], 1), ([], 2), (None, 3)],
             "array<double>": [([1.0], 1), ([], 2), (None, 3)],
             "array<decimal(10,2)>": [(None, 1), (None, 2), (None, 3)],
             "array<array<int>>": [([[1]], 1), ([], 2), (None, 3)],
@@ -3374,15 +3387,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                             element_schema in lowered,
                         )
                         self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
-        # A collated element type does not match "array<string>".
-        with self.sql_conf(_TRANSPILE_ON):
-            u = self._transpiled_udf(str_array_plus, LongType())
-            df = self.spark.createDataFrame(
-                rows_by_schema["array<string>"], "a array<string>, b long"
-            ).selectExpr("cast(a as array<string collate UTF8_LCASE>) as a", "b")
-            projected = df.select(u("a", "b"))
-            self.assertGreater(self._eval_python_count(projected), 0)
-            self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
 
     def test_udf_transpile_element_aware_array_equality_lowers(self):
         # `==`/`!=` on element-aware arrays lowers to Spark's `=`, which agrees

@@ -129,13 +129,5 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   }
 
   // Extracts the element category from "array<c>".
-  private object ArrayCategory {
-    def unapply(category: String): Option[String] = {
-      if (category.startsWith("array<") && category.endsWith(">")) {
-        Some(category.substring("array<".length, category.length - 1))
-      } else {
-        None
-      }
-    }
-  }
+  private val ArrayCategory = "array<(.+)>".r
 }

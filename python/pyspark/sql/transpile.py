@@ -202,42 +202,37 @@ def _array_leaf_cat(cat: Optional[str]) -> Optional[str]:
     return elem
 
 
-def _is_fully_known_array_cat(cat: Optional[str]) -> bool:
-    """True for an ``"array<c>"`` whose element category is known all the way
-    down and is not a map: ``"array<integer>"`` or ``"array<array<string>>"``,
-    but not ``"array"``, ``"array<array>"`` or ``"array<map>"``. Two such
-    operands of the same category share an analysis-valid common type, so a
-    lowered CASE WHEN over them type-checks."""
-    leaf = _array_leaf_cat(cat)
-    return leaf is not None and not _is_complex_cat(leaf)
-
+# Innermost element categories of an "array<c>" whose Spark type is known all
+# the way down, so two arrays of one such category share an analysis-valid common
+# type and a lowered CASE WHEN over them type-checks.
+_SCALAR_ELEMENT_CATS = frozenset(("integer", "float", "string", "bool", "binary"))
 
 # Element categories whose Spark `=` agrees with Python's `==`, NULL elements
 # included. "float" is left out: Python's list `==` checks element identity
 # before value, so whether `[nan] == [nan]` is True depends on whether the two
 # NaNs are one object, while Spark's array `=` treats every NaN as equal.
-_EQUATABLE_ELEMENT_CATS = frozenset(("integer", "string", "bool", "binary"))
-
-
-def _is_equatable_array_cat(cat: Optional[str]) -> bool:
-    """True for an ``"array<c>"`` that ``==``/``!=`` can lower to Spark's ``=``:
-    ``c`` is in ``_EQUATABLE_ELEMENT_CATS`` or is itself such an array."""
-    return _array_leaf_cat(cat) in _EQUATABLE_ELEMENT_CATS
+_EQUATABLE_ELEMENT_CATS = _SCALAR_ELEMENT_CATS - {"float"}
 
 
 def _complex_operands_ok(
-    pred: Callable[[Optional[str]], bool],
+    leaf_cats: frozenset[str],
     lc: Optional[str],
     rc: Optional[str],
     left: Optional[ast.AST],
     right: Optional[ast.AST],
 ) -> bool:
-    """For two operands, at least one a ``map``/``array``: ``pred`` holds for the
-    complex operand's category, and the other operand is the same category or a
-    ``None`` literal -- not an operand whose category is merely unknown, which
-    could be anything."""
-    cat, other = (lc, right) if _is_complex_cat(lc) else (rc, left)
-    return pred(cat) and (lc == rc or _is_none_literal(other))
+    """False when an operand is a ``map``/``array`` and either its innermost
+    element category is not in ``leaf_cats`` (always so for a map or a bare
+    ``array``), or the other operand is neither the same category nor a
+    ``None`` literal -- an operand whose category is merely unknown could be
+    anything. True when neither operand is a ``map``/``array``."""
+    if _is_complex_cat(lc):
+        cat, other = lc, right
+    elif _is_complex_cat(rc):
+        cat, other = rc, left
+    else:
+        return True
+    return _array_leaf_cat(cat) in leaf_cats and (lc == rc or _is_none_literal(other))
 
 
 class AbstractTranspiler(object):
@@ -557,20 +552,18 @@ class CatalystTranspiler(AbstractTranspiler):
         # (e.g. a bare ``None``) are treated as compatible and don't force this.
         body_cat = self._safe_category(params, body_node)
         else_cat = self._safe_category(params, else_node)
-        if _is_complex_cat(body_cat) or _is_complex_cat(else_cat):
-            # Two branches of one element-aware array category share a common
-            # type (`array<int>` and `array<bigint>` widen), and a None-literal
-            # branch unifies with either. Anything else -- a map, an array whose
-            # element type is not known, or an operand whose category is unknown
-            # -- may have no common type, failing analysis instead of falling back.
-            if not _complex_operands_ok(
-                _is_fully_known_array_cat, body_cat, else_cat, body_node, else_node
-            ):
-                raise UnsupportedOperationException(
-                    "if/else branches have a `map`/`array` operand without a "
-                    "matching element-aware array category on the other side; "
-                    "complex branches fall back to interpreted Python"
-                )
+        # Two branches of one element-aware array category share a common type
+        # (`array<int>` and `array<bigint>` widen), and a None-literal branch
+        # unifies with either. Anything else with a map/array branch -- a map, an
+        # array whose element type is not known, or an operand whose category is
+        # unknown -- may have no common type, failing analysis instead of falling
+        # back.
+        if not _complex_operands_ok(_SCALAR_ELEMENT_CATS, body_cat, else_cat, body_node, else_node):
+            raise UnsupportedOperationException(
+                "if/else branches have a `map`/`array` operand without a "
+                "matching element-aware array category on the other side; "
+                "complex branches fall back to interpreted Python"
+            )
         if body_cat is not None and else_cat is not None and body_cat != else_cat:
             # Numeric sub-categories (integer/float) are compatible: Spark widens
             # to double in the CASE WHEN expression. Truly mismatched families
@@ -641,14 +634,13 @@ class CatalystTranspiler(AbstractTranspiler):
                     "Python compares across types as unequal while Spark would coerce "
                     "or fail analysis, so the transpiler falls back to interpreted Python"
                 )
-        if _is_complex_cat(lc) or _is_complex_cat(rc):
-            # See the docstring: maps and bare arrays are always refused.
-            if not _complex_operands_ok(_is_equatable_array_cat, lc, rc, left_node, right_node):
-                raise UnsupportedOperationException(
-                    f"`==`/`!=` has a `map`/`array` operand ({lc} vs {rc}); Spark's "
-                    "`=` fails analysis or diverges from Python there, so the "
-                    "transpiler falls back to interpreted Python"
-                )
+        # See the docstring: maps and bare arrays are always refused.
+        if not _complex_operands_ok(_EQUATABLE_ELEMENT_CATS, lc, rc, left_node, right_node):
+            raise UnsupportedOperationException(
+                f"`==`/`!=` has a `map`/`array` operand ({lc} vs {rc}); Spark's "
+                "`=` fails analysis or diverges from Python there, so the "
+                "transpiler falls back to interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
