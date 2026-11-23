@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.collation
 
-import scala.jdk.CollectionConverters.MapHasAsJava
+import java.sql.Timestamp
+
+import scala.jdk.CollectionConverters.{MapHasAsJava, SeqHasAsJava}
 
 import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
@@ -41,7 +43,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.window.{Final, WindowGroupLimitExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType, TestUDT, TimestampType}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -3424,7 +3426,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("WindowGroupLimitExec collation grouping with Double in mixed partition spec") {
-    // A mixed spec with one DOUBLE and one collated STRING key takes the InterpretedOrdering
+    // A mixed spec with one DOUBLE and one collated STRING key takes the UnsafeRowKeyOperations
     // path, which must compare every field: with byte grouping 'foo'/'FOO' split each d value
     // into separate groups so the Final node forwards all 5 rows, while a comparator over s
     // alone would collapse the d = 1.0 and d = 2.0 groups into one and forward a single row
@@ -3503,10 +3505,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // A struct or array key holding a mixed-spelling UTF8_LCASE string must compare over
     // every nested field: byte grouping splits each spelling into its own group and
     // forwards every row, while a comparison over the collated string alone would also
-    // merge keys whose other fields differ. checkAnswer alone cannot catch either (the
-    // WindowExec above the limit recomputes the answer), so the Final node's
-    // numOutputRows is asserted as in the tests above, and the answers are compared
-    // against the same query with the window group limit disabled.
+    // merge keys whose other fields differ. The answer check catches a comparison over the
+    // string alone, which drops a survivor, but not byte grouping, whose answer the WindowExec
+    // above the limit recomputes, so the Final node's numOutputRows is asserted as in the tests
+    // above, and the answers are compared against the same query with the limit disabled.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -3539,7 +3541,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             w.metrics("numOutputRows").value
         }.sum
         // Post-fix: one survivor per collation group ('a'/'A' with i = 1, and i = 2) =
-        // 2 rows. Pre-fix byte grouping forwards one row per byte group = 3; a
+        // 2 rows. Pre-fix byte grouping forwards one row per run of byte-equal keys = 4; a
         // comparator over the string field alone would forward 1.
         assert(finalForwarded == 2,
           s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
@@ -3757,8 +3759,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("session window aggregation keeps distinct collated keys in separate sessions") {
-    // The other session tests hold a single collation group, so the collation branch of
-    // the iterators' group-equality check only ever answers true there. Here a second
+    // No other session test holds collated strings that differ under the collation (the
+    // interval test's groups differ only in the interval). Here a second
     // collation group ('bar'/'BAR') overlaps the 'foo' session in time, so a checker
     // that wrongly treated keys differing under the collation as equal, or compared
     // only some fields of a multi-column key, would merge the sessions of distinct keys
@@ -3913,6 +3915,99 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
                 |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
           Row(900L, 2L) :: Row(600L, 1L) :: Nil)
       }
+    }
+  }
+
+  test("session window aggregation groups collated keys holding a user-defined type") {
+    // A grouping key with a non-binary collated string and a user-defined type inside an
+    // array or map reaches both session iterators, and their group-key checker must
+    // compare that value: the interpreted ordering unwraps a user-defined type only when
+    // a key field itself is one, so one nested inside an array or map reaches a physical
+    // ordering that does not support it; the checker uses the generated comparator,
+    // which compares the user-defined type through its SQL type at every depth.
+    // ('foo', [v(1.0)]) and ('FOO', [v(1.0)]) are one group whose sessions merge (10:00
+    // to 10:15), while ('foo', [v(3.0, 4.0)]) is a separate group (10:08 to 10:18) even
+    // though its collated string matches. The base is a view over createDataFrame
+    // because no file format stores user-defined types.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val udt = new TestUDT.MyDenseVectorUDT
+
+    // Array key: the user-defined type is the array's element type.
+    withTempView("t_arr") {
+      val schema = StructType(Seq(
+        StructField("s", collatedString, nullable = false),
+        StructField("arr", ArrayType(udt, containsNull = false), nullable = false),
+        StructField("ts", TimestampType, nullable = false),
+        StructField("v", IntegerType, nullable = false)))
+      def vector(xs: Double*): Seq[TestUDT.MyDenseVector] =
+        Seq(new TestUDT.MyDenseVector(xs.toArray))
+      val rows = Seq(
+        Row("foo", vector(1.0), Timestamp.valueOf("2026-01-01 10:00:00"), 1),
+        Row("FOO", vector(1.0), Timestamp.valueOf("2026-01-01 10:05:00"), 2),
+        Row("foo", vector(3.0, 4.0), Timestamp.valueOf("2026-01-01 10:08:00"), 3))
+      spark.createDataFrame(rows.asJava, schema).createOrReplaceTempView("t_arr")
+
+      // The plain aggregate runs MergingSessionsIterator over the (s, arr) key. The sort
+      // on the collated key plus session start makes the reported spelling ('foo', the
+      // first row of each group) deterministic.
+      checkAnswer(
+        sql("""SELECT s,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t_arr
+              |  GROUP BY s, arr, session_window(ts, '10 minutes')""".stripMargin),
+        Row("foo", 900L, 2L) :: Row("foo", 600L, 1L) :: Nil)
+
+      // The one-distinct plan runs UpdatingSessionsIterator over the same key.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t_arr
+              |  GROUP BY s, arr, session_window(ts, '10 minutes')""".stripMargin),
+        Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+
+      // The array as the first grouping column reaches the same comparisons with the
+      // fields swapped.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t_arr
+              |  GROUP BY arr, s, session_window(ts, '10 minutes')""".stripMargin),
+        Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+    }
+
+    // Map key: the user-defined type is the map's value type.
+    withTempView("t_map") {
+      val schema = StructType(Seq(
+        StructField("s", collatedString, nullable = false),
+        StructField("m", MapType(StringType, udt, valueContainsNull = false), nullable = false),
+        StructField("ts", TimestampType, nullable = false),
+        StructField("v", IntegerType, nullable = false)))
+      def pointMap(xs: Double*): Map[String, TestUDT.MyDenseVector] =
+        Map("a" -> new TestUDT.MyDenseVector(xs.toArray))
+      val rows = Seq(
+        Row("foo", pointMap(1.0), Timestamp.valueOf("2026-01-01 10:00:00"), 1),
+        Row("FOO", pointMap(1.0), Timestamp.valueOf("2026-01-01 10:05:00"), 2),
+        Row("foo", pointMap(3.0, 4.0), Timestamp.valueOf("2026-01-01 10:08:00"), 3))
+      spark.createDataFrame(rows.asJava, schema).createOrReplaceTempView("t_map")
+
+      checkAnswer(
+        sql("""SELECT s,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t_map
+              |  GROUP BY s, m, session_window(ts, '10 minutes')""".stripMargin),
+        Row("foo", 900L, 2L) :: Row("foo", 600L, 1L) :: Nil)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t_map
+              |  GROUP BY s, m, session_window(ts, '10 minutes')""".stripMargin),
+        Row(900L, 2L) :: Row(600L, 1L) :: Nil)
     }
   }
 }

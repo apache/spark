@@ -1196,7 +1196,6 @@ class GroupedAggPandasUDFTestsMixin:
             ],
             "s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v DOUBLE",
         )
-        df.createOrReplaceTempView("t")
 
         @pandas_udf("string")
         def spellings(s: pd.Series) -> str:

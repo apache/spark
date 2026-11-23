@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TestUDT
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
@@ -467,6 +468,46 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
       // Keys whose intervals differ are unequal, whether or not the strings match.
       assert(!checker(fooOneDay, key("foo", 2)))
       assert(!checker(fooOneDay, key("FOO", 2)))
+    }
+  }
+
+  test("rowEqualityChecker for grouping keys holding a user-defined type") {
+    // The interpreted ordering unwraps a user-defined type only when a key field
+    // itself is one, so a key holding one inside an array or map reaches a physical
+    // ordering that does not support it; a key whose types hold one must use the
+    // generated comparator, which compares the user-defined type through its SQL
+    // type at every depth.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val udtArray = ArrayType(new TestUDT.MyDenseVectorUDT, containsNull = false)
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("arr", udtArray, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, xs: Double*): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      // The internal form of the array field is one array of the SQL type's representation
+      // (an array of doubles) per user-defined value.
+      val vectors =
+        new GenericArrayData(Seq(new GenericArrayData(xs.map(_.asInstanceOf[Any]).toArray)))
+      row.update(1, vectors)
+      projection(row).copy()
+    }
+
+    // Both checkBytesFirst forms, which agree on which keys are equal.
+    val checkers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, udtArray), checkBytesFirst)
+    }
+
+    val fooOneTwo = key("foo", 1.0, 2.0)
+    for (checker <- checkers) {
+      // Byte-identical keys are equal.
+      assert(checker(fooOneTwo, key("foo", 1.0, 2.0)))
+      // Keys differing only in the string's case are equal under the collation.
+      assert(checker(fooOneTwo, key("FOO", 1.0, 2.0)))
+      // Keys whose arrays differ are unequal, whether or not the strings match.
+      assert(!checker(fooOneTwo, key("foo", 3.0, 4.0)))
+      assert(!checker(fooOneTwo, key("FOO", 3.0, 4.0)))
     }
   }
 

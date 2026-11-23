@@ -24,11 +24,15 @@ from pyspark.sql import Row
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import PandasUDFType, pandas_udf, udf
 from pyspark.sql.types import (
+    ArrayType,
     DecimalType,
     DoubleType,
     FloatType,
     IntegerType,
     LongType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -637,6 +641,46 @@ class WindowPandasUDFTestsMixin:
                 Row(s="foo", v=1.0, c=3),
                 Row(s="FOO", v=2.0, c=3),
                 Row(s="foo", v=3.0, c=3),
+                Row(s="bar", v=4.0, c=1),
+            ],
+        )
+
+    def test_collation_aware_partition_by_with_user_defined_type(self):
+        # A partition spec of a collated string and an array of a user-defined type must
+        # compare both fields when it groups the buffered partition: byte grouping would
+        # split spellings the collation treats as equal, and the interpreted ordering
+        # cannot compare the user-defined type nested inside the array, so keys holding
+        # one are compared with the generated comparator (SPARK-58928).
+        from pyspark.testing.objects import PythonOnlyPoint, PythonOnlyUDT
+
+        schema = StructType(
+            [
+                StructField("s", StringType("UTF8_LCASE")),
+                StructField("arr", ArrayType(PythonOnlyUDT(), containsNull=False)),
+                StructField("v", DoubleType()),
+            ]
+        )
+        df = self.spark.createDataFrame(
+            [
+                ("foo", [PythonOnlyPoint(1.0, 2.0)], 1.0),
+                ("FOO", [PythonOnlyPoint(1.0, 2.0)], 2.0),
+                ("foo", [PythonOnlyPoint(3.0, 4.0)], 3.0),
+                ("bar", [PythonOnlyPoint(1.0, 2.0)], 4.0),
+            ],
+            schema,
+        )
+        w = (
+            Window.partitionBy("s", "arr")
+            .orderBy("v")
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        )
+
+        assertDataFrameEqual(
+            df.select("s", "v", self.pandas_agg_count_udf("v").over(w).alias("c")).sort("v"),
+            [
+                Row(s="foo", v=1.0, c=2),
+                Row(s="FOO", v=2.0, c=2),
+                Row(s="foo", v=3.0, c=1),
                 Row(s="bar", v=4.0, c=1),
             ],
         )

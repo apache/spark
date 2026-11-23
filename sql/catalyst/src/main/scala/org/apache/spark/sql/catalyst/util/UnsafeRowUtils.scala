@@ -247,8 +247,12 @@ object UnsafeRowUtils {
    *
    * Keys holding a CALENDAR INTERVAL use the generated comparator, because the
    * interpreted ordering cannot compare intervals (their physical ordering is
-   * unsupported); the generated comparator is the one the planner's sort applies to
-   * such keys.
+   * unsupported). Keys holding a user-defined type use it too: the interpreted
+   * ordering unwraps a user-defined type only when a key field itself is one, so a
+   * type nested inside an array or map reaches the physical array or map ordering,
+   * whose element orderings come from the physical type of the user-defined type,
+   * which is unsupported. The generated comparator unwraps a user-defined type at
+   * every depth, and is the one the planner's sort applies to such keys.
    *
    * `checkBytesFirst` controls whether that fallback compares the key bytes before the
    * ordering, and is only observable for non-binary-stable keys: byte-identical rows
@@ -265,7 +269,8 @@ object UnsafeRowUtils {
     if (dataTypes.forall(isBinaryStable)) {
       (key1, key2) => key1.equals(key2)
     } else {
-      val ordering = if (dataTypes.exists(containsCalendarInterval)) {
+      val ordering = if (dataTypes.exists(containsCalendarInterval) ||
+          dataTypes.exists(containsUserDefinedType)) {
         RowOrdering.createNaturalAscendingOrdering(dataTypes)
       } else {
         InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
@@ -280,6 +285,11 @@ object UnsafeRowUtils {
 
   private def containsCalendarInterval(dataType: DataType): Boolean = dataType.existsRecursively {
     case CalendarIntervalType => true
+    case _ => false
+  }
+
+  private def containsUserDefinedType(dataType: DataType): Boolean = dataType.existsRecursively {
+    case _: UserDefinedType[_] => true
     case _ => false
   }
 }
