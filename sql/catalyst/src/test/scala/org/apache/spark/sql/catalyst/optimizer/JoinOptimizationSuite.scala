@@ -224,28 +224,31 @@ class JoinOptimizationSuite extends PlanTest {
     // The lower filter removes a row on which `b > d` is NULL, but in the join condition that the
     // filter is put in, `NULL AND x` evaluates `x`. So a condition above it over two of its plans
     // that can fail in ANSI mode, by itself or by reading `q`, is evaluated only where `b > d` is
-    // TRUE, with IS NOT NULL checks of its columns. One that can not fail once its cast of a
-    // literal is folded, one that also reads `z`, and the ones above a filter whose condition can
-    // not be NULL or of a streaming plan go into a join as before. Only ReorderJoin runs.
-    val canNotFail =
-      $"c" > $"d" || $"c" === Cast(Literal("1"), IntegerType, evalMode = EvalMode.ANSI)
+    // TRUE, with IS NOT NULL checks of its columns, also an equality whose sides both read `x`.
+    // One that can not fail once its cast of a literal is folded, an equality of `x` and `y`,
+    // which can be a join key, one that also reads `z`, and the ones above a filter whose condition
+    // can not be NULL or of a streaming plan go into a join as before. Only ReorderJoin runs.
+    val notGuarded = Seq(
+      $"c" > $"d" || $"c" === Cast(Literal("1"), IntegerType, evalMode = EvalMode.ANSI),
+      ansiDivide($"c", $"b") === $"d")
     Seq(($"b" > $"d", false, true), ($"b".isNotNull, false, false), ($"b" > $"d", true, false))
       .foreach { case (cond, isStreaming, guarded) =>
         val x = testRelation.copy(isStreaming = isStreaming)
           .select($"a", $"b", $"c", ansiDivide($"a", $"b").as("q"))
         val y = testRelation1.copy(isStreaming = isStreaming)
         val z = LocalRelation(Seq($"e".int, $"f".int), Nil, isStreaming)
-        val failable = Seq(ansiDivide($"c", $"d") > 1, $"q" > $"d")
+        val failable = Seq(ansiDivide($"c", $"d") > 1, $"q" > $"d", ansiDivide($"c", $"d") === $"b")
         val query = x.join(y, condition = Some($"a" === $"d")).where(cond)
-          .join(z, condition = Some((Seq($"e" === $"a", canNotFail) ++ failable).reduce(_ && _)))
+          .join(z, condition = Some((Seq($"e" === $"a") ++ notGuarded ++ failable).reduce(_ && _)))
           .where(ansiDivide($"c", $"f") > 1)
         val moved = if (guarded) {
-          failable.map(If(cond, _, Literal(false))) ++ Seq($"c", $"d", $"q").map(IsNotNull(_))
+          failable.map(If(cond, _, Literal(false))) ++
+            Seq($"c", $"d", $"q", $"b").map(IsNotNull(_))
         } else {
           failable
         }
         val answer = x.join(y,
-            condition = Some((Seq($"a" === $"d", cond, canNotFail) ++ moved).reduce(_ && _)))
+            condition = Some((Seq($"a" === $"d", cond) ++ notGuarded ++ moved).reduce(_ && _)))
           .join(z, condition = Some($"e" === $"a" && ansiDivide($"c", $"f") > 1))
         comparePlans(ReorderJoin(query.analyze), answer.analyze)
       }
@@ -280,15 +283,19 @@ class JoinOptimizationSuite extends PlanTest {
     // it in a filter above all the joins, where they only see the rows that the lower filter
     // keeps. Guarding them would wrap them again whenever the pushdown puts the lower filter, whose
     // IN subquery can not go into a join either, back between the joins, until the batch reaches
-    // its iteration limit.
+    // its iteration limit. The IN subquery of the lower filter never precedes the division before
+    // `rand(0) > 0.5` in a join condition, so only `b > d` guards it.
     val z = LocalRelation($"e".int, $"f".int)
     val s = LocalRelation($"y".int)
     val query = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
-      .where(InSubquery(Seq($"a" + $"d"), ListQuery(s.select($"y"))))
+      .where(InSubquery(Seq($"a" + $"d"), ListQuery(s.select($"y"))) && $"b" > $"d")
       .join(z, condition = Some($"e" === $"a"))
-      .where(InSubquery(Seq($"b" + $"d"), ListQuery(s.select($"y"))) && Rand(0) > 0.5 &&
-        ansiDivide($"c", $"d") > 1)
+      .where(InSubquery(Seq($"b" + $"d"), ListQuery(s.select($"y"))) &&
+        ansiDivide($"b", $"d") > 1 && Rand(0) > 0.5 && ansiDivide($"c", $"d") > 1)
     val optimized = Optimize.execute(query.analyze)
-    assert(!optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[If]))), optimized)
+    val guards = optimized.flatMap(_.expressions.flatMap(_.collect { case i: If =>
+      (i.predicate.references.map(_.name).toSet, i.trueValue.references.map(_.name).toSet)
+    }))
+    assert(guards === Seq((Set("b", "d"), Set("b", "d"))), optimized)
   }
 }

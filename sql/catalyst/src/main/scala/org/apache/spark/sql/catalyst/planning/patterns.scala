@@ -340,7 +340,9 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * returned as `If(<filter condition>, <condition>, false)` for each lower filter whose condition
    * can be NULL, the lowest one outermost, which evaluates it only where they are TRUE, wherever it
    * is put. `IS NOT NULL` checks of the columns that make it NULL follow it, as `If` hides them
-   * from `InferFiltersFromConstraints`.
+   * from `InferFiltersFromConstraints`. Only the filter conjuncts that can go into a join
+   * condition (see `canEvaluateWithinJoin`) count, as one that can not, e.g. an IN subquery, never
+   * precedes the condition in one, and a copy of its subquery would be computed again.
    *  - A condition that only reads one of `plans` is pushed down to it, with the conjuncts of the
    *    filters that only read that plan, so only those that can be NULL guard it.
    *  - Any other condition that only reads columns of a filter whose condition can be NULL, or no
@@ -348,10 +350,12 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    *
    * The others are left as is: one that also reads a plan joined above the filters, e.g. a key of
    * a join above them, which reordering can still evaluate ahead of them, as when the filter
-   * condition is FALSE; one that `ReorderJoin` keeps in a filter above all the joins or out of the
-   * join conditions (see `canEvaluateWithinJoin`), which only sees the rows that the filters keep;
-   * and the ones of a streaming plan, whose joins need their keys and event time conditions as
-   * written. The condition of a lower join guards nothing, as in `PushPredicateThroughJoin`.
+   * condition is FALSE; an equality whose sides read different plans, which can be a join key,
+   * and as a key is computed on every row of each side anyway; one that `ReorderJoin` keeps in a
+   * filter above all the joins or out of the join conditions, which only sees the rows that the
+   * filters keep; and the ones of a streaming plan, whose joins need their keys and event time
+   * conditions as written. The condition of a lower join guards nothing, as in
+   * `PushPredicateThroughJoin`.
    */
   private def guard(
       conditions: Seq[Expression],
@@ -359,7 +363,9 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       filters: Seq[(Seq[Expression], LogicalPlan)],
       plans: Seq[LogicalPlan],
       plan: LogicalPlan): Seq[Expression] = {
-    lazy val nullable = filters.filter(_._1.exists(_.nullable))
+    lazy val nullable = filters.map { case (conjuncts, filter) =>
+      (conjuncts.filter(canEvaluateWithinJoin), filter)
+    }.filter(_._1.exists(_.nullable))
     if (conditions.isEmpty || plan.isStreaming || nullable.isEmpty) {
       conditions
     } else {
@@ -371,12 +377,20 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
             new java.util.IdentityHashMap[Expression, java.lang.Boolean]()))
         splitMovable(Seq(folded), Seq(plan), afterBarrier = true)._2.nonEmpty
       }
+      def canBeKey(e: Expression): Boolean = e match {
+        case Equality(l, r) =>
+          val (left, right) = (plans.filter(p => l.references.exists(p.outputSet.contains)),
+            plans.filter(p => r.references.exists(p.outputSet.contains)))
+          left.nonEmpty && right.nonEmpty && !left.exists(p => right.exists(_ eq p))
+        case _ => false
+      }
       var afterBarrier = before.exists(isBarrier)
       val checked = mutable.Set.empty[ExprId]
       conditions.flatMap { cond =>
         afterBarrier ||= isBarrier(cond)
         val refs = cond.references
-        val guards = if (afterBarrier || !canEvaluateWithinJoin(cond) || !canFail(cond)) {
+        val guards = if (afterBarrier || !canEvaluateWithinJoin(cond) || canBeKey(cond) ||
+            !canFail(cond)) {
           Nil
         } else {
           plans.find(p => refs.nonEmpty && refs.subsetOf(p.outputSet)) match {
