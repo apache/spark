@@ -95,6 +95,8 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
   A [SELECT](sql-ref-syntax-qry-select.html) statement that constructs the view from base tables or other views.
 
   A persistent view cannot reference temporary views, temporary functions, or session variables.
+  A call to a built-in or persistent function that resolves ahead of a same-named temporary
+  function is not a reference to the temporary function.
 
   For a persistent view, the SQL Path in effect at `CREATE VIEW` time is captured into the view's
   metadata; the body resolves against that frozen path on every reference, not the invoker's
