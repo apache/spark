@@ -239,6 +239,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               useMaterializedThreshold = false))
           case _ => None
         }
+      // The bloom filter's subquery reads a DSv2 scan again, so only a scan that
+      // `isRepeatableRead` counts. A pushed limit, for example, lets the source pick other rows on
+      // a second read.
+      case scan: DataSourceV2ScanRelation if !scan.isRepeatableRead => None
       case _: LeafNode if hasHitSelectiveFilter =>
         Some(FilterCreationSide(
           targetKey,
@@ -431,8 +435,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
   // reference hides the determinism of its plan, a cache only if Spark can tell that scanning it
   // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
-  // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
-  // second read. It must not read a file metadata column either, such as
+  // row by itself. That is stricter than `extract`, which also takes a scan with a pushed aggregate
+  // or join, or the target read of a copy-on-write operation, when it `isRepeatableRead`. Such a
+  // scan gives no bloom filter for a key whose DPP filters are all dropped. The plan must not read
+  // a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
   // split them differently. Its filters, and the projections that the key and the filters need,
   // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery
