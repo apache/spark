@@ -7524,6 +7524,39 @@ object SQLConf {
     .intConf
     .createWithDefault(Int.MaxValue)
 
+  val BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED =
+    buildConf("spark.sql.sources.binaryFile.singleContentCopy.enabled")
+      .internal()
+      .doc("When true, the binary file reader sizes its row buffer for the requested path and " +
+        "content, and skips the projection that appends partition values when there are no " +
+        "partition columns. Archive entries grow their buffers as content is read instead of " +
+        "allocating the size declared in their headers up front.")
+      .version("4.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE =
+    buildConf("spark.sql.sources.binaryFile.streamContentRead.minFileSize")
+      .internal()
+      .doc("Minimum listed file length for the binary file reader to copy content from its " +
+        "stream in bounded chunks instead of materializing an intermediate whole-file array.")
+      .version("4.5.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "must not be negative")
+      .createWithDefaultString("256MB")
+
+  val BINARY_FILE_STREAM_CONTENT_READ_ENABLED =
+    buildConf("spark.sql.sources.binaryFile.streamContentRead.enabled")
+      .internal()
+      .doc("When true, together with " +
+        s"${BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED.key}, binary file content is copied from " +
+        "the input stream into the row buffer in chunks of up to 1 MiB for files of at least " +
+        s"${BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE.key} bytes. The stream is read to " +
+        "its end even when its content length differs from the listed file length.")
+      .version("4.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CAST_DATETIME_TO_STRING =
     buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
       .internal()

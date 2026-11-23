@@ -17,13 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io.{File, IOException}
+import java.lang.management.ManagementFactory
+import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.Random
+
+import com.sun.management.ThreadMXBean
+import org.apache.hadoop.fs.Path
+import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeWriter
+import org.apache.spark.sql.execution.datasources.binaryfile.BinaryFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 
 /**
  * Reads of binary files packed in archives via the [[SupportsArchiveFormat]] path. The `wholeFile`
@@ -61,6 +73,184 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
 
   private def read(path: String, options: Map[String, String]): DataFrame =
     spark.read.format("binaryFile").options(options).load(path)
+
+  private def withContentCopyFlags[T](
+      singleContentCopy: Boolean,
+      streamRead: Boolean,
+      minFileSize: Long)(f: => T): T = withSQLConf(
+    SQLConf.BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED.key -> singleContentCopy.toString,
+    SQLConf.BINARY_FILE_STREAM_CONTENT_READ_ENABLED.key -> streamRead.toString,
+    SQLConf.BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE.key ->
+      minFileSize.toString)(f)
+
+  /** The rows the read function of a wholeFile=false scan returns for `archive`. */
+  private def readEntries(archive: File): Seq[InternalRow] = {
+    val reader = new BinaryFileFormat().buildReaderWithPartitionValues(
+      sparkSession = spark,
+      dataSchema = BinaryFileFormat.schema,
+      partitionSchema = StructType(Nil),
+      requiredSchema = BinaryFileFormat.schema,
+      filters = Nil,
+      options = Map("wholeFile" -> "false"),
+      hadoopConf = spark.sessionState.newHadoopConf())
+    val file = mock(classOf[PartitionedFile])
+    when(file.toPath).thenReturn(new Path(archive.toURI))
+    reader(file).toList
+  }
+
+  /** The fewest bytes this thread allocates over three runs of `f`, after a warm-up run. */
+  private def minAllocatedBytes(f: => Unit): Long = {
+    val threads = ManagementFactory.getThreadMXBean.asInstanceOf[ThreadMXBean]
+    assume(threads.isThreadAllocatedMemorySupported && threads.isThreadAllocatedMemoryEnabled)
+    f
+    Seq.fill(3) {
+      val start = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+      f
+      threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - start
+    }.min
+  }
+
+  /** Changes the size the central directory of the zip at `archive` lists for its last entry. */
+  private def shiftZipEntrySize(archive: File, delta: Int): Unit = {
+    val zip = Files.readAllBytes(archive.toPath)
+    // The last central directory file header is the entry's; its uncompressed size is at 24.
+    val header = zip.lastIndexOfSlice(Seq[Byte](0x50, 0x4b, 0x01, 0x02))
+    assert(header >= 0, "the archive must have a central directory")
+    val buffer = ByteBuffer.wrap(zip).order(ByteOrder.LITTLE_ENDIAN)
+    buffer.putInt(header + 24, buffer.getInt(header + 24) + delta)
+    Files.write(archive.toPath, zip)
+  }
+
+  test("SPARK-62256: archive entries read the same through the single content copy") {
+    // A 4096-byte minimum streams the larger entries, including one of more than one read chunk,
+    // and reads the others as whole-file arrays.
+    val entries = Seq(0, 1001, 4096, UnsafeWriter.STREAM_READ_CHUNK_BYTES + 1).zipWithIndex.map {
+      case (numBytes, seed) =>
+        s"entry-$seed.bin" ->
+          Array.tabulate[Byte](numBytes)(i => ((i * 31 + seed) % 251 + 1).toByte)
+    }
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        writeArchive(archive, entries)
+        def entryRows(): DataFrame = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
+          .select("path", "length", "content")
+        val expected = withContentCopyFlags(
+            singleContentCopy = false, streamRead = false, minFileSize = 0L) {
+          entryRows().collect()
+        }
+        assert(expected.map(r => r.getString(0).split("!/").last -> r.getAs[Array[Byte]](2).toSeq)
+          .toMap === entries.map { case (name, bytes) => name -> bytes.toSeq }.toMap, ext)
+        withContentCopyFlags(singleContentCopy = true, streamRead = true, minFileSize = 4096L) {
+          withClue(s"$ext: ") {
+            checkAnswer(entryRows(), expected.toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  if (archiveExtensions.contains("tgz")) {
+    test("SPARK-62256: a truncated archive entry stays a corrupt file to ignoreCorruptFiles") {
+      withArchiveFile("tgz") { archive =>
+        // Incompressible, so cutting the archive in half ends the gzip stream inside the entry,
+        // which gzip reports by throwing an EOFException rather than by ending the stream.
+        val content = new Array[Byte](64 * 1024)
+        new Random(42).nextBytes(content)
+        writeArchive(archive, Seq("entry.bin" -> content))
+        Files.write(archive.toPath, Files.readAllBytes(archive.toPath).take(32 * 1024))
+        def entryRows(): DataFrame = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
+          .select("content")
+        // The legacy read, the whole-file array, and the stream read.
+        Seq((false, false), (true, false), (true, true)).foreach {
+          case (singleContentCopy, streamRead) =>
+            withContentCopyFlags(singleContentCopy, streamRead, minFileSize = 0L) {
+              val clue = s"single copy $singleContentCopy, stream read $streamRead"
+              withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+                withClue(s"$clue: ") {
+                  checkAnswer(entryRows(), Seq.empty[Row])
+                }
+              }
+              withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+                intercept[SparkException](entryRows().collect())
+              }
+            }
+        }
+      }
+    }
+
+    test("SPARK-62256: a truncated archive entry fails before its declared size is allocated") {
+      withArchiveFile("tgz") { archive =>
+        val declared = 64 * UnsafeWriter.STREAM_READ_CHUNK_BYTES
+        val content = new Array[Byte](declared)
+        new Random(42).nextBytes(content)
+        writeArchive(archive, Seq("entry.bin" -> content))
+        Files.write(archive.toPath, Files.readAllBytes(archive.toPath).take(32 * 1024))
+        Seq((false, false), (true, false), (true, true)).foreach {
+          case (singleContentCopy, streamRead) =>
+            withContentCopyFlags(singleContentCopy, streamRead, minFileSize = 0L) {
+              val allocated = minAllocatedBytes {
+                intercept[IOException](readEntries(archive))
+                ()
+              }
+              assert(allocated < declared / 8, s"single copy $singleContentCopy, stream read " +
+                s"$streamRead: allocated $allocated bytes for an entry declaring $declared")
+            }
+        }
+      }
+    }
+  }
+
+  if (archiveExtensions.contains("zip")) {
+    test("SPARK-62256: a zip entry whose size header is wrong reads what the legacy read does") {
+      val content = Array.tabulate[Byte](4096)(i => (i % 251 + 1).toByte)
+      // The zip entry stream returns all of the entry's data whatever its size header says.
+      Seq(8, -8).foreach { delta =>
+        withArchiveFile("zip") { archive =>
+          writeArchive(archive, Seq("entry.bin" -> content))
+          shiftZipEntrySize(archive, delta)
+          def entryRows(): DataFrame = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
+            .select("length", "content")
+          // The legacy read, the whole-file array, and the stream read.
+          Seq((false, false), (true, false), (true, true)).foreach {
+            case (singleContentCopy, streamRead) =>
+              withContentCopyFlags(singleContentCopy, streamRead, minFileSize = 0L) {
+                withClue(s"size header off by $delta, single copy $singleContentCopy, " +
+                    s"stream read $streamRead: ") {
+                  checkAnswer(entryRows(), Row(content.length.toLong + delta, content))
+                }
+              }
+          }
+        }
+      }
+    }
+
+    test("SPARK-62256: a zip entry whose header overstates its size allocates what it holds") {
+      val content = Array.tabulate[Byte](4096)(i => (i % 251 + 1).toByte)
+      val declared = 64 * UnsafeWriter.STREAM_READ_CHUNK_BYTES
+      withArchiveFile("zip") { archive =>
+        writeArchive(archive, Seq("entry.bin" -> content))
+        shiftZipEntrySize(archive, declared - content.length)
+        val legacy = withContentCopyFlags(
+            singleContentCopy = false, streamRead = false, minFileSize = 0L) {
+          readEntries(archive)
+        }
+        val schema = BinaryFileFormat.schema
+        assert(legacy.map(_.getLong(schema.fieldIndex("length"))) === Seq(declared.toLong))
+        assert(legacy.map(_.getBinary(schema.fieldIndex("content")).toSeq) === Seq(content.toSeq))
+        Seq((false, false), (true, false), (true, true)).foreach {
+          case (singleContentCopy, streamRead) =>
+            withContentCopyFlags(singleContentCopy, streamRead, minFileSize = 0L) {
+              val clue = s"single copy $singleContentCopy, stream read $streamRead"
+              var rows = Seq.empty[InternalRow]
+              val allocated = minAllocatedBytes { rows = readEntries(archive) }
+              assert(rows === legacy, clue)
+              assert(allocated < declared / 8,
+                s"$clue: allocated $allocated bytes for an entry declaring $declared")
+            }
+        }
+      }
+    }
+  }
 
   test("wholeFile=true (default) reads the whole archive as a single record") {
     archiveExtensions.foreach { ext =>

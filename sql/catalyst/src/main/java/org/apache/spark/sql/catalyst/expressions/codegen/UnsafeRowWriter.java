@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -73,6 +74,26 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
     this.fixedSize = nullBitsSize + 8 * numFields;
     this.startingOffset = cursor();
+  }
+
+  /**
+   * Returns the {@code initialBufferSize} for {@link #UnsafeRowWriter(int, int)} that holds
+   * variable-length values of exactly {@code valueNumBytes} bytes each, so writing them never grows
+   * the buffer, or -1 if a length is negative or the row would not fit in a single array.
+   */
+  public static int exactVariableLengthBufferSize(int numFields, long... valueNumBytes) {
+    final long fixedSize = UnsafeRow.calculateBitSetWidthInBytes(numFields) + 8L * numFields;
+    long rowSize = fixedSize;
+    for (long numBytes : valueNumBytes) {
+      if (numBytes < 0 || numBytes > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        return -1;
+      }
+      rowSize += ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+      if (rowSize > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        return -1;
+      }
+    }
+    return (int) (rowSize - fixedSize);
   }
 
   /**
