@@ -117,9 +117,9 @@ object ToNumberParser {
  * @param numberFormat the format string describing the expected inputs.
  * @param errorOnFail true if evaluation should throw an exception if the input string fails to
  *                    match the format string. Otherwise, returns NULL instead.
- * @param legacyFormatZeroAsBlank true if formatting a zero value with a format string containing
- *                                no digits after the decimal point should render the integer part
- *                                as all spaces, as in Spark 4.3 and earlier.
+ * @param legacyFormatZeroAsBlank true to restore the results of Spark 4.3 and earlier, which leave
+ *                                out the ones digit of a zero value for some format strings with no
+ *                                digits after the decimal point, such as '999'.
  */
 class ToNumberParser(
     numberFormat: String,
@@ -768,9 +768,10 @@ class ToNumberParser(
         reachedDecimalPoint = true
       case _ =>
     }
-    // The zero stripping above leaves no digits at all for a zero value. When the format string
-    // has no digits after the decimal point, nothing else would render the value, so keep a
-    // single zero digit for the integer part.
+    // The zero stripping above leaves no digits for a zero value, and without digits after the
+    // decimal point the ones digit could be left out entirely, so keep a single zero digit. For
+    // formats where the decimal point or zero padding already renders the zero, this changes
+    // nothing.
     if (!legacyFormatZeroAsBlank && beforeDecimalPoint.isEmpty && afterDecimalPoint.isEmpty &&
       numFormatDigitsBeforeDecimalPoint > 0 && numFormatDigitsAfterDecimalPoint == 0) {
       beforeDecimalPoint = ZERO_DIGIT.toString

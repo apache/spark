@@ -9606,10 +9606,11 @@ object SQLConf {
   val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
     buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
       .internal()
-      .doc("When set to true, to_char renders a zero value as all spaces if the format string " +
-        "has no digits after the decimal point. For example: SELECT to_char(0, '999') returns " +
-        "'   '. When set to false, the zero digit is kept. For example: " +
-        "SELECT to_char(0, '999') returns '  0'.")
+      .doc("When set to true, to_char restores the results of Spark 4.3 and earlier, which " +
+        "leave out the ones digit of a zero value for some format strings with no digits after " +
+        "the decimal point. For example: SELECT to_char(0, '999') returns '   ' and " +
+        "SELECT to_char(0, '999S') returns '+   '. When set to false, the ones digit is kept: " +
+        "they return '  0' and '  0+'.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
