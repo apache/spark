@@ -307,8 +307,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // So does a checkpoint written without the join output watermark check for an input that
         // the default mode would evict by another column, since for such a checkpoint that check
         // only warns about a later operator that drops the rows this eviction emits late.
-        // An input without its own watermark that the condition bounds only through a cast gets
-        // no cutoff.
+        // An input without its own watermark gets no cutoff from a conjunct that the solver reads
+        // inexactly, such as through a cast that can round or through whole days in a time zone
+        // whose offset changes, and none at all for a checkpoint written without the join output
+        // watermark check, whose filter keeps only a pick of the event time.
         // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
         //  evicted by its event time with the cast column's cutoff, which can be too early, or not
         //  at all when it has no watermark of its own.

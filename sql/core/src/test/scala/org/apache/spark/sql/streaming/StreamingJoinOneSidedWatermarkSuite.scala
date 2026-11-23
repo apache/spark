@@ -147,8 +147,6 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
     }
   }
 
-  // An earlier version, like the legacy mode, kept every row of such an input, including one
-  // whose bounded column is NULL.
   // A cast to a whole number of seconds rounds 14.2 s and 19.6 s down, so the cutoff solved through
   // it is too high. Earlier versions never evicted the left input, which has no watermark.
   for {
@@ -185,6 +183,41 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
     }
   }
 
+  // In America/Los_Angeles, the day before 2026-11-01 12:00 PST lasts 25 hours, but the solver
+  // reads it as 24, so the cutoff is too high. Earlier versions never evicted the left input.
+  for (version <- Seq(2, 4)) {
+    test(s"an input without its own watermark is not evicted through a day across a " +
+        s"daylight-saving change, V$version") {
+      withJoinConf(version) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          val leftInput = MemoryStream[(Int, Long)]
+          val rightInput = MemoryStream[(Int, Long)]
+          val left = leftInput.toDF().toDF("leftKey", "time")
+            .select($"leftKey", timestamp_seconds($"time").as("lt"))
+          val right = rightInput.toDF().toDF("rightKey", "time")
+            .select($"rightKey", timestamp_seconds($"time").as("rt"))
+            .withWatermark("rt", "10 minutes")
+          val joined = left.join(right,
+              expr("leftKey = rightKey AND lt BETWEEN rt - INTERVAL 1 DAY AND rt"), "left_outer")
+            .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+          // 2026-10-31 12:30 PDT, 2026-11-01 11:55 PST and 2026-11-01 12:00 PST.
+          val (start, later, end) = (1793475000L, 1793562900L, 1793563200L)
+          testStream(joined)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, start)), AddData(rightInput, (9, later)))),
+            CheckNewAnswer(),
+            // The watermark is 11:45 PST, less than a day read as 24 hours after the left row.
+            AddData(rightInput, (9, later)),
+            CheckNewAnswer(),
+            AddData(rightInput, (1, end)),
+            CheckNewAnswer(Row(1, start, end)))
+        }
+      }
+    }
+  }
+
+  // An earlier version, like the legacy mode, kept every row of such an input, including one
+  // whose bounded column is NULL.
   test("a stored row of an input without its own watermark whose column is NULL is evicted") {
     withJoinConf(2) {
       val leftInput = MemoryStream[(Int, Int)]
