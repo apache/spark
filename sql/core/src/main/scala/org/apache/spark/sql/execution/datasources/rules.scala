@@ -652,9 +652,9 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
-          // Drop legacy query-output names from EVOLUTION views: they no longer match the new
-          // schema. This is the only cleanup on the read path, so a view that needs no sync keeps
-          // them; reads ignore them.
+          // EVOLUTION views don't use stored query-output names, but a later ALTER VIEW ... WITH
+          // SCHEMA would copy them, so drop any left by older versions whenever the schema is
+          // rewritten. Reads that need no sync leave them in place.
           val newProperties = if (viewSchemaMode == SchemaEvolution) {
             metaData.properties.filterNot(_._1.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
           } else {

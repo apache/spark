@@ -1656,6 +1656,26 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
+  test("schema sync of an EVOLUTION view with a new column removes stale query column names") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 INT, c2 INT) USING parquet")
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+        setViewQueryColumnNames("v", "c1", "c2")
+
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (c1 INT, c2 INT, c3 INT) USING parquet")
+        sql("INSERT INTO t VALUES (10, 20, 30)")
+        // The read syncs the view schema to the new column count.
+        checkAnswer(sql("SELECT * FROM v"), Row(10, 20, 30))
+        assert(viewQueryOutputPropertyKeys("v").isEmpty)
+
+        sql("ALTER VIEW v WITH SCHEMA BINDING")
+        checkAnswer(sql("SELECT * FROM v"), Row(10, 20, 30))
+      }
+    }
+  }
+
   test("reading an unchanged EVOLUTION view keeps its stored query column names") {
     withTable("t") {
       withView("v") {
