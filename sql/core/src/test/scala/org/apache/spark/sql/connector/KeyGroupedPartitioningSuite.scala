@@ -67,6 +67,7 @@ import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DataSourceV2Test
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSuiteBase {
 
@@ -2281,6 +2282,230 @@ class KeyGroupedPartitioningSuite
           catalog.clearTables()
         }
       }
+    }
+  }
+
+  // Pairs of values that are equal under a collation but have different bytes.
+  private val collationEqualPairs =
+    Seq("UTF8_LCASE" -> ("A", "a"), "UTF8_BINARY_RTRIM" -> ("a", "a "))
+
+  /** The bucket InMemoryBaseTable puts a string in, which `StringBucketFunction` computes. */
+  private def stringBucket(value: String, numBuckets: Int): Int =
+    StringBucketFunction.produceResult(InternalRow(numBuckets, UTF8String.fromString(value)))
+
+  /**
+   * A bucket count that puts the two values of every pair into different buckets, and 'b' and 'B',
+   * and the strings of `0.0` and `-0.0` too.
+   */
+  private lazy val separatingBucketCount: Int = (2 to 64).find { n =>
+    (collationEqualPairs.map(_._2) ++ Seq(("b", "B"), ("0.0", "-0.0"))).forall { case (a, b) =>
+      stringBucket(a, n) != stringBucket(b, n)
+    }
+  }.get
+
+  private def shuffleCount(df: DataFrame): Int =
+    collectAllShuffles(df.queryExecution.executedPlan).size
+
+  test("SPARK-62150: a transform of a collated string column does not cluster it") {
+    // A bucket over the raw bytes puts the two values of each pair into two buckets, so if
+    // `bucket(n, s)` clustered `s`, a window or an aggregate over `s` would skip its shuffle and
+    // split the pair. Both shuffle, and see one value.
+    collationEqualPairs.foreach { case (collation, (a, b)) =>
+      withFunction(UnboundStringBucketFunction) {
+        createTable("collated", Array(Column.create("s", StringType(collation))),
+          Array(bucket(separatingBucketCount, "s")))
+        sql(s"INSERT INTO testcat.ns.collated VALUES ('$a'), ('$b')")
+        val window = sql("SELECT s, count(*) OVER (PARTITION BY s) FROM testcat.ns.collated")
+        checkAnswer(window, Seq(Row(a, 2L), Row(b, 2L)))
+        assert(shuffleCount(window) == 1, collation)
+        val aggregate = sql("SELECT count(*) FROM testcat.ns.collated GROUP BY s")
+        checkAnswer(aggregate, Seq(Row(2L)))
+        assert(shuffleCount(aggregate) == 1, collation)
+        catalog.clearTables()
+      }
+    }
+  }
+
+  test("SPARK-62150: a union of scans bucketed by a collated column does not cluster it") {
+    // Each scan holds one value of the pair, so the union's layout would put them into two
+    // partitions.
+    withFunction(UnboundStringBucketFunction) {
+      Seq("t1" -> "A", "t2" -> "a").foreach { case (t, v) =>
+        createTable(t, Array(Column.create("s", StringType("UTF8_LCASE"))),
+          Array(bucket(separatingBucketCount, "s")))
+        sql(s"INSERT INTO testcat.ns.$t VALUES ('$v')")
+      }
+      checkAnswer(sql("SELECT count(*) FROM (SELECT s FROM testcat.ns.t1 UNION ALL " +
+        "SELECT s FROM testcat.ns.t2) GROUP BY s"), Seq(Row(2L)))
+    }
+  }
+
+  test("SPARK-62150: a broadcast join's layout over a collated build key does not cluster it") {
+    // The join reports the streamed side's layout over the build side's key, here
+    // `c.s COLLATE UTF8_BINARY`, a function of the collated `c.s` that tells 'A' from 'a'. If it
+    // clustered `c.s`, an aggregate or a window over `c.s` would skip its shuffle and split the
+    // pair, whether the streamed side is bucketed by its binary column or keyed by it as it is.
+    Seq(bucket(separatingBucketCount, "b"), identity("b")).foreach { partitioning =>
+      withFunction(UnboundStringBucketFunction) {
+        createTable("f", Array(Column.create("b", StringType)), Array(partitioning))
+        createTable("c", Array(Column.create("s", StringType("UTF8_LCASE"))), Array.empty)
+        Seq("f", "c").foreach(t => sql(s"INSERT INTO testcat.ns.$t VALUES ('A'), ('a')"))
+        val join = "FROM testcat.ns.f JOIN testcat.ns.c ON f.b = c.s COLLATE UTF8_BINARY"
+        val aggregate = sql(s"SELECT /*+ BROADCAST(c) */ count(*) $join GROUP BY c.s")
+        checkAnswer(aggregate, Seq(Row(2L)))
+        assert(shuffleCount(aggregate) == 1, partitioning.describe)
+        checkAnswer(sql(s"SELECT /*+ BROADCAST(c) */ count(*) OVER (PARTITION BY c.s) $join"),
+          Seq(Row(2L), Row(2L)))
+        catalog.clearTables()
+      }
+    }
+  }
+
+  test("SPARK-62150: a transform of a floating point column does not cluster it") {
+    // `0.0` and `-0.0` are equal, but `sign_bit` keys them apart, and so does a bucket of their
+    // strings, the layout a broadcast join on `f.str = CAST(c.d AS STRING)` reports over `c.d`.
+    // An aggregate normalizes its key but clusters on the column, so it would split them.
+    withFunction(SignBitFunction) {
+      createTable("signed", Array(Column.create("d", DoubleType)),
+        Array(Expressions.apply("sign_bit", Expressions.column("d"))))
+      sql("INSERT INTO testcat.ns.signed VALUES (0.0D), (-0.0D)")
+      val aggregate = sql("SELECT count(*) FROM testcat.ns.signed GROUP BY d")
+      checkAnswer(aggregate, Seq(Row(2L)))
+      assert(shuffleCount(aggregate) == 1)
+      checkAnswer(
+        sql("SELECT count(*) FROM (SELECT DISTINCT d FROM testcat.ns.signed)"), Seq(Row(1L)))
+    }
+    withFunction(UnboundStringBucketFunction) {
+      createTable("f", Array(Column.create("str", StringType)),
+        Array(bucket(separatingBucketCount, "str")))
+      createTable("c", Array(Column.create("d", DoubleType)), Array.empty)
+      sql("INSERT INTO testcat.ns.f VALUES ('0.0'), ('-0.0')")
+      sql("INSERT INTO testcat.ns.c VALUES (0.0D), (-0.0D)")
+      checkAnswer(sql("SELECT /*+ BROADCAST(c) */ count(*) FROM testcat.ns.f " +
+        "JOIN testcat.ns.c ON f.str = CAST(c.d AS STRING) GROUP BY c.d"), Seq(Row(2L)))
+    }
+  }
+
+  test("SPARK-62150: a semi-join on a collated column does not pair a bucket of it") {
+    // A semi-join from an IN or EXISTS subquery is built after `RewriteCollationJoin`, so it
+    // compares the collated `s` itself rather than its collation key, and asks each side to be
+    // clustered on `s`. A bucket of `s` must not pair the sides on it: 'A' and 'a' are in
+    // different buckets. In `(identity(id), bucket(n, s))`, the sides may pair on `id` alone.
+    val n = separatingBucketCount
+    val subset = SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key
+    val cols = Array(Column.create("id", IntegerType), Column.create("s", StringType("UTF8_LCASE")))
+    Seq(
+      Array(bucket(n, "s")),
+      Array(identity("id"), bucket(n, "s")),
+      Array(bucket(n, "s"), identity("id"))
+    ).foreach { partitioning =>
+      withFunction(UnboundStringBucketFunction) {
+        createTable("t1", cols, partitioning)
+        createTable("t2", cols, partitioning)
+        sql("INSERT INTO testcat.ns.t1 VALUES (1, 'A'), (2, 'b')")
+        sql("INSERT INTO testcat.ns.t2 VALUES (1, 'a'), (2, 'B')")
+        val order = partitioning.map(_.describe).mkString(", ")
+        // Each query, and whether it joins on `id` too.
+        Seq(
+          "SELECT id, s FROM testcat.ns.t1 WHERE (id, s) IN (SELECT id, s FROM testcat.ns.t2)" ->
+            true,
+          "SELECT id, s FROM testcat.ns.t1 WHERE EXISTS (SELECT 1 FROM testcat.ns.t2 " +
+            "WHERE t2.id = t1.id AND t2.s = t1.s)" -> true,
+          "SELECT id, s FROM testcat.ns.t1 WHERE s IN (SELECT s FROM testcat.ns.t2)" -> false,
+          "SELECT id, s FROM testcat.ns.t1 WHERE EXISTS (SELECT 1 FROM testcat.ns.t2 " +
+            "WHERE t2.s = t1.s)" -> false
+        ).foreach { case (query, onId) =>
+          Seq("true", "false").foreach { allowSubset =>
+            withSQLConf(subset -> allowSubset) {
+              val df = sql(query)
+              withClue(s"$order, allowKeysSubsetOfPartitionKeys=$allowSubset: ") {
+                checkAnswer(df, Seq(Row(1, "A"), Row(2, "b")))
+              }
+              if (allowSubset == "true" && partitioning.length == 2 && onId) {
+                assert(shuffleCount(df) == 0, s"$order: the sides pair on id")
+              }
+            }
+          }
+        }
+        catalog.clearTables()
+      }
+    }
+  }
+
+  test("SPARK-62150: a column as a key of its own, a transform of a binary string, and a " +
+      "layout's other positions still cluster") {
+    // Spark compares partition keys under their type's equality, so `identity(s)` and
+    // `identity(d)` group the partitions of equal values into one and need no shuffle. A binary
+    // string compares by its bytes, so a bucket of it still clusters it.
+    withFunction(UnboundStringBucketFunction) {
+      createTable("ident", Array(Column.create("s", StringType("UTF8_LCASE"))),
+        Array(identity("s")))
+      createTable("binary", Array(Column.create("s", StringType)),
+        Array(bucket(separatingBucketCount, "s")))
+      Seq("ident", "binary").foreach(t => sql(s"INSERT INTO testcat.ns.$t VALUES ('A'), ('a')"))
+      Seq(("ident", 2L), ("binary", 1L)).foreach { case (table, count) =>
+        val window = sql(s"SELECT s, count(*) OVER (PARTITION BY s) FROM testcat.ns.$table")
+        checkAnswer(window, Seq(Row("A", count), Row("a", count)))
+        assert(shuffleCount(window) == 0, table)
+      }
+      createTable("doubles", Array(Column.create("d", DoubleType)), Array(identity("d")))
+      sql("INSERT INTO testcat.ns.doubles VALUES (0.0D), (-0.0D)")
+      val aggregate = sql("SELECT count(*) FROM testcat.ns.doubles GROUP BY d")
+      checkAnswer(aggregate, Seq(Row(2L)))
+      assert(shuffleCount(aggregate) == 0)
+      catalog.clearTables()
+
+      // A collated column as a key of its own also covers itself when the layout is grouped on it
+      // alone: in `(identity(id), identity(s))`, a window over `s` and a semi-join on `s` group
+      // the partitions on `s`, which merges 'A' and 'a', with no shuffle.
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        val idents =
+          Array(Column.create("id", IntegerType), Column.create("s", StringType("UTF8_LCASE")))
+        createTable("i1", idents, Array(identity("id"), identity("s")))
+        createTable("i2", idents, Array(identity("id"), identity("s")))
+        sql("INSERT INTO testcat.ns.i1 VALUES (1, 'A'), (2, 'a')")
+        sql("INSERT INTO testcat.ns.i2 VALUES (3, 'a')")
+        val window = sql("SELECT id, s, count(*) OVER (PARTITION BY s) FROM testcat.ns.i1")
+        checkAnswer(window, Seq(Row(1, "A", 2L), Row(2, "a", 2L)))
+        assert(shuffleCount(window) == 0)
+        val semiJoin =
+          sql("SELECT id, s FROM testcat.ns.i1 WHERE s IN (SELECT s FROM testcat.ns.i2)")
+        checkAnswer(semiJoin, Seq(Row(1, "A"), Row(2, "a")))
+        assert(shuffleCount(semiJoin) == 0)
+      }
+      catalog.clearTables()
+
+      // In `(identity(id), bucket(n, s))`, `identity(id)` still clusters `id`. With the layout
+      // grouped on `id` alone, which merges partitions the source kept apart and so needs
+      // `allowKeysSubsetOfPartitionKeys`, an aggregate on `id, s` counts both values of the pair
+      // together, and a join on `id` pairs the scans, with no shuffle. Without the conf, the
+      // aggregate shuffles. Both orders of the two positions.
+      val n = separatingBucketCount
+      Seq(Array(identity("id"), bucket(n, "s")), Array(bucket(n, "s"), identity("id")))
+        .foreach { partitioning =>
+          val cols =
+            Array(Column.create("id", IntegerType), Column.create("s", StringType("UTF8_LCASE")))
+          Seq("t1", "t2").foreach { t =>
+            createTable(t, cols, partitioning)
+            sql(s"INSERT INTO testcat.ns.$t VALUES (1, 'A'), (2, 'a'), (1, 'a'), (2, 'A')")
+          }
+          val order = partitioning.map(_.describe).mkString(", ")
+          val groupBy = "SELECT id, count(*) FROM testcat.ns.t1 GROUP BY id, s"
+          withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+            val aggregate = sql(groupBy)
+            checkAnswer(aggregate, Seq(Row(1, 2L), Row(2, 2L)))
+            assert(shuffleCount(aggregate) == 0, order)
+            val join = sql("SELECT t1.id, t1.s, t2.s FROM testcat.ns.t1 JOIN testcat.ns.t2 " +
+              "ON t1.id = t2.id")
+            checkAnswer(join, for (id <- Seq(1, 2); l <- Seq("A", "a"); r <- Seq("A", "a"))
+              yield Row(id, l, r))
+            assert(shuffleCount(join) == 0, order)
+          }
+          val aggregate = sql(groupBy)
+          checkAnswer(aggregate, Seq(Row(1, 2L), Row(2, 2L)))
+          assert(shuffleCount(aggregate) == 1, order)
+          catalog.clearTables()
+        }
     }
   }
 

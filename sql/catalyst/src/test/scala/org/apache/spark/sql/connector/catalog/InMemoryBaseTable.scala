@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, Struct
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction, SignBitFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
@@ -253,6 +253,7 @@ abstract class InMemoryBaseTable(
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case NamedTransform("flip_low_bit", Seq(_: NamedReference)) =>
+    case NamedTransform("sign_bit", Seq(_: NamedReference)) =>
     case NamedTransform("self_reduce", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
@@ -387,6 +388,12 @@ abstract class InMemoryBaseTable(
       case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (value: Long, LongType) => FlipLowBitFunction.produceResult(InternalRow(value))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case NamedTransform("sign_bit", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Double, DoubleType) => SignBitFunction.produceResult(InternalRow(value))
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
