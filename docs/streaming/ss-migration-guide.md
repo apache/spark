@@ -65,10 +65,12 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `leftTime > rightTime - INTERVAL 5 SECONDS` bounds the state of the left input.
   `CAST(leftTime AS LONG) > 10` no longer gives a cutoff, so it no longer holds back the cutoff of
   other range conditions. `CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100` no longer
-  evicts state that later rows of the other input can still match. As a result, outer joins
+  evicts state that later rows of the other input can still match. As a result, new outer joins
   without a watermark in the join keys, whose only range condition has one of these forms, fail
-  analysis, also when an existing query restarts. To run such a query, add a range condition that
-  bounds the state, or a watermark in the join keys, and start it from a new checkpoint. A left
+  analysis. To run such a query, add a range condition that bounds the state, or a watermark in
+  the join keys. A query restarted from a checkpoint of an earlier version keeps the earlier rule,
+  so it is accepted and returns the same rows as before; start it from a new checkpoint to use the
+  new rule. A left
   semi join of that kind still runs, as in earlier versions, but its state is not evicted. Such
   conjuncts still hold back, as in earlier versions, a cutoff that goes through a cast that can
   round or drop digits, such as `CAST(leftTime AS LONG) >= CAST(rightTime AS LONG) - 5`, a cutoff
