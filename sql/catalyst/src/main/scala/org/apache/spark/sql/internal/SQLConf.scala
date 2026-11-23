@@ -4485,11 +4485,12 @@ object SQLConf {
         "event time can come from an input of the join that has a watermark but no state " +
         "cutoff on its event time, even by the rule of earlier versions, or that the join evicts " +
         "by another column. When false, such a query only logs a warning, the join evicts by the " +
-        "event time an input that it would otherwise evict by another column, and range cutoffs " +
-        "keep the rule of earlier versions, in which constant-only and negative-sign conjuncts " +
-        "give cutoffs, for eviction, the state format 4 scan bounds, the output watermark and " +
-        "the analysis of outer joins. A streaming query restarted from a checkpoint written " +
-        "without this config uses false.")
+        "event time an input that it would otherwise evict by another column and does not evict " +
+        "an input without its own watermark, and range cutoffs keep the rule of earlier " +
+        "versions, in which constant-only and negative-sign conjuncts give cutoffs, for " +
+        "eviction, the state format 4 scan bounds, the output watermark and the analysis of " +
+        "outer joins. A streaming query restarted from a checkpoint written without this config " +
+        "uses false.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

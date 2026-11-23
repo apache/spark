@@ -683,11 +683,49 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
-  // An earlier version, like the legacy mode, kept the rows of an input without its own watermark
-  // out of the V4 index. Outer joins would never emit them, while inner and left semi joins still
-  // find them.
+  // A checkpoint of an earlier version records neither conf, so the join keeps the earlier
+  // behavior for an input without its own watermark: no predicate, and no eviction.
+  test("V4 restart from a checkpoint of an earlier version for an input without its own " +
+      "watermark") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          .withWatermark("rightTime", "10 seconds")
+        val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
+          "left_outer").select($"leftKey", $"rightKey")
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(leftInput, (1, 5L), (2, 5L)),
+            CheckNewAnswer(),
+            StopStream)
+        }
+        removeConfs(checkpoint, indexVersionKey,
+          SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key)
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (2, 8L)),
+          CheckNewAnswer(Row(2, 2)),
+          AddData(rightInput, (3, 30L)),
+          CheckNewAnswer(),
+          // The watermark is 20 s, past the range of the left row of key 1, which stays.
+          AddData(rightInput, (3, 40L)),
+          CheckNewAnswer())
+      }
+    }
+  }
+
+  // The legacy mode kept the rows of an input without its own watermark out of the V4 index. Outer
+  // joins would never emit them, while inner and left semi joins still find them.
   for (joinType <- Seq("left_outer", "right_outer", "full_outer", "inner", "left_semi")) {
-    test(s"V4 restart from an older checkpoint for an input without its own watermark, $joinType") {
+    test(s"V4 restart from a legacy-mode checkpoint for an input without its own watermark, " +
+        s"$joinType") {
       withJoinConf(4) {
         withTempDir { checkpoint =>
           val leftInput = MemoryStream[(Int, Long)]
