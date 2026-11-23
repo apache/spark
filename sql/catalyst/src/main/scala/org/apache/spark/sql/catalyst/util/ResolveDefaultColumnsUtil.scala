@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.ZoneOffset
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -40,6 +42,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 /**
@@ -488,6 +491,56 @@ object ResolveDefaultColumns extends QueryErrorsBase
     } else {
       null
     }
+  }
+
+  /**
+   * Returns the SQL text to store as the EXISTS_DEFAULT metadata of a column whose constant-folded
+   * default value is `value`. [[getExistenceDefaultValue]] parses this text in the session of each
+   * reader, so it must denote the same value in every session. `Literal.sql` renders a TIMESTAMP
+   * value, which is an instant, as its wall clock in the session time zone without an offset: a
+   * session in another time zone reads it as another instant, and a wall clock that the end of
+   * daylight saving time repeats denotes two instants. So a TIMESTAMP or TIMESTAMP_LTZ(p) value,
+   * also in an array, a struct or a map, is rendered in UTC with the offset `Z`, which the parser
+   * keeps regardless of the session time zone and `spark.sql.timestampType`. Any other value is
+   * rendered by `Literal.sql`.
+   */
+  def existenceDefaultSQL(value: Expression): String = value match {
+    case ExprLiteral(v, dataType) => existenceDefaultSQL(v, dataType)
+    case other => other.sql
+  }
+
+  private def existenceDefaultSQL(value: Any, dataType: DataType): String = {
+    (value, dataType) match {
+      case _ if value == null || !containsLocalTimestamp(dataType) =>
+        ExprLiteral(value, dataType).sql
+      case (micros: Long, TimestampType) =>
+        s"TIMESTAMP '${TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(micros)}Z'"
+      case (nanos: TimestampNanosVal, t: TimestampLTZNanosType) =>
+        val formatted =
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).formatNanos(nanos, t.precision)
+        s"TIMESTAMP_LTZ '${ExprLiteral.padToNanosPrecision(formatted, t.precision)}Z'"
+      // The same forms as `Literal.sql` for a value that contains such a timestamp.
+      case (array: GenericArrayData, ArrayType(elementType, _)) =>
+        array.array.map(existenceDefaultSQL(_, elementType)).mkString("ARRAY(", ", ", ")")
+      case (row: GenericInternalRow, structType: StructType) =>
+        row.values.zip(structType.fields).map { case (v, field) =>
+          s"'${field.name}', ${existenceDefaultSQL(v, field.dataType)}"
+        }.mkString("NAMED_STRUCT(", ", ", ")")
+      case (map: ArrayBasedMapData, MapType(keyType, valueType, _)) =>
+        (map.keyArray, map.valueArray) match {
+          case (keys: GenericArrayData, values: GenericArrayData) =>
+            keys.array.zip(values.array).map { case (k, v) =>
+              s"${existenceDefaultSQL(k, keyType)}, ${existenceDefaultSQL(v, valueType)}"
+            }.mkString("MAP(", ", ", ")")
+          case _ => ExprLiteral(value, dataType).sql
+        }
+      case _ => ExprLiteral(value, dataType).sql
+    }
+  }
+
+  private def containsLocalTimestamp(dataType: DataType): Boolean = dataType.existsRecursively {
+    case TimestampType | _: TimestampLTZNanosType => true
+    case _ => false
   }
 
   /**
