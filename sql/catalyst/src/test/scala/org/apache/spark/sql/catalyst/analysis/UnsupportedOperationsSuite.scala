@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1121,15 +1121,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Each of these passes only because of one condition: the left semi join emits only its left
   // input, an operator whose input has no event time filters no joined row, and a join input
-  // without an event time emits none. A union with the same child twice is a path that the trace
-  // cannot follow.
+  // without an event time emits none. A deduplication by the event time is a stateful operator,
+  // through which the trace does not follow.
   Seq[(String, LogicalPlan)](
-    "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime), {
-      val semi = Join(TestStreamingRelation(Seq(leftKey, leftTime)),
+    "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime),
+      Deduplicate(Seq(leftTime), Join(TestStreamingRelation(Seq(leftKey, leftTime)),
         TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
-        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE)
-      Union(Seq(semi, semi))
-    }),
+        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE))),
     "an operator whose input has no event time" ->
       Deduplicate(Seq(leftKey), Aggregate(Seq(leftKey), Seq(leftKey), keyOnlyJoin)),
     "a watermark above a join of inputs without one" -> {
@@ -1146,10 +1144,37 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  // Planning rejects this join with its own error.
+  // Planning rejects this join with its own error. The right input has no cutoff, so the check
+  // would reject the plan without its early return.
   test("join output watermark: a stream-stream join without an equality predicate") {
-    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(leftTime),
-      Seq(leftTime), joinOf(Seq(leftTime), Seq(rightTime), leftTime > rightTime)), Append)
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(rightTime),
+      Seq(rightTime), joinOf(Seq(leftTime), Seq(rightTime), leftTime > rightTime)), Append)
+  }
+
+  // Only the right input has no cutoff. A union maps the traced columns by position into each of
+  // its inputs that holds the join, and a later join traces each of its inputs.
+  private val oneSidedJoin = joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime),
+    leftKey === rightKey && rightTime <= leftTime)
+  private val (otherKey, otherTime) = (AttributeReference("ok", IntegerType)(),
+    AttributeReference("ot", TimestampType, metadata = watermarkMetadata)())
+  Seq[(String, Attribute => LogicalPlan)](
+    "a union with a watermarked stream" -> (time => Aggregate(Seq(otherTime), Seq(otherTime),
+      Union(Seq(TestStreamingRelation(Seq(otherKey, otherTime)),
+        oneSidedJoin.select(leftKey, time))))),
+    "a projection to the attributes of a union" -> (time => Aggregate(Seq(otherTime),
+      Seq(otherTime), Project(Seq(Alias(leftKey, "ok")(otherKey.exprId),
+        Alias(time, "ot")(otherTime.exprId)), oneSidedJoin))),
+    "a later join of two projections of one join" -> (time => Join(
+      oneSidedJoin.select(leftKey, leftTime), oneSidedJoin.select(rightKey, time), Inner,
+      Some(leftKey === rightKey), JoinHint.NONE))
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: one-sided range join through $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(leftTime), Append)
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(rightTime), Append))
+      assert(e.getMessage.contains(
+        "the state of the right input of a stream-stream join has no cutoff"))
+    }
   }
 
   private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =

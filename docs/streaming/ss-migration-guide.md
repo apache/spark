@@ -30,10 +30,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   stream-stream join and its event time can come from an input of the join whose state is never
   evicted, for example an input of a join on a key without a watermark and without a time range
   on that input. Such a query could drop joined rows as late. The check follows the event time
-  down to the join through projections and the operators that pass their input's columns
-  through, and also fails a query whose path to the join passes another stateful operator. Add a
-  watermark in the join keys, or a range condition that bounds that input by the other input's
-  watermark. Queries restarted from checkpoints written before Spark 4.5 only log a warning.
+  down to the join through projections, unions and the operators that pass their input's columns
+  through, and also fails a query whose path to the join passes another stateful operator or an
+  operator none of whose inputs outputs all the columns it follows. Add a watermark in the join
+  keys, or a range condition that bounds that input by the other input's watermark. Setting
+  `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
+  a warning, and also turns the existing check of chained stateful operators into a warning.
+  Queries restarted from checkpoints written before Spark 4.5 only log a warning.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
