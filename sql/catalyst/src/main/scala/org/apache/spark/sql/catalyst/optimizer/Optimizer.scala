@@ -2452,10 +2452,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * which the conjuncts so far, with the constraints of `child`, imply it, so that evaluating the
    * condition in its order does not evaluate it before the conjuncts that precede that one, whose
    * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`, or in
-   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints only grow with the prefix, so the first
-   * implying prefix of each predicate is found by a binary search over the prefixes, and the
-   * constraints of each prefix are computed once. The condition is rebuilt as a balanced tree, as
-   * the parser builds a long chain of `AND`.
+   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints are assumed to only grow with the
+   * prefix, so the first implying prefix of each predicate is found by a search that doubles the
+   * prefix until it implies the predicate, then halves the last range; the constraints of each
+   * prefix are computed once. If a longer prefix lost a constraint, a predicate would only be
+   * placed later. The prefixes and the condition are built as balanced trees, as the parser
+   * builds a long chain of `AND`.
    */
   private def withInferredPredicates(
       inferred: Seq[Expression],
@@ -2465,11 +2467,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val conjuncts = splitConjunctivePredicates(condition)
       val implied = mutable.HashMap.empty[Int, ExpressionSet]
       def impliedBy(k: Int): ExpressionSet = implied.getOrElseUpdate(k,
-        Filter(conjuncts.take(k + 1).reduce(And), child).constraints)
+        Filter(buildBalancedPredicate(conjuncts.take(k + 1), And), child).constraints)
       val placed = Array.fill(conjuncts.length)(Seq.empty[Expression])
       // Places `preds`, each implied by the first `hi + 1` conjuncts and not by the first `lo`.
-      // The whole condition implies every inferred predicate, since they come from the
-      // constraints of the filter.
       def place(preds: Seq[Expression], lo: Int, hi: Int): Unit = if (preds.nonEmpty) {
         if (lo == hi) {
           placed(lo) = preds
@@ -2480,7 +2480,20 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
           place(after, mid + 1, hi)
         }
       }
-      place(inferred, 0, conjuncts.length - 1)
+      // The whole condition implies every inferred predicate, since they come from the
+      // constraints of the filter, so the last range ends at the last conjunct.
+      val last = conjuncts.length - 1
+      var remaining = inferred
+      var lo = 0
+      var hi = 0
+      while (remaining.nonEmpty) {
+        val (now, later) =
+          if (hi == last) (remaining, Nil) else remaining.partition(impliedBy(hi).contains)
+        place(now, lo, hi)
+        remaining = later
+        lo = hi + 1
+        hi = math.min(2 * hi + 1, last)
+      }
       buildBalancedPredicate(conjuncts.zip(placed).flatMap { case (c, ps) => ps :+ c }, And)
     } else {
       And(inferred.reduce(And), condition)

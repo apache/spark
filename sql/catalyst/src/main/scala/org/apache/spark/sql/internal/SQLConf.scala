@@ -1922,7 +1922,9 @@ object SQLConf {
         "stage computes on demand by an expression that can raise, instead of just before the " +
         "first conjunct that references its column; a check whose column the same stage has " +
         "not computed yet, by an expression that can raise, keeps the latter placement, except " +
-        "after a conjunct that can be NULL, as when false. A predicate that the optimizer " +
+        "after a conjunct that can be NULL, as when false. So does a check that can raise an " +
+        "error itself, so a check after it can drop a row on which the interpreted evaluation " +
+        "raises the error of that check. A predicate that the optimizer " +
         "infers from the condition is placed just before the first conjunct at which the " +
         "conjuncts so far imply it, instead of at the front of the condition, so with " +
         "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +

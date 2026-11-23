@@ -55,14 +55,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("filter: filter out constraints in condition") {
-    val originalQuery = testRelation.where($"a" === 1 && $"a" === $"b").analyze
-    val correctAnswer = testRelation.where(IsNotNull($"a") && IsNotNull($"b") &&
-      $"a" === $"b" && $"a" === 1 && $"b" === 1).analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
   /** The conjuncts of the condition of `query` optimized with or without the config. */
   private def optimizedConjuncts(query: LogicalPlan, inOrder: Boolean): Seq[Expression] = {
     withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> inOrder.toString) {
@@ -75,6 +67,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   private def inOrderPositions(query: LogicalPlan, exprs: Expression*): Seq[Int] = {
     val conjuncts = optimizedConjuncts(query, inOrder = true).map(_.canonicalized)
     exprs.map(e => conjuncts.indexOf(e.canonicalized))
+  }
+
+  test("filter: filter out constraints in condition") {
+    val originalQuery = testRelation.where($"a" === 1 && $"a" === $"b").analyze
+    val correctAnswer = testRelation.where(IsNotNull($"a") && IsNotNull($"b") &&
+      $"a" === $"b" && $"a" === 1 && $"b" === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-60329: evaluateNotNullChecksInOrder places inferred IsNotNull checks in the " +
@@ -116,6 +116,27 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       a === b, b + 1 > 0, a === c, b === c)
     assert(written5 >= 0 && written5 < written6 && written6 < inferredAC &&
       inferredAC < written7)
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places the inferred predicates of a long " +
+      "condition exactly and keeps the condition balanced") {
+    val relation = LocalRelation((1 to 16).map(i => AttributeReference(s"c$i", IntegerType)()))
+    val columns = relation.output
+    // Each conjunct implies the check on its own column, and only that one, so each inferred
+    // check goes right before its conjunct, also at depths that a short condition never reaches.
+    val conjuncts = columns.map(c => c > 0)
+    val optimized = optimizedConjuncts(relation.where(conjuncts.reduce(And)), inOrder = true)
+    assert(optimized.map(_.canonicalized) ===
+      columns.flatMap(c => Seq(IsNotNull(c), c > 0)).map(_.canonicalized))
+    withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true") {
+      val Filter(condition, _) = Optimize.execute(relation.where(conjuncts.reduce(And)).analyze)
+      def depth(e: Expression): Int = e match {
+        case And(l, r) => 1 + math.max(depth(l), depth(r))
+        case _ => 0
+      }
+      // 32 conjuncts in a balanced tree, where a left-deep chain would be 31 levels deep.
+      assert(depth(condition) == 5, condition)
+    }
   }
 
   test("single inner join: filter out values on either side on equi-join keys") {
