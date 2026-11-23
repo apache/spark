@@ -3222,9 +3222,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * projection a filter of its own too. A filter of its own, in the split or above it, only gets
    * the rows on which the conditions below it are true, while one filter by default also evaluates
    * a condition after one that is null (SPARK-60315). So a non-deterministic condition written
-   * after a condition over an expensive alias that can be null, which the split filters on below
-   * it, sees fewer rows than with the split off, and, e.g. for a seeded `rand`, the two can return
-   * other rows. A condition over no expensive alias is pushed below the projection either way. The
+   * after a condition that can be null, which is filtered on in a filter below it, sees fewer rows
+   * than with the split off, and, e.g. for a seeded `rand`, the two can return other rows. The
    * projection on top computes the aliases of the conditions left above it, as without the split.
    *
    * Whole-stage codegen already defers a projected expression past a filter that does not need

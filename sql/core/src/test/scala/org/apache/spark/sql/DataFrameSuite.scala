@@ -3127,12 +3127,12 @@ class DataFrameSuite extends SharedSparkSession
         }
       }
     }
-    // When a condition over a UDF result that can be null is written before the
-    // non-deterministic one, the split filters on it below, so `rand(10)` only sees the rows where
-    // it is true, while the one filter of the split-off plan also evaluates `rand(10)` where it is
-    // null (SPARK-60315). So `rand(10)` draws its values for other rows, and the two return other
-    // rows. This holds for a non-deterministic condition the split places, as in the first query,
-    // and for one left above it, after the condition that ends the split, as in the second. These
+    // When a condition over a UDF result that can be null is written before the non-deterministic
+    // one, it is filtered on in a filter below, so `rand(10)` only sees the rows where it is true,
+    // while the one filter of the split-off plan also evaluates `rand(10)` where it is null
+    // (SPARK-60315). So `rand(10)` draws its values for other rows, and the two return other rows.
+    // This holds for a non-deterministic condition the split places, as in the first query, and for
+    // one left above it, after the condition that ends the split, as in the second. These
     // expectations record that difference; a change that keeps those rows for `rand(10)` with the
     // split on would update them.
     def fAtLeast0(i: Int): Boolean = i % 7 != 3
