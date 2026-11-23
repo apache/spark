@@ -43,6 +43,7 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -95,7 +96,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def collapseGroupedSumOfCount(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.optimizerExcludedRuleNames.contains(CollapseGroupedSumOfCount.ruleName)) {
+    val excludedRules = SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    if (excludedRules.contains(CollapseGroupedSumOfCount.ruleName)) {
       plan
     } else {
       CollapseGroupedSumOfCount(plan)

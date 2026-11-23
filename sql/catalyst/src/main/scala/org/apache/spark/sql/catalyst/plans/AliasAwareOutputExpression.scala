@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.FoldablePropagation
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -29,9 +28,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AliasAwareOutputExpression extends SQLConfHelper {
   protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
-  protected val foldablePropagationExcluded: Boolean =
-    conf.optimizerExcludedRuleNames.contains(FoldablePropagation.ruleName)
-
   protected def outputExpressions: Seq[NamedExpression]
   /**
    * This method can be used to strip expression which does not affect the result, for example:
@@ -44,15 +40,16 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   // more than `aliasCandidateLimit` attributes for an expression. In those cases the old logic
   // handled only the last alias so we need to make sure that we give precedence to that.
   // If the `outputExpressions` contain simple attributes we need to add those too to the map.
-  // A foldable child is mapped only while `FoldablePropagation` is excluded. When the rule runs it
-  // rewrites a requirement written against a query-constant alias to the constant, so the
-  // projection must keep the constant form (`a + 1`, not `a + one`); when the rule is excluded the
-  // requirement can stay alias-spelled, and the alias is kept as before.
+  // A foldable child is mapped too. `projectExpression` keeps the original expression as an
+  // alternative, so the projection advertises both the alias spelling (`a + one`) and the
+  // constant spelling (`a + 1`): FoldablePropagation rewrites the alias spelling to the constant
+  // only through a subset of operators (e.g. not across CollectMetrics or a checkpoint), and
+  // nothing rewrites the constant spelling back.
   @transient
   private lazy val aliasMap = {
     val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
     outputExpressions.reverse.foreach {
-      case a @ Alias(child, _) if !strip(child).foldable || foldablePropagationExcluded =>
+      case a @ Alias(child, _) =>
         val buffer = aliases.getOrElseUpdate(strip(child).canonicalized, mutable.ArrayBuffer.empty)
         if (buffer.size < aliasCandidateLimit) {
           buffer += a.toAttribute
@@ -78,9 +75,11 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   protected def projectExpression(expr: Expression): LazyList[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
     expr.multiTransformDown {
-      // Mapping with aliases
+      // Mapping with aliases. A foldable expression stays an alternative because a requirement can
+      // keep the alias spelling where FoldablePropagation does not rewrite it.
       case e: Expression if aliasMap.contains(e.canonicalized) =>
-        aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
+        aliasMap(e.canonicalized).toSeq ++
+          (if (e.containsChild.nonEmpty || e.foldable) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.
       // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`

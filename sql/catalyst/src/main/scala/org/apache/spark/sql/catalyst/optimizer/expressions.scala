@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /*
  * Optimization rules defined in this file should not affect the structure of the logical plan.
@@ -162,7 +163,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     val childColumns = new ChildColumns(plan)
     // The checks fold a conjunct with the foldable columns of the child in only if
     // `FoldablePropagation`, which puts them into the condition, is not excluded.
-    val propagatesFoldables = !conf.optimizerExcludedRuleNames(FoldablePropagation.ruleName)
+    val propagatesFoldables = !excludedRules(FoldablePropagation.ruleName)
     plan.transformUpWithPruning(
       _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
       case f: Filter =>
@@ -536,7 +537,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * [[ConstantFolding]].
    */
   private def simplify(e: Expression): Option[(Expression, Boolean)] = {
-    val excluded = conf.optimizerExcludedRuleNames
+    val excluded = excludedRules
     if (excluded(ConstantFolding.ruleName)) return Some((e, false))
     def included(rules: Seq[Rule[LogicalPlan]]) = rules.filterNot(r => excluded(r.ruleName))
     val before = included(SIMPLIFY_RULES_BEFORE_FOLDING)
@@ -567,6 +568,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       case NonFatal(_) => None
     }
   }
+
+  /**
+   * The rules that `spark.sql.optimizer.excludedRules` excludes. Unlike `Optimizer.batches`, this
+   * does not leave out the non-excludable rules, none of which this rule checks.
+   */
+  private def excludedRules: Set[String] =
+    conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq).toSet
 
   /** The most times that [[simplify]] simplifies an expression. */
   private val MAX_SIMPLIFY_ITERATIONS = 10

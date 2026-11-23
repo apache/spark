@@ -42,6 +42,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils._
+import org.apache.spark.util.Utils
 
 /**
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
@@ -561,7 +562,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * if necessary, instead of this method.
    */
   final override def batches: Seq[Batch] = {
-    val excludedRules = conf.optimizerExcludedRuleNames.filter { ruleName =>
+    val excludedRulesConf =
+      conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
         logWarning(log"Optimization rule '${MDC(LogKeys.RULE_NAME, ruleName)}' " +
