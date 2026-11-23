@@ -411,7 +411,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // An earlier version evicted the left input by leftTime and emitted its outer row at the
-  // watermark 390 s, which the aggregation counted. A restarted query keeps that eviction.
+  // watermark 390 s, which the aggregation counted. A restarted query keeps that eviction, so the
+  // check does not flag the left input.
   test("a join evicted by another column keeps the earlier eviction from an older checkpoint") {
     withJoinConf(2) {
       withTempDir { checkpoint =>
@@ -430,8 +431,18 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
             AddData(rightInput, (9, 400L)), CheckNewAnswer((100L, 1L)),
             AddData(rightInput, (1, 460L)), CheckNewAnswer())
         }
-        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-          "the state of the left input of a stream-stream join has no cutoff on its event time")))
+        assert(!logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")))
+      }
+    }
+  }
+
+  test("a join evicted by another column before a window aggregation runs in the legacy mode") {
+    withJoinConf(4) {
+      withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+        val (leftInput, rightInput, result) = countJoinedByExpiry()
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5L))(rightInput, (1, 8L)), CheckNewAnswer())
       }
     }
   }

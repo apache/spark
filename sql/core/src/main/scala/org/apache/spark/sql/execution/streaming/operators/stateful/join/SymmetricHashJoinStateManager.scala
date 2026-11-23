@@ -178,8 +178,9 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 
 /**
  * This trait is for state manager implementations that support eviction by timestamp. This is for
- * the state manager implementations which maintain the state with event time and can efficiently
- * scan the keys with event time smaller than the given timestamp for eviction.
+ * the state manager implementations which maintain the state with a timestamp, the column that the
+ * value predicate of the side tests, and can efficiently scan the keys with a timestamp smaller
+ * than the given one for eviction.
  */
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
@@ -213,7 +214,9 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
 /**
  * The version 4 of stream-stream join state manager implementation, which is designed to optimize
  * the eviction with watermark. Previous versions require full scan to find the keys to evict,
- * while this version only scans the keys with event time smaller than the watermark.
+ * while this version only scans the keys with a timestamp smaller than the cutoff. The timestamp
+ * is the column that the value predicate of the side tests: the event time, or another TIMESTAMP
+ * column that the join condition bounds.
  *
  * In this implementation, we no longer build a logical array of values; instead, we store the
  * (key, timestamp) -> values in the primary store, and maintain a secondary index of
@@ -679,9 +682,9 @@ class SymmetricHashJoinStateManagerV4(
    * The primary store to store the key-value pairs.
    *
    * The state format of the primary store is following:
-   * [key][timestamp (event time)] -> [(value, matched), (value, matched), ...]
+   * [key][timestamp] -> [(value, matched), (value, matched), ...]
    *
-   * The values are bucketed by event time to facilitate efficient eviction by watermark; the
+   * The values are bucketed by that timestamp to facilitate efficient eviction by watermark; the
    * secondary index will provide the way to scan the key + timestamp pairs for the eviction, and
    * it will be easy to perform retrieval/removal of the values based on key + timestamp pairs.
    * There is no case where we evict only part of the values for the same key + timestamp.

@@ -105,6 +105,31 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     }
   }
 
+  test("a checkpoint without the join output watermark check keeps only a pick of the event " +
+      "time") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+    def predicate(condition: Expression): JoinStateValueWatermarkPredicate =
+      StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(leftTime, expiry), Seq(rightTime), Nil, Nil, Some(condition), Some(200000L), None,
+        useFirstEventTimeColumn = false, checkJoinOutputWatermark = false)
+        .left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
+    // The event time keeps its own cutoff, above the one from expiry.
+    val bothBounded = predicate(
+      leftTime > TimestampAddInterval(rightTime, Literal(Duration.ofSeconds(10))) &&
+        rightTime <= expiry)
+    assert(bothBounded.expr.references === AttributeSet(leftTime))
+    assert(bothBounded.stateWatermark === 210000L)
+    assert(bothBounded.conditionBoundsColumn)
+    // Only expiry is bounded, so the event time takes the cutoff solved over the whole input.
+    val expiryBounded = predicate(rightTime >= leftTime && rightTime <= expiry)
+    assert(expiryBounded.expr.references === AttributeSet(leftTime))
+    assert(expiryBounded.stateWatermark === 199999L)
+    assert(!expiryBounded.conditionBoundsColumn)
+  }
+
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)
     assert(split.leftSideOnly.isEmpty)

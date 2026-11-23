@@ -344,16 +344,20 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
       .metadataOpt.get.conf.get(indexVersionKey)
   }
 
-  // Removes the V4 index version from the latest offset log entry, as older versions wrote it.
-  private def removeIndexVersion(checkpoint: File): Unit = {
+  // Removes the V4 index version from the latest offset log entry, to test a checkpoint that
+  // records only the other confs of this version.
+  private def removeIndexVersion(checkpoint: File): Unit = removeConfs(checkpoint, indexVersionKey)
+
+  // Removes confs from the latest offset log entry, as versions without them wrote it.
+  private def removeConfs(checkpoint: File, keys: String*): Unit = {
     val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
     val log = new OffsetSeqLog(spark, offsetsPath)
     val (batchId, offsets) = log.getLatest().get
     val updated = offsets match {
       case o: OffsetSeq =>
-        o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - indexVersionKey)))
+        o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf -- keys)))
       case o: OffsetMap =>
-        o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - indexVersionKey))
+        o.copy(metadata = o.metadata.copy(conf = o.metadata.conf -- keys))
     }
     val path = new Path(offsetsPath, batchId.toString)
     assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
@@ -552,6 +556,69 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
                 parameters = Map("side" -> "right", "column" -> "`expiry`"))
             })
         }
+      }
+    }
+  }
+
+  // Without the join output watermark check, the default mode keeps evicting by the event time and
+  // orders the state by it, as the legacy mode does.
+  for (joinType <- Seq("left_outer", "right_outer")) {
+    test(s"V4 restart in the legacy mode of a checkpoint without the join output watermark " +
+        s"check, $joinType") {
+      withJoinConf(4) {
+        withTempDir { checkpoint =>
+          val (leftInput, rightInput, result) =
+            joinWithExpiry("rightTime BETWEEN leftTime AND expiry", joinType)
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key -> "false") {
+            testStream(result)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (1, 100L, 700L), (2, 100L, 700L)),
+                AddData(rightInput, (9, 100L)))),
+              CheckNewAnswer(),
+              StopStream)
+          }
+          assert(indexVersion(checkpoint) === Some("1"))
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+            testStream(result)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              AddData(rightInput, (1, 160L)),
+              CheckNewAnswer(Row(1, 160L, 100L)),
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (8, 1000L, 1600L)), AddData(rightInput, (9, 1000L)))),
+              CheckNewAnswer(),
+              AddData(rightInput, (9, 1000L)),
+              CheckNewAnswer(Row(2, null, 100L)))
+          }
+        }
+      }
+    }
+  }
+
+  // A checkpoint written before the join output watermark check keeps a pick of the event time,
+  // so a row with a NULL event time that the legacy mode stored is evicted after the upgrade.
+  test("a stored row whose event time is NULL is evicted after a restart from a checkpoint " +
+      "without the join output watermark check") {
+    withJoinConf(2) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) = joinWithExpiry(
+          "rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES", "left_outer")
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(result)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, -1L, 700L)), AddData(rightInput, (9, 100L)))),
+            CheckNewAnswer(),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 400L, 1000L)), AddData(rightInput, (9, 400L)))),
+            CheckNewAnswer(),
+            StopStream)
+        }
+        removeConfs(checkpoint, SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key)
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (9, 400L)),
+          CheckNewAnswer(Row(1, null, null)))
       }
     }
   }
