@@ -92,6 +92,24 @@ class DataFrameTableValuedFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60564: left lateral join without a join condition over VARIANT and collated values") {
+    // Each left row is generated from its own value: a VARIANT column has no ordering, and
+    // collated strings that are equal keep their own spelling.
+    checkAnswer(
+      sql(
+        """SELECT id, pos, CAST(value AS STRING)
+          |FROM VALUES (1, PARSE_JSON('[1, 2]')), (2, PARSE_JSON('[]')) AS t(id, v)
+          |LEFT JOIN LATERAL VARIANT_EXPLODE(v)""".stripMargin),
+      Seq(Row(1, 0, "1"), Row(1, 1, "2"), Row(2, null, null)))
+    checkAnswer(
+      sql(
+        """SELECT id, CAST(col AS STRING)
+          |FROM VALUES (1, ARRAY('Foo' COLLATE UTF8_LCASE)), (2, ARRAY('foo' COLLATE UTF8_LCASE)),
+          |  (3, CAST(ARRAY() AS ARRAY<STRING COLLATE UTF8_LCASE>)) AS t(id, arr)
+          |LEFT JOIN LATERAL EXPLODE(arr)""".stripMargin),
+      Seq(Row(1, "Foo"), Row(2, "foo"), Row(3, null)))
+  }
+
   test("explode_outer") {
     val actual1 = spark.tvf.explode_outer(array(lit(1), lit(2)))
     val expected1 = spark.sql("SELECT * FROM explode_outer(array(1, 2))")

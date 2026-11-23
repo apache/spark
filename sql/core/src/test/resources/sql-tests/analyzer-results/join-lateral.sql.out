@@ -2570,18 +2570,6 @@ Project [id#x, m#x, key#x, value#x]
 
 
 -- !query
-SELECT * FROM VALUES (1, PARSE_JSON('[1, 2]')), (2, PARSE_JSON('[]')) AS t(id, v)
-  LEFT JOIN LATERAL VARIANT_EXPLODE(v)
--- !query analysis
-Project [id#x, v#x, pos#x, key#x, value#x]
-+- LateralJoin lateral-subquery#x [v#x], LeftOuter
-   :  +- Generate variant_explode(outer(v#x), false), false, [pos#x, key#x, value#x]
-   :     +- OneRowRelation
-   +- SubqueryAlias t
-      +- LocalRelation [id#x, v#x]
-
-
--- !query
 SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
   (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'))) AS t(id, arr) LEFT JOIN LATERAL INLINE(arr)
 -- !query analysis
@@ -2596,18 +2584,6 @@ Project [id#x, arr#x, x#x, y#x]
 -- !query
 SELECT * FROM VALUES (1, ARRAY(-0.0D)), (2, ARRAY(0.0D)) AS t(id, arr)
   LEFT JOIN LATERAL EXPLODE(arr)
--- !query analysis
-Project [id#x, arr#x, col#x]
-+- LateralJoin lateral-subquery#x [arr#x], LeftOuter
-   :  +- Generate explode(outer(arr#x)), false, [col#x]
-   :     +- OneRowRelation
-   +- SubqueryAlias t
-      +- LocalRelation [id#x, arr#x]
-
-
--- !query
-SELECT * FROM VALUES (1, ARRAY('Foo' COLLATE UTF8_LCASE)), (2, ARRAY('foo' COLLATE UTF8_LCASE))
-  AS t(id, arr) LEFT JOIN LATERAL EXPLODE(arr)
 -- !query analysis
 Project [id#x, arr#x, col#x]
 +- LateralJoin lateral-subquery#x [arr#x], LeftOuter

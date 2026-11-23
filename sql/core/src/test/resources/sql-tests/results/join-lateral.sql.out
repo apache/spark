@@ -1592,17 +1592,6 @@ struct<id:int,m:map<string,int>,key:string,value:int>
 
 
 -- !query
-SELECT * FROM VALUES (1, PARSE_JSON('[1, 2]')), (2, PARSE_JSON('[]')) AS t(id, v)
-  LEFT JOIN LATERAL VARIANT_EXPLODE(v)
--- !query schema
-struct<id:int,v:variant,pos:int,key:string,value:variant>
--- !query output
-1	[1,2]	0	NULL	1
-1	[1,2]	1	NULL	2
-2	[]	NULL	NULL	NULL
-
-
--- !query
 SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
   (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'))) AS t(id, arr) LEFT JOIN LATERAL INLINE(arr)
 -- !query schema
@@ -1620,16 +1609,6 @@ struct<id:int,arr:array<double>,col:double>
 -- !query output
 1	[-0.0]	-0.0
 2	[0.0]	0.0
-
-
--- !query
-SELECT * FROM VALUES (1, ARRAY('Foo' COLLATE UTF8_LCASE)), (2, ARRAY('foo' COLLATE UTF8_LCASE))
-  AS t(id, arr) LEFT JOIN LATERAL EXPLODE(arr)
--- !query schema
-struct<id:int,arr:array<string collate UTF8_LCASE>,col:string collate UTF8_LCASE>
--- !query output
-1	["Foo"]	Foo
-2	["foo"]	foo
 
 
 -- !query
