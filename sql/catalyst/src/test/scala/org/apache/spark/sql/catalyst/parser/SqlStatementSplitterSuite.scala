@@ -290,6 +290,27 @@ class SqlStatementSplitterSuite extends SparkFunSuite with SQLHelper {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("BEGIN..END block with an optional reference") {
+    val block = "BEGIN SELECT a? FROM t; SELECT 1; END"
+    // With optional references, `a?` is a reference and the block is one statement.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      val result = split(block + "; SELECT 2;")
+      assert(result.completeStatements == Seq(statement(block), statement("SELECT 2")))
+      assert(result.partialStatement.isEmpty)
+    }
+    // Without them, `?` is a parameter marker, `SELECT a ? FROM t` is not a statement, and the
+    // input is split at every `;`, as before.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "false") {
+      val result = split(block + "; SELECT 2;")
+      assert(result.completeStatements == Seq(
+        statement("BEGIN SELECT a? FROM t"),
+        statement("SELECT 1"),
+        statement("END"),
+        statement("SELECT 2")))
+      assert(result.partialStatement.isEmpty)
+    }
+  }
+
   test("BEGIN..END block preceded by another statement") {
     val block = "BEGIN SELECT 1; SELECT 2; END"
     val result = split("SELECT 11; " + block + ";")

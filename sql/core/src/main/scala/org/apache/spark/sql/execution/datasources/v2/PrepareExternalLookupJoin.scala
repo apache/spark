@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Collections, IdentityHashMap}
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -188,8 +186,14 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
-    val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
-      lookupBuilder.selectLookupPredicates(offeredPredicates))
+    // The connector selects by position, so it receives a copy, which Spark checks afterwards: a
+    // copy that the connector reordered would bind the parameters to the wrong predicates. The
+    // descriptions are taken first, because the connector receives the predicate instances.
+    val offeredDescriptions = offeredPredicates.map(_.describe()).toIndexedSeq
+    val passedPredicates = offeredPredicates.clone()
+    val selectedPredicates = selectedCandidates(tableName, offeredPredicates,
+      offeredDescriptions, offeredCandidates.toIndexedSeq, passedPredicates,
+      lookupBuilder.selectLookupPredicates(passedPredicates))
     val selectedConjuncts = selectedPredicates.flatMap(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that
@@ -372,16 +376,21 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   }
 
   /**
-   * Maps the connector's selection back to the offered candidates, in the connector's order, which
-   * defines the fields of each request parameter row. Selections are matched by object identity
-   * rather than by equality, so two candidates of the same shape, for example the same lookup field
-   * compared with two different join-side values, remain distinguishable.
+   * Maps the connector's selection, positions in the offered array, back to the offered
+   * candidates, in the connector's order, which defines the fields of each request parameter row.
+   * Positions keep two candidates of the same shape, for example the same lookup field compared
+   * with two different join-side values, distinguishable. `passed` is the copy of `offered` that
+   * the connector received; for a non-empty selection, it must still hold the offered predicates
+   * in the offered order. As each offered predicate has its own `LookupParameter`, which equals
+   * only itself, `equals` tells every reorder apart while it accepts an equal rebuilt predicate.
    */
   private def selectedCandidates(
       tableName: String,
       offered: Array[V2Predicate],
-      candidates: Seq[OfferedLookupPredicate],
-      selected: Array[V2Predicate]): Seq[OfferedLookupPredicate] = {
+      descriptions: IndexedSeq[String],
+      candidates: IndexedSeq[OfferedLookupPredicate],
+      passed: Array[V2Predicate],
+      selected: Array[Int]): Seq[OfferedLookupPredicate] = {
     if (selected == null) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
@@ -390,24 +399,25 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
-    val candidateByPredicate = new IdentityHashMap[V2Predicate, OfferedLookupPredicate]()
-    offered.zip(candidates).foreach { case (predicate, candidate) =>
-      candidateByPredicate.put(predicate, candidate)
+    if (!passed.corresponds(offered)(_ == _)) {
+      val position = passed.indices.indexWhere(position => passed(position) != offered(position))
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, "MODIFIED_CANDIDATES",
+        Map("position" -> position.toString, "predicate" -> descriptions(position)))
     }
-    val seen = Collections.newSetFromMap(new IdentityHashMap[V2Predicate, java.lang.Boolean]())
-    selected.toSeq.map { predicate =>
-      // A null element is not an offered instance either.
-      val candidate = Option(predicate).map(candidateByPredicate.get).orNull
-      if (candidate == null) {
+    val seen = mutable.BitSet.empty
+    selected.toSeq.map { position =>
+      if (position < 0 || position >= candidates.length) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "UNOFFERED_SELECTED_PREDICATE",
-          Map("predicate" -> Option(predicate).map(_.describe()).getOrElse("null")))
+          tableName, "INVALID_SELECTED_PREDICATE_POSITION",
+          Map("position" -> position.toString, "maxPosition" -> (candidates.length - 1).toString))
       }
-      if (!seen.add(predicate)) {
+      if (!seen.add(position)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> predicate.describe()))
+          tableName, "DUPLICATE_SELECTED_PREDICATE",
+          Map("position" -> position.toString, "predicate" -> descriptions(position)))
       }
-      candidate
+      candidates(position)
     }
   }
 

@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedExpression, NamedLambdaVariable, Or, PythonUDAF, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, Equality, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedExpression, NamedLambdaVariable, NoThrow, Or, PredicateHelper, PythonUDAF, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
@@ -65,7 +65,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
  * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
-object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
+object NormalizeFloatingNumbers extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformWithPruning(_.containsAnyPattern(WINDOW, JOIN)) {
@@ -88,7 +88,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
         val newRightJoinKeys = rightKeys.map(normalize)
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
           case (l, r) => EqualTo(l, r)
-        } ++ condition
+        } ++ condition.map(normalizeEqualities(_, j))
         j.copy(condition = Some(newConditions.reduce(And)))
 
       // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
@@ -96,6 +96,14 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
           if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
         val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
         j.copy(condition = Some(Or(equality, IsNull(equality))))
+
+      // An equality between the two sides that is not a key, as it may not be evaluated ahead of
+      // the rest of the condition (see `ExtractEquiJoinKeys`), is normalized where it is written:
+      // a later rule can turn it into a key, e.g. `ExtractPythonUDFs`, which replaces a Python UDF
+      // in it with a column of a node below the join.
+      case j @ Join(_, _, _, Some(condition), _)
+          if splitConjunctivePredicates(condition).exists(isEqualityToNormalize(_, j)) =>
+        j.copy(condition = Some(normalizeEqualities(condition, j)))
 
       // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
       // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
@@ -164,6 +172,23 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     !aggregate.isStreaming && keys.nonEmpty &&
       outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
   }
+
+  /** Whether `e` is an equality between the two sides of `join` over values to normalize. */
+  private def isEqualityToNormalize(e: Expression, join: Join): Boolean = e match {
+    case Equality(l, r) if needNormalize(l) || needNormalize(r) =>
+      l.references.nonEmpty && r.references.nonEmpty &&
+        (canEvaluate(l, join.left) && canEvaluate(r, join.right) ||
+          canEvaluate(l, join.right) && canEvaluate(r, join.left))
+    case _ => false
+  }
+
+  /** `condition` of `join` with its equalities between the two sides normalized in place. */
+  private def normalizeEqualities(condition: Expression, join: Join): Expression =
+    splitConjunctivePredicates(condition).map {
+      case e @ Equality(l, r) if isEqualityToNormalize(e, join) =>
+        e.withNewChildren(Seq(normalize(l), normalize(r)))
+      case e => e
+    }.reduce(And)
 
   /**
    * Short circuit if the underlying expression is already normalized
@@ -265,7 +290,8 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 }
 
-case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class NormalizeNaNAndZero(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NoThrow {
 
   override def dataType: DataType = child.dataType
 
