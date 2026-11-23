@@ -20,8 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, SQLException, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.util.Properties
+import java.time.{Instant, LocalDateTime}
+import java.util.{Properties, TimeZone}
 
 import scala.util.Using
 
@@ -486,6 +486,51 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
     val df_actual = spark.read.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
     checkAnswer(df_actual, df_expected)
+  }
+
+  test("SPARK-61857: timestampCalendarTimeZone applies to timestamp array elements") {
+    val source = "ts_calendar_tz_array"
+    val target = "ts_calendar_tz_array_write"
+    val expected = Instant.parse("2026-10-10T11:03:07Z")
+    def toInstant(value: Any): Instant = value match {
+      case i: Instant => i
+      case t: Timestamp => t.toInstant
+    }
+    val prop = new Properties
+    prop.setProperty("timestampCalendarTimeZone", "UTC")
+
+    Using.resource(getConnection()) { conn =>
+      conn.prepareStatement(
+        s"CREATE TABLE $source (ts TIMESTAMP, tsa TIMESTAMP[], tstza TIMESTAMPTZ[])")
+        .executeUpdate()
+      conn.prepareStatement(s"INSERT INTO $source VALUES ('2026-10-10 11:03:07', " +
+        "ARRAY['2026-10-10 11:03:07'::timestamp], ARRAY['2026-10-10 11:03:07+00'::timestamptz])")
+        .executeUpdate()
+    }
+    val originalZone = TimeZone.getDefault
+    try {
+      TimeZone.setDefault(TimeZone.getTimeZone("Asia/Kolkata"))
+      Seq("true", "false").foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api) {
+          val row = spark.read.jdbc(jdbcUrl, source, prop).head()
+          assert(toInstant(row.get(0)) === expected, s"java8Api=$java8Api")
+          assert(row.getSeq[Any](1).map(toInstant) === Seq(expected), s"java8Api=$java8Api")
+          assert(row.getSeq[Any](2).map(toInstant) === Seq(expected), s"java8Api=$java8Api")
+
+          spark.read.jdbc(jdbcUrl, source, prop).select("tsa")
+            .write.mode("overwrite").jdbc(jdbcUrl, target, prop)
+          Using.resource(getConnection()) { conn =>
+            val rs = conn.prepareStatement(s"SELECT tsa[1]::text FROM $target").executeQuery()
+            assert(rs.next())
+            assert(rs.getString(1) === "2026-10-10 11:03:07", s"java8Api=$java8Api")
+          }
+          val readBack = spark.read.jdbc(jdbcUrl, target, prop).head().getSeq[Any](0)
+          assert(readBack.map(toInstant) === Seq(expected), s"java8Api=$java8Api")
+        }
+      }
+    } finally {
+      TimeZone.setDefault(originalZone)
+    }
   }
 
   test("SPARK-43267: user-defined column in array test") {

@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -2215,6 +2215,85 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 0]",
       "PushedGroupByExpressions: [DEPT]")
     checkAnswer(df, Seq(Row(10000, 1100.0), Row(12000, 1250.0), Row(12000, 1200.0)))
+  }
+
+  test("SPARK-61857: timestamp predicates are not pushed down with timestampCalendarTimeZone") {
+    withSQLConf(
+        "spark.sql.catalog.h2tz" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2tz.url" -> url,
+        "spark.sql.catalog.h2tz.driver" -> "org.h2.Driver",
+        "spark.sql.catalog.h2tz.timestampCalendarTimeZone" -> "UTC",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val query = "SELECT name FROM %s.test.datetime WHERE time1 = TIMESTAMP '2022-05-19 05:30:00'"
+
+      val df = sql(query.format("h2tz"))
+      checkFiltersRemoved(df, removed = false)
+      checkAnswer(df, Seq(Row("amy")))
+
+      val range =
+        sql("SELECT name FROM h2tz.test.datetime WHERE time1 > TIMESTAMP '2022-05-18 05:30:00'")
+      checkFiltersRemoved(range, removed = false)
+      checkAnswer(range, Seq(Row("amy")))
+
+      val nameFilter = sql("SELECT name FROM h2tz.test.datetime WHERE name = 'amy'")
+      checkFiltersRemoved(nameFilter)
+      checkAnswer(nameFilter, Seq(Row("amy")))
+
+      val mixed = sql("SELECT name FROM h2tz.test.datetime " +
+        "WHERE name = 'amy' AND time1 = TIMESTAMP '2022-05-19 05:30:00'")
+      checkFiltersRemoved(mixed, removed = false)
+      checkPushedInfo(mixed, "NAME = 'amy'")
+      checkKeywordsNotExistsInExplain(mixed, ExtendedMode, "TIME1 = ")
+      checkAnswer(mixed, Seq(Row("amy")))
+
+      checkFiltersRemoved(sql(query.format("h2")))
+    }
+  }
+
+  test("SPARK-61857: time-zone dependent expressions are not pushed down with " +
+      "timestampCalendarTimeZone") {
+    withSQLConf(
+        "spark.sql.catalog.h2tzfn" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2tzfn.url" -> url,
+        "spark.sql.catalog.h2tzfn.driver" -> "org.h2.Driver",
+        "spark.sql.catalog.h2tzfn.pushDownAggregate" -> "true",
+        "spark.sql.catalog.h2tzfn.pushDownLimit" -> "true",
+        "spark.sql.catalog.h2tzfn.timestampCalendarTimeZone" -> "UTC",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val hourFive = sql("SELECT name FROM h2tzfn.test.datetime WHERE hour(time1) = 5")
+      checkFiltersRemoved(hourFive, removed = false)
+      checkKeywordsNotExistsInExplain(hourFive, ExtendedMode, "EXTRACT(HOUR FROM TIME1)")
+      checkAnswer(hourFive, Seq(Row("amy"), Row("alex")))
+      checkAnswer(sql("SELECT name FROM h2tzfn.test.datetime WHERE hour(time1) = 0"), Seq())
+
+      val afterDate = sql("SELECT name FROM h2tzfn.test.datetime WHERE time1 > date1")
+      checkFiltersRemoved(afterDate, removed = false)
+      checkAnswer(afterDate, Seq(Row("amy"), Row("alex")))
+
+      val byDate = sql("SELECT CAST(time1 AS DATE), COUNT(*) FROM h2tzfn.test.datetime " +
+        "GROUP BY CAST(time1 AS DATE)")
+      checkAggregateRemoved(byDate, removed = false)
+      checkAnswer(byDate, Seq(
+        Row(java.sql.Date.valueOf("2022-05-18"), 1L),
+        Row(java.sql.Date.valueOf("2022-05-19"), 1L)))
+
+      val countAfter = sql("SELECT SUM(CASE WHEN time1 > TIMESTAMP '2022-05-18 03:00:00' " +
+        "THEN 1 ELSE 0 END) FROM h2tzfn.test.datetime")
+      checkAggregateRemoved(countAfter, removed = false)
+      checkAnswer(countAfter, Seq(Row(2L)))
+
+      val topN = sql("SELECT name FROM h2tzfn.test.datetime " +
+        "ORDER BY time1 > TIMESTAMP '2022-05-18 03:00:00', name DESC LIMIT 1")
+      checkSortRemoved(topN, removed = false)
+      checkLimitRemoved(topN, removed = false)
+      checkAnswer(topN, Seq(Row("amy")))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val hourZero = sql("SELECT name FROM h2.test.datetime WHERE hour(time1) = 0")
+      checkFiltersRemoved(hourZero)
+      checkPushedInfo(hourZero, "EXTRACT(HOUR FROM TIME1) = 0")
+    }
   }
 
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
