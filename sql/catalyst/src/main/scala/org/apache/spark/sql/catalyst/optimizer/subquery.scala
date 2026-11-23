@@ -1182,9 +1182,20 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
           g.copy(generator = newGenerator, outer = g.outer || keepLeftRows, child = left)
 
         case Project(projectList, g @ Generate(generator, _, _, _, _, _: OneRowRelation)) =>
-          val newPList = stripOuterReferences(projectList)
           val newGenerator = stripOuterReference(generator)
           val generatorOutput = AttributeSet(g.generatorOutput)
+          // The Generate becomes outer, so its columns are NULL on the row it adds. The Project
+          // must reference them as nullable, or rules such as NullPropagation fold null checks
+          // over them as if that row could not be NULL.
+          val newPList = if (keepLeftRows && !g.outer) {
+            val nullableOutput =
+              AttributeMap(g.generatorOutput.map(a => a -> a.withNullability(true)))
+            stripOuterReferences(projectList).map(_.transformUp {
+              case a: Attribute if nullableOutput.contains(a) => nullableOutput(a)
+            }.asInstanceOf[NamedExpression])
+          } else {
+            stripOuterReferences(projectList)
+          }
           // A column of the generator, renamed or not, is NULL on the row that an outer Generate
           // adds. On an outer Generate in the subquery, that row is a row of the subquery.
           def passesThrough(e: NamedExpression): Boolean = e match {
@@ -1198,16 +1209,21 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
             Project(left.output ++ newPList, newGenerate)
           } else {
             val marker = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
-            def nullIfNotGenerated(e: Expression): Expression =
-              If(IsNull(marker), Literal(null, e.dataType), e)
+            // A Python or external UDF is lifted out of the If and evaluated on every row, so mark
+            // it to be evaluated only on the rows the generator returns. The If and the marker
+            // share one condition, so SimplifyConditionals drops the marker once no UDF is left.
+            def nullIfNotGenerated(e: Expression): Expression = {
+              val generated = IsNotNull(marker)
+              If(generated,
+                if (EvalOnlyWhen.hasLiftedUDF(e)) EvalOnlyWhen(generated, e) else e,
+                Literal(null, e.dataType))
+            }
             // Keep the expression IDs and the metadata, as the parent operators bind to them.
             val markedPList = newPList.map {
               case e if passesThrough(e) => e
               case a: Alias =>
                 Alias(nullIfNotGenerated(a.child), a.name)(
                   a.exprId, a.qualifier, Some(a.metadata), a.nonInheritableMetadataKeys)
-              case a: Attribute =>
-                Alias(nullIfNotGenerated(a), a.name)(a.exprId, a.qualifier, Some(a.metadata))
               case o =>
                 throw SparkException.internalError(
                   s"Unexpected expression in a lateral subquery over a generator: $o")

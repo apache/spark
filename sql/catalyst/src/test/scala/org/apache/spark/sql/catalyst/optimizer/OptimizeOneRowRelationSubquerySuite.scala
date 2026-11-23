@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Explode, GeneratedRowMarker, If, IsNull, Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Explode, GeneratedRowMarker, If, IsNotNull, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
@@ -242,11 +242,28 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     assert(project.output.map(_.name) == Seq("a", "b", "arr", "v", "w"))
     // Both computed values are NULL on the row that the outer Generate adds.
     project.projectList.takeRight(2).foreach {
-      case Alias(If(IsNull(m: Attribute), Literal(null, _), _), _) =>
+      case Alias(If(IsNotNull(m: Attribute), _, Literal(null, _)), _) =>
         assert(m.exprId == marker.exprId)
       case o => fail(s"Unexpected expression: $o")
     }
     assert(!project.output.exists(_.exprId == marker.exprId))
+  }
+
+  test("SPARK-60564: generator columns are nullable over a left outer lateral Generate") {
+    // The elements can not be NULL, so the analyzed generator column is not nullable, but the
+    // row that the outer Generate adds has NULL there.
+    val t4 = LocalRelation($"a".int,
+      AttributeReference("arr", ArrayType(IntegerType, containsNull = false))())
+    val query = t4.lateralJoin(
+      t0.generate(Explode($"arr")).select($"col".as("v")), LeftOuter, None)
+    val optimized = Optimize.execute(query.analyze)
+    val project = optimized.asInstanceOf[Project]
+    assert(project.child.asInstanceOf[Generate].outer)
+    project.projectList.last match {
+      case Alias(col: Attribute, "v") => assert(col.nullable)
+      case o => fail(s"Unexpected expression: $o")
+    }
+    assert(project.output.last.nullable)
   }
 
   test("SPARK-60564: the legacy flag keeps the Generate of a left outer lateral join inner") {

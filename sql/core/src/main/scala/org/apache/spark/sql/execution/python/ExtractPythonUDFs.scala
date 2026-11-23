@@ -439,6 +439,11 @@ object ExtractPythonUDTFs extends Rule[LogicalPlan] {
     case PythonEvalType.SQL_TABLE_UDF =>
       BatchEvalPythonUDTF(
         func, requiredChildOutput, resultAttrs, child, outer, generatedRowMarker)
+    // The padding of `outer` assumes each output group belongs to one input row, which does not
+    // hold for an Arrow UDTF that receives whole batches. CheckAnalysis rejects such lateral joins.
+    case PythonEvalType.SQL_ARROW_UDTF if outer =>
+      throw SparkException.internalError(
+        s"An outer Generate is not supported for an Arrow UDTF: ${func.name}")
     case PythonEvalType.SQL_ARROW_TABLE_UDF | PythonEvalType.SQL_ARROW_UDTF =>
       ArrowEvalPythonUDTF(
         func, requiredChildOutput, resultAttrs, child, func.evalType, outer, generatedRowMarker)

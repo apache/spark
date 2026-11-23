@@ -330,6 +330,83 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql("SELECT * FROM VALUES (1), (1) t(i) LEFT JOIN LATERAL randomUDTF(i)")
         self.assertEqual(len({row.u for row in df.collect()}), 2)
 
+        # A Python UDF in the lateral subquery is not called on a kept left row
+        @udf("int")
+        def plus_one(x):
+            return x + 1
+
+        self.spark.udf.register("plus_one", plus_one)
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM VALUES (1, array(1, 2)), (2, array()) t(k, arr) "
+                "LEFT JOIN LATERAL (SELECT plus_one(v) AS w FROM EXPLODE(arr) t2(v))"
+            ),
+            [Row(k=1, arr=[1, 2], w=2), Row(k=1, arr=[1, 2], w=3), Row(k=2, arr=[], w=None)],
+        )
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM range(0, 3, 1, 1) "
+                "LEFT JOIN LATERAL (SELECT plus_one(a) AS b FROM testUDTF(id))"
+            ),
+            [Row(id=0, b=None), Row(id=1, b=1), Row(id=2, b=1), Row(id=2, b=2)],
+        )
+
+        # Rows from terminate() stay with the last input row, next to the padded rows
+        @udtf(returnType="r: int")
+        class TerminateUDTF:
+            def __init__(self):
+                self._count = 0
+
+            def eval(self, k: int):
+                self._count += 1
+                if k % 2 == 1:
+                    yield (k * 10,)
+
+            def terminate(self):
+                yield (-self._count,)
+
+        self.spark.udtf.register("terminateUDTF", TerminateUDTF)
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM (SELECT id AS k FROM range(1, 5, 1, 1)) "
+                "LEFT JOIN LATERAL terminateUDTF(k)"
+            ),
+            [Row(k=1, r=10), Row(k=2, r=None), Row(k=3, r=30), Row(k=4, r=None), Row(k=4, r=-4)],
+        )
+
+        # A row that eval() yields as None is a generated row, so a computed value is kept on it
+        @udtf(returnType="r: int")
+        class YieldNoneUDTF:
+            def eval(self, k: int):
+                if k % 2 == 1:
+                    yield
+
+        self.spark.udtf.register("yieldNoneUDTF", YieldNoneUDTF)
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM (SELECT id AS k FROM range(1, 5, 1, 1)) "
+                "LEFT JOIN LATERAL (SELECT coalesce(r, -1) AS s FROM yieldNoneUDTF(k))"
+            ),
+            [Row(k=1, s=-1), Row(k=2, s=None), Row(k=3, s=-1), Row(k=4, s=None)],
+        )
+
+
+    def test_udtf_with_left_lateral_join_not_null_column(self):
+        # SPARK-60564: a column the UDTF declares NOT NULL is NULL on a kept left row
+        @udtf(returnType="a: int NOT NULL")
+        class NotNullUDTF:
+            def eval(self, i: int):
+                for n in range(i):
+                    yield (n,)
+
+        self.spark.udtf.register("notNullUDTF", NotNullUDTF)
+        for query in [
+            "SELECT * FROM range(0, 3, 1, 1) LEFT JOIN LATERAL notNullUDTF(id) WHERE a IS NULL",
+            "SELECT * FROM range(0, 3, 1, 1) "
+            "LEFT JOIN LATERAL (SELECT a FROM notNullUDTF(id)) WHERE a IS NULL",
+        ]:
+            with self.subTest(query=query):
+                assertDataFrameEqual(self.spark.sql(query), [Row(id=0, a=None)])
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -3511,6 +3588,14 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
 class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
+
+    @unittest.skip(
+        "In the legacy pandas conversion, eval yielding no rows for a NOT NULL output column "
+        "fails with 'Tried to write record batch with different schema', also in an inner "
+        "lateral join."
+    )
+    def test_udtf_with_left_lateral_join_not_null_column(self):
+        super().test_udtf_with_left_lateral_join_not_null_column()
     def test_udtf_binary_type(self):
         @udtf(returnType="type_name: string")
         class BinaryTypeUDTF:
@@ -3873,6 +3958,10 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
 
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
+
+    def test_udtf_with_left_lateral_join_not_null_column(self):
+        # The Arrow conversion handles it; only the legacy pandas conversion skips this test.
+        BaseUDTFTestsMixin.test_udtf_with_left_lateral_join_not_null_column(self)
     def test_udtf_binary_type(self):
         # For Arrow Python UDTF with non-legacy conversionBinaryType is mapped to
         # bytes or bytearray consistently with non-Arrow Python UDTF behavior.
