@@ -3127,6 +3127,27 @@ class DataFrameSuite extends SharedSparkSession
         }
       }
     }
+    // When a condition that can be null is written before the non-deterministic one, the split
+    // filters on it first, so `rand(10)` only sees the rows where it is true, while the one filter
+    // of the split-off plan also evaluates `rand(10)` where it is null (SPARK-60315). So
+    // `rand(10)` draws its values for other rows, and the two return other rows.
+    def nullFirst: DataFrame = nullableDf.where($"f" >= 50 && (rand(10) > 0.5 || $"h" < 0))
+    def drawnOn(reached: Int => Boolean): Seq[Long] = (0 until 100).filter(reached).zipWithIndex
+      .collect { case (i, n) if randAbove(n) && fAtLeast50(i) => i.toLong }
+    for (split <- Seq(true, false); codegen <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        if (split) {
+          assert(udfProjects(nullFirst).size > 1, "The split did not apply:\n" +
+            nullFirst.queryExecution.optimizedPlan)
+        }
+        val expected = if (split) drawnOn(fAtLeast50) else drawnOn(i => i % 7 == 3 || i >= 50)
+        assert(nullFirst.collect().map(_.getLong(0)).toSeq === expected,
+          s"split=$split, codegen=$codegen")
+      }
+    }
+    assert(drawnOn(fAtLeast50) !== drawnOn(i => i % 7 == 3 || i >= 50))
   }
 
   test("SPARK-60731: a throwable alias sharing work with an earlier condition's alias is " +

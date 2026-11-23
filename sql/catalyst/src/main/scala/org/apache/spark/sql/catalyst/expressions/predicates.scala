@@ -324,10 +324,21 @@ trait PredicateHelper extends AliasHelper with Logging {
     }
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
     val (cannotFail, stayUp) = following.partition { cond =>
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+      cannotFailOver(cond, failable, ExprUtils.canEvaluateUnconditionally)
     }
     (leading ++ cannotFail, stayUp)
   }
+
+  /**
+   * Whether `cond` cannot fail by `cannotFail` and reads no column of `failable`, the columns of
+   * the plans below that can fail (see `failableOutputWith`), which is only computed when
+   * `cannotFail` accepts `cond`.
+   */
+  protected def cannotFailOver(
+      cond: Expression,
+      failable: => AttributeSet,
+      cannotFail: Expression => Boolean): Boolean =
+    cannotFail(cond) && !cond.references.exists(failable.contains)
 
   /**
    * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum

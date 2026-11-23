@@ -3215,7 +3215,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * reads aliases computed below, ahead of the conditions written before it. That is why a
    * non-deterministic condition gets a filter of its own in the split. So, when the split places at
    * least one condition, the caller gives each non-deterministic condition it leaves above the
-   * projection a filter of its own too. The projection on top computes the aliases of the
+   * projection a filter of its own too. A filter of its own only gets the rows on which the
+   * conditions before it are true, while one filter also evaluates a condition after one that is
+   * null (SPARK-60315), so a non-deterministic condition written after a condition that can be
+   * null sees fewer rows than with the split off, and, e.g. for a seeded `rand`, the two can
+   * return other rows. The projection on top computes the aliases of the
    * conditions left above it, as without the split.
    *
    * Whole-stage codegen already defers a projected expression past a filter that does not need
@@ -3271,17 +3275,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * computes, which would then run twice; a condition that would break this stays above. So the
    * layer itself only drops rows earlier. It can compute an alias on rows that a later rewrite of
    * the condition ending the split would have dropped first, which costs time but cannot fail. For
-   * example, with `f` and `g` the only expensive aliases, LIKE or RLIKE with such a pattern under
-   * version 0 of the regex pattern cost estimate, `f != g AND f` computes `f` and filters on `f`
-   * below `f != g`, which stays above the projection. The check is conservative: when the layer
-   * would compute an alias that can fail, such as a UDF, or a condition after the one ending the
-   * split can fail or reads a column below that can fail, nothing is filtered on below it. Later
-   * passes split each layer the same way, so in a layer's filter a condition that cannot fail can
-   * likewise be filtered on below the first one, when that one needs every expensive alias the
-   * layer computes: with `j` expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`,
-   * then on `j`. Among the conditions that cannot fail, the split does not otherwise order by cost:
-   * in this example, and in `(f || g) AND j`, it computes `f` and `g` on more rows than filtering
-   * on `j` first would (SPARK-61680).
+   * example, with `f` and `g` the only expensive aliases, LIKE or RLIKE with such patterns that the
+   * regex pattern cost estimate counts as expensive (every one under version 0, and, e.g., RLIKE
+   * `'.*a.*b'` under the default version 1), `f != g AND f` computes `f` and filters on `f` below
+   * `f != g`, which stays above the projection. The check is conservative: when the layer would
+   * compute an alias that can fail, such as a UDF, or a condition after the one ending the split
+   * can fail or reads a column below that can fail, nothing is filtered on below it. Later passes
+   * split each layer the same way, so in a layer's filter a condition that cannot fail can likewise
+   * be filtered on below the first one, when that one needs every expensive alias the layer
+   * computes: with `j` expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`, then
+   * on `j`. Among the conditions that cannot fail, the split does not otherwise order by cost: in
+   * this example, and in `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on
+   * `j` first would (SPARK-61680).
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form and written order).
@@ -3351,77 +3356,73 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
     var plan = baseChild
     var computed = AttributeSet.empty
-    var searching = true
-    while (searching && pending.nonEmpty) {
-      val (needed, head) = pending.head
-      val remaining = expensiveAliases -- computed
-      // The aliases the next layer needs, the conditions of its filter, the rest, and whether it
-      // is the last layer.
-      val nextLayer = if (!remaining.subsetOf(needed)) {
-        // The next condition and, when it is deterministic, the deterministic ones right after it
-        // that only need aliases computed already.
-        val (inFilter, rest) = nextFilter(pending)(
-          _._2.deterministic, { case (condNeeded, _) => condNeeded.subsetOf(computed ++ needed) })
-        Some((needed, inFilter, rest, false))
-      } else if (head.deterministic) {
-        // The head ends the split, but first the conditions after it get a layer of their own,
-        // when none of them, nor any alias that layer computes, can fail (see the docstring).
-        val conds = pending.toIndexedSeq
-        val following = conds.indices.tail.takeWhile(idx => conds(idx)._2.deterministic)
-        // With every alias of the projection inlined, and over no column below it that can fail
-        // (see the docstring).
-        lazy val failableBelow = failableOutputWith(project.child, cannotFailInSplit)
-        val followingCannotFail = following.forall { idx =>
-          val inlined = replaceAlias(conds(idx)._2, aliasMap)
-          cannotFailInSplit(inlined) && !inlined.references.exists(failableBelow.contains)
-        }
-        val (deferred, deferredNeeded) = (if (followingCannotFail) following else Nil)
-          .foldLeft((Set.empty[Int], AttributeSet.empty)) { case ((taken, unit), idx) =>
-            val grown = unit ++ conds(idx)._1
-            val newAliases = grown -- computed
-            val left = remaining -- grown
-            // Only while the layer still leaves an expensive alias for a later one, no alias it
-            // leaves shares expensive work with one it computes, and no alias it computes, also
-            // one that only shares expensive work with an alias a condition reads, can fail.
-            if (left.nonEmpty && (partsOf(left) intersect partsOf(newAliases)).isEmpty &&
-                newAliases.forall(attr => cannotFailInSplit(aliasMap(attr).child))) {
-              (taken + idx, grown)
-            } else {
-              (taken, unit)
-            }
-          }
-        Option.when(deferred.nonEmpty) {
-          val (inFilter, rest) = conds.indices.partition(deferred.contains)
-          // The head still ends the split after this layer, and no condition this layer leaves
-          // could join another one: the expensive aliases left only shrink, this layer computes
-          // no alias that can fail, and a throwable alias sharing no Python UDF with an alias a
-          // condition needs is never pulled into the unit of a condition that does not read it.
-          (deferredNeeded, inFilter.map(conds), rest.map(conds), true)
-        }
+    // Stacks a layer computing the aliases of `layerNeeded` not computed yet, filtered on the
+    // conditions of `inFilter`.
+    def addLayer(layerNeeded: AttributeSet, inFilter: Seq[(AttributeSet, Expression)]): Unit = {
+      val newAliases =
+        orderedAliases.filter(a => layerNeeded.contains(a) && !computed.contains(a))
+      computed ++= AttributeSet(newAliases.map(_.toAttribute))
+      val condition = inFilter.map(_._2).reduce(And)
+      plan = if (newAliases.isEmpty) {
+        // When the filter needs no new alias, its first condition or the one before it is
+        // non-deterministic, or its conditions come from after the condition that ends the
+        // split; otherwise they would have joined the previous filter. A projection would
+        // compute nothing here.
+        Filter(condition, plan)
       } else {
-        None
+        // Keep the plan's existing outputs available for later projections; column pruning
+        // drops the extras.
+        Filter(condition, project.copy(projectList = plan.output ++ newAliases, child = plan))
       }
-      nextLayer match {
-        case None =>
-          searching = false
-        case Some((layerNeeded, inFilter, rest, last)) =>
-          val newAliases =
-            orderedAliases.filter(a => layerNeeded.contains(a) && !computed.contains(a))
-          computed ++= AttributeSet(newAliases.map(_.toAttribute))
-          val condition = inFilter.map(_._2).reduce(And)
-          plan = if (newAliases.isEmpty) {
-            // When the filter needs no new alias, its first condition or the one before it is
-            // non-deterministic, or its conditions come from after the condition that ends the
-            // split; otherwise they would have joined the previous filter. A projection would
-            // compute nothing here.
-            Filter(condition, plan)
+    }
+    // A layer for the next condition and, when it is deterministic, the deterministic ones right
+    // after it that only need aliases computed already, until a condition needs every expensive
+    // alias not computed yet, which ends the split.
+    while (pending.nonEmpty && !(expensiveAliases -- computed).subsetOf(pending.head._1)) {
+      val needed = pending.head._1
+      val (inFilter, rest) = nextFilter(pending)(
+        _._2.deterministic, { case (condNeeded, _) => condNeeded.subsetOf(computed ++ needed) })
+      addLayer(needed, inFilter)
+      pending = rest
+    }
+    if (pending.nonEmpty && pending.head._2.deterministic) {
+      // The head ends the split, but first the conditions after it get a layer of their own,
+      // when none of them, nor any alias that layer computes, can fail (see the docstring).
+      val remaining = expensiveAliases -- computed
+      val conds = pending.toIndexedSeq
+      val following = conds.indices.tail.takeWhile(idx => conds(idx)._2.deterministic)
+      val (deferred, deferredNeeded) = following
+        .foldLeft((Set.empty[Int], AttributeSet.empty)) { case ((taken, unit), idx) =>
+          val grown = unit ++ conds(idx)._1
+          val newAliases = grown -- computed
+          val left = remaining -- grown
+          // Only while the layer still leaves an expensive alias for a later one, no alias it
+          // leaves shares expensive work with one it computes, and no alias it computes, also
+          // one that only shares expensive work with an alias a condition reads, can fail.
+          if (left.nonEmpty && (partsOf(left) intersect partsOf(newAliases)).isEmpty &&
+              newAliases.forall(attr => cannotFailInSplit(aliasMap(attr).child))) {
+            (taken + idx, grown)
           } else {
-            // Keep the plan's existing outputs available for later projections; column pruning
-            // drops the extras.
-            Filter(condition, project.copy(projectList = plan.output ++ newAliases, child = plan))
+            (taken, unit)
           }
-          pending = rest
-          searching = !last
+        }
+      // With every alias of the projection inlined, none of the conditions after the head can
+      // fail, nor reads a column below the projection that can fail (see the docstring).
+      def followingCannotFail: Boolean = {
+        val failableBelow = failableOutputWith(project.child, cannotFailInSplit)
+        following.forall { idx =>
+          cannotFailOver(replaceAlias(conds(idx)._2, aliasMap), failableBelow, cannotFailInSplit)
+        }
+      }
+      if (deferred.nonEmpty && followingCannotFail) {
+        // The split ends after this layer: the head still ends it, and no condition this layer
+        // leaves could join another one, as the expensive aliases left only shrink, this layer
+        // computes no alias that can fail, and a throwable alias sharing no Python UDF with an
+        // alias a condition needs is never pulled into the unit of a condition that does not
+        // read it.
+        val (inFilter, rest) = conds.indices.partition(deferred.contains)
+        addLayer(deferredNeeded, inFilter.map(conds))
+        pending = rest.map(conds)
       }
     }
     (plan, computed, pending.map(_._2))
@@ -3447,7 +3448,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   /**
    * Whether `e` cannot fail: `ExprUtils.canEvaluateUnconditionally`, also accepting LIKE and RLIKE
    * whose pattern `StringRegexExpression.cannotFailPattern` accepts, which version 0 of the regex
-   * pattern cost estimate treats as expensive (SPARK-60731). `CombineFilters` uses the narrower
+   * pattern cost estimate treats as expensive (SPARK-60731), and the default version 1 too for
+   * some patterns, e.g. LIKE `'%a%b%c%'` and RLIKE `'.*a.*b'`. `CombineFilters` uses the narrower
    * `canEvaluateUnconditionally` (see `splitMovable`), so it does not move a condition with LIKE
    * or RLIKE ahead of a non-deterministic or throwable one.
    */
