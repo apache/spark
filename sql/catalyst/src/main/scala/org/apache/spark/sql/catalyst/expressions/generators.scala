@@ -348,6 +348,38 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
 }
 
 /**
+ * Wrapper around another generator that adds a column that is true on every row the generator
+ * returns, including the rows of `terminate()`. In an outer `Generate`, the NULL-padded row of an
+ * input row for which the generator returns no rows has NULL in that column, which tells it apart
+ * from a generated row whose values are NULL. `OptimizeOneRowRelationSubquery` uses it to inline a
+ * left outer lateral join over a generator whose projection computes values.
+ */
+case class GeneratedRowMarker(child: Generator)
+  extends UnaryExpression with Generator with CodegenFallback {
+
+  override def elementSchema: StructType =
+    child.elementSchema.add(GeneratedRowMarker.columnName, BooleanType, nullable = false)
+
+  private def withMarker(rows: IterableOnce[InternalRow]): IterableOnce[InternalRow] = {
+    val marked = new JoinedRow
+    rows.iterator.map(marked(_, GeneratedRowMarker.markerRow))
+  }
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = withMarker(child.eval(input))
+
+  override def terminate(): IterableOnce[InternalRow] = withMarker(child.terminate())
+
+  override protected def withNewChildInternal(newChild: Expression): GeneratedRowMarker =
+    copy(child = newChild.asInstanceOf[Generator])
+}
+
+object GeneratedRowMarker {
+  val columnName: String = "__generated_row"
+
+  private val markerRow: InternalRow = InternalRow(true)
+}
+
+/**
  * A base class for [[Explode]] and [[PosExplode]].
  */
 abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with Serializable {

@@ -43,7 +43,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingLocalLimitExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperator, StreamingLocalLimitExec}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper, StreamingRelation}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ForeachBatchUserFuncException, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
@@ -1454,6 +1454,25 @@ class StreamSuite extends StreamTest {
       assert(StreamExecution.isInterruptionException(febError3, spark.sparkContext))
     } finally {
       spark.sparkContext.setLocalProperty("spark.jobGroup.id", prevJobId)
+    }
+  }
+
+  test("SPARK-60564: a LEFT JOIN LATERAL over a generator keeps left rows and stays stateless") {
+    val input = MemoryStream[Int]
+    withTempView("v") {
+      input.toDF().selectExpr("value AS id", "slice(array(10, 20), 1, value) AS arr")
+        .createOrReplaceTempView("v")
+      val df = spark.sql(
+        "SELECT id, c FROM v LEFT JOIN LATERAL (SELECT col + 1 AS c FROM explode(arr))")
+      testStream(df, OutputMode.Append())(
+        AddData(input, 0, 1, 2),
+        CheckAnswerRows(
+          Seq(Row(0, null), Row(1, 11), Row(2, 11), Row(2, 21)),
+          lastOnly = false,
+          isSorted = false),
+        AssertOnQuery { q =>
+          q.lastExecution.executedPlan.collect { case s: StatefulOperator => s }.isEmpty
+        })
     }
   }
 }

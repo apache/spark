@@ -313,9 +313,22 @@ trait BaseEvalPythonUDTF extends UnaryNode {
 
   def resultAttrs: Seq[Attribute]
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
+  /**
+   * Whether an input row for which the UDTF returns no rows is kept once, with NULLs for
+   * `resultAttrs`, as in an outer [[Generate]].
+   */
+  def outer: Boolean
 
-  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+  /**
+   * A column that is true on every row the UDTF returns and NULL on the row that `outer` adds, as
+   * the column of a [[org.apache.spark.sql.catalyst.expressions.GeneratedRowMarker]].
+   */
+  def generatedRowMarker: Option[Attribute]
+
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs ++ generatedRowMarker
+
+  override def producedAttributes: AttributeSet =
+    AttributeSet(resultAttrs ++ generatedRowMarker)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDTF)
 }
@@ -370,12 +383,16 @@ case class ArrowEvalPython(
  *                            generation that will be discarded next by a projection.
  * @param resultAttrs the output schema of the Python UDTF.
  * @param child the child plan
+ * @param outer whether an input row for which the UDTF returns no rows is kept once with NULLs.
+ * @param generatedRowMarker a column that is true on the rows the UDTF returns, if any.
  */
 case class BatchEvalPythonUDTF(
     udtf: PythonUDTF,
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPythonUDTF {
+    child: LogicalPlan,
+    outer: Boolean = false,
+    generatedRowMarker: Option[Attribute] = None) extends BaseEvalPythonUDTF {
   override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPythonUDTF =
     copy(child = newChild)
 }
@@ -388,13 +405,18 @@ case class BatchEvalPythonUDTF(
  *                            generation that will be discarded next by a projection.
  * @param resultAttrs the output schema of the Python UDTF.
  * @param child the child plan
+ * @param evalType the Python eval type
+ * @param outer whether an input row for which the UDTF returns no rows is kept once with NULLs.
+ * @param generatedRowMarker a column that is true on the rows the UDTF returns, if any.
  */
 case class ArrowEvalPythonUDTF(
     udtf: PythonUDTF,
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
-    evalType: Int) extends BaseEvalPythonUDTF {
+    evalType: Int,
+    outer: Boolean = false,
+    generatedRowMarker: Option[Attribute] = None) extends BaseEvalPythonUDTF {
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPythonUDTF =
     copy(child = newChild)
 }

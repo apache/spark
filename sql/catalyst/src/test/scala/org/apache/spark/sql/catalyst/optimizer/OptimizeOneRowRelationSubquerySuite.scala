@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Explode, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Explode, GeneratedRowMarker, If, IsNull, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
@@ -202,15 +202,60 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     assertHasDomainJoin(optimized)
   }
 
-  test("SPARK-60564: should not optimize left outer lateral subquery with Generate") {
-    // A left outer lateral join keeps the left rows for which the generator returns no rows,
-    // which a Generate over the left side does not.
-    Seq(
-      t0.generate(Explode($"arr")),
-      t0.generate(Explode($"arr")).select($"col".as("v"))).foreach { inner =>
-      val query = t3.lateralJoin(inner, LeftOuter, None)
-      val optimized = Optimize.execute(query.analyze)
-      assertHasDomainJoin(optimized)
+  test("SPARK-60564: optimize left outer lateral subquery with Generate into an outer Generate") {
+    // SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(arr)
+    val query1 = t3.lateralJoin(t0.generate(Explode($"arr")), LeftOuter, None)
+    comparePlans(
+      Optimize.execute(query1.analyze),
+      t3.generate(Explode($"arr"), outer = true).analyze)
+
+    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT col AS v FROM EXPLODE(arr))
+    val query2 = t3.lateralJoin(
+      t0.generate(Explode($"arr")).select($"col".as("v")), LeftOuter, None)
+    comparePlans(
+      Optimize.execute(query2.analyze),
+      t3.generate(Explode($"arr"), outer = true)
+        .select($"a", $"b", $"arr", $"col".as("v")).analyze)
+
+    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT col + 1 AS v FROM EXPLODE_OUTER(arr)): the row
+    // that an outer generator adds is a row of the subquery, so its values are computed.
+    val query3 = t3.lateralJoin(
+      t0.generate(Explode($"arr"), outer = true).select(($"col" + 1).as("v")), LeftOuter, None)
+    comparePlans(
+      Optimize.execute(query3.analyze),
+      t3.generate(Explode($"arr"), outer = true)
+        .select($"a", $"b", $"arr", ($"col" + 1).as("v")).analyze)
+  }
+
+  test("SPARK-60564: a computed projection over Generate in a left outer lateral subquery") {
+    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT col + 1 AS v, a AS w FROM EXPLODE(arr))
+    val query = t3.lateralJoin(
+      t0.generate(Explode($"arr")).select(($"col" + 1).as("v"), $"a".as("w")), LeftOuter, None)
+    val optimized = Optimize.execute(query.analyze)
+    assert(optimized.collectWithSubqueries { case d: DomainJoin => d }.isEmpty)
+    val generate = optimized.collectFirst { case g: Generate => g }.get
+    assert(generate.outer)
+    assert(generate.generator.isInstanceOf[GeneratedRowMarker])
+    val marker = generate.generatorOutput.last
+    assert(marker.name == GeneratedRowMarker.columnName)
+    val project = optimized.asInstanceOf[Project]
+    assert(project.output.map(_.name) == Seq("a", "b", "arr", "v", "w"))
+    // Both computed values are NULL on the row that the outer Generate adds.
+    project.projectList.takeRight(2).foreach {
+      case Alias(If(IsNull(m: Attribute), Literal(null, _), _), _) =>
+        assert(m.exprId == marker.exprId)
+      case o => fail(s"Unexpected expression: $o")
+    }
+    assert(!project.output.exists(_.exprId == marker.exprId))
+  }
+
+  test("SPARK-60564: the legacy flag keeps the Generate of a left outer lateral join inner") {
+    withSQLConf(SQLConf.LEFT_LATERAL_JOIN_GENERATOR_LEGACY_DROP_ROWS_ENABLED.key -> "true") {
+      val query = t3.lateralJoin(
+        t0.generate(Explode($"arr")).select(($"col" + 1).as("v")), LeftOuter, None)
+      comparePlans(
+        Optimize.execute(query.analyze),
+        t3.generate(Explode($"arr")).select($"a", $"b", $"arr", ($"col" + 1).as("v")).analyze)
     }
   }
 }

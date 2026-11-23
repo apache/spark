@@ -2483,6 +2483,208 @@ Project [c1#x, c2#x, col#x]
 
 
 -- !query
+SELECT * FROM t3 LEFT JOIN LATERAL POSEXPLODE(c2)
+-- !query analysis
+Project [c1#x, c2#x, pos#x, col#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- Generate posexplode(outer(c2#x)), false, [pos#x, col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE_OUTER(c2)
+-- !query analysis
+Project [c1#x, c2#x, col#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- Generate explode(outer(c2#x)), true, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1, 'x', t3.c1 FROM EXPLODE(c2) t(c3))
+-- !query analysis
+Project [c1#x, c2#x, (c3 + 1)#x, x#x, c1#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [(c3#x + 1) AS (c3 + 1)#x, x AS x#x, outer(c1#x) AS c1#x]
+   :        +- SubqueryAlias t
+   :           +- Project [col#x AS c3#x]
+   :              +- Generate explode(outer(c2#x)), false, [col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE_OUTER(c2) t(c3))
+-- !query analysis
+Project [c1#x, c2#x, (c3 + 1)#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [(c3#x + 1) AS (c3 + 1)#x]
+   :        +- SubqueryAlias t
+   :           +- Project [col#x AS c3#x]
+   :              +- Generate explode(outer(c2#x)), true, [col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(CAST(NULL AS INT))), (2, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT COALESCE(v, -1) AS w FROM EXPLODE(arr) t2(v))
+-- !query analysis
+Project [id#x, arr#x, w#x]
++- LateralJoin lateral-subquery#x [arr#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(v#x, -1) AS w#x]
+   :        +- SubqueryAlias t2
+   :           +- Project [col#x AS v#x]
+   :              +- Generate explode(outer(arr#x)), false, [col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, MAP('a', 1)), (2, MAP()) AS t(id, m) LEFT JOIN LATERAL EXPLODE(m)
+-- !query analysis
+Project [id#x, m#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [m#x], LeftOuter
+   :  +- Generate explode(outer(m#x)), false, [key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, m#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, PARSE_JSON('[1, 2]')), (2, PARSE_JSON('[]')) AS t(id, v)
+  LEFT JOIN LATERAL VARIANT_EXPLODE(v)
+-- !query analysis
+Project [id#x, v#x, pos#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [v#x], LeftOuter
+   :  +- Generate variant_explode(outer(v#x), false), false, [pos#x, key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, v#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'))) AS t(id, arr) LEFT JOIN LATERAL INLINE(arr)
+-- !query analysis
+Project [id#x, arr#x, x#x, y#x]
++- LateralJoin lateral-subquery#x [arr#x], LeftOuter
+   :  +- Generate inline(outer(arr#x)), false, [x#x, y#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(-0.0D)), (2, ARRAY(0.0D)) AS t(id, arr)
+  LEFT JOIN LATERAL EXPLODE(arr)
+-- !query analysis
+Project [id#x, arr#x, col#x]
++- LateralJoin lateral-subquery#x [arr#x], LeftOuter
+   :  +- Generate explode(outer(arr#x)), false, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY('Foo' COLLATE UTF8_LCASE)), (2, ARRAY('foo' COLLATE UTF8_LCASE))
+  AS t(id, arr) LEFT JOIN LATERAL EXPLODE(arr)
+-- !query analysis
+Project [id#x, arr#x, col#x]
++- LateralJoin lateral-subquery#x [arr#x], LeftOuter
+   :  +- Generate explode(outer(arr#x)), false, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+SET spark.sql.optimizer.decorrelateInnerQuery.enabled=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.decorrelateInnerQuery.enabled,Some(false))
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query analysis
+Project [c1#x, c2#x, col#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- Generate explode(outer(c2#x)), false, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+RESET spark.sql.optimizer.decorrelateInnerQuery.enabled
+-- !query analysis
+ResetCommand spark.sql.optimizer.decorrelateInnerQuery.enabled
+
+
+-- !query
+SET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled,Some(true))
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query analysis
+Project [c1#x, c2#x, col#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- Generate explode(outer(c2#x)), false, [col#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE(c2) t(c3))
+-- !query analysis
+Project [c1#x, c2#x, (c3 + 1)#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [(c3#x + 1) AS (c3 + 1)#x]
+   :        +- SubqueryAlias t
+   :           +- Project [col#x AS c3#x]
+   :              +- Generate explode(outer(c2#x)), false, [col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+RESET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled
+-- !query analysis
+ResetCommand spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)))
 -- !query analysis
 Project [c1#x, c2#x, col#x]

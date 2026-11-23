@@ -1525,6 +1525,180 @@ NULL	[4]	4
 
 
 -- !query
+SELECT * FROM t3 LEFT JOIN LATERAL POSEXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,col:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+2	[]	NULL	NULL
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE_OUTER(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1, 'x', t3.c1 FROM EXPLODE(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int,x:string,c1:int>
+-- !query output
+0	[0,1]	1	x	0
+0	[0,1]	2	x	0
+1	[2]	3	x	1
+2	[]	NULL	NULL	NULL
+NULL	[4]	5	x	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE_OUTER(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int>
+-- !query output
+0	[0,1]	1
+0	[0,1]	2
+1	[2]	3
+2	[]	NULL
+NULL	[4]	5
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(CAST(NULL AS INT))), (2, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT COALESCE(v, -1) AS w FROM EXPLODE(arr) t2(v))
+-- !query schema
+struct<id:int,arr:array<int>,w:int>
+-- !query output
+1	[null]	-1
+2	[]	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, MAP('a', 1)), (2, MAP()) AS t(id, m) LEFT JOIN LATERAL EXPLODE(m)
+-- !query schema
+struct<id:int,m:map<string,int>,key:string,value:int>
+-- !query output
+1	{"a":1}	a	1
+2	{}	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, PARSE_JSON('[1, 2]')), (2, PARSE_JSON('[]')) AS t(id, v)
+  LEFT JOIN LATERAL VARIANT_EXPLODE(v)
+-- !query schema
+struct<id:int,v:variant,pos:int,key:string,value:variant>
+-- !query output
+1	[1,2]	0	NULL	1
+1	[1,2]	1	NULL	2
+2	[]	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'))) AS t(id, arr) LEFT JOIN LATERAL INLINE(arr)
+-- !query schema
+struct<id:int,arr:array<struct<x:int,y:string>>,x:int,y:string>
+-- !query output
+1	NULL	NULL	NULL
+2	[{"x":1,"y":"a"}]	1	a
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(-0.0D)), (2, ARRAY(0.0D)) AS t(id, arr)
+  LEFT JOIN LATERAL EXPLODE(arr)
+-- !query schema
+struct<id:int,arr:array<double>,col:double>
+-- !query output
+1	[-0.0]	-0.0
+2	[0.0]	0.0
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY('Foo' COLLATE UTF8_LCASE)), (2, ARRAY('foo' COLLATE UTF8_LCASE))
+  AS t(id, arr) LEFT JOIN LATERAL EXPLODE(arr)
+-- !query schema
+struct<id:int,arr:array<string collate UTF8_LCASE>,col:string collate UTF8_LCASE>
+-- !query output
+1	["Foo"]	Foo
+2	["foo"]	foo
+
+
+-- !query
+SET spark.sql.optimizer.decorrelateInnerQuery.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.decorrelateInnerQuery.enabled	false
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+RESET spark.sql.optimizer.decorrelateInnerQuery.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled	true
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int>
+-- !query output
+0	[0,1]	1
+0	[0,1]	2
+1	[2]	3
+NULL	[4]	5
+
+
+-- !query
+RESET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)))
 -- !query schema
 struct<c1:int,c2:int,col:int>

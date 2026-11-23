@@ -1127,12 +1127,17 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
     // A lateral subquery with a Generate over OneRowRelation, with or without a Project on top,
-    // becomes a Generate over the left side. That Generate drops the left rows for which the
-    // generator returns no rows, so it can not replace a left outer lateral join.
+    // becomes a Generate over the left side, which evaluates the generator once per left row. A
+    // left outer lateral join keeps a left row for which the generator returns no rows once, with
+    // NULLs for the columns of the subquery, so its Generate becomes outer, which adds that row.
+    // A Project that computes values over a Generate that is not outer must not compute them on
+    // that row, as the subquery has no row there: the Generate then marks the rows the generator
+    // returns, see `GeneratedRowMarker`, and the Project gives NULL on the row it does not mark.
     case LateralJoin(
       left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), joinType, None)
-        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty &&
-          !(joinType == LeftOuter && plan.exists(_.isInstanceOf[Generate])) =>
+        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
+      val keepLeftRows = joinType == LeftOuter &&
+        !conf.getConf(SQLConf.LEFT_LATERAL_JOIN_GENERATOR_LEGACY_DROP_ROWS_ENABLED)
       plan match {
         case Project(projectList, _: OneRowRelation) =>
           val newPList = stripOuterReferences(projectList)
@@ -1140,12 +1145,46 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
         case g @ Generate(generator, _, _, _, _, _: OneRowRelation) =>
           val newGenerator = stripOuterReference(generator)
-          g.copy(generator = newGenerator, child = left)
+          g.copy(generator = newGenerator, outer = g.outer || keepLeftRows, child = left)
 
         case Project(projectList, g @ Generate(generator, _, _, _, _, _: OneRowRelation)) =>
           val newPList = stripOuterReferences(projectList)
           val newGenerator = stripOuterReference(generator)
-          Project(left.output ++ newPList, g.copy(generator = newGenerator, child = left))
+          val generatorOutput = AttributeSet(g.generatorOutput)
+          // A column of the generator, renamed or not, is NULL on the row that an outer Generate
+          // adds. On an outer Generate in the subquery, that row is a row of the subquery.
+          def passesThrough(e: NamedExpression): Boolean = e match {
+            case a: Attribute => generatorOutput.contains(a)
+            case Alias(a: Attribute, _) => generatorOutput.contains(a)
+            case _ => false
+          }
+          if (!keepLeftRows || g.outer || newPList.forall(passesThrough)) {
+            val newGenerate =
+              g.copy(generator = newGenerator, outer = g.outer || keepLeftRows, child = left)
+            Project(left.output ++ newPList, newGenerate)
+          } else {
+            val marker = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
+            def nullIfNotGenerated(e: Expression): Expression =
+              If(IsNull(marker), Literal(null, e.dataType), e)
+            // Keep the expression IDs and the metadata, as the parent operators bind to them.
+            val markedPList = newPList.map {
+              case e if passesThrough(e) => e
+              case a: Alias =>
+                Alias(nullIfNotGenerated(a.child), a.name)(
+                  a.exprId, a.qualifier, Some(a.metadata), a.nonInheritableMetadataKeys)
+              case a: Attribute =>
+                Alias(nullIfNotGenerated(a), a.name)(a.exprId, a.qualifier, Some(a.metadata))
+              case o =>
+                throw SparkException.internalError(
+                  s"Unexpected expression in a lateral subquery over a generator: $o")
+            }
+            val markedGenerate = g.copy(
+              generator = GeneratedRowMarker(newGenerator),
+              outer = true,
+              generatorOutput = g.generatorOutput :+ marker,
+              child = left)
+            Project(left.output ++ markedPList, markedGenerate)
+          }
 
         case o =>
           throw SparkException.internalError(

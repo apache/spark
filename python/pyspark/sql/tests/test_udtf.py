@@ -284,6 +284,52 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+    def test_udtf_with_left_lateral_join(self):
+        # SPARK-60564: a LEFT JOIN LATERAL keeps a left row for which the UDTF returns no rows.
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, i: int):
+                for n in range(i):
+                    yield (n,)
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+        expected = [Row(id=0, a=None), Row(id=1, a=0), Row(id=2, a=0), Row(id=2, a=1)]
+        assertDataFrameEqual(
+            self.spark.sql("SELECT * FROM range(0, 3, 1, 1) LEFT JOIN LATERAL testUDTF(id)"),
+            expected,
+        )
+        assertDataFrameEqual(
+            self.spark.range(3, numPartitions=1).lateralJoin(
+                TestUDTF(col("id").outer()), how="left"
+            ),
+            expected,
+        )
+        # The values that the lateral subquery computes are NULL on a kept left row.
+        assertDataFrameEqual(
+            self.spark.sql(
+                "SELECT * FROM range(0, 3, 1, 1) "
+                "LEFT JOIN LATERAL (SELECT a + 10 AS b, 'x' AS c FROM testUDTF(id))"
+            ),
+            [
+                Row(id=0, b=None, c=None),
+                Row(id=1, b=10, c="x"),
+                Row(id=2, b=10, c="x"),
+                Row(id=2, b=11, c="x"),
+            ],
+        )
+
+        # A non-deterministic UDTF is called once for each left row, even for equal arguments.
+        @udtf(returnType="u: string")
+        class RandomUDTF:
+            def eval(self, i: int):
+                import uuid
+
+                yield (str(uuid.uuid4()),)
+
+        self.spark.udtf.register("randomUDTF", RandomUDTF)
+        df = self.spark.sql("SELECT * FROM VALUES (1), (1) t(i) LEFT JOIN LATERAL randomUDTF(i)")
+        self.assertEqual(len({row.u for row in df.collect()}), 2)
+
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):

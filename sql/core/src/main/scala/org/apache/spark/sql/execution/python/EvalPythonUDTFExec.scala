@@ -42,9 +42,19 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
   def resultAttrs: Seq[Attribute]
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
+  /**
+   * Whether an input row for which the UDTF returns no rows is kept once, with NULLs for
+   * `resultAttrs`, as in an outer [[org.apache.spark.sql.execution.GenerateExec]].
+   */
+  def outer: Boolean
 
-  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+  /** A column that is true on every row the UDTF returns and NULL on the row `outer` adds. */
+  def generatedRowMarker: Option[Attribute]
+
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs ++ generatedRowMarker
+
+  override def producedAttributes: AttributeSet =
+    AttributeSet(resultAttrs ++ generatedRowMarker)
 
   protected def evaluate(
       argMetas: Array[ArgumentMetadata],
@@ -116,13 +126,23 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
       val joined = new JoinedRow
       val nullRow = new GenericInternalRow(udtf.elementSchema.length)
+      // The row that `outer` adds, with NULL for the marker column too.
+      val paddedRow = new GenericInternalRow(udtf.elementSchema.length + generatedRowMarker.size)
+      val markRow: InternalRow => InternalRow = if (generatedRowMarker.isDefined) {
+        val marked = new JoinedRow
+        val markerRow = InternalRow(true)
+        marked(_, markerRow)
+      } else {
+        identity
+      }
       val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.flatMap { outputRows =>
         // If `count` is greater than zero, it means there are remaining input rows in the queue.
         // In this case, the output rows of the UDTF are joined with the corresponding input row
         // in the queue.
-        if (count > 0) {
+        val isInputRow = count > 0
+        if (isInputRow) {
           val left = queue.remove()
           count -= 1
           joined.withLeft(pruneChildForResult(left))
@@ -131,13 +151,17 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         // from the UDTF are from the `terminate()` call. We leave the left side as the last
         // element of its child output to keep it consistent with the Generate implementation
         // and Hive UDTFs.
-        outputRows.map { r =>
-          // When the UDTF's result is None, such as `def eval(): yield`,
-          // we join it with a null row to avoid NullPointerException.
-          if (r == null) {
-            resultProj(joined.withRight(nullRow))
-          } else {
-            resultProj(joined.withRight(r))
+        if (outer && isInputRow && !outputRows.hasNext) {
+          Iterator.single(resultProj(joined.withRight(paddedRow)))
+        } else {
+          outputRows.map { r =>
+            // When the UDTF's result is None, such as `def eval(): yield`,
+            // we join it with a null row to avoid NullPointerException.
+            if (r == null) {
+              resultProj(joined.withRight(markRow(nullRow)))
+            } else {
+              resultProj(joined.withRight(markRow(r)))
+            }
           }
         }
       }
