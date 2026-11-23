@@ -1056,6 +1056,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       () => fail("attempted to compute locally")).isLeft)
   }
 
+  test("remote read of an empty block stored as deserialized objects in memory") {
+    // Without compression, Kryo serializes an empty partition to no bytes, while its memSize is a
+    // non-zero estimate of the stored objects.
+    def uncompressed: Option[SparkConf] = Some(new SparkConf(false).set(RDD_COMPRESS, false))
+    val store = spy[BlockManager](makeBlockManager(8000, "executor1", testConf = uncompressed))
+    val store2 = makeBlockManager(8000, "executor2", testConf = uncompressed)
+    val blockId = RDDBlockId(0, 0)
+    store2.putIterator(blockId, Iterator.empty, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(store2.getStatus(blockId).get.memSize > 0)
+    assert(store2.getLocalBytes(blockId).get.size === 0)
+
+    val remote = store.getRemoteValues[Any](blockId)
+    assert(remote.isDefined)
+    assert(remote.get.data.isEmpty)
+    doAnswer { _ => true }.when(store).isRDDBlockVisible(mc.any())
+    assert(store.getOrElseUpdateRDDBlock(
+      0L,
+      blockId,
+      StorageLevel.MEMORY_ONLY,
+      ClassTag.Any,
+      () => fail("attempted to compute locally")).isLeft)
+  }
+
   test("in-memory LRU storage") {
     testInMemoryLRUStorage(StorageLevel.MEMORY_ONLY)
   }
