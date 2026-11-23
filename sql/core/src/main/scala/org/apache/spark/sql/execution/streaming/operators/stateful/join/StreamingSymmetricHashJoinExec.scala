@@ -364,9 +364,11 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Older versions and the legacy mode order the V4 state of an input by its event time (index
-    // version 0), so their checkpoints cannot evict that state by another column. Index version 1
-    // orders it by the column that the default mode picks, which the legacy mode cannot evict.
+    // The legacy mode orders the V4 state of an input by its event time (index version 0), so its
+    // checkpoints cannot evict that state by another column. Index version 1 orders it by the
+    // column that the default mode picks, which the legacy mode cannot evict. A checkpoint of an
+    // earlier version passes: it restores index version 0, and the join output watermark check as
+    // false, for which the default mode keeps the event time.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
     if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
       Seq((LeftSide, stateWatermarkPredicates.left, left.output, right.output),
@@ -378,8 +380,8 @@ case class StreamingSymmetricHashJoinExec(
             stateValueWatermarkColumnOrdinal(predicate, attributes)
           } else {
             predicate.collect { case _: JoinStateValueWatermarkPredicate =>
-              StreamingJoinHelper.getStateValueWatermarkColumn(attributes,
-                AttributeSet(otherAttributes), condition.full, Some(0L))
+              pickStateValueWatermarkColumn(attributes, otherAttributes, condition.full, Some(0L),
+                conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
             }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
           }
           column.filterNot(eventTime.contains).foreach { i =>
@@ -770,6 +772,9 @@ case class StreamingSymmetricHashJoinExec(
     // A left semi join processes its right input first, so this batch's left rows can still match
     // a right row that the completion check skips (SPARK-61380). Earlier versions tested it against
     // the cutoff on the event time solved over the whole input, which a picked column can exceed.
+    // TODO: [SPARK-61380] For a right input evicted by a picked column other than its event time,
+    //  the skip still drops a right row that the eviction keeps, so a left row of a later batch
+    //  can miss its match.
     private[this] val skipsEvictingRightRow: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(p: JoinStateValueWatermarkPredicate) if p.conditionBoundsColumn &&
           joinType == LeftSemi && joinSide == RightSide =>

@@ -208,6 +208,24 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     (leftStateWatermark, rightStateWatermark)
   }
 
+  /**
+   * The column that the default mode evicts an input by, with its cutoff, as
+   * [[getStateWatermarkPredicates]] picks it. A checkpoint written without the join output
+   * watermark check keeps only a pick of the event time.
+   */
+  def pickStateValueWatermarkColumn(
+      inputAttributes: Seq[Attribute],
+      otherInputAttributes: Seq[Attribute],
+      condition: Option[Expression],
+      eventTimeWatermark: Option[Long],
+      checkJoinOutputWatermark: Boolean): Option[(Attribute, Long)] = {
+    val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    StreamingJoinHelper.getStateValueWatermarkColumn(inputAttributes,
+      AttributeSet(otherInputAttributes), condition, eventTimeWatermark).filter {
+      case (c, _) => checkJoinOutputWatermark || eventTime.exists(_.semanticEquals(c))
+    }
+  }
+
   /** Get the predicates defining the state watermarks for both sides of the join */
   def getStateWatermarkPredicates(
       leftAttributes: Seq[Attribute],
@@ -286,10 +304,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         //  evicted by its event time with the cast column's cutoff, which can be too early.
         def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
-            StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
-              AttributeSet(otherSideInputAttributes), condition, watermark).filter {
-              case (c, _) => checkJoinOutputWatermark || eventTime.exists(_.semanticEquals(c))
-            }
+            pickStateValueWatermarkColumn(oneSideInputAttributes, otherSideInputAttributes,
+              condition, watermark, checkJoinOutputWatermark)
           }
           picked.map { case (c, w) => (c, w, true) }.orElse {
             for (e <- eventTime; w <- wholeInput(watermark)) yield (e, w, false)
