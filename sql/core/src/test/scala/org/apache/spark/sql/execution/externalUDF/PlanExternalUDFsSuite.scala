@@ -24,8 +24,8 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayTransform, Attribute,
-  AttributeReference, AttributeSet, CreateArray, EqualTo, Expression,
-  ExternalUserDefinedFunction, GreaterThan, IsNull, Lag, LambdaFunction, Literal,
+  AttributeReference, AttributeSet, CreateArray, EqualTo, EvalOnlyWhen, Expression,
+  ExternalUserDefinedFunction, GreaterThan, If, IsNull, Lag, LambdaFunction, Literal,
   NamedArgumentExpression, NamedLambdaVariable, UnspecifiedFrame, WindowExpression,
   WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
@@ -830,5 +830,27 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
         "joinType" -> Inner.sql,
         "leftPlan" -> "Range (0, 10, step=1, splits=Some(1))",
         "rightPlan" -> "Range (0, 10, step=1, splits=Some(1))"))
+  }
+
+  test("SPARK-61482: an external UDF inside an EvalOnlyWhen marker gets the condition") {
+    val u = udf("inv", workerSpec("inv"), Seq(input))
+    val cond = IsNull(input)
+    val plan = Project(
+      Seq(Alias(If(cond, EvalOnlyWhen(cond, u), Literal.create(null, IntegerType)), "r")()),
+      relation)
+    val node = singleEvalNode(extract(plan))
+    assert(node.evalCondition.contains(cond))
+  }
+
+  test("SPARK-61482: an external UDF also used outside a marker gets no condition") {
+    val u = udf("inv", workerSpec("inv"), Seq(input))
+    val cond = IsNull(input)
+    val plan = Project(
+      Seq(
+        Alias(If(cond, EvalOnlyWhen(cond, u), Literal.create(null, IntegerType)), "r")(),
+        Alias(u, "s")()),
+      relation)
+    val node = singleEvalNode(extract(plan))
+    assert(node.evalCondition.isEmpty)
   }
 }

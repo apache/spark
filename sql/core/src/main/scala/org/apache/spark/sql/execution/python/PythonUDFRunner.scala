@@ -122,9 +122,7 @@ abstract class BasePythonUDFRunner(
       stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
-        if (writer.exception.isDefined) {
-          throw writer.exception.get
-        }
+        throwIfWriterFailed()
         try {
           stream.readInt() match {
             case length if length >= 0 =>

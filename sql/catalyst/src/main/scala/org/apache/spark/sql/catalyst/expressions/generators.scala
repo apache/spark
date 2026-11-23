@@ -22,7 +22,8 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, MultiAlias}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -377,6 +378,29 @@ object GeneratedRowMarker {
   val columnName: String = "__generated_row"
 
   private val markerRow: InternalRow = InternalRow(true)
+}
+
+/**
+ * Extracts the parts of a generator item, as ExtractGenerator plans it: a [[Generator]], optionally
+ * wrapped in [[GeneratorOuter]], and then optionally in a [[MultiAlias]] that names its output
+ * columns. Returns the generator inside any GeneratorOuter, the MultiAlias names (None without a
+ * MultiAlias), and whether the generator is outer. Neither wrapper reports itself resolved, so
+ * callers test the returned generator instead.
+ */
+object GeneratorItem {
+  def unapply(e: Expression): Option[(Generator, Option[Seq[String]], Boolean)] = e match {
+    case MultiAlias(child, names) => unwrapOuter(child).map { case (g, outer) =>
+      (g, Some(names), outer)
+    }
+    case _ => unwrapOuter(e).map { case (g, outer) => (g, None, outer) }
+  }
+
+  // GeneratorOuter is itself a Generator, so it must be matched first.
+  private def unwrapOuter(e: Expression): Option[(Generator, Boolean)] = e match {
+    case GeneratorOuter(g) => Some((g, true))
+    case g: Generator => Some((g, false))
+    case _ => None
+  }
 }
 
 /**

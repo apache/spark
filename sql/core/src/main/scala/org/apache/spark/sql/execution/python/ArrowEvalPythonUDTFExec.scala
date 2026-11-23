@@ -50,7 +50,7 @@ case class ArrowEvalPythonUDTFExec(
     evalType: Int,
     outer: Boolean = false,
     generatedRowMarker: Option[Attribute] = None)
-  extends EvalPythonUDTFExec with PythonSQLMetrics {
+  extends EvalPythonUDTFExec with PythonPhaseMetrics {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone

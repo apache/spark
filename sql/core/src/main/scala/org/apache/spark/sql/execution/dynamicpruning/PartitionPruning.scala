@@ -58,6 +58,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
+    // If the key has a UDF that needs extraction, the "Extract UDFs" batch evaluates the UDF in a
+    // node of its own, between a DPP filter on the key and the scan, so the scan could not prune
+    // with the filter. The filter would only drop rows before the join, at the cost of evaluating
+    // the UDF once more on every row. A key that has such a UDF only through an alias keeps its
+    // filter: by default it stays above the projection that evaluates the UDF, and in a union it
+    // can still prune the partitions of a branch that has no such UDF.
+    if (needsUDFExtraction(Seq(a))) return None
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
       case (resExp, l: LogicalRelation) =>
@@ -113,8 +120,17 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     } else {
       None
     }
-    lazy val hasBenefit = pruningHasBenefit(
-      pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
+    // A standalone DPP subquery reads the filtering side again, apart from the join. A V2 scan
+    // with a row-selecting pushdown, such as a limit, may then return other rows, and the DPP
+    // filter would prune partitions that the join needs. So such a side may only reuse the
+    // join's broadcast, which reads it once. A side with a UDF that needs extraction may only
+    // reuse it too, as the standalone subquery would fail on the UDF.
+    lazy val hasBenefit = !filteringPlan.exists {
+      case r: DataSourceV2ScanRelation => !r.onlyRowWisePushdowns
+      case _ => false
+    } && !needsUDFExtraction(filteringKeys ++ filteringPlan.flatMap(_.expressions)) &&
+      pruningHasBenefit(pruningKey, partScan, filteringKeys.head, filteringPlan,
+        hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -129,6 +145,20 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // abort dynamic partition pruning
       pruningPlan
     }
+  }
+
+  /**
+   * Returns whether the expressions have a UDF that only the "Extract UDFs" batch, which runs
+   * after this rule, plans for evaluation: a scalar Python UDF, a Python UDTF or an external
+   * UDF. That batch does not rewrite the plan of a [[DynamicPruningSubquery]], so a standalone
+   * DPP subquery, which evaluates the filtering keys over the filtering plan, would fail on such
+   * a UDF.
+   */
+  private def needsUDFExtraction(exprs: Seq[Expression]): Boolean = {
+    exprs.exists(_.exists {
+      case _: PythonUDTF | _: ExternalUserDefinedFunction => true
+      case e => PythonUDF.isScalarPythonUDF(e)
+    })
   }
 
   /**
@@ -327,10 +357,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         var newLeft = left
         var newRight = right
 
-        // extract the left and right keys of the join condition
-        val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _, _) => (lkeys, rkeys)
-          case _ => (Nil, Nil)
+        // extract the left and right keys of the join condition, and the conjuncts they come
+        // from. Only those are used for pruning: `ExtractEquiJoinKeys` leaves an equality that
+        // may not be evaluated ahead of the rest of the condition, e.g. one that can fail after a
+        // throwable conjunct, out of the keys, and a pruning filter would evaluate it ahead too.
+        val (leftKeys, rightKeys, keyPredicates) = j match {
+          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, keyCondition, _, _, _) =>
+            (lkeys, rkeys, keyCondition.toSeq.flatMap(splitConjunctivePredicates))
+          case _ => (Nil, Nil, Nil)
         }
 
         // checks if two expressions are on opposite sides of the join
@@ -341,7 +375,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
-        splitConjunctivePredicates(condition).foreach {
+        keyPredicates.foreach {
           case EqualTo(a: Expression, b: Expression)
               if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&

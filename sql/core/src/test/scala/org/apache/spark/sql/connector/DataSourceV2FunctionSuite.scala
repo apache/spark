@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 object IntAverage extends AggregateFunction[(Int, Int), Int] {
@@ -116,6 +117,38 @@ object IntegralAverage extends UnboundFunction {
       |  iavg(bigint) -> bigint""".stripMargin
 }
 
+// `IntegralAverage`, but its bound function says it is not deterministic, as a sampling aggregate
+// may.
+object NondeterministicIntegralAverage extends UnboundFunction {
+  override def name(): String = "nondeterministic_iavg"
+
+  override def bind(inputType: StructType): BoundFunction = NondeterministicAggregate(
+    IntegralAverage.bind(inputType).asInstanceOf[AggregateFunction[java.io.Serializable, Any]])
+
+  override def description(): String = s"$name: iavg, but not deterministic"
+}
+
+// A case class, so that both analyzers of a dual run bind equal functions.
+case class NondeterministicAggregate(f: AggregateFunction[java.io.Serializable, Any])
+  extends AggregateFunction[java.io.Serializable, Any] {
+  override def name(): String = f.name()
+  override def canonicalName(): String = f.canonicalName()
+  override def inputTypes(): Array[DataType] = f.inputTypes()
+  override def resultType(): DataType = f.resultType()
+  override def isDeterministic(): Boolean = false
+
+  override def newAggregationState(): java.io.Serializable = f.newAggregationState()
+
+  override def update(state: java.io.Serializable, input: InternalRow): java.io.Serializable =
+    f.update(state, input)
+
+  override def merge(
+      leftState: java.io.Serializable,
+      rightState: java.io.Serializable): java.io.Serializable = f.merge(leftState, rightState)
+
+  override def produceResult(state: java.io.Serializable): Any = f.produceResult(state)
+}
+
 case class StrLen(impl: BoundFunction) extends UnboundFunction {
   override def name(): String = "strlen"
 
@@ -153,6 +186,7 @@ case class BoundConstantString(argTypes: Seq[DataType], result: String)
   override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString(result)
 }
 
+@DataSourceV2Test
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 

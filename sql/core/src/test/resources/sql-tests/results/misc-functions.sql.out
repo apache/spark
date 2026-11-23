@@ -450,3 +450,103 @@ SELECT xxh3_128(CAST(NULL AS BINARY))
 struct<xxh3_128(CAST(NULL AS BINARY)):string>
 -- !query output
 NULL
+
+
+-- !query
+SELECT farm_fingerprint('Spark')
+-- !query schema
+struct<farm_fingerprint(Spark):bigint>
+-- !query output
+-2743780590904673122
+
+
+-- !query
+SELECT farm_fingerprint(CAST('Spark' AS BINARY))
+-- !query schema
+struct<farm_fingerprint(CAST(Spark AS BINARY)):bigint>
+-- !query output
+-2743780590904673122
+
+
+-- !query
+SELECT farm_fingerprint('')
+-- !query schema
+struct<farm_fingerprint():bigint>
+-- !query output
+-7286425919675154353
+
+
+-- !query
+SELECT farm_fingerprint(concat(CAST(1 AS STRING), 'foo', CAST(true AS STRING)))
+-- !query schema
+struct<farm_fingerprint(concat(CAST(1 AS STRING), foo, CAST(true AS STRING))):bigint>
+-- !query output
+-1541654101129638711
+
+
+-- !query
+SELECT farm_fingerprint(CAST(NULL AS STRING))
+-- !query schema
+struct<farm_fingerprint(CAST(NULL AS STRING)):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT farm_fingerprint(CAST(NULL AS BINARY))
+-- !query schema
+struct<farm_fingerprint(CAST(NULL AS BINARY)):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT farm_fingerprint(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"farm_fingerprint(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "farm_fingerprint(1)"
+  } ]
+}
+
+
+-- !query
+SELECT farm_fingerprint(array(1, 2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"array(1, 2)\"",
+    "inputType" : "\"ARRAY<INT>\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"farm_fingerprint(array(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "farm_fingerprint(array(1, 2))"
+  } ]
+}

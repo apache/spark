@@ -49,6 +49,10 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. Within one request, matches are returned as
  *   {@link #lookupBatch} describes.</li>
+ *   <li>Within a task, Spark may serve a parameter row that it has already requested from its own
+ *   cache instead of sending it again, so a later change in the source may not be seen by that
+ *   task. A query turns the cache off with {@code spark.sql.join.externalLookup.cache.enabled} or
+ *   the hint option {@code cache_enabled=false}.</li>
  *   <li>Implementations should respond to thread interruption if their client supports it.</li>
  * </ul>
  *
@@ -67,15 +71,16 @@ public interface ExternalLookupReader extends Closeable {
    * Spark guarantees that {@code uniqueParameters} is non-null and holds between 1 and
    * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. When a selected
    * predicate is a range comparison whose parameter reads a stream column, each request holds
-   * exactly one parameter row. Field {@code i} of each row is the value for the {@code i}-th
-   * selected predicate, in Spark's internal representation: an integral or BOOLEAN value as its
-   * Java primitive; DECIMAL as a {@code Decimal} at the column's precision and scale; DATE as days
-   * since 1970-01-01 in the proleptic Gregorian calendar; TIMESTAMP as microseconds since
-   * 1970-01-01 00:00:00 UTC; TIMESTAMP_NTZ as microseconds since 1970-01-01 00:00:00 of the local
-   * date and time, with no time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared
-   * byte by byte. A conversion that loses precision, such as to milliseconds, can lose matches.
-   * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
-   * may be null at the top level, and a null one matches the rows whose column is null.
+   * exactly one parameter row. Field {@code i} of each row is the value for the predicate at the
+   * {@code i}-th position that {@link SupportsExternalLookup#selectLookupPredicates} returned, in
+   * Spark's internal representation: an integral or BOOLEAN value as its Java primitive; DECIMAL as
+   * a {@code Decimal} at the column's precision and scale; DATE as days since 1970-01-01 in the
+   * proleptic Gregorian calendar; TIMESTAMP as microseconds since 1970-01-01 00:00:00 UTC;
+   * TIMESTAMP_NTZ as microseconds since 1970-01-01 00:00:00 of the local date and time, with no
+   * time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion
+   * that loses precision, such as to milliseconds, can lose matches. No two rows are equal; a null
+   * {@code <=>} parameter equals a null. Only {@code <=>} parameters may be null at the top level,
+   * and a null one matches the rows whose column is null.
    * <p>
    * The cursor must be non-null. Each row's results must be complete: every stored row that
    * passes the filters this source reports as pushed and for which all selected predicates hold,
