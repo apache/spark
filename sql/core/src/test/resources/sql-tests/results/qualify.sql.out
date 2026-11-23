@@ -171,6 +171,249 @@ struct<a:int,b:bigint,rn:int>
 
 
 -- !query
+SELECT a AS k, SUM(b) AS a, ROW_NUMBER() OVER (ORDER BY SUM(b)) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY a = 3
+ORDER BY k
+-- !query schema
+struct<k:int,a:bigint,rn:int>
+-- !query output
+1	3	1
+2	3	2
+3	3	3
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) + 0 AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+3	3
+
+
+-- !query
+SELECT id, score * 10 AS rn, ROW_NUMBER() OVER (ORDER BY id) AS w
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query schema
+struct<id:int,rn:int,w:int>
+-- !query output
+3	100	3
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn, SUM(score) OVER () AS total
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query schema
+struct<id:int,rn:int,total:bigint>
+-- !query output
+3	3	60
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1 AND EXISTS (SELECT 1 FROM VALUES (1) AS u(k) WHERE u.k = rn)
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+3	3
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30), (2, 20), (3, 10) AS t(id, score)
+QUALIFY EXISTS (SELECT 1 FROM VALUES (1) AS u(k) WHERE u.k = rn)
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT a AS k, ROW_NUMBER() OVER (ORDER BY a) AS a
+FROM testData2
+GROUP BY a
+QUALIFY a = 2 AND EXISTS (SELECT 1 FROM VALUES (2) AS u(x) WHERE u.x = a)
+-- !query schema
+struct<k:int,a:int>
+-- !query output
+2	2
+
+
+-- !query
+SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS b
+FROM testData2
+GROUP BY a
+QUALIFY b = 1
+-- !query schema
+struct<a:int,total:bigint,b:int>
+-- !query output
+1	3	1
+
+
+-- !query
+SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS b
+FROM testData2
+GROUP BY a
+HAVING SUM(b) > 0
+QUALIFY b = 1
+-- !query schema
+struct<a:int,total:bigint,b:int>
+-- !query output
+1	3	1
+
+
+-- !query
+SELECT SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY SUM(b)) AS b
+FROM testData2
+QUALIFY b = 1
+-- !query schema
+struct<total:bigint,b:int>
+-- !query output
+9	1
+
+
+-- !query
+SELECT id, FIRST_VALUE(name) OVER (ORDER BY id) AS user
+FROM VALUES (1, 'alice'), (2, 'bob') AS t(id, name)
+QUALIFY user = 'alice'
+ORDER BY id
+-- !query schema
+struct<id:int,user:string>
+-- !query output
+1	alice
+2	alice
+
+
+-- !query
+SELECT id, FIRST_VALUE(name) OVER (ORDER BY id) AS user
+FROM VALUES (1, 'alice', 'x'), (2, 'bob', 'y') AS t(id, name, user)
+QUALIFY user = 'y'
+-- !query schema
+struct<id:int,user:string>
+-- !query output
+2	alice
+
+
+-- !query
+SELECT score AS rn, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 1), (2, 20), (3, 10) AS t(id, score)
+QUALIFY rn = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`rn`, `rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 128,
+    "stopIndex" : 129,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SELECT score AS rn, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query schema
+struct<rn:int,rn:int>
+-- !query output
+10	3
+
+
+-- !query
+SELECT a, SUM(b) AS rn, ROW_NUMBER() OVER (ORDER BY a) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY rn = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`rn`, `rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 97,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SELECT t1.id, ROW_NUMBER() OVER (ORDER BY t1.id) AS rn
+FROM VALUES (1, 0) AS t1(id, rn) JOIN VALUES (1, 5) AS t2(id, rn) ON t1.id = t2.id
+QUALIFY rn = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`t1`.`rn`, `t2`.`rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 147,
+    "stopIndex" : 148,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.qualifyPreferSelectAlias=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.qualifyPreferSelectAlias	true
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+ORDER BY id
+-- !query schema
+struct<id:int,rn:int>
+-- !query output
+1	1
+
+
+-- !query
+RESET spark.sql.legacy.qualifyPreferSelectAlias
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT id, rn, RANK() OVER (ORDER BY id) AS rank
 FROM (
   SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn

@@ -249,6 +249,335 @@ Sort [a#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT a AS k, SUM(b) AS a, ROW_NUMBER() OVER (ORDER BY SUM(b)) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY a = 3
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (a#xL = cast(3 as bigint))
+   +- Project [k#x, a#xL, rn#x]
+      +- Project [k#x, a#xL, _w0#xL, rn#x, rn#x]
+         +- Window [row_number() windowspecdefinition(_w0#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [_w0#xL ASC NULLS FIRST]
+            +- Aggregate [a#x], [a#x AS k#x, sum(b#x) AS a#xL, sum(b#x) AS _w0#xL]
+               +- SubqueryAlias testdata2
+                  +- View (`testData2`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias testData2
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) + 0 AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query analysis
+Project [id#x, rn#x]
++- Filter (rn#x = 1)
+   +- Project [id#x, rn#x, rn#x]
+      +- Project [id#x, score#x, _we0#x, (_we0#x + 0) AS rn#x, rn#x]
+         +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _we0#x], [score#x DESC NULLS LAST]
+            +- Project [id#x, score#x, rn#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+SELECT id, score * 10 AS rn, ROW_NUMBER() OVER (ORDER BY id) AS w
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query analysis
+Project [id#x, rn#x, w#x]
++- Filter (rn#x = 1)
+   +- Project [id#x, rn#x, w#x, rn#x]
+      +- Project [id#x, rn#x, w#x, w#x, rn#x]
+         +- Window [row_number() windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS w#x], [id#x ASC NULLS FIRST]
+            +- Project [id#x, (score#x * 10) AS rn#x, rn#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn, SUM(score) OVER () AS total
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query analysis
+Project [id#x, rn#x, total#xL]
++- Filter (rn#x = 1)
+   +- Project [id#x, rn#x, total#xL, rn#x]
+      +- Project [id#x, score#x, rn#x, total#xL, rn#x, total#xL, rn#x]
+         +- Window [sum(score#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS total#xL]
+            +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [score#x DESC NULLS LAST]
+               +- Project [id#x, score#x, rn#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1 AND EXISTS (SELECT 1 FROM VALUES (1) AS u(k) WHERE u.k = rn)
+-- !query analysis
+Project [id#x, rn#x]
++- Filter ((rn#x = 1) AND exists#x [rn#x])
+   :  +- Project [1 AS 1#x]
+   :     +- Filter (k#x = outer(rn#x))
+   :        +- SubqueryAlias u
+   :           +- LocalRelation [k#x]
+   +- Project [id#x, rn#x, rn#x]
+      +- Project [id#x, score#x, rn#x, rn#x, rn#x]
+         +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [score#x DESC NULLS LAST]
+            +- Project [id#x, score#x, rn#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30), (2, 20), (3, 10) AS t(id, score)
+QUALIFY EXISTS (SELECT 1 FROM VALUES (1) AS u(k) WHERE u.k = rn)
+-- !query analysis
+Filter exists#x [rn#x]
+:  +- Project [1 AS 1#x]
+:     +- Filter (k#x = outer(rn#x))
+:        +- SubqueryAlias u
+:           +- LocalRelation [k#x]
++- Project [id#x, rn#x]
+   +- Project [id#x, score#x, rn#x, rn#x]
+      +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [score#x DESC NULLS LAST]
+         +- Project [id#x, score#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, score#x]
+
+
+-- !query
+SELECT a AS k, ROW_NUMBER() OVER (ORDER BY a) AS a
+FROM testData2
+GROUP BY a
+QUALIFY a = 2 AND EXISTS (SELECT 1 FROM VALUES (2) AS u(x) WHERE u.x = a)
+-- !query analysis
+Filter ((k#x = 2) AND exists#x [k#x])
+:  +- Project [1 AS 1#x]
+:     +- Filter (x#x = outer(k#x))
+:        +- SubqueryAlias u
+:           +- LocalRelation [x#x]
++- Project [k#x, a#x]
+   +- Project [k#x, a#x, a#x, a#x]
+      +- Window [row_number() windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS a#x], [a#x ASC NULLS FIRST]
+         +- Aggregate [a#x], [a#x AS k#x, a#x]
+            +- SubqueryAlias testdata2
+               +- View (`testData2`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias testData2
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS b
+FROM testData2
+GROUP BY a
+QUALIFY b = 1
+-- !query analysis
+Filter (b#x = 1)
++- Project [a#x, total#xL, b#x]
+   +- Project [a#x, total#xL, b#x, b#x]
+      +- Window [row_number() windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS b#x], [a#x ASC NULLS FIRST]
+         +- Aggregate [a#x], [a#x, sum(b#x) AS total#xL]
+            +- SubqueryAlias testdata2
+               +- View (`testData2`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias testData2
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS b
+FROM testData2
+GROUP BY a
+HAVING SUM(b) > 0
+QUALIFY b = 1
+-- !query analysis
+Filter (b#x = 1)
++- Project [a#x, total#xL, b#x]
+   +- Project [a#x, total#xL, b#x, b#x]
+      +- Window [row_number() windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS b#x], [a#x ASC NULLS FIRST]
+         +- Filter (total#xL > cast(0 as bigint))
+            +- Aggregate [a#x], [a#x, sum(b#x) AS total#xL]
+               +- SubqueryAlias testdata2
+                  +- View (`testData2`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias testData2
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY SUM(b)) AS b
+FROM testData2
+QUALIFY b = 1
+-- !query analysis
+Filter (b#x = 1)
++- Project [total#xL, b#x]
+   +- Project [total#xL, _w0#xL, b#x, b#x]
+      +- Window [row_number() windowspecdefinition(_w0#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS b#x], [_w0#xL ASC NULLS FIRST]
+         +- Aggregate [sum(b#x) AS total#xL, sum(b#x) AS _w0#xL]
+            +- SubqueryAlias testdata2
+               +- View (`testData2`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias testData2
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT id, FIRST_VALUE(name) OVER (ORDER BY id) AS user
+FROM VALUES (1, 'alice'), (2, 'bob') AS t(id, name)
+QUALIFY user = 'alice'
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Filter (user#x = alice)
+   +- Project [id#x, user#x]
+      +- Project [id#x, name#x, user#x, user#x]
+         +- Window [first_value(name#x, false) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS user#x], [id#x ASC NULLS FIRST]
+            +- Project [id#x, name#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, name#x]
+
+
+-- !query
+SELECT id, FIRST_VALUE(name) OVER (ORDER BY id) AS user
+FROM VALUES (1, 'alice', 'x'), (2, 'bob', 'y') AS t(id, name, user)
+QUALIFY user = 'y'
+-- !query analysis
+Project [id#x, user#x]
++- Filter (user#x = y)
+   +- Project [id#x, user#x, user#x]
+      +- Project [id#x, name#x, user#x, user#x, user#x]
+         +- Window [first_value(name#x, false) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS user#x], [id#x ASC NULLS FIRST]
+            +- Project [id#x, name#x, user#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, name#x, user#x]
+
+
+-- !query
+SELECT score AS rn, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 1), (2, 20), (3, 10) AS t(id, score)
+QUALIFY rn = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`rn`, `rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 128,
+    "stopIndex" : 129,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SELECT score AS rn, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+-- !query analysis
+Project [rn#x, rn#x]
++- Filter (rn#x = 1)
+   +- Project [rn#x, rn#x, rn#x]
+      +- Project [rn#x, score#x, rn#x, rn#x, rn#x]
+         +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [score#x DESC NULLS LAST]
+            +- Project [score#x AS rn#x, score#x, rn#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+SELECT a, SUM(b) AS rn, ROW_NUMBER() OVER (ORDER BY a) AS rn
+FROM testData2
+GROUP BY a
+QUALIFY rn = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`rn`, `rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 97,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SELECT t1.id, ROW_NUMBER() OVER (ORDER BY t1.id) AS rn
+FROM VALUES (1, 0) AS t1(id, rn) JOIN VALUES (1, 5) AS t2(id, rn) ON t1.id = t2.id
+QUALIFY rn = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`rn`",
+    "referenceNames" : "[`t1`.`rn`, `t2`.`rn`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 147,
+    "stopIndex" : 148,
+    "fragment" : "rn"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.qualifyPreferSelectAlias=true
+-- !query analysis
+SetCommand (spark.sql.legacy.qualifyPreferSelectAlias,Some(true))
+
+
+-- !query
+SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn
+FROM VALUES (1, 30, 0), (2, 20, 0), (3, 10, 1) AS t(id, score, rn)
+QUALIFY rn = 1
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Filter (rn#x = 1)
+   +- Project [id#x, rn#x]
+      +- Project [id#x, score#x, rn#x, rn#x]
+         +- Window [row_number() windowspecdefinition(score#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [score#x DESC NULLS LAST]
+            +- Project [id#x, score#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, score#x, rn#x]
+
+
+-- !query
+RESET spark.sql.legacy.qualifyPreferSelectAlias
+-- !query analysis
+ResetCommand spark.sql.legacy.qualifyPreferSelectAlias
+
+
+-- !query
 SELECT id, rn, RANK() OVER (ORDER BY id) AS rank
 FROM (
   SELECT id, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn

@@ -4780,6 +4780,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_QUALIFY_PREFER_SELECT_ALIAS =
+    buildConf("spark.sql.legacy.qualifyPreferSelectAlias")
+      .internal()
+      .doc("When true (legacy behavior), a name in a QUALIFY condition resolves to an alias of a " +
+        "SELECT list with window functions, such as a window function alias, even when an input " +
+        "column of the query block has the same name. When false (the default), the input " +
+        "column takes precedence, matching the documented name resolution rules of QUALIFY.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION =
     buildConf("spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction")
       .internal()

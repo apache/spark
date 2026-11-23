@@ -4332,27 +4332,41 @@ class Analyzer(
         val resolved = resolveExpressionByPlanChildren(cond, agg)
         val subqueryResolved = resolveConditionSubqueries(resolved, agg.child)
         val extraAggExprs = mutable.ArrayBuffer.empty[NamedExpression]
-        val newCond = subqueryResolved.transform {
-          case grouping if grouping.resolved &&
-            agg.groupingExpressions.exists(grouping.semanticEquals) =>
-            val allAggExprs = agg.aggregateExpressions ++ extraAggExprs.toSeq
-            val index = allAggExprs.indexWhere {
-              case Alias(child, _) => child.semanticEquals(grouping)
-              case o => o.semanticEquals(grouping)
+        def isGrouping(e: Expression): Boolean =
+          e.resolved && agg.groupingExpressions.exists(e.semanticEquals)
+        // The output of the Aggregate that carries a grouping expression, added if there is none.
+        def groupingOutput(grouping: Expression): Attribute = {
+          val allAggExprs = agg.aggregateExpressions ++ extraAggExprs.toSeq
+          val index = allAggExprs.indexWhere {
+            case Alias(child, _) => child.semanticEquals(grouping)
+            case o => o.semanticEquals(grouping)
+          }
+          if (index >= 0) {
+            allAggExprs(index).toAttribute
+          } else {
+            grouping match {
+              case ne: NamedExpression =>
+                extraAggExprs += ne
+                ne.toAttribute
+              case o: Expression =>
+                val alias = Alias(o, o.sql)()
+                extraAggExprs += alias
+                alias.toAttribute
             }
-            if (index >= 0) {
-              allAggExprs(index).toAttribute
-            } else {
-              grouping match {
-                case ne: NamedExpression =>
-                  extraAggExprs += ne
-                  ne.toAttribute
-                case o: Expression =>
-                  val alias = Alias(o, o.sql)()
-                  extraAggExprs += alias
-                  alias.toAttribute
-              }
-            }
+          }
+        }
+        // A correlated reference to a grouping column inside a subquery of the condition must
+        // point at the same output as the column outside the subquery, which can rename it, as
+        // UpdateOuterReferences does for a HAVING condition.
+        val outerRefsUpdated = subqueryResolved.transformUp {
+          case s: SubqueryExpression if s.children.nonEmpty =>
+            s.withNewPlan(s.plan.resolveExpressions {
+              case OuterReference(e) if isGrouping(e) => OuterReference(groupingOutput(e))
+            })
+        }
+        val newCond = outerRefsUpdated.transform {
+          case grouping if isGrouping(grouping) =>
+            groupingOutput(grouping)
           case a: Attribute if a.resolved && !candidateAttrs.contains(a) =>
             a.failAnalysis(
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -4364,18 +4378,18 @@ class Analyzer(
         (newCond, newAgg)
 
       case p: Project =>
-        // First resolve against this Project's children output, leaving out the attributes of the
-        // window functions that ExtractWindowExpressions moved below it. They are SELECT aliases,
-        // and an input column with the same name takes precedence over them. A name that only
-        // matches such an alias is resolved against the SELECT list afterwards.
-        val windowAttrs = windowOutputs(p.child)
-        val resolved = if (windowAttrs.isEmpty) {
-          resolveExpressionByPlanChildren(cond, p)
+        // Resolve the condition and its subqueries against this Project's children output, with
+        // the aliases that the SELECT list defines left out where an input column of the query
+        // block has the same name, see `inputFirstScope`. The recursion then binds such a name to
+        // the input column. A name that only a SELECT alias has is resolved against the SELECT
+        // list afterwards.
+        val scope = if (conf.getConf(SQLConf.LEGACY_QUALIFY_PREFER_SELECT_ALIAS)) {
+          p.child
         } else {
-          val inputs = Project(p.child.output.filterNot(windowAttrs.contains), p.child)
-          resolveExpressionByPlanChildren(cond, p.copy(child = inputs))
+          inputFirstScope(p.child)
         }
-        val subqueryResolved = resolveConditionSubqueries(resolved, p.child)
+        val resolved = resolveExpressionByPlanChildren(cond, p.copy(child = scope))
+        val subqueryResolved = resolveConditionSubqueries(resolved, scope)
         // Recurse into child to resolve any remaining unresolved references and
         // propagate missing attributes through intermediate nodes.
         val (newCond, newChild) = resolveQualifyCondition(
@@ -4404,14 +4418,69 @@ class Analyzer(
     }
 
     /**
-     * The attributes defined by the Window nodes of this query block below `plan`, which
-     * `ExtractWindowExpressions` creates for the window functions of the SELECT list. They are
-     * above the Aggregate of the block, if any, and below the Projects of the SELECT list.
+     * `plan`, the child of a Project of a SELECT list with window functions, or a plan to resolve
+     * names against in its place, in which the input columns of the query block replace the
+     * same-named aliases that the SELECT list defines.
+     *
+     * `ExtractWindowExpressions` turns such a SELECT list into Projects and Windows over the input
+     * of the query block, which is the FROM clause, or its Aggregate, under the HAVING Filter if
+     * any. The aliases the SELECT list defines are the outputs of the Windows and the aliases the
+     * Projects compute. One of them is left out if a usable input column has its name: a column
+     * of the input, or with an Aggregate, a grouping column, since the other input columns can not
+     * be referenced. It is kept if the Aggregate also computes an alias of that name, so that the
+     * reference stays ambiguous as before. The input column takes the alias's place, so that the
+     * name binds to it at once, also in a subquery of the condition, instead of falling back to a
+     * parameterless function such as `user`. The recursion of `resolveQualifyCondition` then adds
+     * it to the output of the nodes between the input and this plan.
+     *
+     * TODO: an alias that the Aggregate computes still takes precedence over a same-named grouping
+     * column.
      */
-    private def windowOutputs(plan: LogicalPlan): AttributeSet = plan match {
-      case w: Window => w.windowOutputSet ++ windowOutputs(w.child)
-      case p: Project => windowOutputs(p.child)
-      case _ => AttributeSet.empty
+    private def inputFirstScope(plan: LogicalPlan): LogicalPlan = {
+      val defined = mutable.ArrayBuffer.empty[Attribute]
+      var hasWindow = false
+      def selectInput(node: LogicalPlan): LogicalPlan = node match {
+        case w: Window =>
+          hasWindow = true
+          defined ++= w.windowOutputSet
+          selectInput(w.child)
+        case p: Project if !hasWindow || p.child.isInstanceOf[Window] ||
+            p.child.isInstanceOf[Project] =>
+          defined ++= p.projectList.collect { case a: Alias => a.toAttribute }
+          selectInput(p.child)
+        case p: Project =>
+          // The Project below the Windows, over the input of the query block
+          defined ++= p.projectList.collect { case a: Alias => a.toAttribute }
+          p.child
+        case other => other
+      }
+      val input = selectInput(plan) match {
+        case Filter(_, agg: Aggregate) => agg
+        case other => other
+      }
+      if (!hasWindow) {
+        plan
+      } else {
+        val resolver = conf.resolver
+        val (inputColumns, aggregateAliasNames) = input match {
+          case agg: Aggregate =>
+            (agg.groupingExpressions.collect { case a: Attribute => a },
+              agg.aggregateExpressions.collect { case a: Alias => a.name })
+          case other => (other.output, Nil)
+        }
+        val hidden = AttributeSet(defined.filter { a =>
+          inputColumns.exists(c => resolver(c.name, a.name)) &&
+            !aggregateAliasNames.exists(resolver(_, a.name))
+        })
+        if (hidden.isEmpty) {
+          plan
+        } else {
+          val inputs = inputColumns.filter(c => hidden.exists(a => resolver(c.name, a.name)))
+          // Only used to resolve names against its output
+          LocalRelation(plan.output.filterNot(hidden.contains) ++
+            inputs.filterNot(plan.outputSet.contains))
+        }
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
