@@ -382,7 +382,7 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
           tolerance <- Seq(false, true)
           exact <- Seq(false, true)
         } withClue(s"$direction, $joinType, tolerance $tolerance, exact matches $exact: ") {
-          def join() = usingJoin(
+          def join(): classic.DataFrame = usingJoin(
             trades, quotes, Seq("sym", "ex"), joinType,
             if (tolerance) lit(1) else null, exact, direction)
           // The Column condition path keeps the key of both sides.
