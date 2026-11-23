@@ -83,15 +83,31 @@ Project [id#x, name#x]
 
 
 -- !query
-SELECT id ?, name /* comment */ ? FROM people
+SELECT id ?, name FROM people
 -- !query analysis
-Project [id#x, null AS name#x]
-+- SubqueryAlias people
-   +- View (`people`, [id#x, addr#x])
-      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
-         +- Project [id#x, addr#x]
-            +- SubqueryAlias t
-               +- LocalRelation [id#x, addr#x]
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT id, name /* comment */ ? FROM people
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -3076,10 +3092,13 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT :x ?, :x /* comment */ ?' USING 5 AS x
+EXECUTE IMMEDIATE 'SELECT :x ?' USING 5 AS x
 -- !query analysis
-Project [5 AS 5#x, 5 AS 5#x]
-+- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
 
 
 -- !query
@@ -3282,9 +3301,99 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
+-- !query analysis
+Project [trim(xabcx, Some(x)) AS TRIM(BOTH x FROM xabcx)#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
+-- !query analysis
+Project [INTERVAL '1' DAY AS INTERVAL '1' DAY#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b'
+-- !query analysis
+Project [CASE WHEN (x = x) THEN a ELSE b END AS CASE WHEN (x = x) THEN a ELSE b END#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE addr.city LIKE? ORDER BY id' USING '%F'
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter addr#x.city LIKE %F
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
 -- !query analysis
 Aggregate [first(distinct 5, false) AS f#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a'
+-- !query analysis
+Distinct
++- Project [a AS a#x]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a'
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- Project [a AS a#x]
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F'
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter (between(addr#x.city, A, Z) AND addr#x.city LIKE %F)
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT `distinct`?, `select`?, addr.from? FROM people
+-- !query analysis
+Project [null AS distinct#x, null AS select#x, null AS from#x]
 +- SubqueryAlias people
    +- View (`people`, [id#x, addr#x])
       +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
@@ -3315,15 +3424,13 @@ GlobalLimit 1
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
-  "sqlState" : "07001",
-  "messageParameters" : {
-    "numMarkers" : "0",
-    "numValues" : "1"
-  }
-}
+Aggregate [null AS missing#x, first(distinct 5, false) AS f#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
 
 
 -- !query
@@ -3341,15 +3448,13 @@ Aggregate [first(distinct 5, false) AS f#x, 6 AS g#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
-  "sqlState" : "07001",
-  "messageParameters" : {
-    "numMarkers" : "1",
-    "numValues" : "2"
-  }
-}
+Aggregate [null AS missing#x, first(distinct 5, false) AS f#x, 6 AS g#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
 
 
 -- !query

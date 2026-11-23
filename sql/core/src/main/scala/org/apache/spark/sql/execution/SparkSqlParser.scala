@@ -147,33 +147,29 @@ class SparkSqlParser extends AbstractSqlParser {
     val variableSubstituted = substitutor.substitute(command)
 
     // Step 2: Apply parameter substitution if a parameter context is provided.
-    val (paramSubstituted, positionMapper, hasParameters, withOptionalReferences) =
-      parameterContext match {
-        case Some(context) =>
-          // Check if the context actually contains parameters
-          val contextHasParams = context match {
-            case NamedParameterContext(params) => params.nonEmpty
-            case PositionalParameterContext(params) => params.nonEmpty
-            case HybridParameterContext(args, _) => args.nonEmpty
-          }
-          if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-            // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-            // Only set hasParameters if the context actually contains parameters.
-            (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams,
-              false)
-          } else {
-            // Modern mode: Perform parameter substitution during parsing.
-            val substitution =
-              ParameterHandler.substituteParameters(variableSubstituted, context)
-            // Only set hasParameters if the context actually contains parameters. The substituted
-            // text is parsed with the optional references that the substitution parsed it with.
-            (substitution.sqlText, substitution.positionMapper, contextHasParams,
-              substitution.parsedWithOptionalReferences)
-          }
-        case None =>
-          // No parameter context provided; skip parameter substitution.
-          (variableSubstituted, PositionMapper.identity(variableSubstituted), false, false)
-      }
+    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
+      case Some(context) =>
+        // Check if the context actually contains parameters
+        val contextHasParams = context match {
+          case NamedParameterContext(params) => params.nonEmpty
+          case PositionalParameterContext(params) => params.nonEmpty
+          case HybridParameterContext(args, _) => args.nonEmpty
+        }
+        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
+          // Only set hasParameters if the context actually contains parameters.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams)
+        } else {
+          // Modern mode: Perform parameter substitution during parsing.
+          val substitution =
+            ParameterHandler.substituteParameters(variableSubstituted, context)
+          // Only set hasParameters if the context actually contains parameters.
+          (substitution.sqlText, substitution.positionMapper, contextHasParams)
+        }
+      case None =>
+        // No parameter context provided; skip parameter substitution.
+        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
+    }
 
     // Step 3: Set up the origin with SQL text and position mapper to enable
     // parameter-aware error reporting.
@@ -195,7 +191,7 @@ class SparkSqlParser extends AbstractSqlParser {
     // Parse with the origin containing position mapper.
     // CurrentOrigin.withOrigin automatically restores the previous origin.
     CurrentOrigin.withOrigin(originToUse) {
-      super.parse(paramSubstituted, withOptionalReferences)(toResult)
+      super.parse(paramSubstituted)(toResult)
     }
   }
 }

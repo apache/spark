@@ -58,12 +58,35 @@ struct<id:int,name:void>
 
 
 -- !query
-SELECT id ?, name /* comment */ ? FROM people
+SELECT id ?, name FROM people
 -- !query schema
-struct<id:int,name:void>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT id, name /* comment */ ? FROM people
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -2652,11 +2675,15 @@ struct<id:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT :x ?, :x /* comment */ ?' USING 5 AS x
+EXECUTE IMMEDIATE 'SELECT :x ?' USING 5 AS x
 -- !query schema
-struct<5:int,5:int>
+struct<>
 -- !query output
-5	5
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
 
 
 -- !query
@@ -2832,11 +2859,78 @@ struct<id:int>
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
+-- !query schema
+struct<TRIM(BOTH x FROM xabcx):string>
+-- !query output
+abc
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
+-- !query schema
+struct<INTERVAL '1' DAY:interval day>
+-- !query output
+1 00:00:00.000000000
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b'
+-- !query schema
+struct<CASE WHEN (x = x) THEN a ELSE b END:string>
+-- !query output
+a
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE addr.city LIKE? ORDER BY id' USING '%F'
+-- !query schema
+struct<id:int>
+-- !query output
+1
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
 -- !query schema
 struct<f:int>
 -- !query output
 5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a'
+-- !query schema
+struct<a:string>
+-- !query output
+a
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a'
+-- !query schema
+struct<a:string>
+-- !query output
+a
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F'
+-- !query schema
+struct<id:int>
+-- !query output
+1
+
+
+-- !query
+SELECT `distinct`?, `select`?, addr.from? FROM people
+-- !query schema
+struct<distinct:void,select:void,from:void>
+-- !query output
+NULL	NULL	NULL
+NULL	NULL	NULL
 
 
 -- !query
@@ -2852,17 +2946,9 @@ NULL	2
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
 -- !query schema
-struct<>
+struct<missing:void,f:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
-  "sqlState" : "07001",
-  "messageParameters" : {
-    "numMarkers" : "0",
-    "numValues" : "1"
-  }
-}
+NULL	5
 
 
 -- !query
@@ -2876,17 +2962,9 @@ struct<f:int,g:int>
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
 -- !query schema
-struct<>
+struct<missing:void,f:int,g:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
-  "sqlState" : "07001",
-  "messageParameters" : {
-    "numMarkers" : "1",
-    "numValues" : "2"
-  }
-}
+NULL	5	6
 
 
 -- !query

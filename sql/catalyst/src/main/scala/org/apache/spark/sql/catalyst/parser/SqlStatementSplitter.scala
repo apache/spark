@@ -406,10 +406,11 @@ object SqlStatementSplitter {
     regionTokens.fill()
     val parser = new SqlBaseParser(regionTokens)
     configureSplitterParser(parser, conf)
+    AbstractParser.markOptionalReferenceMarkers(parser, regionTokens)
 
     // Two-stage parse: SLL first (fast), then LL on failure. Matches the
     // normal parser's `AbstractParser.executeWithTwoStageStrategy`.
-    def parseRegion(): ParseOutcome = try {
+    try {
       parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
       parser.compoundOrSingleStatement()
       ParsedOk
@@ -431,14 +432,6 @@ object SqlStatementSplitter {
           case _: StackOverflowError => FailedNonEof
         }
       case _: StackOverflowError => FailedNonEof
-    }
-
-    parseRegion() match {
-      case ParsedOk => ParsedOk
-      // Like the normal parser, parse a region that is not a statement again with optional
-      // references (`x?`) if they are enabled.
-      case _ if AbstractParser.restartWithOptionalReferences(parser, regionTokens) => parseRegion()
-      case failed => failed
     }
   }
 

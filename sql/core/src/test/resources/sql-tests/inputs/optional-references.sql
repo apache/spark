@@ -1,5 +1,5 @@
--- Tests for optional column, field, variable, and named parameter references: a `?` after an
--- identifier makes that identifier optional, so that a reference that cannot be resolved
+-- Tests for optional column, field, variable, and named parameter references: a `?` directly
+-- after an identifier makes that identifier optional, so that a reference that cannot be resolved
 -- evaluates to a static NULL of type VOID instead of raising a not-found error.
 
 --SET spark.sql.optionalReferences.enabled=true
@@ -25,8 +25,10 @@ SELECT id?, name? FROM people;
 SELECT typeof(id?), typeof(name?) FROM people LIMIT 1;
 SELECT * FROM (SELECT id?, name? FROM people);
 
--- Whitespace and comments between the identifier and `?` are insignificant.
-SELECT id ?, name /* comment */ ? FROM people;
+-- The `?` directly follows the name. A `?` after whitespace or a comment is a positional
+-- parameter marker, as it is without optional references.
+SELECT id ?, name FROM people;
+SELECT id, name /* comment */ ? FROM people;
 
 -- Optional references in expressions, predicates, grouping, ordering, and function arguments.
 SELECT id, bonus? + 1 AS b FROM people;
@@ -491,7 +493,7 @@ EXECUTE IMMEDIATE 'SELECT :x?, :y?' USING 1 AS x;
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE :city? IS NULL OR addr.city = :city? ORDER BY id';
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE :city? IS NULL OR addr.city = :city? ORDER BY id'
   USING 'SF' AS city;
-EXECUTE IMMEDIATE 'SELECT :x ?, :x /* comment */ ?' USING 5 AS x;
+EXECUTE IMMEDIATE 'SELECT :x ?' USING 5 AS x;
 EXECUTE IMMEDIATE 'SELECT :x?::INT' USING '5' AS x;
 EXECUTE IMMEDIATE 'SELECT :x?AS v, :y?IS NULL AS w' USING 5 AS x;
 EXECUTE IMMEDIATE 'SELECT :y?, :y';
@@ -513,20 +515,35 @@ EXECUTE IMMEDIATE 'SELECT NOT ?, CASE ? WHEN 1 THEN ? ELSE ? END' USING true, 1,
 EXECUTE IMMEDIATE
   'SELECT id FROM people WHERE id BETWEEN ? AND ? AND addr.city LIKE ? ORDER BY id'
   USING 1, 2, '%F';
--- A statement that is valid without optional references keeps its meaning: the `?` is a
--- parameter marker, although `distinct?` is also a reference to a column named `distinct`.
+-- A `?` directly after a keyword is a positional parameter marker where a reference to a column
+-- with the name of the keyword cannot be.
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx';
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1';
+EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b';
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE addr.city LIKE? ORDER BY id' USING '%F';
+-- It is also one after a keyword that a positional parameter marker can follow where such a
+-- reference could also be, such as `distinct?` in `SELECT DISTINCT?`, so that a statement that
+-- is valid without optional references keeps its meaning.
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5;
+EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a';
+EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a';
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F';
+-- A column with the name of such a keyword is quoted to be optional, and the name of a field is
+-- not such a keyword.
+SELECT `distinct`?, `select`?, addr.from? FROM people;
 -- Parameter markers in a statement with optional references.
 EXECUTE IMMEDIATE
   'SELECT missing?, id FROM people WHERE id IN (SELECT ?) AND id BETWEEN ? AND ? LIMIT ?'
   USING 2, 1, 2, 1;
--- In a statement that is not valid without optional references, a `?` after a keyword marks a
--- reference to a column with the name of the keyword where the syntax allows a reference, so
--- `distinct?` is NULL here. A value that no marker takes is an error, so that the following
--- markers do not take the values of the preceding ones silently.
+-- A `?` after whitespace stays a positional parameter marker in a statement with optional
+-- references.
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5;
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
+-- A value that no marker takes is an error in a statement with optional references, so that the
+-- markers do not take the values that were meant for a `?` that is an optional reference.
 EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5;
 EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2;
 EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2;

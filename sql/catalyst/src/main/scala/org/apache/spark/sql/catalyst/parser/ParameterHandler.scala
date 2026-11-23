@@ -77,8 +77,7 @@ object ParameterHandler {
   }
 
   private def noSubstitution(sqlText: String): ParameterSubstitution =
-    ParameterSubstitution(sqlText, 0, PositionMapper.identity(sqlText),
-      parsedWithOptionalReferences = false)
+    ParameterSubstitution(sqlText, 0, PositionMapper.identity(sqlText))
 
   /**
    * Converts a value to an Expression, handling different input types safely.
@@ -151,8 +150,8 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param context The parameter context (named or positional)
-   * @return The substituted SQL, with the position mapper for error reporting and the optional
-   *   references with which the parser has to parse it, see [[ParameterSubstitution]]
+   * @return The substituted SQL, with the position mapper for error reporting, see
+   *   [[ParameterSubstitution]]
    * @throws IllegalArgumentException if context is null
    */
   def substituteParameters(
