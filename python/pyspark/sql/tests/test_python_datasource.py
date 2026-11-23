@@ -1690,6 +1690,7 @@ class BasePythonDataSourceTestsMixin:
     def test_write_requirements_use_writer_inputs(self):
         # The planning writer gets the write's schema, options and overwrite flag: it clusters
         # by the column named in an option, and only when all three are what the write passed.
+        # The option is set and read with different casing, as option keys are case-insensitive.
         with tempfile.TemporaryDirectory(prefix="write_req_inputs") as d:
 
             class InputsWriter(DataSourceWriter):
@@ -1723,7 +1724,7 @@ class BasePythonDataSourceTestsMixin:
             self.spark.dataSource.register(InputsDataSource)
             with self.sql_conf(self._write_conf()):
                 writer = self._write_df().write.format("write_req_inputs")
-                writer.option("cluster_by", "key").mode("overwrite").save()
+                writer.option("Cluster_By", "key").mode("overwrite").save()
             tasks = self._read_tasks(d)
             for rows in tasks:
                 self.assertEqual(len({key for key, _ in rows}), 1)
