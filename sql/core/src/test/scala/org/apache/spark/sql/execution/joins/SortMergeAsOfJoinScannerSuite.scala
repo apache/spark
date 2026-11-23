@@ -182,7 +182,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     assert(compiled == Seq((false, false), (false, false), (true, true)))
   }
 
-  test("cursor scan evaluates the as-of condition twice per left row") {
+  test("cursor scan evaluates the right as-of key twice per left row") {
     val leftKey = AttributeReference("leftKey", IntegerType)()
     val rightKey = AttributeReference("rightKey", IntegerType)()
     val leftValues = 5 to 95 by 10
@@ -202,7 +202,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         val (cursorKeys, evaluations, cursorTasks) = runScan(
           leftValues, rightValues, leftKey, rightKey, condition, direction, useCursorScan = true)
         assert(cursorKeys == expected)
-        assert(evaluations == 20, s"evaluated the as-of condition $evaluations times")
+        assert(evaluations == 20, s"evaluated the right as-of key $evaluations times")
         assert(cursorTasks == 1)
       }
     }
@@ -313,7 +313,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         s"$direction $condition")
     }
 
-    // The limits that a DATE or TIMESTAMP key with an interval tolerance gets.
+    // The limits that a DATE or TIMESTAMP key gets from an interval tolerance, or that a DATE
+    // key gets from a whole number of days.
     Seq(
       DateType -> ((key: Expression) => DateAdd(key, Literal(-2))),
       DateType -> ((key: Expression) => DateSub(key, Literal(2))),
@@ -522,7 +523,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
 
   /**
    * Runs one scan with no equi-keys in a task. Returns the right key that each left row matched,
-   * how many times the scan evaluated the as-of condition, and the cursor scan task count.
+   * how many times the scan evaluated the right as-of key, and the cursor scan task count.
    */
   private def runScan(
       leftValues: Seq[Int],
@@ -538,6 +539,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     sc.parallelize(Seq(0), 1)
       .mapPartitions { _ =>
         val count = new AtomicInteger()
+        // The sort key and the condition both read the counted right key.
+        val countedRightKey = CountedEvaluation(rightKey, count)
         val numAsOfCursorTasks = new SQLMetric("sum")
         val scanner = new SortMergeAsOfJoinScanner(
           leftIter = leftValues.iterator.map(value => InternalRow(value)),
@@ -547,8 +550,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
           leftKeys = Nil,
           rightKeys = Nil,
           leftSortExprs = Seq(leftKey),
-          rightSortExprs = Seq(rightKey),
-          asOfCondition = CountedEvaluation(asOfCondition, count),
+          rightSortExprs = Seq(countedRightKey),
+          asOfCondition = asOfCondition.transformUp { case `rightKey` => countedRightKey },
           joinType = Inner,
           residualCondition = None,
           numOutputRows = new SQLMetric("sum"),

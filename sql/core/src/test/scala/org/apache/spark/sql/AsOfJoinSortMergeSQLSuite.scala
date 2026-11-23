@@ -33,7 +33,8 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DecimalType, IntegerType, LongType, StringType,
+  StructType}
 
 /**
  * SQL ASOF JOIN tests that exercise the sort-merge physical operator.
@@ -2407,6 +2408,76 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("cursor scan: a quote equal to the trade under UTF8_LCASE or as -0.0 matches only an " +
+      "inclusive MATCH_CONDITION") {
+    // Under UTF8_LCASE, 'B' equals 'b', and -0.0 equals 0.0. The UTF8_LCASE case catches a
+    // compare that drops the collation of the key values, as a byte compare orders 'B' before
+    // 'b'. The DOUBLE case checks that both scans also treat -0.0 and 0.0 as equal.
+    def lcase(value: String): String = s"'$value' COLLATE UTF8_LCASE"
+    Seq(
+      (lcase("b"), Seq(lcase("a") -> "a", lcase("B") -> "B", lcase("c") -> "c")),
+      ("0.0D", Seq("-1.0D" -> "minus one", "-0.0D" -> "negative zero", "1.0D" -> "one"))
+    ).foreach { case (trade, quotes) =>
+      // The tags of the quotes before, equal to and after the trade.
+      val tags = quotes.map(_._2)
+      val quoteRows = quotes.map { case (k, tag) => s"($k, '$tag')" }.mkString(", ")
+      Seq(">=" -> tags(1), ">" -> tags(0), "<=" -> tags(1), "<" -> tags(2)).foreach {
+        case (op, tag) =>
+          withClue(s"$trade $op: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT q.tag
+                   |FROM VALUES ($trade) AS t(k)
+                   |ASOF JOIN VALUES $quoteRows AS q(k, tag)
+                   |  MATCH_CONDITION (t.k $op q.k)
+                   |""".stripMargin),
+              Row(tag) :: Nil)
+          }
+      }
+    }
+  }
+
+  test("cursor scan: later trades of a group that tie with a quote under UTF8_LCASE or as -0.0 " +
+      "match it only with an inclusive MATCH_CONDITION") {
+    // Trades low, tie and high, and quotes tie2 and top, in one group. The tie trade and the tie2
+    // quote are equal, but differ in bytes or bits, one way in the first case of each type and
+    // the other way in the second. Forward, the tie and high trades check the quote that the
+    // trade before them kept. Backward, they compare the quote the cursor waits at. The
+    // UTF8_LCASE cases catch a compare that drops the collation, which gives one of them the
+    // wrong quote. The DOUBLE cases check that both scans also treat -0.0 and 0.0 as equal.
+    def lcase(value: String): String = s"'$value' COLLATE UTF8_LCASE"
+    val cases = Seq(
+      // (low, tie, high, tie2, top)
+      (lcase("a"), lcase("b"), lcase("c"), lcase("B"), lcase("d")),
+      (lcase("a"), lcase("B"), lcase("c"), lcase("b"), lcase("d")),
+      ("-1.0D", "0.0D", "0.5D", "-0.0D", "1.0D"),
+      ("-1.0D", "-0.0D", "0.5D", "0.0D", "1.0D"))
+    // The tags of the quotes that trades low, tie and high match.
+    val matches = Seq(
+      "<=" -> Seq("tie2", "tie2", "top"),
+      "<" -> Seq("tie2", "top", "top"),
+      ">=" -> Seq(null, "tie2", "tie2"),
+      ">" -> Seq(null, null, "tie2"))
+    for {
+      (low, tie, high, tie2, top) <- cases
+      (op, tags) <- matches
+    } {
+      withClue(s"trades $low, $tie, $high, quotes $tie2, $top, $op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 1, $low), (1, 2, $tie), (1, 3, $high) AS t(g, id, k)
+               |LEFT ASOF JOIN VALUES (1, $tie2, 'tie2'), (1, $top, 'top') AS q(g, k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON t.g = q.g
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+  }
+
   test("cursor scan: MATCH_CONDITION sides that are expressions of a column") {
     // Each side sorts on its whole operand, so the cursor walks the operand values in order,
     // even when the operand reverses the column order.
@@ -2591,6 +2662,183 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Runs `f` with random views t and q. Left groups 0, 1 and 2 have 100 rows each, and right
+   * groups 0, 1 and 3 have 300, so group 2 has no right rows. Each right key is unique in its
+   * group, and about one left key in 20 is NULL. Strings and binaries have random lengths, so
+   * each right row writes other bytes into the buffer that the right row before it used.
+   */
+  private def withRandomKeyViews(f: => Unit): Unit = {
+    val random = new Random(7)
+    def word(): String = random.alphanumeric.take(1 + random.nextInt(12)).mkString
+    def orNull(value: Any): Any = if (random.nextInt(20) == 0) null else value
+    def bytes(value: String): Array[Byte] = value.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    val leftRows = (0 until 300).map { id =>
+      val str = word()
+      Row(id, id % 3, orNull(str), orNull(bytes(word())),
+        orNull(BigDecimal(random.nextInt(100000), 2)), orNull(random.nextInt(1000).toLong))
+    }
+    val rightRows = Seq(0, 1, 3).flatMap { g =>
+      def unique[T](next: => T): Seq[T] = Iterator.continually(next).distinct.take(300).toSeq
+      val strings = unique(word().map(_.toUpper))
+      val binaries = unique(word()).map(bytes)
+      val decimals = random.shuffle((0 until 200000).toList).take(300)
+      val longs = random.shuffle((0 until 10000).toList).take(300)
+      (0 until 300).map { i =>
+        Row(g, strings(i), binaries(i), BigDecimal(decimals(i), 2), longs(i).toLong, s"q$g-$i")
+      }
+    }
+    val leftSchema = new StructType().add("id", IntegerType).add("g", IntegerType)
+      .add("s", StringType).add("b", BinaryType).add("d", DecimalType(10, 2)).add("v", LongType)
+    val rightSchema = new StructType().add("g", IntegerType).add("s", StringType)
+      .add("b", BinaryType).add("d", DecimalType(11, 2)).add("v", LongType).add("tag", StringType)
+    withTempView("t", "q") {
+      spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
+        .createOrReplaceTempView("t")
+      spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
+        .createOrReplaceTempView("q")
+      f
+    }
+  }
+
+  /**
+   * Checks a LEFT ASOF JOIN of views t and q on `t.g = q.g` and `bound` against a plain join that
+   * picks the closest right row by `rightKey`: the largest for `>=` and `>`, the smallest for `<=`
+   * and `<`. Runs it with the cursor scan off and on, each with the codegen off and on, in one
+   * partition, so the cursor moves between the groups.
+   */
+  private def checkClosestRowLikePlainJoin(
+      leftKey: String, op: String, rightKey: String, bound: String = ""): Unit = {
+    val closest = if (op.startsWith(">")) "MAX" else "MIN"
+    val on = s"t.g = q.g$bound"
+    val expected = sql(
+      s"""
+         |SELECT t.id, $closest(named_struct('k', $rightKey, 'tag', q.tag)).tag
+         |FROM t LEFT JOIN q ON $on AND $leftKey $op $rightKey
+         |GROUP BY t.id
+         |""".stripMargin).collect().toSeq
+    for (cursorScan <- Seq(false, true)) {
+      withClue(s"$leftKey $op $rightKey ON $on, cursor scan $cursorScan: ") {
+        withSQLConf(
+            SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+            SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+          checkWithAsOfJoinCodegenOffAndOn(sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM t LEFT ASOF JOIN q MATCH_CONDITION ($leftKey $op $rightKey) ON $on
+               |""".stripMargin)) { df =>
+            checkAnswer(df, expected)
+            assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+          }
+        }
+      }
+    }
+  }
+
+  private val closestRowOperators = Seq(">=", ">", "<=", "<")
+
+  test("cursor scan: STRING and BINARY column keys match a plain join after the next right row " +
+      "reuses the buffer of the one compared") {
+    withRandomKeyViews {
+      for (key <- Seq("s", "b"); op <- closestRowOperators) {
+        checkClosestRowLikePlainJoin(s"t.$key", op, s"q.$key")
+      }
+    }
+  }
+
+  test("cursor scan: computed STRING and DECIMAL left keys match a plain join while the right " +
+      "rows go by") {
+    withRandomKeyViews {
+      for {
+        // Each of these returns a new string or DECIMAL(11, 2) for each left row.
+        (leftKey, rightKey) <- Seq("upper(t.s)" -> "q.s", "concat(t.s, 'x')" -> "q.s",
+          "t.d + t.d" -> "q.d")
+        op <- closestRowOperators
+      } {
+        checkClosestRowLikePlainJoin(leftKey, op, rightKey)
+      }
+    }
+  }
+
+  test("cursor scan: a tolerance bound on a computed BIGINT key matches a plain join while the " +
+      "right rows go by") {
+    withRandomKeyViews {
+      for {
+        (op, bound) <- Seq(">=" -> " AND q.v >= t.v * 10 - 25", ">" -> " AND q.v > t.v * 10 - 25",
+          "<=" -> " AND q.v <= t.v * 10 + 25", "<" -> " AND q.v < t.v * 10 + 25")
+      } {
+        checkClosestRowLikePlainJoin("t.v * 10", op, "q.v", bound)
+      }
+    }
+  }
+
+  test("cursor scan: a forward kept quote is checked again from its copy, not from the right " +
+      "row after it") {
+    // Trades b, c and e keep quote e, while the next quote z has taken the right row buffer.
+    // Trade m must drop e and match z, which a check against z would not do. With a tolerance,
+    // trade 9 must drop 5 and get no match, as 100 is past 9 + 4.
+    Seq(
+      "<=" -> Seq("e", "e", "e", "z"),
+      "<" -> Seq("e", "e", "z", "z")
+    ).foreach { case (op, tags) =>
+      withClue(s"STRING $op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 'b'), (2, 'c'), (3, 'e'), (4, 'm') AS t(id, k)
+               |LEFT ASOF JOIN VALUES ('e', 'e'), ('zzzzzzzzzzzz', 'z') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+    Seq(
+      "<=" -> Seq("5", "5", "5", null),
+      "<" -> Seq("5", "5", null, null)
+    ).foreach { case (op, tags) =>
+      withClue(s"BIGINT $op ON q.v <= t.v + 4: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 1L), (2, 2L), (3, 5L), (4, 9L) AS t(id, v)
+               |LEFT ASOF JOIN VALUES (5L, '5'), (100L, '100') AS q(v, tag)
+               |  MATCH_CONDITION (t.v $op q.v)
+               |  ON q.v <= t.v + 4
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+  }
+
+  test("cursor scan: a NULL left key or a new group does not reuse the left key of the row " +
+      "before") {
+    // Trade 3 has a NULL key after trade 2 of group 1, group 3 has no quotes, and each other
+    // first trade of a group matches another quote than the last trade before it would.
+    val trades = "(1, 1, 'c'), (2, 1, 'k'), (3, 2, NULL), (4, 2, 'd'), (5, 3, 'm'), (6, 4, 'p')"
+    val quotes = "(1, 'b'), (1, 'j'), (2, 'a'), (2, 'f'), (4, 'c'), (4, 'h'), (4, 'q')"
+    Seq(
+      ">=" -> Seq("b", "j", null, "a", null, "h"),
+      ">" -> Seq("b", "j", null, "a", null, "h"),
+      "<=" -> Seq("j", null, null, "f", null, "q"),
+      "<" -> Seq("j", null, null, "f", null, "q")
+    ).foreach { case (op, tags) =>
+      withClue(s"$op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.k
+               |FROM VALUES $trades AS t(id, g, k)
+               |LEFT ASOF JOIN VALUES $quotes AS q(g, k)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON t.g = q.g
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
       }
     }
   }

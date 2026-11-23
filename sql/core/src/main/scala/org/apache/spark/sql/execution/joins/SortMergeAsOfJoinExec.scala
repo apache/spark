@@ -25,8 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode,
-  FalseLiteral, GeneratePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, EmptyBlock,
+  ExprCode, FalseLiteral, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -264,8 +264,15 @@ case class SortMergeAsOfJoinExec(
     // The bound can follow the comparison or be the whole residual condition.
     val strategy = AsOfScanStrategy(direction)
     val (keysCondition, toleranceBound) = strategy.cursorConditions(asOfCondition, condition)
-    // The cursor moves on the comparison of the as-of keys alone.
-    val keysHold = genConditionFunction(ctx, keysCondition, "keysHold")
+    // The cursor moves on the comparison of the as-of keys alone, on the key values that its
+    // NULL checks read, so the comparison evaluates no key again.
+    val keyComparison = SortMergeAsOfJoinScanner.comparisonOnKeyValues(keysCondition)
+    def keysHold(rightKey: ExprCode): ExprCode = {
+      ctx.currentVars = Seq(leftAsOfKey.copy(code = EmptyBlock), rightKey.copy(code = EmptyBlock))
+      val holds = keyComparison.genCode(ctx)
+      ctx.currentVars = null
+      holds
+    }
     // A new group skips the right rows of earlier groups without evaluating either as-of key,
     // then records whether the group has a right row. Without equi-keys, the only group starts
     // with the scan.
@@ -288,13 +295,18 @@ case class SortMergeAsOfJoinExec(
     val checkKeptRow = if (strategy.matchOutlivesLeftRow) {
       ""
     } else {
+      val keptKey = createJoinKey(ctx, cursorBest, rightSortExprs.take(1), right.output).head
+      val keptHolds = keysHold(keptKey)
       s"""
          |if ($cursorBest != null) {
-         |  if ($keysHold($leftRow, $cursorBest)) return $cursorBest;
+         |  ${keptKey.code}
+         |  ${keptHolds.code}
+         |  if (${keptHolds.value}) return $cursorBest;
          |  $cursorBest = null;
          |}
        """.stripMargin
     }
+    val peekHolds = keysHold(rightAsOfKey)
     val onPass = if (strategy.firstMatchWins) s"return $cursorBest;" else ""
     // A failing row either waits for a later left row, or can match none and is dropped.
     val onFail =
@@ -323,7 +335,8 @@ case class SortMergeAsOfJoinExec(
          |      $rightPeek = $nextRight();
          |      continue;
          |    }
-         |    if ($keysHold($leftRow, $rightPeek)) {
+         |    ${peekHolds.code}
+         |    if (${peekHolds.value}) {
          |      // The next right row can overwrite `rightPeek`, so keep a copy.
          |      $cursorBest = $copyToBest($rightPeek);
          |      $rightPeek = $nextRight();
@@ -654,12 +667,15 @@ private[joins] class SortMergeAsOfJoinScanner(
 
   // Lazy, since only the cursor scan reads them. The cursor moves on the comparison of the as-of
   // keys alone, and checks the tolerance bound, if any, only on the closest right row.
-  private lazy val (boundCursorCond, boundToleranceCond): (BasePredicate, Option[BasePredicate]) = {
+  private lazy val (cursorKeysCond, boundToleranceCond): (BasePredicate, Option[BasePredicate]) = {
     val (keysCondition, toleranceBound) =
       orderedScanStrategy.get.cursorConditions(asOfCondition, residualCondition)
-    (ShortCircuitPredicate.create(keysCondition, joinedOutput),
+    (ShortCircuitPredicate.create(
+      SortMergeAsOfJoinScanner.comparisonOnKeyValues(keysCondition), Nil),
       toleranceBound.map(ShortCircuitPredicate.create(_, joinedOutput)))
   }
+  // The left and the right as-of key values that `cursorKeysCond` compares.
+  private val cursorKeyValues = new GenericInternalRow(2)
 
   // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
   // passed through identity UnsafeProjection when right columns are NOT NULL.
@@ -948,40 +964,44 @@ private[joins] class SortMergeAsOfJoinScanner(
     val (leftAsOfKey, rightAsOfKey) = cursorKeys
     // A NULL left as-of key matches nothing. It must not move the cursor, or forward would drop
     // right rows that later left rows need.
-    if (leftAsOfKey.eval(leftRow) == null) return null
+    val leftValue = leftAsOfKey.eval(leftRow)
+    if (leftValue == null) return null
+    cursorKeyValues.update(0, leftValue)
 
     // The scanner checked that the direction has a strategy when it was built.
     val strategy = orderedScanStrategy.get
-    joinedRow.withLeft(leftRow)
     if (!strategy.matchOutlivesLeftRow && cursorBest != null) {
       // The cursor is already past the best row, and every row before it failed.
-      joinedRow.withRight(cursorBest)
-      if (holds(boundCursorCond)) return cursorBest
+      if (keysHold(rightAsOfKey.eval(cursorBest))) return cursorBest
       cursorBest = null
     }
 
     // The group's right rows end at the first row of a later group.
     while (rightPeek != null && compareToRightPeek(leftKey) == 0) {
-      if (rightAsOfKey.eval(rightPeek) == null) {
+      val rightValue = rightAsOfKey.eval(rightPeek)
+      if (rightValue == null) {
         // A NULL right as-of key: no left row can match it.
         advanceRightPeek()
+      } else if (keysHold(rightValue)) {
+        // The next right row overwrites `rightPeek`, so keep a copy.
+        cursorBest = copyToCursorBestBuffer(rightPeek)
+        advanceRightPeek()
+        if (strategy.firstMatchWins) return cursorBest
+      } else if (strategy.matchOutlivesLeftRow) {
+        // The row waits for a later left row.
+        return cursorBest
       } else {
-        joinedRow.withRight(rightPeek)
-        if (holds(boundCursorCond)) {
-          // The next right row overwrites `rightPeek`, so keep a copy.
-          cursorBest = copyToCursorBestBuffer(rightPeek)
-          advanceRightPeek()
-          if (strategy.firstMatchWins) return cursorBest
-        } else if (strategy.matchOutlivesLeftRow) {
-          // The row waits for a later left row.
-          return cursorBest
-        } else {
-          // No later left row can match the row.
-          advanceRightPeek()
-        }
+        // No later left row can match the row.
+        advanceRightPeek()
       }
     }
     cursorBest
+  }
+
+  /** Whether the comparison of the as-of keys holds for this left key value and `rightValue`. */
+  private def keysHold(rightValue: Any): Boolean = {
+    cursorKeyValues.update(1, rightValue)
+    cursorKeysCond.eval(cursorKeyValues)
   }
 
   /**
@@ -1118,9 +1138,10 @@ private[execution] object SortMergeAsOfJoinScanner {
    * the comparison move forward as the left key grows. Anything else, such as another residual
    * condition, a tuple, or an operand cast that the sort key does not have, keeps the buffer.
    *
-   * The condition must name the left side first, since the cursor evaluates the left key first.
-   * With the right side first, a NULL right key ends the condition before the left key, which
-   * can fail under ANSI. Only a DataFrame join with reversed keys builds such a condition.
+   * The comparison must name the left key first. The cursor reads the left key of each left
+   * row, for its NULL check, before any right key. With the right key first, the buffered scan
+   * stops at a NULL right key without reading the left key, which can fail under ANSI. Only a
+   * DataFrame join with reversed keys builds such a condition.
    */
   def supportsCursorScan(
       direction: AsOfJoinDirection,
@@ -1144,11 +1165,24 @@ private[execution] object SortMergeAsOfJoinScanner {
   }
 
   /**
+   * The comparison of the as-of keys of a cursor scan, rebound onto the two key values: input 0
+   * is the left key and input 1 the right key, neither NULL. It keeps the class and the operand
+   * types of `comparison`, so collations, NaN and -0.0 compare the same way.
+   */
+  def comparisonOnKeyValues(comparison: Expression): Expression = comparison match {
+    case c: BinaryComparison => c.withNewChildren(Seq(
+      BoundReference(0, c.left.dataType, nullable = false),
+      BoundReference(1, c.right.dataType, nullable = false)))
+    case other => throw SparkException.internalError(s"Unexpected as-of key comparison: $other")
+  }
+
+  /**
    * Whether `bound` compares the right key, first, with a limit that a DataFrame tolerance or a
    * SQL ON bound builds: the left key plus or minus a constant (`r >= l - 10`), or the left key
    * alone, which a tolerance of 0 can fold to. The cursor scan evaluates the limit only on the
-   * closest right row, and the buffered scan on every right row that passes the comparison of
-   * the keys. The limit reads only the left row, so both scans get the same value or the same
+   * closest right row, and the buffered scan on each right row that passes the comparison of
+   * the keys, though a forward scan stops at the first one that also passes the bound. The
+   * limit reads only the left row, so both scans get the same value or the same
    * error. The right key comes first, so a NULL right key skips the limit in the buffered scan.
    * A NULL left key, which the cursor scan skips, makes each of these limits NULL without
    * evaluating the constant.
