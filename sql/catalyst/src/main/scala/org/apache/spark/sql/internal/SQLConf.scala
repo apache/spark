@@ -4565,8 +4565,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.statefulOperator.checkJoinOutputWatermark")
       .internal()
       .doc("When true, the correctness check of chained stateful operators also covers, in " +
-        "append mode, an operator that drops late rows after a stream-stream join that emits " +
-        "the rows of an input whose state has no cutoff. " +
+        "append mode, an operator that drops late rows after a stream-stream join, when its " +
+        "event time can come from an input of the join whose state has no cutoff. " +
         "When false, such a query only logs a warning. A streaming query restarted from a " +
         "checkpoint written without this config uses false.")
       .version("4.5.0")

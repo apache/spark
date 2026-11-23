@@ -27,11 +27,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 - Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is
   planned if an operator that drops late rows, such as a window aggregation, follows a
-  stream-stream join that emits the rows of an input whose state is never evicted, for example a
-  join on a key without a watermark and without a time range on that input. Such a query could
-  drop joined rows as late. Add a watermark in the join keys, or a range condition that bounds each
-  input by the other input's watermark. Queries restarted from existing checkpoints only log a
-  warning.
+  stream-stream join and its event time can come from an input of the join whose state is never
+  evicted, for example an input of a join on a key without a watermark and without a time range
+  on that input. Such a query could drop joined rows as late. The check follows the event time
+  down to the join through projections and the operators that pass their input's columns
+  through, and also fails a query whose path to the join passes another stateful operator. Add a
+  watermark in the join keys, or a range condition that bounds that input by the other input's
+  watermark. Queries restarted from checkpoints written before Spark 4.5 only log a warning.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
