@@ -36,8 +36,10 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
   import testImplicits._
 
@@ -344,6 +346,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
  * and resource to run all combinations for all times, hence we will randomly pick 5 tests
  * per run.
  */
+@DataSourceV2Test
 class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
 
   private val TEST_SHUFFLE_PARTITIONS = Seq(1, 3, 5)
@@ -437,6 +440,7 @@ class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
   }
 }
 
+@DataSourceV2Test
 class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
   override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
     new HDFSBackedStateStoreProvider
@@ -538,6 +542,7 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
   }
 }
 
+@DataSourceV2Test
 class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
@@ -585,6 +590,7 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
   }
 }
 
+@DataSourceV2Test
 class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends
 StateDataSourceReadSuite {
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
@@ -644,6 +650,7 @@ StateDataSourceReadSuite {
   }
 }
 
+@DataSourceV2Test
 class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceReadSuite {
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
@@ -713,6 +720,7 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
   }
 }
 
+@DataSourceV2Test
 class RocksDBWithCheckpointV2StateDataSourceReaderSnapshotSuite extends StateDataSourceReadSuite {
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
@@ -1674,6 +1682,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
  * Test suite that verifies the state data source reader does not create empty state
  * directories when reading state for all stateful operators.
  */
+@DataSourceV2Test
 class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
 
   /**

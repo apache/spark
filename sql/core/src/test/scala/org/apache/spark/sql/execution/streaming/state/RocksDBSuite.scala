@@ -50,7 +50,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkConfWithEnv, ThreadUtils, Utils}
@@ -732,7 +732,7 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
   }
 }
 
-@SlowSQLTest
+@ExtendedSQLTest
 class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     with PrivateMethodTester {
 
@@ -5332,5 +5332,5 @@ object RocksDBSuite {
  * Test suite that runs all RocksDBSuite tests with row checksum enabled.
  * This ensures row checksum works correctly with all RocksDB features.
  */
-@SlowSQLTest
+@ExtendedSQLTest
 class RocksDBSuiteWithRowChecksum extends RocksDBSuite with EnableStateStoreRowChecksum

@@ -23,11 +23,12 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
-import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, InMemoryTableWithV2Filter, InMemoryTableWithV2FilterCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
@@ -38,10 +39,12 @@ import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.functions._
@@ -280,16 +283,21 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("SPARK-61504: Overwrite: overwrite by expression on a CHAR column") {
-    spark.sql(
-      "CREATE TABLE testcat.table_name (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
-    spark.sql("INSERT INTO testcat.table_name VALUES (1L, 'hr'), (2L, 'software')")
+    spark.conf.set(
+      "spark.sql.catalog.testv2filter", classOf[InMemoryTableWithV2FilterCatalog].getName)
+    val t = "testv2filter.table_name"
+    // the table pads the stored values for the overwrite condition, as a read does
+    spark.sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep) " +
+      s"TBLPROPERTIES ('${InMemoryTableWithV2Filter.AcceptCharReadSidePaddingKey}' = 'true')")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      spark.sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+    }
+    spark.sql(s"INSERT INTO $t VALUES (2L, 'hr'), (3L, 'software')")
 
     // the query is not resolved when the command is created, unlike the query of a SQL INSERT
-    Seq((3L, "hr")).toDF("id", "dep").writeTo("testcat.table_name").overwrite($"dep" === "hr")
+    Seq((4L, "hr")).toDF("id", "dep").writeTo(t).overwrite($"dep" === "hr")
 
-    checkAnswer(
-      spark.table("testcat.table_name"),
-      Seq(Row(2L, "software"), Row(3L, "hr      ")))
+    checkAnswer(spark.table(t), Seq(Row(3L, "software"), Row(4L, "hr      ")))
   }
 
   test("Overwrite: write to a temp view of v2 relation") {
@@ -472,6 +480,26 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     }
     assert(exc.getMessage.contains(
       s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+  }
+
+  test("SPARK-62100: Append and overwrite check a NOT NULL column against a value " +
+    "made nullable by an outer join") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data bigint NOT NULL) USING foo")
+    val left = Seq(1L, 2L).toDF("id")
+    val right = Seq(2L).toDF("data")
+    // right("data") is non-nullable in `right`, but NULL for id 1 after the left outer join
+    val df = left.join(right, left("id") === right("data"), "left_outer")
+      .select(left("id"), right("data"))
+    Seq[DataFrameWriterV2[Row] => Unit](
+      _.append(),
+      _.overwrite(lit(true)),
+      _.overwritePartitions()).foreach { write =>
+      val e = intercept[SparkRuntimeException] {
+        write(df.writeTo("testcat.table_name"))
+      }
+      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+    checkAnswer(spark.table("testcat.table_name"), Seq.empty)
   }
 
   test("Create: basic behavior") {

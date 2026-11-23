@@ -107,10 +107,12 @@ object ShufflePartitionsUtil extends Logging {
     // in that case. For example when we union fully aggregated data (data is arranged to a single
     // partition) and a result of a SortMergeJoin (multiple partitions).
     if (validMetrics.map(_.bytesByPartitionId.length).distinct.length > 1) {
-      logWarning(s"Could not apply partition coalescing because numOfPartitions of " +
-        s"ShuffleStages in the same coalesce group are not equal. " +
-        s"Problematic ShuffleQueryStage(s): ${shuffleStageIds.mkString(", ")} and " +
-        s"Problematic mapOutputStatistics: ${getMapOutputStatisticsDetails(validMetrics)}")
+      logWarning(log"Could not apply partition coalescing because numOfPartitions of " +
+        log"ShuffleStages in the same coalesce group are not equal. " +
+        log"Problematic ShuffleQueryStage(s): " +
+        log"${MDC(LogKeys.STAGES, shuffleStageIds.mkString(", "))} and " +
+        log"Problematic mapOutputStatistics: " +
+        log"${MDC(LogKeys.STATS, getMapOutputStatisticsDetails(validMetrics))}")
       return Seq.empty
     }
 
@@ -152,9 +154,10 @@ object ShufflePartitionsUtil extends Logging {
     // There should be no unexpected partition specs and the start indices should be identical
     // across all different shuffles.
     if (partitionIndicesSeq.distinct.length > 1 || partitionIndicesSeq.head.exists(_ < 0)) {
-      logWarning(s"Could not apply partition coalescing because of unexpected partition indices. " +
-        s"Problematic ShuffleQueryStage(s): ${shuffleStageIds.mkString(", ")}. " +
-        s"Invalid shuffle partition specs: $inputPartitionSpecs.")
+      logWarning(log"Could not apply partition coalescing because of unexpected partition " +
+        log"indices. Problematic ShuffleQueryStage(s): " +
+        log"${MDC(LogKeys.STAGES, shuffleStageIds.mkString(", "))}. " +
+        log"Invalid shuffle partition specs: ${MDC(LogKeys.PARTITION_SPECS, inputPartitionSpecs)}.")
       return Seq.empty
     }
 

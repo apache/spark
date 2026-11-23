@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
+import itertools
 import os
 import subprocess
+from collections.abc import Sequence
 
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
@@ -89,7 +91,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> [x.name for x in determine_modules_to_test([modules.core])]
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
-    ['graphx', 'examples']
+    ['graphx', 'examples', 'graph']
     """
     modules_to_test = set()
     for module in changed_modules:
@@ -107,6 +109,21 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True
     )
+
+
+def determine_shell_script_test_goals(
+    test_modules: Sequence[modules.Module], stage: modules.TestStage
+) -> tuple[modules.ShellScriptTestGoal, ...]:
+    """
+    Return the shell script test goals that the given modules declare for a stage.
+
+    Goals are returned in the order determined by the modules passed in,
+    preserving each module's declaration order. Each goal is returned only once.
+    """
+    declared_goals = itertools.chain.from_iterable(m.shell_script_test_goals for m in test_modules)
+    stage_goals = (goal for goal in declared_goals if goal.stage == stage)
+    # `dict.fromkeys` preserves order, unlike `set`.
+    return tuple(dict.fromkeys(stage_goals))
 
 
 def determine_dangling_python_tests(changed_files):

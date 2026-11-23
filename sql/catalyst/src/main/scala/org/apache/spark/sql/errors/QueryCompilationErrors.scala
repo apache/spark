@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FileTypeColumnUsage, ParseMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -259,6 +259,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     invalidParameter("PARSE_SQL_MODE", "parse_sql", "mode", mode)
   }
 
+  def cannotEvaluateParameterError(
+      functionName: String,
+      parameter: String,
+      invalidValue: Expression,
+      cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.EVALUATION_ERROR",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId(parameter),
+        "invalidValue" -> toSQLExpr(invalidValue)),
+      cause = Some(cause))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -336,6 +350,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def binByDisabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
+      messageParameters = Map.empty)
+  }
+
+  def gapFillNotSupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL",
       messageParameters = Map.empty)
   }
 
@@ -1432,7 +1452,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRetrieveTableOrViewNotInSameDatabaseError(
       qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1072",
+      errorClass = "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE",
       messageParameters = Map("qualifiedTableNames" -> qualifiedTableNames.toString()))
   }
 
@@ -4847,6 +4867,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = cause)
   }
 
+  def invalidExternalLookupHintError(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"INVALID_EXTERNAL_LOOKUP_HINT.$errorSubClass",
+      messageParameters = messageParameters)
+  }
+
+  def invalidExternalLookupOptionError(
+      option: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    invalidExternalLookupHintError(
+      errorSubClass, Map("option" -> toDSOption(option)) ++ messageParameters)
+  }
+
   def unsupportedExternalLookupJoinError(
       errorSubClass: String,
       messageParameters: Map[String, String] = Map.empty): Throwable = {
@@ -4861,7 +4897,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters: Map[String, String] = Map.empty): Throwable = {
     new AnalysisException(
       errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
-      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+      messageParameters = Map("table" -> toSQLFreeFormId(table)) ++ messageParameters)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,
@@ -5259,34 +5295,37 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def fileTypeUnknownWriteError(colNames: Seq[Seq[String]]): Throwable = {
+  def fileTypeMissingQualifierError(colPath: Seq[String], dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_MISSING_QUALIFIER",
+      messageParameters = Map("colName" -> toSQLId(colPath), "dataType" -> toSQLType(dataType)))
+  }
+
+  def fileTypeUnknownWriteError(colPaths: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_UNKNOWN_WRITE",
-      messageParameters = Map("colNames" -> colNames.map(toSQLId).mkString("[", ", ", "]")))
+      messageParameters = Map("colNames" -> colPaths.map(toSQLId).mkString("[", ", ", "]")))
   }
 
-  def fileTypeUnsupportedColumnUsageError(field: StructField, usage: String): Throwable = {
+  def fileTypeUnsupportedColumnUsageError(
+      colPath: Seq[String],
+      dataType: DataType,
+      usage: FileTypeColumnUsage): Throwable = {
     new AnalysisException(
-      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
-      messageParameters = Map(
-        "colName" -> toSQLId(field.name),
-        "dataType" -> toSQLType(field.dataType)))
+      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.${usage.errorSubClass}",
+      messageParameters = Map("colName" -> toSQLId(colPath), "dataType" -> toSQLType(dataType)))
   }
 
-  def fileTypeInRoutineSignatureUnsupportedQualifierError(
-      routineType: String,
-      routineName: String): Throwable = {
+  def fileTypeInRoutineSignatureUnsupportedQualifierError(routineName: String): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+      messageParameters = Map("routineName" -> routineName))
   }
 
-  def fileTypeInRoutineSignatureUnsupportedMapKeyError(
-      routineType: String,
-      routineName: String): Throwable = {
+  def fileTypeInRoutineSignatureUnsupportedMapKeyError(routineName: String): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+      messageParameters = Map("routineName" -> routineName))
   }
 
   def unsupportedTimeTypeError(): Throwable = {
@@ -5330,5 +5369,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION",
       messageParameters = Map.empty)
+  }
+
+  def unresolvableCheckConstraintError(
+      constraintName: String,
+      condition: String,
+      cause: AnalysisException): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVABLE_CHECK_CONSTRAINT",
+      messageParameters = Map(
+        "constraintName" -> constraintName,
+        "checkCondition" -> condition,
+        "cause" -> cause.getSimpleMessage),
+      cause = Some(cause))
   }
 }

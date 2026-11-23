@@ -24,10 +24,12 @@ import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink,
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamRealTimeModeManualClockSuiteBase, TimeMode}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * State data source reads under Real-Time Mode (RTM).
  */
+@DataSourceV2Test
 class StateDataSourceRealTimeSuite
     extends StreamRealTimeModeManualClockSuiteBase
     with StateDataSourceTestBase {

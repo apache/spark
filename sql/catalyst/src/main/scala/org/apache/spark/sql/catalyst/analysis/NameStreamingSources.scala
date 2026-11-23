@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, TransformWithState, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, HasStreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.TreePattern.NAMED_STREAMING_RELATION
@@ -104,6 +104,25 @@ object NameStreamingSources extends Rule[LogicalPlan] {
           sa @ SubqueryAlias(_, h: HasStreamingSourceIdentifyingName),
           sourceIdentifyingName) =>
         sa.copy(child = h.withSourceIdentifyingName(sourceIdentifyingName))
+
+      // Wait for an unresolved inner naming wrapper instead of swapping the two names.
+      case named @ NamedStreamingRelation(_: NamedStreamingRelation, _) =>
+        named
+
+      // Propagate the name through any unary operator above the source, such as the ones
+      // changelog resolution inserts. A node with several children stops propagation, except
+      // the TransformWithState case below. Must follow the nested-wrapper case, because
+      // NamedStreamingRelation is itself a UnaryNode.
+      case NamedStreamingRelation(unary: UnaryNode, sourceIdentifyingName) =>
+        unary.mapChildren { child =>
+          propagateSourceNames(NamedStreamingRelation(child, sourceIdentifyingName))
+        }
+
+      // Name the data stream while preserving the separate batch initial-state input.
+      case NamedStreamingRelation(tws: TransformWithState, sourceIdentifyingName)
+          if tws.child.isStreaming && !tws.initialState.isStreaming =>
+        tws.copy(child =
+          propagateSourceNames(NamedStreamingRelation(tws.child, sourceIdentifyingName)))
 
       // Fallback for resolved children that don't implement HasStreamingSourceIdentifyingName.
       // This includes:
