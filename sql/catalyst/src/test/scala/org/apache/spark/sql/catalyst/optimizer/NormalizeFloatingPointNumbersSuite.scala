@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayUnion, CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayUnion, CaseWhen, Cast, EvalMode, If, IsNull, KnownFloatingPointNormalized, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -163,5 +163,20 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
     comparePlans(SimpleTestOptimizer.FinishAnalysis(query), query)
     comparePlans(Optimize.execute(query), query)
+  }
+
+  test("SPARK-62241: normalize floating points in a join condition equality that is not a key") {
+    // The cast is built in ANSI mode, where it can fail, so after the throwable conjunct the
+    // equality on it is not a key (see `ExtractEquiJoinKeys`). A later rule can make it one, so it
+    // is normalized where it is written.
+    val left = LocalRelation($"s".string)
+    val throwing = IsNull(RaiseError(Literal("boom")))
+    val cast = Cast(left.output.head, DoubleType, evalMode = EvalMode.ANSI)
+    val query = left.join(testRelation2, condition = Some(throwing && cast === b))
+
+    val optimized = Optimize.execute(query)
+    val joinCond = throwing && KnownFloatingPointNormalized(NormalizeNaNAndZero(cast)) ===
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+    assert(optimized.asInstanceOf[Join].condition === Some(joinCond))
   }
 }

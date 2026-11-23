@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -129,7 +129,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
         leftStats.copy(sizeInBytes = sizeInBytes)
       case Inner | LeftOuter | RightOuter | FullOuter =>
         p match {
-          case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
+          case ExtractAllEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
               if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) ||
                 right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) =>
             // The sizeInBytes should be > 1 because sizeInBytes * 1 != sizeInBytes + 1.
