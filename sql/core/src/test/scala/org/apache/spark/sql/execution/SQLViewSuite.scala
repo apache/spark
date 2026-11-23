@@ -1611,9 +1611,11 @@ abstract class SQLViewSuite extends QueryTest {
   private def viewQueryColumnNames(viewName: String): Seq[String] =
     spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).viewQueryColumnNames
 
+  private def viewProperties(viewName: String): Map[String, String] =
+    spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).properties
+
   private def viewQueryOutputPropertyKeys(viewName: String): Set[String] =
-    spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).properties.keySet
-      .filter(_.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
+    viewProperties(viewName).keySet.filter(_.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
 
   // Stores query column names the way older versions did for EVOLUTION views.
   private def setViewQueryColumnNames(viewName: String, names: String*): Unit = {
@@ -1630,8 +1632,15 @@ abstract class SQLViewSuite extends QueryTest {
       withView("v") {
         sql("CREATE TABLE t (c1 INT, c2 INT) USING parquet")
         sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+        sql("ALTER VIEW v SET TBLPROPERTIES ('note' = 'kept')")
         setViewQueryColumnNames("v", "c1", "c2")
         assert(viewQueryOutputPropertyKeys("v").size == 3)
+        // Hive adds properties of its own, so compare the user property and view metadata only.
+        def keptProperties: Map[String, String] = viewProperties("v").filter { case (k, _) =>
+          k == "note" || (k.startsWith(CatalogTable.VIEW_PREFIX) &&
+            !k.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
+        }
+        val propsBefore = keptProperties
 
         sql("DROP TABLE t")
         sql("CREATE TABLE t (c2 INT, c1 INT) USING parquet")
@@ -1639,6 +1648,7 @@ abstract class SQLViewSuite extends QueryTest {
         // The read syncs the view schema to the new column order.
         checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
         assert(viewQueryOutputPropertyKeys("v").isEmpty)
+        assert(keptProperties == propsBefore)
 
         sql("ALTER VIEW v WITH SCHEMA BINDING")
         checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
