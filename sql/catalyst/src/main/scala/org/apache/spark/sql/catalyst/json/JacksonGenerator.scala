@@ -296,14 +296,14 @@ class JacksonGenerator(
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
     val indices = if (options.sortKeys) {
-      (0 until map.numElements()).sortBy(i => keyArray.get(i, mapType.keyType).toString).toArray
+      (0 until map.numElements()).sortBy(i => mapKeyName(keyArray, i, mapType.keyType)).toArray
     } else {
       null
     }
     var j = 0
     while (j < map.numElements()) {
       val i = if (indices != null) indices(j) else j
-      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+      gen.writeFieldName(mapKeyName(keyArray, i, mapType.keyType))
       if (!valueArray.isNullAt(i)) {
         fieldWriter.apply(valueArray, i)
       } else {
@@ -312,6 +312,15 @@ class JacksonGenerator(
       j += 1
     }
   }
+
+  // Returns the JSON field name of the key at `ordinal` in the key array of a map. That is the
+  // `toString` of the key, except for a BINARY key: the `toString` of a byte array is its JVM
+  // identity, so a BINARY key is written in base64, with the variant `writeBinary` uses.
+  private def mapKeyName(keyArray: ArrayData, ordinal: Int, keyType: DataType): String =
+    keyType match {
+      case BinaryType => Base64Variants.getDefaultVariant.encode(keyArray.getBinary(ordinal))
+      case _ => keyArray.get(ordinal, keyType).toString
+    }
 
   def close(): Unit = gen.close()
 
