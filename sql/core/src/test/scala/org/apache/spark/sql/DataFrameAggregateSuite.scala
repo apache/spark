@@ -4332,22 +4332,38 @@ class DataFrameAggregateSuite extends SharedSparkSession
 
     // (k, n) of each input, merged left to right, and the expected k with the conf on.
     val examples: Seq[(Seq[(Int, Int)], Int)] = Seq(
+      // A compacted right with a smaller k lowers k.
       Seq((400, 8000), (100, 2000)) -> 100,
-      Seq((100, 2000), (400, 8000)) -> 100,
-      Seq((400, 8000), (8, 3)) -> 400,
-      Seq((8, 3), (400, 8000)) -> 8,
       Seq((400, 3), (100, 2000)) -> 100,
+      Seq((200, 4000), (100, 101)) -> 100,
+      Seq((65535, 70000), (8, 9)) -> 8,
+      Seq((200, 4000), (200, 4000)) -> 200,
+      // The k of left counts, compacted or exact.
+      Seq((100, 2000), (400, 8000)) -> 100,
+      Seq((8, 3), (400, 8000)) -> 8,
+      // An exact right never lowers k.
+      Seq((400, 8000), (8, 3)) -> 400,
+      Seq((200, 4000), (100, 100)) -> 200,
+      // No input compacts: the result takes the k of left, also when it compacts itself.
       Seq((20, 3), (8, 3)) -> 20,
+      Seq((1000, 10), (8, 3)) -> 1000,
+      Seq((8, 3), (1000, 10)) -> 8,
+      Seq((65535, 10), (8, 3)) -> 65535,
+      Seq((100, 60), (200, 60)) -> 100,
+      // Empty inputs count as absent.
       Seq((8, 0), (400, 8000)) -> 400,
       Seq((8, 0), (400, 3)) -> 400,
       Seq((400, 0), (8, 160)) -> 8,
-      Seq((8, 0), (400, 0)) -> KllSketch.DEFAULT_K,
       Seq((400, 8000), (8, 0)) -> 400,
-      Seq((200, 4000), (100, 100)) -> 200,
-      Seq((200, 4000), (100, 101)) -> 100,
-      Seq((65535, 70000), (8, 9)) -> 8,
+      Seq((20, 3), (8, 0)) -> 20,
+      // Two empty inputs give the default k.
+      Seq((8, 0), (400, 0)) -> KllSketch.DEFAULT_K,
+      Seq((1000, 0), (8, 0)) -> KllSketch.DEFAULT_K,
+      Seq((100, 0), (100, 0)) -> KllSketch.DEFAULT_K,
+      // Chains of more than two inputs.
       Seq((8, 0), (50, 10), (4096, 5000), (100, 300)) -> 50,
-      Seq((50, 0), (8, 0), (400, 10), (100, 0), (200, 1000)) -> 200)
+      Seq((50, 0), (8, 0), (400, 10), (100, 0), (200, 1000)) -> 200,
+      Seq((1000, 10), (400, 5000), (16, 5), (200, 3000), (50, 50)) -> 200)
     def ruleK(inputs: Seq[(Int, Int)]): Int = inputs.dropWhile(_._2 == 0) match {
       case first +: rest => (first._1 +: rest.collect { case (k, n) if n > k => k }).min
       case _ => KllSketch.DEFAULT_K
