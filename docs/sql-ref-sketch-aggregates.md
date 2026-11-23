@@ -959,7 +959,7 @@ kll_merge_agg_double(sketch [, k])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `sketch` | BINARY | A KLL sketch in binary format (e.g., from `kll_sketch_agg_*`) |
-| `k` | INT (optional) | Controls accuracy and size of the merged sketch. Range: 8-65535. If not specified, the merged sketch adopts the k value from the first input sketch. |
+| `k` | INT (optional) | Controls accuracy and size of the merged sketch. Range: 8-65535. If not specified, the merged sketch takes the lowest k among the first non-empty input sketch and the input sketches that have started compacting. If every input sketch is empty, it takes the k of the first one, and without input sketches the default k (200). So the k can depend on the order and the partitioning of the inputs. |
 
 Returns a BINARY containing the merged KLL sketch.
 
@@ -992,7 +992,7 @@ FROM (
 ```
 
 **Notes:**
-- When `k` is not specified, the merged sketch adopts the k value from the first input sketch.
+- When `k` is not specified, the merged sketch takes the lowest k among the first non-empty input sketch and the input sketches that have started compacting. If every input sketch is empty, it takes the k of the first one, and without input sketches the default k (200). So the k can depend on the order and the partitioning of the inputs.
 - The merge operation can handle input sketches with different k values.
 - NULL values are ignored during aggregation.
 - Use this function when you need to merge multiple sketches in an aggregation context. For merging exactly two sketches, use the scalar `kll_sketch_merge_*` functions instead.

@@ -4540,9 +4540,13 @@ class DataFrameAggregateSuite extends SharedSparkSession
       withSQLConf(confKey -> lowestCompactingK.toString,
           SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100000") {
         val rows = for ((inputs, id) <- cases.zipWithIndex; s <- inputs) yield (id, s)
-        spark.sparkContext.parallelize(rows, 1).toDF("id", "s").groupBy("id")
-          .agg(expr(s"kll_merge_agg_$t(s)").as("m")).orderBy("id").collect()
-          .map(r => kAndN(t, r.getAs[Array[Byte]](1))).toSeq
+        val df = spark.sparkContext.parallelize(rows, 1).toDF("id", "s").groupBy("id")
+          .agg(expr(s"kll_merge_agg_$t(s)").as("m")).orderBy("id")
+        val result = df.collect().map(r => kAndN(t, r.getAs[Array[Byte]](1))).toSeq
+        // A SortAggregate would not keep the order of the rows in a group.
+        assert(collect(df.queryExecution.executedPlan) { case a: ObjectHashAggregateExec => a }
+          .nonEmpty)
+        result
       }
     }
     // Merges `rows` in a global aggregate over `numPartitions` partitions.
@@ -4674,9 +4678,40 @@ class DataFrameAggregateSuite extends SharedSparkSession
     for (t <- types; (inputs, k) <- anyOrder) {
       val sketches = inputs.map { case (k, n) => Some(sketch(t, k, n)) }
       val n = inputs.map(_._2.toLong).sum
-      for (rows <- Seq(None +: sketches, sketches :+ None, None +: sketches.reverse)) {
+      val layouts = Seq(None +: sketches, sketches :+ None, None +: sketches.reverse,
+        sketches.reverse :+ None)
+      for (rows <- layouts) {
         assert(kAndN(t, mergedGlobal(t, rows, rows.size + 2, lowestCompactingK = true)) ==
           ((k, n)), (t, inputs))
+      }
+    }
+  }
+
+  // DISTINCT and FILTER plan the aggregate in other ways. Each case gives the same k in every
+  // merge order.
+  test("SPARK-61368: kll_merge_agg k rule with DISTINCT and with FILTER") {
+    import KllMergeAggKRule._
+    val anyOrder = Seq(
+      Seq((1000, 0)) -> 1000,
+      Seq((8, 0), (100, 10)) -> 100,
+      Seq((1000, 0), (50, c)) -> 50,
+      Seq((1000, 10), (200, c), (400, 10)) -> 200,
+      Seq((400, c), (100, c), (1000, c)) -> 100)
+    for (t <- types; (inputs, k) <- anyOrder) {
+      val sketches = inputs.map { case (k, n) => Some(sketch(t, k, n)) }
+      val n = inputs.map(_._2.toLong).sum
+      withSQLConf(confKey -> "true") {
+        // Each input appears twice, and DISTINCT keeps one of them.
+        val rows = None +: (sketches ++ sketches)
+        val distinct = spark.sparkContext.parallelize(rows, rows.size + 2).toDF("s")
+          .agg(expr(s"kll_merge_agg_$t(DISTINCT s)")).head().getAs[Array[Byte]](0)
+        assert(kAndN(t, distinct) == ((k, n)), (t, inputs))
+        // FILTER drops every row of three partitions, so their compacting k = 8 inputs do not
+        // count, and the partitions send no sketch.
+        val keep = Seq.fill(3)((false, Some(sketch(t, 8, c)))) ++ sketches.map((true, _))
+        val filtered = spark.sparkContext.parallelize(keep, keep.size).toDF("keep", "s")
+          .agg(expr(s"kll_merge_agg_$t(s) FILTER (WHERE keep)")).head().getAs[Array[Byte]](0)
+        assert(kAndN(t, filtered) == ((k, n)), (t, inputs))
       }
     }
   }
@@ -4700,10 +4735,13 @@ class DataFrameAggregateSuite extends SharedSparkSession
         withSQLConf(confKey -> "true", SQLConf.USE_OBJECT_HASH_AGG.key -> objectHash.toString,
             SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> threshold.toString) {
           val shuffled = new Random(threshold).shuffle(rows)
-          val ks = spark.sparkContext.parallelize(shuffled, numPartitions).toDF("g", "s")
-            .groupBy("g").agg(expr(s"kll_merge_agg_$t(s)").as("m")).collect()
-            .map(r => r.getInt(0) -> state(t, r.getAs[Array[Byte]](1))._1).toMap
+          val df = spark.sparkContext.parallelize(shuffled, numPartitions).toDF("g", "s")
+            .groupBy("g").agg(expr(s"kll_merge_agg_$t(s)").as("m"))
+          val ks = df.collect().map(r => r.getInt(0) -> state(t, r.getAs[Array[Byte]](1))._1).toMap
           assert(ks == expected, (t, objectHash, threshold, numPartitions))
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(if (objectHash) plan.isInstanceOf[ObjectHashAggregateExec]
+            else plan.isInstanceOf[SortAggregateExec], plan)
         }
       }
     }
@@ -4713,7 +4751,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
     import KllMergeAggKRule._
     val inputs = Seq(None, Some((1000, 0)), Some((8, 0)), Some((1000, 10)), Some((8, 3)),
       Some((200, c)), Some((50, 0)), Some((100, c)), None)
-    val frames = Seq((Window.unboundedPreceding, 0L), (-1L, 0L), (-2L, 1L))
+    // The frame (-2, -1) holds no rows for the first row of each window partition.
+    val frames = Seq((Window.unboundedPreceding, Window.currentRow), (-1L, Window.currentRow),
+      (-2L, 1L), (-2L, -1L))
     for (t <- types; on <- Seq(true, false); (start, end) <- frames) {
       // Window partition 1 has the inputs in reverse order.
       val orders = Seq(inputs, inputs.reverse)
@@ -4766,6 +4806,29 @@ class DataFrameAggregateSuite extends SharedSparkSession
       }
       assert(mergedInOrder(t, sketches, on) == expected, (t, on))
       assert(kAndN(t, mergedGlobal(t, Seq.empty, 2, on)) == ((200, 0L)), (t, on))
+    }
+  }
+
+  test("SPARK-61368: kll_merge_agg keeps the k of the first of the empty sketches that SQL " +
+      "builds, and gives the default k for only NULLs") {
+    import KllMergeAggKRule._
+    for (t <- types; on <- Seq(true, false)) {
+      def sketchOf(query: String): Array[Byte] = sql(query).head().getAs[Array[Byte]](0)
+      // Empty sketches as users get them: over no rows, over only NULLs, and from a merge of
+      // only NULL sketches.
+      val noRows = sketchOf(s"SELECT kll_sketch_agg_$t(CAST(id AS $t), 1000) FROM range(0)")
+      val onlyNulls = sketchOf(s"SELECT kll_sketch_agg_$t(CAST(NULL AS $t), 8) FROM range(5)")
+      val mergedNulls = sketchOf(s"SELECT kll_merge_agg_$t(CAST(NULL AS BINARY)) FROM range(5)")
+      assert(Seq(noRows, onlyNulls, mergedNulls).map(state(t, _)) ==
+        Seq((1000, 0L, false), (8, 0L, false), (200, 0L, false)), t)
+      // Inputs in merge order and the expected k, with the conf on and off.
+      val cases = Seq(
+        Seq(noRows, onlyNulls) -> 1000,
+        Seq(onlyNulls, noRows) -> 8,
+        Seq(mergedNulls, noRows) -> 200,
+        Seq(noRows, mergedNulls, onlyNulls) -> 1000)
+      assert(mergedInOrder(t, cases.map(_._1.map(Some(_))), on) == cases.map(c => (c._2, 0L)),
+        (t, on))
     }
   }
 
@@ -4823,6 +4886,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
     for ((on, k) <- Seq(true -> 1000, false -> 4000)) {
       assert(kAndN("bigint", mergedGlobal("bigint", rows, 1, on)) == ((k, 49L)), s"conf = $on")
     }
+    // In two partitions, `merge` reads the input as a partial result. Both orders give 1000.
+    assert(kAndN("bigint", mergedGlobal("bigint", rows, 2, lowestCompactingK = true)) ==
+      ((1000, 49L)))
   }
 
   test("SPARK-54179: tuple_sketch_agg_double basic functionality") {

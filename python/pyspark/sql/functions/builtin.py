@@ -30833,7 +30833,8 @@ def kll_merge_agg_bigint(
     merged sketch. The optional k parameter controls the size and accuracy of the merged
     sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
     among the first non-empty input sketch and the input sketches that have started
-    compacting.
+    compacting. If every input sketch is empty, it takes the k of the first one, and
+    without input sketches the default k (200).
 
     .. versionadded:: 4.1.2
 
@@ -30879,7 +30880,8 @@ def kll_merge_agg_float(
     merged sketch. The optional k parameter controls the size and accuracy of the merged
     sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
     among the first non-empty input sketch and the input sketches that have started
-    compacting.
+    compacting. If every input sketch is empty, it takes the k of the first one, and
+    without input sketches the default k (200).
 
     .. versionadded:: 4.1.2
 
@@ -30925,7 +30927,8 @@ def kll_merge_agg_double(
     merged sketch. The optional k parameter controls the size and accuracy of the merged
     sketch (range 8-65535). If k is not specified, the merged sketch takes the lowest k
     among the first non-empty input sketch and the input sketches that have started
-    compacting.
+    compacting. If every input sketch is empty, it takes the k of the first one, and
+    without input sketches the default k (200).
 
     .. versionadded:: 4.1.2
 

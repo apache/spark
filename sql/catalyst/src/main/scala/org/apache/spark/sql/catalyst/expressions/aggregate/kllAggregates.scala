@@ -488,7 +488,8 @@ case class KllSketchAggDouble(
  *   optional expression for the k parameter from the Apache DataSketches library that controls
  *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
  *   If not specified, the merged sketch takes the lowest k among the first non-empty input
- *   sketch and the input sketches that have started compacting.
+ *   sketch and the input sketches that have started compacting. If every input sketch is empty,
+ *   it takes the k of the first one, and without input sketches the default k (200).
  *   If specified, the value is used to initialize the aggregation buffer. The merge operation
  *   can handle input sketches with different k values. Larger k values provide more accurate
  *   estimates but result in larger, slower sketches.
@@ -517,7 +518,8 @@ case class KllSketchAggDouble(
       * k - Optional. The parameter controlling the size and accuracy of the merged
           sketch. An expression that evaluates to an integer between 8 and 65535. Must be
           a constant. Defaults to the lowest k among the first non-empty input sketch and the
-          input sketches that have started compacting.
+          input sketches that have started compacting. If every input sketch is empty, it
+          defaults to the k of the first one, and without input sketches to 200.
   """,
   examples = """
     Examples:
@@ -577,7 +579,8 @@ case class KllMergeAggBigint(
  *   optional expression for the k parameter from the Apache DataSketches library that controls
  *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
  *   If not specified, the merged sketch takes the lowest k among the first non-empty input
- *   sketch and the input sketches that have started compacting.
+ *   sketch and the input sketches that have started compacting. If every input sketch is empty,
+ *   it takes the k of the first one, and without input sketches the default k (200).
  *   If specified, the value is used to initialize the aggregation buffer. The merge operation
  *   can handle input sketches with different k values. Larger k values provide more accurate
  *   estimates but result in larger, slower sketches.
@@ -606,7 +609,8 @@ case class KllMergeAggBigint(
       * k - Optional. The parameter controlling the size and accuracy of the merged
           sketch. An expression that evaluates to an integer between 8 and 65535. Must be
           a constant. Defaults to the lowest k among the first non-empty input sketch and the
-          input sketches that have started compacting.
+          input sketches that have started compacting. If every input sketch is empty, it
+          defaults to the k of the first one, and without input sketches to 200.
   """,
   examples = """
     Examples:
@@ -666,7 +670,8 @@ case class KllMergeAggFloat(
  *   optional expression for the k parameter from the Apache DataSketches library that controls
  *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
  *   If not specified, the merged sketch takes the lowest k among the first non-empty input
- *   sketch and the input sketches that have started compacting.
+ *   sketch and the input sketches that have started compacting. If every input sketch is empty,
+ *   it takes the k of the first one, and without input sketches the default k (200).
  *   If specified, the value is used to initialize the aggregation buffer. The merge operation
  *   can handle input sketches with different k values. Larger k values provide more accurate
  *   estimates but result in larger, slower sketches.
@@ -695,7 +700,8 @@ case class KllMergeAggFloat(
       * k - Optional. The parameter controlling the size and accuracy of the merged
           sketch. An expression that evaluates to an integer between 8 and 65535. Must be
           a constant. Defaults to the lowest k among the first non-empty input sketch and the
-          input sketches that have started compacting.
+          input sketches that have started compacting. If every input sketch is empty, it
+          defaults to the k of the first one, and without input sketches to 200.
   """,
   examples = """
     Examples:
@@ -824,8 +830,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
   /**
    * Returns the merge of the buffer and `input`. Without k and with `lowestCompactingK`, the
    * result takes the lowest k among the first non-empty input and the compacting inputs, or the
-   * k of the first input if every input is empty. `heapInput` returns `input` as a heap sketch
-   * that can change.
+   * k of the first input if every input is empty. `heapInput` returns a mutable heap copy of
+   * `input`.
    */
   private def mergeSketch(sketchOption: Option[T], input: T, heapInput: => T): T =
     sketchOption match {
@@ -833,7 +839,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
       // k of the first one until a non-empty input replaces it.
       case Some(buffer) if takesLowestCompactingK && input.isEmpty() => buffer
       case Some(buffer) if takesLowestCompactingK && buffer.isEmpty() => heapInput
-      case Some(buffer) if rebuildsAtInputK(buffer, input) =>
+      case Some(buffer) if mergesIntoInput(buffer, input) =>
         // A merge keeps the k of its target, so the buffer goes into the input.
         val sketch = heapInput
         sketch.merge(buffer)
@@ -846,9 +852,10 @@ abstract class KllMergeAggBase[T <: KllSketch]
 
   private def takesLowestCompactingK: Boolean = kExpr.isEmpty && lowestCompactingK
 
-  // A compacting input is already approximate at its k, so a larger k adds no accuracy. An exact
-  // input is not approximate, so its k counts only when it is the first non-empty input.
-  private def rebuildsAtInputK(buffer: T, input: T): Boolean =
+  // A compacting input sets the error bound at its k, so a larger k adds size but no better
+  // bound. An exact input is not approximate, so its k counts only when it is the first non-empty
+  // input.
+  private def mergesIntoInput(buffer: T, input: T): Boolean =
     takesLowestCompactingK && input.isEstimationMode() && input.getK() < buffer.getK()
 
   /** Merges an input sketch into the current aggregation buffer. */
@@ -880,8 +887,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
   override def serialize(sketchOption: Option[T]): Array[Byte] = {
     sketchOption match {
       case Some(sketch) => toByteArray(sketch)
-      // Zero bytes deserialize as no input. So a partition without input sketches does not add an
-      // empty sketch with the default k to the final merge.
+      // Zero bytes deserialize as no input, also in released versions. So a partition without
+      // input sketches does not add an empty sketch with the default k to the final merge.
       case None if takesLowestCompactingK => Array.emptyByteArray
       case None => toByteArray(newHeapInstance(kValue))
     }
