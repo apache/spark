@@ -892,14 +892,24 @@ class NumPyCompatTestsMixin:
                     np_func(psdf["a"].astype(float), psdf["b"])
 
     def test_np_gcd_lcm_null(self):
-        # SPARK-60653: a null operand gives a null result.
-        psdf = self.spark.createDataFrame([(0, 6, 4), (1, None, 2)], "i int, x long, y long")
-        psdf = psdf.pandas_api(index_col="i").sort_index()
-        for np_func, expected in ((np.gcd, 2), (np.lcm, 12)):
+        # SPARK-60653: a null operand gives a null result, and a value above 2**53 in the same
+        # batch stays exact.
+        sdf = self.spark.createDataFrame(
+            [(0, 2**53 + 1, 3), (1, None, 3)], "i int, x long, y long"
+        ).coalesce(1)
+        psdf = sdf.pandas_api(index_col="i")
+        for np_func, expected in ((np.gcd, 3), (np.lcm, 2**53 + 1)):
             with self.subTest(ufunc=np_func.__name__):
-                result = np_func(psdf.x, psdf.y).to_pandas()
-                self.assertEqual(result.iloc[0], expected)
-                self.assertTrue(pd.isna(result.iloc[1]))
+                # Read the result from Spark, as to_pandas would turn the nullable long into a
+                # float64 that rounds it.
+                rows = (
+                    psdf.assign(r=np_func(psdf.x, psdf.y))
+                    .to_spark(index_col="i")
+                    .orderBy("i")
+                    .select("r")
+                    .collect()
+                )
+                self.assertEqual([row.r for row in rows], [expected, None])
 
     def test_np_fmax_fmin_non_default_dtypes(self):
         # Both helpers select an operand, so the result keeps the operands' type for every

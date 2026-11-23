@@ -25,7 +25,7 @@ from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.pandas.utils import _floor_divide_func
 from pyspark.sql import Column
 from pyspark.sql import functions as F
-from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.pandas.functions import arrow_udf, pandas_udf
 from pyspark.sql.types import (
     BooleanType,
     ByteType,
@@ -258,17 +258,28 @@ def _integer_ufunc_func(ufunc: Any) -> Callable[[np.dtype], Callable[..., Column
     Return the mapping of a NumPy ufunc that takes integers only, such as np.gcd.
 
     The mapping takes the integer dtype NumPy gives the operands, see _integer_ufunc_dtype, and
-    returns a pandas UDF that runs the ufunc on the operands cast to that dtype. So the result has
+    returns an Arrow UDF that runs the ufunc on the operands cast to that dtype. So the result has
     that dtype, as in pandas, and stays exact above 2**53.
     """
 
     def build(dtype: np.dtype) -> Callable[..., Column]:
+        import pandas as pd
+        import pyarrow as pa
+
+        arrow_type = pa.from_numpy_dtype(dtype)
         # The nullable counterpart of the dtype, such as Int64, keeps nulls.
-        nullable_dtype = dtype.name.capitalize()
-        return pandas_udf(  # type: ignore[call-overload]
-            lambda s1, s2: ufunc(s1.astype(nullable_dtype), s2.astype(nullable_dtype)),
-            as_spark_type(dtype),
-        )
+        nullable_dtype = pd.api.types.pandas_dtype(dtype.name.capitalize())
+
+        def func(a1: pa.Array, a2: pa.Array) -> pa.Array:
+            # A pandas UDF would get an integer batch with nulls as float64, which rounds values
+            # above 2**53, so take the Arrow arrays and convert them to the nullable dtype.
+            s1, s2 = (
+                a.cast(arrow_type).to_pandas(types_mapper={arrow_type: nullable_dtype}.get)
+                for a in (a1, a2)
+            )
+            return pa.array(ufunc(s1, s2), type=arrow_type)
+
+        return arrow_udf(func, as_spark_type(dtype))  # type: ignore[call-overload]
 
     return build
 
