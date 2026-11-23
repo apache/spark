@@ -4477,9 +4477,10 @@ object SQLConf {
       .doc("When true, the correctness check of chained stateful operators also covers, in " +
         "append mode, an operator that drops late rows after a stream-stream join, when its " +
         "event time can come from an input of the join whose state has no cutoff on its event " +
-        "time. When false, such a query only logs a warning, and the join evicts by the event " +
-        "time an input that it would otherwise evict by another column. A streaming query " +
-        "restarted from a checkpoint written without this config uses false.")
+        "time, even by the rule of earlier versions, or that the join evicts by another " +
+        "column. When false, such a query only logs a warning, and the join evicts by the " +
+        "event time an input that it would otherwise evict by another column. A streaming " +
+        "query restarted from a checkpoint written without this config uses false.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

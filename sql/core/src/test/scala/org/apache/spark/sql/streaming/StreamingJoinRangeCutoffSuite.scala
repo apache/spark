@@ -52,6 +52,38 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
     (leftInput, rightInput, left, right)
   }
 
+  // In America/Los_Angeles, the day after 2026-10-31 12:00 PDT lasts 25 hours, but the solver reads
+  // it as 24, so the constant-only conjunct keeps capping the cutoff. State format 4 probes the
+  // same 24 hours, as in earlier versions, so the test covers formats 2 and 3.
+  Seq(2, 3).foreach { version =>
+    test(s"constant-only conjunct caps a cutoff through a day across a daylight-saving change, " +
+        s"V$version") {
+      withJoinStateVersion(version) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          val (leftInput, rightInput, left, right) = inputs()
+          val joined = left.join(right, expr("leftKey = rightKey AND rt >= lt AND " +
+              "rt <= lt + INTERVAL 1 DAY AND CAST(lt AS LONG) > 1700000000"), "left_outer")
+            .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+          // 2026-10-31 12:00 PDT, 2026-11-01 11:30:01 PST and 2026-11-01 11:45 PST.
+          val (start, later, end) = (1793473200L, 1793561401L, 1793562300L)
+          testStream(joined)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, start)), AddData(rightInput, (9, start)))),
+            CheckNewAnswer(),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, later)), AddData(rightInput, (9, later)))),
+            CheckNewAnswer(),
+            // The watermark is now 11:30 PST. Read as 24 hours, the day after the left row ends
+            // at 11:00 PST, but it ends at 12:00 PST.
+            AddData(rightInput, (9, later)),
+            CheckNewAnswer(),
+            AddData(rightInput, (1, end)),
+            CheckNewAnswer(Row(1, start, end)))
+        }
+      }
+    }
+  }
+
   Seq(2, 3, 4).foreach { version =>
     test(s"negative watermark term does not evict state that can still match, V$version") {
       withJoinStateVersion(version) {
@@ -159,6 +191,47 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
           AddData(rightInput, (1, 19.6)),
           CheckNewAnswer(Row(1, 14.2, 19.6)))
       }
+    }
+
+    // The default mode would evict the left input by expiry, whose cutoff goes through a cast to a
+    // whole number and so lacks the cap of the conjunct on the event time. The input keeps the
+    // eviction by the event time with the earlier minimum.
+    Seq(("left_outer", "CAST(lt AS LONG) > 10", 0.0),
+        ("inner", "CAST(lt AS LONG) + CAST(rt AS LONG) > 100", 100.0)).foreach {
+      case (joinType, cap, shift) =>
+        test(s"$cap caps a cutoff through a truncating cast on another column, V$version " +
+            s"$joinType") {
+          withJoinStateVersion(version) {
+            val leftInput = MemoryStream[(Int, Double, Double)]
+            val rightInput = MemoryStream[(Int, Double)]
+            val left = leftInput.toDF().toDF("leftKey", "time", "end")
+              .select($"leftKey", timestamp_seconds($"time").as("lt"),
+                timestamp_seconds($"end").as("expiry"))
+              .withWatermark("lt", "1 second")
+            val right = rightInput.toDF().toDF("rightKey", "time")
+              .select($"rightKey", timestamp_seconds($"time").as("rt"))
+              .withWatermark("rt", "1 second")
+            val condition = expr(
+              s"leftKey = rightKey AND CAST(expiry AS LONG) >= CAST(rt AS LONG) AND $cap")
+            val joined = left.join(right, condition, joinType)
+              .select($"leftKey", $"lt".cast("double"), $"rt".cast("double"))
+            testStream(joined)(
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (1, 14.2 + shift, 19.2 + shift)),
+                AddData(rightInput, (9, 14.2 + shift)))),
+              CheckNewAnswer(),
+              // The watermark becomes 19.5 s after the shift. The cutoff from expiry alone would
+              // be about the same, but CAST(19.2) = 19 >= CAST(19.6) = 19 still matches.
+              StreamProgressLockedActions(Seq(
+                AddData(leftInput, (8, 20.5 + shift, 20.5 + shift)),
+                AddData(rightInput, (9, 20.5 + shift)))),
+              CheckNewAnswer(),
+              AddData(rightInput, (9, 20.6 + shift)),
+              CheckNewAnswer(),
+              AddData(rightInput, (1, 19.6 + shift)),
+              CheckNewAnswer(Row(1, 14.2 + shift, 19.6 + shift)))
+          }
+        }
     }
 
     // DECIMAL(10, 0) rounds half up, so 39.3 and 39.45 both become 39.
