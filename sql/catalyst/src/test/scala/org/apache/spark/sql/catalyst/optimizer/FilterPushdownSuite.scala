@@ -78,7 +78,8 @@ class FilterPushdownSuite extends PlanTest {
   private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
 
   // An RLIKE with a short literal pattern without `(`, `\` or `{`, which cannot fail; version 0
-  // of the regex pattern cost estimate treats it as expensive, and version 1 some of them.
+  // of the regex pattern cost estimate treats every such RLIKE as expensive, and version 1 some of
+  // them, e.g. `.*a.*b`.
   private def literalRLike(pattern: String): Expression = $"e".rlike(pattern)
 
   // This test already passes.
@@ -1019,24 +1020,28 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     // Under the default version 1 of the estimate too, with LIKE and RLIKE patterns that it
-    // counts as expensive and `cannotFailPattern` accepts: `f AND g != j AND j`.
+    // counts as expensive and `cannotFailPattern` accepts: `f AND g != j AND j`, with j, which is
+    // filtered on below (g != j), an RLIKE or a LIKE.
     assert(conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) === 1)
-    val (f1, g1, j1) = (literalRLike(".*a.*b"), $"e".like("%a%b%c%"), literalRLike("^.*a.*a.*b"))
-    Seq(f1, g1, j1).foreach(r => assert(r.expensive, r))
-    val v1Optimized = Optimize.execute(testStringRelation
-      .select($"a", f1 as "f", g1 as "g", j1 as "j")
-      .where($"f" && Not($"g" === $"j") && $"j")
-      .analyze)
-    val v1Answer = testStringRelation
-      .select($"a", $"b", $"e", f1 as "f")
-      .where($"f")
-      .select($"a", $"b", $"e", $"f", j1 as "j")
-      .where($"j")
-      .select($"a", $"f", g1 as "g", $"j")
-      .where(Not($"g" === $"j"))
-      .analyze
-    comparePlans(v1Optimized, v1Answer)
-    assert(filterConjuncts(v1Optimized) === filterConjuncts(v1Answer))
+    val (rlike1, rlike2, like1) =
+      (literalRLike(".*a.*b"), literalRLike("^.*a.*a.*b"), $"e".like("%a%b%c%"))
+    Seq((rlike1, like1, rlike2), (rlike1, rlike2, like1)).foreach { case (f1, g1, j1) =>
+      Seq(f1, g1, j1).foreach(r => assert(r.expensive, r))
+      val v1Optimized = Optimize.execute(testStringRelation
+        .select($"a", f1 as "f", g1 as "g", j1 as "j")
+        .where($"f" && Not($"g" === $"j") && $"j")
+        .analyze)
+      val v1Answer = testStringRelation
+        .select($"a", $"b", $"e", f1 as "f")
+        .where($"f")
+        .select($"a", $"b", $"e", $"f", j1 as "j")
+        .where($"j")
+        .select($"a", $"f", g1 as "g", $"j")
+        .where(Not($"g" === $"j"))
+        .analyze
+      comparePlans(v1Optimized, v1Answer)
+      assert(filterConjuncts(v1Optimized) === filterConjuncts(v1Answer))
+    }
   }
 
   test("SPARK-60731: the conditions after the one that ends the split are not filtered on below " +

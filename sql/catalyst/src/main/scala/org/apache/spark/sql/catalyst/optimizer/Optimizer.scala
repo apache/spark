@@ -3219,12 +3219,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * reads aliases computed below, ahead of the conditions written before it. That is why a
    * non-deterministic condition gets a filter of its own in the split. So, when the split places at
    * least one condition, the caller gives each non-deterministic condition it leaves above the
-   * projection a filter of its own too. A filter of its own only gets the rows on which the
-   * conditions before it are true, while one filter also evaluates a condition after one that is
-   * null (SPARK-60315), so a non-deterministic condition written after a condition that can be
-   * null sees fewer rows than with the split off, and, e.g. for a seeded `rand`, the two can
-   * return other rows. The projection on top computes the aliases of the
-   * conditions left above it, as without the split.
+   * projection a filter of its own too. A filter of its own, in the split or above it, only gets
+   * the rows on which the conditions below it are true, while one filter by default also evaluates
+   * a condition after one that is null (SPARK-60315). So a non-deterministic condition written
+   * after a condition over an expensive alias that can be null, which the split filters on below
+   * it, sees fewer rows than with the split off, and, e.g. for a seeded `rand`, the two can return
+   * other rows. A condition over no expensive alias is pushed below the projection either way. The
+   * projection on top computes the aliases of the conditions left above it, as without the split.
    *
    * Whole-stage codegen already defers a projected expression past a filter that does not need
    * it (`CodegenSupport.evaluateRequiredVariables`), so this rule only buys the same saving on
@@ -3279,18 +3280,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * computes, which would then run twice; a condition that would break this stays above. So the
    * layer itself only drops rows earlier. It can compute an alias on rows that a later rewrite of
    * the condition ending the split would have dropped first, which costs time but cannot fail. For
-   * example, with `f` and `g` the only expensive aliases, LIKE or RLIKE with such patterns that the
-   * regex pattern cost estimate counts as expensive (every one under version 0, and, e.g., RLIKE
-   * `'.*a.*b'` under the default version 1), `f != g AND f` computes `f` and filters on `f` below
-   * `f != g`, which stays above the projection. The check is conservative: when the layer would
-   * compute an alias that can fail, such as a UDF, or a condition after the one ending the split
-   * can fail or reads a column below that can fail, nothing is filtered on below it. Later passes
-   * split each layer the same way, so in a layer's filter a condition that cannot fail can likewise
-   * be filtered on below the first one, when that one needs every expensive alias the layer
-   * computes: with `j` expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`, then
-   * on `j`. Among the conditions that cannot fail, the split does not otherwise order by cost: in
-   * this example, and in `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on
-   * `j` first would (SPARK-61680).
+   * example, with `f` and `g` the only expensive aliases, LIKE or RLIKE whose patterns
+   * `cannotFailPattern` accepts and the regex pattern cost estimate counts as expensive (every such
+   * pattern under version 0, and, e.g., RLIKE `'.*a.*b'` under the default version 1),
+   * `f != g AND f` computes `f` and filters on `f` below `f != g`, which stays above the
+   * projection. The check is conservative: when the layer would compute an alias that can fail,
+   * such as a UDF, or a condition after the one ending the split can fail or reads a column below
+   * that can fail, nothing is filtered on below it. Later passes split each layer the same way, so
+   * in a layer's filter a condition that cannot fail can likewise be filtered on below the first
+   * one, when that one needs every expensive alias the layer computes: with `j` expensive too,
+   * `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the conditions that
+   * cannot fail, the split does not otherwise order by cost: in this example, and in
+   * `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
+   * (SPARK-61680).
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form and written order).
@@ -3410,10 +3412,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             (taken, unit)
           }
         }
-      // With every alias of the projection inlined, none of the conditions after the head can
-      // fail, nor reads a column below the projection that can fail (see the docstring).
+      // With every alias of the projection inlined, none of the conditions after the head, up to
+      // the first non-deterministic one, can fail, nor reads a column below the projection that
+      // can fail (see the docstring).
       def followingCannotFail: Boolean = {
-        val failableBelow = failableOutputWith(project.child, cannotFailInSplit)
+        lazy val failableBelow = failableOutputWith(project.child, cannotFailInSplit)
         following.forall { idx =>
           cannotFailOver(replaceAlias(conds(idx)._2, aliasMap), failableBelow, cannotFailInSplit)
         }
@@ -3452,7 +3455,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   /**
    * Whether `e` cannot fail: `ExprUtils.canEvaluateUnconditionally`, also accepting LIKE and RLIKE
    * whose pattern `StringRegexExpression.cannotFailPattern` accepts, which version 0 of the regex
-   * pattern cost estimate treats as expensive (SPARK-60731), and the default version 1 too for
+   * pattern cost estimate treats as expensive (SPARK-60731), and the default version 1 also for
    * some patterns, e.g. LIKE `'%a%b%c%'` and RLIKE `'.*a.*b'`. `CombineFilters` uses the narrower
    * `canEvaluateUnconditionally` (see `splitMovable`), so it does not move a condition with LIKE
    * or RLIKE ahead of a non-deterministic or throwable one.

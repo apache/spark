@@ -3127,27 +3127,40 @@ class DataFrameSuite extends SharedSparkSession
         }
       }
     }
-    // When a condition that can be null is written before the non-deterministic one, the split
-    // filters on it first, so `rand(10)` only sees the rows where it is true, while the one filter
-    // of the split-off plan also evaluates `rand(10)` where it is null (SPARK-60315). So
-    // `rand(10)` draws its values for other rows, and the two return other rows.
-    def nullFirst: DataFrame = nullableDf.where($"f" >= 50 && (rand(10) > 0.5 || $"h" < 0))
-    def drawnOn(reached: Int => Boolean): Seq[Long] = (0 until 100).filter(reached).zipWithIndex
-      .collect { case (i, n) if randAbove(n) && fAtLeast50(i) => i.toLong }
+    // When a condition over a UDF result that can be null is written before the
+    // non-deterministic one, the split filters on it below, so `rand(10)` only sees the rows where
+    // it is true, while the one filter of the split-off plan also evaluates `rand(10)` where it is
+    // null (SPARK-60315). So `rand(10)` draws its values for other rows, and the two return other
+    // rows. This holds for a non-deterministic condition the split places, as in the first query,
+    // and for one left above it, after the condition that ends the split, as in the second. These
+    // expectations record that difference; a change that keeps those rows for `rand(10)` with the
+    // split on would update them.
+    def fAtLeast0(i: Int): Boolean = i % 7 != 3
+    def hAtLeast0(i: Int): Boolean = i % 5 != 1
+    def drawnOn(reached: Int => Boolean, kept: Int => Boolean): Seq[Long] =
+      (0 until 100).filter(reached).zipWithIndex
+        .collect { case (i, n) if randAbove(n) && kept(i) => i.toLong }
+    val nullFirst = Seq(
+      (() => nullableDf.where($"f" >= 50 && (rand(10) > 0.5 || $"h" < 0)),
+        drawnOn(fAtLeast50, fAtLeast50), drawnOn(i => i % 7 == 3 || i >= 50, fAtLeast50)),
+      (() => nullableDf.where($"f" >= 0 && $"h" >= 0 && (rand(10) > 0.5 || $"f" < 0)),
+        drawnOn(i => fAtLeast0(i) && hAtLeast0(i), i => fAtLeast0(i) && hAtLeast0(i)),
+        drawnOn(_ => true, i => fAtLeast0(i) && hAtLeast0(i))))
+    nullFirst.foreach { case (_, splitIds, unsplitIds) => assert(splitIds !== unsplitIds) }
     for (split <- Seq(true, false); codegen <- Seq(true, false)) {
       withSQLConf(
         SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
-        if (split) {
-          assert(udfProjects(nullFirst).size > 1, "The split did not apply:\n" +
-            nullFirst.queryExecution.optimizedPlan)
+        nullFirst.foreach { case (q, splitIds, unsplitIds) =>
+          if (split) {
+            assert(udfProjects(q()).size > 1, "The split did not apply:\n" +
+              q().queryExecution.optimizedPlan)
+          }
+          assert(q().collect().map(_.getLong(0)).toSeq === (if (split) splitIds else unsplitIds),
+            s"split=$split, codegen=$codegen")
         }
-        val expected = if (split) drawnOn(fAtLeast50) else drawnOn(i => i % 7 == 3 || i >= 50)
-        assert(nullFirst.collect().map(_.getLong(0)).toSeq === expected,
-          s"split=$split, codegen=$codegen")
       }
     }
-    assert(drawnOn(fAtLeast50) !== drawnOn(i => i % 7 == 3 || i >= 50))
   }
 
   test("SPARK-60731: a throwable alias sharing work with an earlier condition's alias is " +
