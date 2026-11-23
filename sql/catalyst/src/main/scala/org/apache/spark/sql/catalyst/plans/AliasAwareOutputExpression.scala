@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.FoldablePropagation
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -28,6 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AliasAwareOutputExpression extends SQLConfHelper {
   protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
+  protected val foldablePropagationExcluded: Boolean =
+    conf.optimizerExcludedRuleNames.contains(FoldablePropagation.ruleName)
+
   protected def outputExpressions: Seq[NamedExpression]
   /**
    * This method can be used to strip expression which does not affect the result, for example:
@@ -40,11 +44,15 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   // more than `aliasCandidateLimit` attributes for an expression. In those cases the old logic
   // handled only the last alias so we need to make sure that we give precedence to that.
   // If the `outputExpressions` contain simple attributes we need to add those too to the map.
+  // A foldable child is mapped only while `FoldablePropagation` is excluded. When the rule runs it
+  // rewrites a requirement written against a query-constant alias to the constant, so the
+  // projection must keep the constant form (`a + 1`, not `a + one`); when the rule is excluded the
+  // requirement can stay alias-spelled, and the alias is kept as before.
   @transient
   private lazy val aliasMap = {
     val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
     outputExpressions.reverse.foreach {
-      case a @ Alias(child, _) =>
+      case a @ Alias(child, _) if !strip(child).foldable || foldablePropagationExcluded =>
         val buffer = aliases.getOrElseUpdate(strip(child).canonicalized, mutable.ArrayBuffer.empty)
         if (buffer.size < aliasCandidateLimit) {
           buffer += a.toAttribute

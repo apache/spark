@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeReference,
+  Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -975,6 +976,120 @@ class ProjectedOrderingAndPartitioningSuite
     val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
     assert(shuffles.size == 1,
       s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
+  }
+
+  test("SPARK-62263: a foldable alias does not lose the constant partitioning form") {
+    val a = AttributeReference("a", IntegerType)()
+    val child = DummyLeafExecWithPartitioning(Seq(a), HashPartitioning(Seq(Add(a, Literal(1))), 4))
+    val one = Alias(Literal(1), "one")()
+    val plan = ProjectExec(Seq(a, one), child)
+
+    // With FoldablePropagation enabled an alias-spelled requirement is rewritten to the constant,
+    // so only the constant form the child advertises needs to be kept.
+    assert(plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, Literal(1))))))
+    assert(!plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, one.toAttribute)))))
+  }
+
+  test("SPARK-62263: an excluded FoldablePropagation keeps the alias-spelled form") {
+    withSQLConf("spark.sql.optimizer.excludedRules" ->
+        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
+      val a = AttributeReference("a", IntegerType)()
+      val child =
+        DummyLeafExecWithPartitioning(Seq(a), HashPartitioning(Seq(Add(a, Literal(1))), 4))
+      val one = Alias(Literal(1), "one")()
+      val plan = ProjectExec(Seq(a, one), child)
+
+      // Without the rule the requirement can stay alias-spelled, so the alias is kept as before.
+      assert(plan.outputPartitioning.satisfies(
+        ClusteredDistribution(Seq(Add(a, one.toAttribute)))))
+      assert(!plan.outputPartitioning.satisfies(
+        ClusteredDistribution(Seq(Add(a, Literal(1))))))
+    }
+  }
+
+  test("SPARK-62263: a foldable alias must not force a redundant shuffle") {
+    withSQLConf(
+      "spark.sql.adaptive.enabled" -> "false",
+      "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val right = base.selectExpr("a as k")
+      val df = left.join(right, left("a") + 1 === right("k"))
+
+      // Correct result: a in 0..8 joins with k = a + 1.
+      val rows = df.collect().map(r => (r.getInt(0), r.getInt(2))).toSet
+      assert(rows == (0 until 9).map(i => (i, i + 1)).toSet, rows)
+
+      // Before the fix the Project advertised only `hashpartitioning(a + one)`, so the join
+      // inserted a second exchange on the repartitioned side (`hashpartitioning(a + 1)` twice).
+      // It must reuse the user's `repartition(a + 1)` instead.
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: a requirement in the alias-spelled form is still satisfied") {
+    withSQLConf(
+      "spark.sql.adaptive.enabled" -> "false",
+      "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+      "spark.sql.optimizer.excludedRules" ->
+        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
+      // FoldablePropagation is what normally rewrites `a + one` to `a + 1`; without it the join
+      // requires the alias-spelled form, which the projection must still advertise.
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val right = base.selectExpr("a as k")
+      val df = left.join(right, left("a") + left("one") === right("k"))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: a foldable alias does not lose partitioning when the alias map is non-empty") {
+    def hashExpressions(): Seq[Seq[String]] = {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val df = base.repartition($"a" + 1).selectExpr("a as x", "1 as one")
+      val partitionings = df.queryExecution.executedPlan.outputPartitioning match {
+        case c: PartitioningCollection => c.partitionings
+        case p => Seq(p)
+      }
+      partitionings.collect { case h: HashPartitioning => h.expressions.map(_.sql) }
+    }
+
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      val hashes = hashExpressions()
+      assert(hashes.contains(Seq("(x + 1)")), hashes)
+      assert(!hashes.contains(Seq("(x + one)")), hashes)
+    }
+    withSQLConf(
+      "spark.sql.adaptive.enabled" -> "false",
+      "spark.sql.optimizer.excludedRules" ->
+        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
+      val hashes = hashExpressions()
+      assert(hashes.contains(Seq("(x + one)")), hashes)
+      assert(!hashes.contains(Seq("(x + 1)")), hashes)
+    }
+  }
+
+  test("SPARK-62263: a foldable alias must not rewrite the child's ordering") {
+    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val df = base.sortWithinPartitions($"a" + 1).selectExpr("a", "1 as one")
+      df.collect()
+      val ordering = df.queryExecution.executedPlan.outputOrdering
+      assert(ordering.size == 1, ordering)
+      // With FoldablePropagation enabled only the constant form is kept.
+      assert(ordering.head.sql == "(a + 1) ASC NULLS FIRST", ordering.head.sql)
+      assert(ordering.head.sameOrderExpressions.isEmpty, ordering.head.sameOrderExpressions)
+    }
   }
 }
 

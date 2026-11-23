@@ -9856,6 +9856,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
+  def optimizerExcludedRuleNames: Set[String] =
+    optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq).toSet
+
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
