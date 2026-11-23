@@ -566,8 +566,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val jobFuture = submit(new MockRDD(sc, 10, Nil, Nil), (0 until 10).toArray)
       awaitJobTermination(jobFuture, duration)
     }
-    assert(results === (0 until 10).map { _ -> 42 }.toMap)
     assertDataStructuresEmpty()
+    assert(results === (0 until 10).map { _ -> 42 }.toMap)
   }
 
   /**
@@ -618,8 +618,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val jobFuture = submit(d, (0 until 30).toArray)
       awaitJobTermination(jobFuture, duration)
     }
-    assert(results === (0 until 30).map { idx => idx -> (4321 + idx) }.toMap)
     assertDataStructuresEmpty()
+    assert(results === (0 until 30).map { idx => idx -> (4321 + idx) }.toMap)
   }
 
   /**
