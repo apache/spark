@@ -706,8 +706,9 @@ object SQLConf {
       "output no row for an input row, so the query can raise an error on such a row that it " +
       "does not raise without the pushdown. When false, only a condition that `ExprUtils." +
       "canEvaluateUnconditionally` accepts, or a dynamic partition pruning or runtime filter " +
-      "whose key it accepts, is pushed below them, which also keeps some conditions that " +
-      "cannot fail above them, such as `upper(s) = 'A'`.")
+      "whose key it accepts, is pushed below them. That check takes the normalization of a " +
+      "FLOAT or DOUBLE join key as unable to fail. It is conservative, so it also keeps some " +
+      "conditions that cannot fail above them, such as `upper(s) = 'A'`.")
     .version("4.4.0")
     .booleanConf
     .createWithDefault(false)
