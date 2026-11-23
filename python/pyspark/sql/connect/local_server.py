@@ -57,6 +57,7 @@ import uuid
 from typing import Any, Dict, Iterator, Optional, TextIO
 
 from pyspark.errors import PySparkRuntimeError
+from pyspark.sql.connect.utils import remote_init_conf_from_env
 
 _SERVER_CLASS = "org.apache.spark.sql.connect.service.SparkConnectServer"
 # A fixed SPARK_IDENT_STRING keeps the spark-daemon.sh pid and log file names stable
@@ -344,9 +345,7 @@ def startup_seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
     """Compute startup confs using the same merge as the in-process server path, then strip
     the keys the launcher manages (see ``_strip_launcher_conf``).
     """
-    conf: Dict[str, Any] = {}
-    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
-        conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
+    conf = remote_init_conf_from_env()
     conf.update(opts)
     return _strip_launcher_conf(conf)
 
