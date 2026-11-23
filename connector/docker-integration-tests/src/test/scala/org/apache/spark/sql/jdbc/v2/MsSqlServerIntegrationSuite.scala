@@ -19,9 +19,11 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import scala.util.Using
+
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
@@ -316,7 +318,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         s"SELECT id FROM $table WHERE CAST(d AS STRING) = '123.456789'" -> Seq(Row(3)),
         s"SELECT id FROM $table WHERE startswith(CAST(d AS STRING), '1234567')" -> Seq(Row(4)),
         s"SELECT id FROM $table WHERE CAST(d AS STRING) = s" -> Seq(Row(1), Row(2), Row(3)),
-        s"SELECT id FROM $table WHERE concat('v', CAST(d AS STRING)) = 'v100.0'" -> Seq(Row(2)),
+        s"SELECT id FROM $table WHERE lpad(CAST(d AS STRING), 6, 'v') = 'v100.0'" -> Seq(Row(2)),
         s"SELECT id FROM $table WHERE d LIKE '1.%'" -> Seq(Row(1)),
         s"SELECT MAX(CAST(d AS STRING)), MIN(CAST(d AS STRING)) FROM $table" ->
           Seq(Row("1234567.0", "1.5")),
@@ -347,6 +349,59 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           assert(remoteQueries.nonEmpty, query)
           assert(!remoteQueries.exists(_.contains("NVARCHAR")), s"$query: $remoteQueries")
           checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-62136: CAST to STRING from decimals is pushed only for columns with scale <= 6") {
+    val table = s"$catalogName.cast_decimal_to_string"
+    withTable(table) {
+      sql(s"CREATE TABLE $table " +
+        "(id INT, c DECIMAL(38, 0), d DECIMAL(38, 6), z DECIMAL(20, 10))")
+      sql(s"INSERT INTO $table VALUES (1, 3, 0.5, 0), (2, 1, 0.25, 1)")
+      // MONEY and SMALLMONEY columns, which Spark reads as decimals, can only be created here.
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          "CREATE TABLE cast_money_to_string (id INT, m MONEY, sm SMALLMONEY)").executeUpdate()
+        conn.prepareStatement("INSERT INTO cast_money_to_string VALUES " +
+          "(1, 123.4567, 214748.3647), (2, 1.5, 2.25)").executeUpdate()
+      }
+      try {
+        def remoteQueries(df: DataFrame): Seq[String] = df.queryExecution.sparkPlan.collect {
+          case scan: RowDataSourceScanExec =>
+            scan.rdd.asInstanceOf[JDBCRDD].getExternalEngineQuery
+        }
+        val money = s"$catalogName.cast_money_to_string"
+        // Decimal columns with a scale up to 6 are pushed, cast to Spark's DECIMAL(p, s) first,
+        // so MONEY values keep their 4 fractional digits instead of SQL Server's 2.
+        Seq(
+          s"SELECT id FROM $table WHERE CAST(d AS STRING) = '0.500000'" -> Seq(Row(1)),
+          s"SELECT id FROM $money WHERE CAST(sm AS STRING) = '214748.3647'" -> Seq(Row(1)),
+          s"SELECT MAX(CAST(m AS STRING)) FROM $money" -> Seq(Row("123.4567"))
+        ).foreach { case (query, expected) =>
+          val df = sql(query)
+          assert(remoteQueries(df).exists(_.contains("AS DECIMAL(")),
+            s"$query: ${remoteQueries(df)}")
+          checkAnswer(df, expected)
+        }
+        // A computed decimal is typed by SQL Server's own rules (it prints 3 + 0.5 as '4'), and
+        // with ANSI mode off Spark prints decimals with a scale above 6 in exponent notation.
+        Seq(
+          (s"SELECT id FROM $table WHERE CAST(c + d AS STRING) = '3.500000'", "true", Row(1)),
+          (s"SELECT id FROM $table WHERE CAST(z AS STRING) = '0E-10'", "false", Row(1))
+        ).foreach { case (query, ansi, expected) =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            val df = sql(query)
+            assert(remoteQueries(df).nonEmpty, query)
+            assert(!remoteQueries(df).exists(_.contains("NVARCHAR")),
+              s"$query: ${remoteQueries(df)}")
+            checkAnswer(df, Seq(expected))
+          }
+        }
+      } finally {
+        Using.resource(getConnection()) { conn =>
+          conn.prepareStatement("DROP TABLE cast_money_to_string").executeUpdate()
         }
       }
     }

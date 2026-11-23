@@ -26,7 +26,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -92,13 +92,22 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     }
 
     // MsSqlServer converts a value to NVARCHAR the way Spark's CAST(x AS STRING) does only for
-    // integral, DECIMAL, DATE and string sources. Others render differently, for example FLOAT
-    // and REAL with at most 6 significant digits (123.456789 -> '123.457', 1234567.0 ->
-    // '1.23457e+006'), BIT as '1' or '0', DATETIME as 'Jan  1 2024 12:00AM' and VARBINARY bytes
-    // as UTF-16 text, so a pushed cast from them would compare different strings than Spark.
+    // integral, DATE and string sources, and for decimal columns with a scale from 0 to 6. Others
+    // render differently, for example FLOAT and REAL with at most 6 significant digits
+    // (123.456789 -> '123.457', 1234567.0 -> '1.23457e+006'), BIT as '1' or '0', DATETIME as
+    // 'Jan  1 2024 12:00AM' and VARBINARY bytes as UTF-16 text, so a pushed cast from them would
+    // compare different strings than Spark.
+    // TODO: some expressions over a refused cast do not depend on its rendering and could still
+    // be pushed: IS [NOT] NULL as the null check on the cast's input, COUNT as COUNT of the
+    // input, and a BOOLEAN-to-STRING cast used as a grouping or sort key as
+    // CASE WHEN b = 1 THEN 'true' WHEN b = 0 THEN 'false' END. Comparisons must stay refused.
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      dataType match {
-        case _: StringType if !rendersCastToStringAsSpark(exprDataType) =>
+      (exprDataType, dataType) match {
+        // A decimal is cast to Spark's DECIMAL(p, s) first, because MONEY and SMALLMONEY columns,
+        // which Spark reads as decimals, would otherwise be printed with 2 fractional digits.
+        case (d: DecimalType, _: StringType) if rendersDecimalAsSpark(d) =>
+          super.visitCast(s"CAST($expr AS DECIMAL(${d.precision},${d.scale}))", d, dataType)
+        case (_, _: StringType) if !rendersCastToStringAsSpark(exprDataType) =>
           throw new UnsupportedOperationException(
             s"Cannot push down CAST from ${exprDataType.sql} to ${dataType.sql}")
         case _ => super.visitCast(expr, exprDataType, dataType)
@@ -107,9 +116,15 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
     private def rendersCastToStringAsSpark(from: DataType): Boolean = from match {
       case ByteType | ShortType | IntegerType | LongType | DateType => true
-      case _: DecimalType | _: StringType => true
+      case _: StringType => true
       case _ => false
     }
+
+    // With ANSI mode off, Spark prints decimals with a scale above 6 in exponent notation
+    // ('0E-10'), and the V2 Cast does not say which mode Spark uses, so they are not pushed.
+    // TODO: carry the cast's eval mode into the V2 Cast, so that ANSI-mode casts from these
+    // decimals can be pushed again.
+    private def rendersDecimalAsSpark(d: DecimalType): Boolean = d.scale >= 0 && d.scale <= 6
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
       funcName match {
@@ -155,6 +170,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             visitCaseWhen(stringArray) + " = 1"
           case _ => super.build(expr)
         }
+        // MsSqlServer types decimal arithmetic by its own precision and scale rules, so the
+        // text of a computed decimal can differ from Spark's (3 + 0.5 over DECIMAL(38,0) and
+        // DECIMAL(38,6) prints '4'). Only decimal columns are cast to a string remotely.
+        case c: V2Cast if c.dataType().isInstanceOf[StringType] &&
+            c.expressionDataType().isInstanceOf[DecimalType] &&
+            !c.expression().isInstanceOf[NamedReference] =>
+          visitUnexpectedExpr(expr)
         case _ => super.build(expr)
       }
     }
