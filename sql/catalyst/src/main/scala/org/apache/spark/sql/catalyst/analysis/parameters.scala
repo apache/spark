@@ -96,10 +96,18 @@ object NameParameterizedQuery {
  * @param child The parameterized logical plan.
  * @param args The literal values or collection constructor functions such as `map()`,
  *             `array()`, `struct()` of positional parameters.
+ * @param hasOptionalReferences Whether the statement as written has optional references (`x?`),
+ *                              see `OptionalReferences.hasOptionalReferences`. Such a statement
+ *                              must not be given more values than it has positional markers.
  */
-case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
+case class PosParameterizedQuery(
+    child: LogicalPlan,
+    args: Seq[Expression],
+    hasOptionalReferences: Boolean)
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
+  // The plan string does not show the flag, so that it stays the same without optional references.
+  override protected def stringArgs: Iterator[Any] = Iterator(child, args)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }
@@ -115,16 +123,23 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
  * @param paramNames Optional parameter names corresponding to args. If provided for an argument,
  *                   that argument can be used for named parameter binding. If not provided
  *                   parameters are treated as positional.
+ * @param hasOptionalReferences Whether the statement as written has optional references (`x?`),
+ *                              see `OptionalReferences.hasOptionalReferences`. Such a statement
+ *                              must not be given more values than it has positional markers
+ *                              when it has no named parameter markers.
  */
 case class GeneralParameterizedQuery(
     child: LogicalPlan,
     args: Seq[Expression],
-    paramNames: Seq[String])
+    paramNames: Seq[String],
+    hasOptionalReferences: Boolean)
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
   assert(paramNames.length == args.length,
     s"paramNames must be same length as args. " +
     s"paramNames.length=${paramNames.length}, args.length=${args.length}")
+  // The plan string does not show the flag, so that it stays the same without optional references.
+  override protected def stringArgs: Iterator[Any] = Iterator(child, args, paramNames)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }
@@ -174,6 +189,23 @@ object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
+  /**
+   * Fails if a statement with optional references (`hasOptionalReferences`, a fact about the
+   * statement as written, because its references may be resolved by now) has fewer positional
+   * parameter markers than values. In such a statement, a `?` after an identifier or a
+   * non-reserved keyword is an optional reference where the syntax allows a reference, and the
+   * remaining markers must not take its value silently. See `SubstituteParamsParser` for the
+   * statements that are not bound here.
+   */
+  private def checkUnusedPositionalArgs(
+      hasOptionalReferences: Boolean,
+      numMarkers: Int,
+      numArgs: Int): Unit = {
+    if (numArgs > numMarkers && hasOptionalReferences) {
+      throw QueryCompilationErrors.unusedSqlParameterValuesError(numMarkers, numArgs)
+    }
+  }
+
   private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
     var stop = false
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
@@ -214,7 +246,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         ParameterizedQueryArgumentsValidator(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
-      case PosParameterizedQuery(child, args)
+      case PosParameterizedQuery(child, args, hasOptionalReferences)
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
@@ -223,6 +255,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
         val positions = scala.collection.mutable.Set.empty[Int]
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
+        checkUnusedPositionalArgs(hasOptionalReferences, positions.size, args.size)
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
         bind(child) {
@@ -230,7 +263,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             args(posToIndex(pos))
         }
 
-      case GeneralParameterizedQuery(child, args, paramNames)
+      case GeneralParameterizedQuery(child, args, paramNames, hasOptionalReferences)
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
@@ -280,6 +313,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           }
         } else {
           // Positional parameter binding (same logic as PosParameterizedQuery)
+          checkUnusedPositionalArgs(hasOptionalReferences, positionalParams.size, args.size)
           val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
           bind(child) {
             case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
