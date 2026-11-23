@@ -759,6 +759,12 @@ case class KllSketchGetRankDouble(left: Expression, right: Expression)
  * This is a base class for the above expressions to reduce boilerplate.
  * Each implementor is expected to define two methods, one to specify the input argument data type,
  * and another to compute the rank of an input sketch buffer given the input quantile.
+ *
+ * TODO: These rank getters still fail with KLL_INVALID_INPUT_SKETCH_BUFFER for a valid empty
+ * sketch, such as the sketch that kll_sketch_agg_* returns when it has no non-NULL input values,
+ * while the quantile getters (see KllSketchGetQuantileBase.emptySketchResult) return NULL for it.
+ * This is deliberately left unchanged for now, because their result for an empty sketch has not
+ * been decided.
  */
 abstract class KllSketchGetRankBase
     extends BinaryExpression
