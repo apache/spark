@@ -7634,28 +7634,29 @@ object SQLConf {
       .createWithDefault(false)
 
   val REPLACE_CTE_REF_WITH_CTE_REUSE =
-    buildConf("spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled")
+    buildConf("spark.sql.cteReuse.enabled")
       .internal()
-      .doc("When true, plan-reuse repartitions (those carrying a nonzero repartition id, " +
-        "currently produced only for CTE definitions marked forceSkipInline) are converted to " +
-        "CTEReuse nodes instead of plain Repartition nodes; ordinary retained or user " +
-        "MATERIALIZED CTEs keep plain repartitions and are unaffected. CTEReuse enables " +
-        "guaranteed exchange reuse in AQE by sharing a single inner AdaptiveSparkPlanExec " +
-        "across all references.")
-      .version("4.4.0")
+      .doc("When true, a CTE definition marked forceSkipInline that a batch query references " +
+        "two or more times is sealed for guaranteed reuse: its references become CTEReuse " +
+        "nodes that materialize the body once, through a single inner AdaptiveSparkPlanExec " +
+        "with AQE on and through one reused shuffle with AQE off. Such a definition can also " +
+        "pin its partitioning. Ordinary retained or user MATERIALIZED CTEs keep plain " +
+        "repartitions and are unaffected. When false, forceSkipInline definitions are lowered " +
+        "like any other retained CTE.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
   val FAIL_ON_CTE_REUSE_WITHOUT_AQE =
-    buildConf("spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled")
+    buildConf("spark.sql.cteReuse.failOnMissWithoutAQE")
       .internal()
-      .doc("When true, throw an error if guaranteed CTE/subplan shuffle reuse fails with AQE " +
-        "off, i.e. two or more shuffles tagged with the same cteId survive after " +
-        "ReuseExchangeAndSubquery (they were not deduplicated into a ReusedExchangeExec). " +
-        "When false, only log the plan, error, and cteIds. Enabled by default in tests to " +
-        "catch reuse regressions.")
-      .version("4.4.0")
+      .doc("When true, throw an error if guaranteed CTE shuffle reuse fails with AQE off, i.e. " +
+        "two or more shuffles carrying the same cteId in their LOCAL_SHUFFLE_FOR_CTE origin " +
+        "survive after ReuseExchangeAndSubquery (they were not deduplicated into a " +
+        "ReusedExchangeExec). When false, only log the plan and the cteIds. The default is " +
+        "false, in tests too; suites that check guaranteed reuse turn it on.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CTE_ID, QUERY_PLAN}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, COUNT, CTE_ID, QUERY_PLAN}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE_EXCHANGE, EXCHANGE}
 import org.apache.spark.sql.execution.SparkPlan
@@ -30,15 +30,15 @@ import org.apache.spark.sql.execution.SparkPlan
  * Each [[CTEReuseExchange]] is replaced by its `subplan` (a [[ShuffleExchangeExec]] with a
  * `LOCAL_SHUFFLE_FOR_CTE(cteId)` origin over the CTE body). The `cteId` is carried by the origin
  * itself (set in `SparkStrategies` when the shuffle is built), so [[VerifyCTEReuse]] can later
- * confirm the copies were reused without relying on a tree-node tag -- the origin survives node
- * reconstructions (e.g. photonization rebuilding the shuffle) that would drop a tag.
+ * confirm the copies were reused without relying on a tree-node tag, which a rule that rebuilds
+ * the shuffle node from its fields would drop.
  *
  * After unwrapping, all preparation rules (EnsureRequirements, columnar transitions, codegen,
  * etc.) process each CTE subplan copy normally, in its own consumer context.
- * The `LOCAL_SHUFFLE_FOR_CTE` shuffle serves as a protected boundary: `EnsureRequirements` /
- * `EnsureRequirementsDP` treat it as immutable (see `ShuffleExchangeLike.isCreatedForSubplanReuse`)
- * and add consumer-dependent operators above it, so the subtree below stays canonically equal
- * across copies. The final `ReuseExchangeAndSubquery` then reuses the copies by canonical equality.
+ * The `LOCAL_SHUFFLE_FOR_CTE` shuffle serves as a protected boundary: `EnsureRequirements` never
+ * rewrites its partitioning in place (see `ShuffleExchangeLike.isCreatedForSubplanReuse`) and adds
+ * any shuffle a consumer needs above it, so the subtree below stays canonically equal across
+ * copies. The final `ReuseExchangeAndSubquery` then reuses the copies by canonical equality.
  *
  * Runs in both main and subquery preparation batches so CTE references inside subqueries are also
  * unwrapped.
@@ -50,8 +50,8 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
     // separately by PlanSubqueries, which calls QueryExecution.prepareExecutedPlan ->
     // preparations(subquery = true), so this rule is applied recursively to each subquery's plan
     // on its own. We only need to handle CTEReuseExchange nodes in the current plan tree here.
-    // Prune on CTE_REUSE_EXCHANGE so plans without a forced CTE (incl. every non-AQE query and
-    // streaming micro-batch) are not re-traversed.
+    // Prune on CTE_REUSE_EXCHANGE so plans without a sealed CTE, which include every query with
+    // the reuse flag off, are not traversed.
     plan.transformUpWithPruning(_.containsPattern(CTE_REUSE_EXCHANGE)) {
       case cte: CTEReuseExchange =>
         // Recursively unwrap nested CTEReuseExchange nodes inside the subplan
@@ -70,7 +70,7 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
             // guaranteed reuse for this cteId).
             logError(log"CTE reuse (AQE off): expected a LOCAL_SHUFFLE_FOR_CTE shuffle under " +
               log"CTEReuseExchange(cteId=${MDC(CTE_ID, cte.cteId)}), but got " +
-              log"${MDC(QUERY_PLAN, other.nodeName)}. Plan:\n${MDC(QUERY_PLAN, other.treeString)}")
+              log"${MDC(CLASS_NAME, other.nodeName)}. Plan:\n${MDC(QUERY_PLAN, other.treeString)}")
         }
         unwrapped
     }
@@ -78,10 +78,11 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
 }
 
 /**
- * Verifies that guaranteed CTE shuffle reuse held (AQE off). Runs at the very end of the
- * preparation pipeline (inside `reuseRules`), after [[ReuseExchangeAndSubquery]], and only on the
- * final main-query pass -- not the per-subquery `PlanSubqueries` invocations, where reuse is not
- * yet complete.
+ * Verifies that guaranteed CTE shuffle reuse held (AQE off). Runs near the end of the main-query
+ * preparation pipeline, right after [[ReuseExchangeAndSubquery]] and before
+ * [[EnablePipelinedShuffle]], and only when the query's optimized plan seals a CTE (see
+ * `QueryExecution.preparations`) -- never in the per-subquery `PlanSubqueries` passes, where reuse
+ * is not yet complete.
  *
  * We rely on the stock [[ReuseExchangeAndSubquery]] (canonical matching) to reuse the CTE shuffles:
  * because all copies of a `cteId` are planned from the same canonicalized `sharedSubplan` and the
@@ -89,12 +90,17 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
  * canonically equal and are deduplicated into [[ReusedExchangeExec]]. After that pass, at most one
  * live (non-reused) shuffle per `cteId` should remain.
  *
- * If two or more live shuffles share a `cteId` tag, reuse did NOT apply for that CTE (e.g. a
- * consumer forced a divergent form above the boundary). This is a best-effort optimization, not a
- * correctness invariant, so:
- *  - when [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]] is on (test default),
- *    throw, to catch reuse regressions in tests;
- *  - otherwise, log the plan / error / cteIds.
+ * If two or more live shuffles carry the same `cteId` in their `LOCAL_SHUFFLE_FOR_CTE` origin,
+ * reuse did NOT apply for that CTE (for example because `spark.sql.exchange.reuse` is off), and the
+ * CTE body runs once per live shuffle, so the references of a nondeterministic CTE can see
+ * different rows. Then:
+ *  - when [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]] is on, throw; the flag defaults to false,
+ *    in tests too, and only the suites that check this rule turn it on;
+ *  - otherwise, log the plan and the cteIds that were not reused.
+ *
+ * TODO: give routes without AQE a fail-closed owner per `cteId` that materializes the CTE once
+ * whatever exchange reuse does, as the inner adaptive plan does under AQE; until then this rule
+ * only detects a reuse miss.
  *
  * This rule does not modify the plan.
  */
@@ -103,7 +109,7 @@ case class VerifyCTEReuse(
 
   override def apply(plan: SparkPlan): SparkPlan = {
     // A LOCAL_SHUFFLE_FOR_CTE shuffle is a ShuffleExchangeExec; if the plan has no exchange at all
-    // (no forced CTE could have survived), skip the traversal entirely.
+    // (no sealed CTE could have survived), skip the traversal entirely.
     if (!plan.containsPattern(EXCHANGE)) {
       return plan
     }
@@ -111,8 +117,7 @@ case class VerifyCTEReuse(
     // LOCAL_SHUFFLE_FOR_CTE origin. ReusedExchangeExec is a leaf whose canonical form is its child,
     // and it does not itself expose a LOCAL_SHUFFLE_FOR_CTE origin, so only un-deduplicated
     // shuffles are counted. Reading the id from the origin (rather than a tree-node tag) means node
-    // reconstructions that preserve `shuffleOrigin` but drop tags -- e.g. photonization rebuilding
-    // the shuffle -- do not blind this check.
+    // reconstructions that preserve `shuffleOrigin` but drop tags do not blind this check.
     val countByCteId = scala.collection.mutable.HashMap.empty[Long, Int]
     plan.foreachWithSubqueries {
       case s: ShuffleExchangeLike =>
@@ -133,11 +138,11 @@ case class VerifyCTEReuse(
           s"Guaranteed CTE shuffle reuse (AQE off) failed: [$summary] have >= 2 un-reused " +
             s"shuffles after ReuseExchangeAndSubquery.\nPlan:\n${plan.treeString}")
       } else {
-        notReused.foreach { case (cteId, _) =>
+        notReused.toSeq.sortBy(_._1).foreach { case (cteId, count) =>
           logWarning(log"Guaranteed CTE shuffle reuse (AQE off) not applied for " +
-            log"cteId=${MDC(CTE_ID, cteId)}.")
+            log"cteId=${MDC(CTE_ID, cteId)} (${MDC(COUNT, count)} shuffles).")
         }
-        logWarning(log"CTE reuse (AQE off) not applied: ${MDC(CTE_ID, summary)}. " +
+        logWarning(log"CTE reuse (AQE off) not applied. " +
           log"Plan:\n${MDC(QUERY_PLAN, plan.treeString)}")
       }
     }

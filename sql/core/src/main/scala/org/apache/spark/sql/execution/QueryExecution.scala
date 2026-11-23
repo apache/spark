@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern.CTE_REUSE
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
@@ -467,8 +468,18 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false,
+      verifyCTEReuse = hasCTEReuse)
   }
+
+  /**
+   * Whether the optimized plan, subqueries included, seals a CTE for guaranteed reuse. Only such a
+   * plan can hold a `LOCAL_SHUFFLE_FOR_CTE` shuffle, so only its preparation needs
+   * [[VerifyCTEReuse]]; every other query, including each streaming micro-batch and every query
+   * with the reuse flag off, skips that traversal. Subquery expressions propagate the pattern of
+   * their plans.
+   */
+  private def hasCTEReuse: Boolean = optimizedPlan.containsPattern(CTE_REUSE)
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
     QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
@@ -830,7 +841,8 @@ object QueryExecution {
   private[execution] def preparations(
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
-      subquery: Boolean): Seq[Rule[SparkPlan]] = {
+      subquery: Boolean,
+      verifyCTEReuse: Boolean = false): Seq[Rule[SparkPlan]] = {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
@@ -896,9 +908,15 @@ object QueryExecution {
         Nil
       } else {
         // VerifyCTEReuse runs only on the main query (not per-subquery) after
-        // ReuseExchangeAndSubquery, to verify guaranteed CTE shuffle reuse held (AQE off).
-        Seq(ReuseExchangeAndSubquery, VerifyCTEReuse(failOnReuseFailure =
-          sparkSession.sessionState.conf.getConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE)))
+        // ReuseExchangeAndSubquery, to verify guaranteed CTE shuffle reuse held (AQE off), and only
+        // when the caller found a sealed CTE in the optimized plan.
+        Seq(ReuseExchangeAndSubquery) ++
+          (if (verifyCTEReuse) {
+            Seq(VerifyCTEReuse(failOnReuseFailure =
+              sparkSession.sessionState.conf.getConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE)))
+          } else {
+            Nil
+          })
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
       // exchange means fan-out, which it refuses to make pipelined).

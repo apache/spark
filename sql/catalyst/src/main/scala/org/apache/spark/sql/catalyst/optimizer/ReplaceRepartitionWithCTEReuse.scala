@@ -25,16 +25,20 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.REPARTITION_OPERATION
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Converts plan-reuse repartitions into [[CTEReuseRelation]] nodes for guaranteed exchange reuse
- * in AQE.
+ * Converts plan-reuse repartitions into [[CTEReuseRelation]] nodes for guaranteed exchange reuse.
  *
- * By the time this runs, [[ReplaceCTERefWithRepartition]] has already turned CTE references into
- * plan-reuse repartitions (a [[Repartition]] / [[RepartitionByExpression]] carrying a non-zero
- * `repartitionId`). This rule seals every plan-reuse
- * repartition -- the ones from CTE references as well as any pre-existing ones from decorrelation,
- * multi-distinct aggregate, or subplan reuse -- into a [[CTEReuseRelation]].
+ * By the time this runs, [[ReplaceCTERefWithRepartition]] has turned the references of each
+ * `forceSkipInline` definition with two or more references into plan-reuse
+ * [[RepartitionByExpression]]s: copies of the definition's lowered body that all carry the same
+ * nonzero `repartitionId`. No other rule assigns such ids. This rule seals every id that still has
+ * two or more copies into [[CTEReuseRelation]]s sharing that id as their `cteId`, so the body is
+ * materialized once (one inner adaptive plan under AQE, one reused exchange without AQE).
  *
- * A CTE/Subplan with same `repartitionId` referenced only once is directly inlined.
+ * An id that ends up with a single copy, for example because its only references sit inside a
+ * definition that is itself never consumed, is not sealed, and its id is reset to zero so the
+ * repartition plans as an ordinary shuffle. If the sealed plan fails
+ * [[LogicalPlanIntegrity.validateCTEReuseRelations]], every id is reset instead and nothing is
+ * sealed.
  *
  * The rule runs only on the main query plan: it counts a `repartitionId`'s references across the
  * whole plan (descending into subqueries) to decide reuse, so it must not run on a subquery
@@ -63,29 +67,37 @@ object ReplaceRepartitionWithCTEReuse extends Rule[LogicalPlan] {
         refCount(r.repartitionId) = refCount.getOrElse(r.repartitionId, 0) + 1
       case _ =>
     }
-    val reusedIds = refCount.collect { case (id, count) if count > 1 => id }.toSet
-    if (reusedIds.isEmpty) {
+    if (refCount.isEmpty) {
       return plan
     }
+    val reusedIds = refCount.collect { case (id, count) if count > 1 => id }.toSet
 
-    val result = plan.transformUpWithSubqueriesAndPruning(
-        _.containsPattern(REPARTITION_OPERATION)) {
-      case r: PlanReusableRepartition if r.isForPlanReuse && reusedIds.contains(r.repartitionId) =>
-        CTEReuseRelation(
-          cteId = r.repartitionId,
-          partitioning = r.partitioning,
-          sharedSubplan = r)
-    }
+    // One bottom-up pass seals the reused ids and resets the others, inside the shared bodies
+    // too: a nested repartition is rewritten before the enclosing one becomes a CTEReuseRelation.
+    val result = sealOrReset(plan, reusedIds)
 
     LogicalPlanIntegrity.validateCTEReuseRelations(result) match {
       case Some(msg) =>
-        // Leave the plan-reuse repartitions unconverted rather than sealing an invalid plan. They
-        // still plan and execute correctly (as LOCAL_SHUFFLE_FOR_CTE shuffles); only guaranteed
-        // reuse is skipped for this query.
+        // Seal nothing rather than an invalid plan: reset every plan-reuse id so the repartitions
+        // plan as ordinary shuffles; only guaranteed reuse is skipped for this query.
         logWarning(s"CTEReuseRelation validation failed, leaving plan-reuse repartitions " +
-          s"unconverted:\n$msg")
-        plan
+          s"unsealed:\n$msg")
+        sealOrReset(plan, Set.empty)
       case None => result
+    }
+  }
+
+  private def sealOrReset(plan: LogicalPlan, reusedIds: Set[Long]): LogicalPlan = {
+    plan.transformUpWithSubqueriesAndPruning(_.containsPattern(REPARTITION_OPERATION)) {
+      case r: PlanReusableRepartition if r.isForPlanReuse =>
+        if (reusedIds.contains(r.repartitionId)) {
+          CTEReuseRelation(
+            cteId = r.repartitionId,
+            partitioning = r.partitioning,
+            sharedSubplan = r)
+        } else {
+          r.withRepartitionId(0L)
+        }
     }
   }
 }

@@ -17,13 +17,23 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
+
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTEReuseRelation}
-import org.apache.spark.sql.execution.EmptyRelationExec
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.adaptive.{CTEReuseQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, CTEReuseQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * End-to-end tests for CTE reuse through AQE: verifies that CTEReuseQueryStageExec instances
@@ -34,8 +44,7 @@ class CTEReuseWithAQESuite
     extends QueryTest with SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
-  private val cteReuseConf =
-    "spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled"
+  private val cteReuseConf = SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE.key
 
   private def withCTEReuseEnabled(f: => Unit): Unit = {
     withSQLConf(
@@ -435,8 +444,8 @@ class CTEReuseWithAQESuite
   // -----------------------------------------------------------------
 
   test("nested CTEs: outer CTE body references inner CTE") {
-    // Inner CTE (cte_inner) is defined inside outer CTE (cte_outer)'s
-    // body. Both have rand() to prevent inlining. The outer CTE is
+    // Both CTEs are defined at one WITH level, and cte_outer's body
+    // references cte_inner. Both have rand() to prevent inlining. The outer CTE is
     // referenced twice in the main query; the inner CTE is referenced
     // twice inside the outer CTE's definition. This produces 2
     // distinct CTE materializations in cteAQERegistry.
@@ -491,10 +500,6 @@ class CTEReuseWithAQESuite
   }
 
   // -----------------------------------------------------------------
-  // Deeply nested CTEs (6 levels)
-  // -----------------------------------------------------------------
-
-  // -----------------------------------------------------------------
   // Global aggregates over a forced CTE
   // -----------------------------------------------------------------
 
@@ -522,16 +527,17 @@ class CTEReuseWithAQESuite
     }
   }
 
+  // -----------------------------------------------------------------
+  // Deeply nested CTEs (6 levels)
+  // -----------------------------------------------------------------
+
   test("deeply nested CTEs: 6 levels of non-deterministic CTE nesting") {
     // Each level defines a non-deterministic CTE (rand()) that references
     // the CTE from the level below, with two refs per level to trigger
-    // CTE reuse. This exercises the CTE thread pool with concurrent
-    // inner AQEs and validates that deeply nested CTE materialization
-    // does not deadlock or produce incorrect results.
-    //
-    // With the default QueryStageCreator pool (16 threads), deeply nested
-    // CTEs would deadlock if CTE inner AQEs shared that pool. The
-    // separate CTE thread pool (1024 threads) prevents this.
+    // CTE reuse. This exercises nested inner AQEs materializing on the
+    // CTE thread pool and checks that six levels of nesting complete with
+    // correct results. At most six materializations block at once, so the
+    // test does not show that either pool avoids exhaustion.
     withCTEReuseEnabled {
       withTable("deep_src") {
         sql("CREATE TABLE deep_src (id INT) USING parquet")
@@ -574,4 +580,258 @@ class CTEReuseWithAQESuite
       }
     }
   }
+
+  // -----------------------------------------------------------------
+  // AQE applicability, the CTE stage's collect paths and job context
+  // -----------------------------------------------------------------
+
+  test("a union of two forced CTE references with no other exchange runs under AQE") {
+    withCTEReuseEnabled {
+      withTable("union_only_src") {
+        sql("CREATE TABLE union_only_src (id INT) USING parquet")
+        sql("INSERT INTO union_only_src VALUES (1), (2), (3)")
+        // The only shuffles are inside the forced CTE, so AQE applies only because
+        // InsertAdaptiveSparkPlan counts the CTE reuse exchanges.
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM union_only_src)
+            |SELECT id FROM cte UNION ALL SELECT id FROM cte
+            |""".stripMargin)
+        checkAnswer(df, Seq(1, 2, 3, 1, 2, 3).map(Row(_)))
+        assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec],
+          s"Expected an adaptive plan:\n${df.queryExecution.executedPlan}")
+        assertInnerAQEShared(df)
+      }
+    }
+  }
+
+  test("a result stage over CTE reuse stages returns the same rows when collected twice") {
+    withCTEReuseEnabled {
+      withTable("result_stage_src") {
+        sql("CREATE TABLE result_stage_src (id INT) USING parquet")
+        sql("INSERT INTO result_stage_src VALUES (1), (2), (3)")
+        // The result stage reads both CTE reuse stages directly (no exchange above them).
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM result_stage_src)
+            |SELECT id, r FROM cte UNION ALL SELECT id, r FROM cte
+            |""".stripMargin)
+        val first = df.collect().toSeq.map(r => (r.getInt(0), r.getDouble(1))).sorted
+        val second = df.collect().toSeq.map(r => (r.getInt(0), r.getDouble(1))).sorted
+        assert(first == second)
+        // One materialization: both references see the same rows.
+        assert(first.grouped(2).forall(pair => pair.distinct.size == 1), first)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        assert(stages.nonEmpty)
+        stages.foreach { s =>
+          val root = s.innerAQE.executedPlan match {
+            case r: AQEShuffleReadExec => r.child
+            case other => other
+          }
+          assert(root.isInstanceOf[ShuffleQueryStageExec],
+            s"Expected the shared inner plan to end in a shuffle stage:\n${s.innerAQE}")
+          // Spark's own shuffles are row-based, so the stage reports row support.
+          assert(s.supportsRowBased && !s.supportsColumnar)
+        }
+      }
+    }
+  }
+
+  test("jobs that materialize a forced CTE carry the query's execution id and job tags") {
+    withCTEReuseEnabled {
+      withTable("job_ctx_src") {
+        sql("CREATE TABLE job_ctx_src (id INT) USING parquet")
+        sql("INSERT INTO job_ctx_src VALUES (1), (2), (3)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM job_ctx_src)
+            |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        val jobs = mutable.ArrayBuffer.empty[java.util.Properties]
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = jobs.synchronized {
+            jobs += jobStart.properties
+          }
+        }
+        val tag = "cte-reuse-job-context"
+        spark.sparkContext.addSparkListener(listener)
+        spark.sparkContext.addJobTag(tag)
+        try {
+          df.collect()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+        } finally {
+          spark.sparkContext.removeJobTag(tag)
+          spark.sparkContext.removeSparkListener(listener)
+        }
+        val props = jobs.synchronized(jobs.toSeq)
+        // The CTE's map-stage job runs from the CTE pool, and the result job from this thread.
+        assert(props.size >= 2, s"Expected the CTE materialization and result jobs, got $props")
+        val executionIds = props.map(p => Option(p.getProperty(SQLExecution.EXECUTION_ID_KEY)))
+        assert(executionIds.forall(_.isDefined) && executionIds.distinct.size == 1,
+          s"Expected every job to carry the query's execution id, got $executionIds")
+        assert(props.forall(p => Option(p.getProperty(SparkContext.SPARK_JOB_TAGS))
+          .exists(_.split(SparkContext.SPARK_JOB_TAGS_SEP).contains(tag))),
+          s"Expected every job to carry the job tag $tag")
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Pins, root shapes and identical bodies
+  // -----------------------------------------------------------------
+
+  // The root shuffle stage of a CTE reuse stage's shared inner plan.
+  private def innerRootStage(s: CTEReuseQueryStageExec): ShuffleQueryStageExec =
+    s.innerAQE.executedPlan match {
+      case r: AQEShuffleReadExec => r.child.asInstanceOf[ShuffleQueryStageExec]
+      case q: ShuffleQueryStageExec => q
+      case other => fail(s"Expected a shuffle stage at the root, got:\n$other")
+    }
+
+  test("a pinned forced CTE materializes on the pinned keys and partition count") {
+    withCTEReuseEnabled {
+      withTable("pinned_src") {
+        sql("CREATE TABLE pinned_src (id INT, v INT) USING parquet")
+        sql("INSERT INTO pinned_src VALUES (1, 10), (2, 20), (3, 30)")
+        val analyzed = spark.sql(
+          """WITH cte AS (SELECT id, v, rand() AS r FROM pinned_src)
+            |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin).queryExecution.analyzed
+        // Build the pin from the body's own output (below the analyzer's SubqueryAlias), the
+        // attributes the optimized definition keeps.
+        val df = classic.Dataset.ofRows(spark, analyzed.transformWithSubqueries {
+          case d: CTERelationDef =>
+            val keys = EliminateSubqueryAliases(d.child).output.filter(_.name == "id")
+            d.copy(forceSkipInline = true, forcePartitioning = Some(HashPartitioning(keys, 3)))
+        })
+        checkAnswer(df, Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+        assertInnerAQEShared(df)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        assert(stages.size == 2)
+        stages.foreach { s =>
+          innerRootStage(s).shuffle.outputPartitioning match {
+            case h: HashPartitioning =>
+              assert(h.numPartitions == 3 &&
+                h.expressions.map(_.references.head.name) == Seq("id"), h)
+            case other => fail(s"Expected the pinned hash partitioning, got $other")
+          }
+          // Each reference reports the partitioning and statistics in its own attributes.
+          s.outputPartitioning match {
+            case h: HashPartitioning =>
+              assert(h.references.subsetOf(s.outputSet), s"Expected $h in terms of ${s.output}")
+            case other => fail(s"Expected a hash partitioning on the stage, got $other")
+          }
+          s.computeStats().foreach { stats =>
+            assert(stats.attributeStats.keys.forall(s.outputSet.contains), stats)
+          }
+        }
+        // The two references are aliased copies with distinct attributes.
+        assert(stages.map(_.output.map(_.exprId)).distinct.size == 2,
+          stages.map(_.output).mkString("\n"))
+      }
+    }
+  }
+
+  test("a forced CTE rooted at a rebalance materializes a single shuffle") {
+    withCTEReuseEnabled {
+      withTable("rebalance_src") {
+        sql("CREATE TABLE rebalance_src (k INT, v INT) USING parquet")
+        sql("INSERT INTO rebalance_src VALUES (1, 10), (2, 20), (3, 30)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT /*+ REBALANCE(k) */ k, v, rand() AS r FROM rebalance_src)
+            |SELECT c1.k, c2.v FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+            |""".stripMargin)
+        val reference = withSQLConf(cteReuseConf -> "false") {
+          sqlWithForcedCTEReuse(
+            """WITH cte AS (SELECT /*+ REBALANCE(k) */ k, v, rand() AS r FROM rebalance_src)
+              |SELECT c1.k, c2.v FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+              |""".stripMargin).collect()
+        }
+        checkAnswer(df, reference.toSeq)
+        assertInnerAQEShared(df)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        stages.foreach { s =>
+          val inner = s.innerAQE.executedPlan
+          val shuffles = collectWithSubqueries(inner) { case q: ShuffleQueryStageExec => q }
+          assert(shuffles.size == 1, s"Expected one shuffle stage in the inner plan:\n$inner")
+          shuffles.head.shuffle.outputPartitioning match {
+            case h: HashPartitioning =>
+              assert(h.expressions.map(_.references.head.name) == Seq("k"))
+            case other => fail(s"Expected the rebalance's hash partitioning, got $other")
+          }
+        }
+      }
+    }
+  }
+
+  test("a forced CTE rooted at REPARTITION(n) materializes one n-partition shuffle") {
+    withCTEReuseEnabled {
+      withTable("repart_n_src") {
+        sql("CREATE TABLE repart_n_src (id INT) USING parquet")
+        sql("INSERT INTO repart_n_src VALUES (1), (2), (3), (4)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT /*+ REPARTITION(3) */ id, rand() AS r FROM repart_n_src)
+            |SELECT c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        checkAnswer(df, (1 to 4).map(_ => Row(true)))
+        assertInnerAQEShared(df)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        stages.foreach { s =>
+          val inner = s.innerAQE.executedPlan
+          val shuffles = collectWithSubqueries(inner) { case q: ShuffleQueryStageExec => q }
+          assert(shuffles.size == 1 &&
+            shuffles.head.shuffle.outputPartitioning.numPartitions == 3,
+            s"Expected one 3-partition shuffle stage in the inner plan:\n$inner")
+        }
+      }
+    }
+  }
+
+  test("forced CTEs with identical deterministic bodies share one inner AQE") {
+    withCTEReuseEnabled {
+      withTable("same_body_src") {
+        sql("CREATE TABLE same_body_src (id INT, v INT) USING parquet")
+        sql("INSERT INTO same_body_src VALUES (1, 10), (2, 20)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH a AS (SELECT id, v * 2 AS w FROM same_body_src),
+            |  b AS (SELECT id, v * 2 AS w FROM same_body_src)
+            |SELECT * FROM a UNION ALL SELECT * FROM a
+            |UNION ALL SELECT * FROM b UNION ALL SELECT * FROM b
+            |""".stripMargin)
+        checkAnswer(df, Seq.fill(4)(Seq(Row(1, 20), Row(2, 40))).flatten)
+        assertInnerAQEShared(df, expectedDistinctCTEs = 1)
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Row support of a CTE reuse stage
+  // -----------------------------------------------------------------
+
+  test("a CTE reuse stage over a columnar-only inner root reports no row support") {
+    val leaf = ColumnarOnlyLeafExec(spark.range(1).queryExecution.analyzed.output)
+    val context = AdaptiveExecutionContext(spark, spark.range(1).queryExecution)
+    val inner = AdaptiveSparkPlanExec(leaf, context, Nil, isSubquery = true)
+    val stage = CTEReuseQueryStageExec(0, inner, leaf.output)
+    assert(stage.supportsColumnar && !stage.supportsRowBased)
+    // A row-based consumer therefore gets a columnar-to-row transition above the stage.
+    val withTransitions =
+      ApplyColumnarRulesAndInsertTransitions(Nil, outputsColumnar = false).apply(stage)
+    assert(withTransitions.isInstanceOf[ColumnarToRowExec], withTransitions.treeString)
+  }
+}
+
+/** A leaf that only produces columnar batches, like the root of a columnar plugin's plan. */
+case class ColumnarOnlyLeafExec(output: Seq[Attribute]) extends LeafExecNode {
+  override def supportsColumnar: Boolean = true
+  override def supportsRowBased: Boolean = false
+  override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException("columnar only")
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
+    throw new UnsupportedOperationException("not executed in this test")
 }

@@ -29,8 +29,16 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Replaces CTE references that have not been previously inlined with [[Repartition]] operations
+ * Replaces CTE references that have not been previously inlined with repartition operations
  * which will then be planned as shuffles and reused across different reference points.
+ *
+ * A definition marked `forceSkipInline` that is referenced at least twice by a batch query is
+ * lowered, when [[SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE]] is on, to a plan-reuse
+ * [[RepartitionByExpression]] (a nonzero `repartitionId` shared by every copy of the definition),
+ * which [[ReplaceRepartitionWithCTEReuse]] then seals into [[CTEReuseRelation]]s so the body is
+ * materialized once. Every other definition, including a forced definition referenced only once or
+ * whose body is streaming, keeps the plain lowering: a repartition without a plan-reuse id, or no
+ * extra repartition when the body already repartitions or hosts a merged scalar subquery.
  *
  * Note that this rule should be called at the very end of the optimization phase to best guarantee
  * that CTE repartition shuffles are reused.
@@ -40,7 +48,45 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
     case _ =>
-      replaceWithRepartition(plan, mutable.HashMap.empty[Long, LogicalPlan])
+      replaceWithRepartition(
+        plan, mutable.HashMap.empty[Long, LogicalPlan], new LoweringContext(countReferences(plan)))
+  }
+
+  /**
+   * Counts the references of each CTE definition across the whole plan: the main query, its
+   * subqueries and the bodies of other CTE definitions.
+   */
+  private def countReferences(plan: LogicalPlan): Map[Long, Int] = {
+    val counts = mutable.HashMap.empty[Long, Int]
+    plan.foreachWithSubqueriesAndPruning(_.containsPattern(CTE)) {
+      case ref: CTERelationRef => counts(ref.cteId) = counts.getOrElse(ref.cteId, 0) + 1
+      case _ =>
+    }
+    counts.toMap
+  }
+
+  /**
+   * Per-query state of the lowering: the reference counts, and the plan-reuse id assigned to each
+   * deterministic shared body, so that forced definitions with canonically equal bodies are
+   * materialized once, as canonical exchange reuse does for plain CTE repartitions.
+   */
+  private class LoweringContext(refCounts: Map[Long, Int]) {
+    private val idByBody = mutable.HashMap.empty[LogicalPlan, Long]
+
+    def refCount(cteId: Long): Int = refCounts.getOrElse(cteId, 0)
+
+    def assignId(root: RepartitionByExpression): RepartitionByExpression = {
+      if (root.isForPlanReuse) {
+        // The root already is the plan-reuse repartition of another shared definition that this
+        // body merely selects (e.g. `SELECT * FROM other_cte`), so it shares that identity.
+        root
+      } else if (root.deterministic) {
+        root.withRepartitionId(
+          idByBody.getOrElseUpdate(root.canonicalized, RepartitionIdGenerator.newRepartitionId))
+      } else {
+        root.withRepartitionId(RepartitionIdGenerator.newRepartitionId)
+      }
+    }
   }
 
   private def canSkipExtraRepartition(p: LogicalPlan): Boolean = p match {
@@ -49,60 +95,88 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  /**
+   * The plain lowering of a CTE definition: no plan-reuse id, and no extra shuffle when the body
+   * already repartitions or hosts a merged scalar subquery.
+   */
+  private def plainLowering(cteDef: CTERelationDef, inlined: LogicalPlan): LogicalPlan = {
+    if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+      inlined
+    } else {
+      RepartitionByExpression(Seq.empty, inlined, None)
+    }
+  }
+
+  /**
+   * The root of a shared forced definition as one repartition that can carry the plan-reuse id.
+   * A root that already plans to a single shuffle is converted to a [[RepartitionByExpression]]
+   * with the same partitioning instead of being wrapped in a second shuffle: a shuffling
+   * [[Repartition]] keeps its partition count, and a [[RebalancePartitions]] keeps its keys, its
+   * partition count and its advisory partition size (both take their partitioning from
+   * [[HasPartitionExpressions]]). A converted rebalance gives up its adaptive coalescing and skew
+   * splitting, because a CTE reuse shuffle keeps one frozen layout for all its consumers. A
+   * coalesce root is wrapped in a repartition to its partition count, and any other root, such as
+   * a merged-subquery body, in a round-robin repartition.
+   */
+  private def sealableRoot(inlined: LogicalPlan): RepartitionByExpression = inlined match {
+    case r: RepartitionByExpression => r
+    case Repartition(numPartitions, true, child) =>
+      RepartitionByExpression(Seq.empty, child, Some(numPartitions))
+    case Repartition(numPartitions, false, _) =>
+      RepartitionByExpression(Seq.empty, inlined, Some(numPartitions))
+    case r: RebalancePartitions =>
+      RepartitionByExpression(
+        r.partitionExpressions, r.child, r.optNumPartitions, r.optAdvisoryPartitionSize)
+    case _ =>
+      RepartitionByExpression(Seq.empty, inlined, None)
+  }
+
+  private def lower(
+      cteDef: CTERelationDef,
+      inlined: LogicalPlan,
+      ctx: LoweringContext): LogicalPlan = {
+    // The reuse-oriented lowering (pinned partitioning, plan-reuse id) only runs for a
+    // `forceSkipInline` definition with guaranteed reuse enabled; otherwise this rule keeps the
+    // plain lowering, so turning the flag off fully rolls the feature back. A pin on a definition
+    // that is not `forceSkipInline` is ignored because such a definition may be inlined by
+    // `InlineCTE` before this rule runs.
+    if (!cteDef.forceSkipInline || !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)) {
+      return plainLowering(cteDef, inlined)
+    }
+    // Only a batch definition with two or more references is sealed for reuse. A single reference
+    // already runs the body once, and sealing a streaming body would hide its stateful operators
+    // from the micro-batch state rules, which run before the AQE-off unwrap.
+    val seal = ctx.refCount(cteDef.id) >= 2 && !inlined.isStreaming
+    cteDef.forcePartitioning match {
+      case Some(h: HashPartitioning) =>
+        // A pinned partitioning materializes the CTE as a RepartitionByExpression on the pinned
+        // expressions and partition count, whether or not it is sealed. It takes precedence over
+        // `canSkipExtraRepartition`: the pin states the exact partitioning we must produce.
+        val pinned = RepartitionByExpression(h.expressions, inlined, Some(h.numPartitions))
+        if (seal) ctx.assignId(pinned) else pinned
+      case Some(other) =>
+        // forcePartitioning is an internal dev API; only HashPartitioning is supported
+        // today (see CTERelationDef.forcePartitioning).
+        throw new UnsupportedOperationException(
+          s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
+            s"${other.getClass.getSimpleName}")
+      case None if seal =>
+        ctx.assignId(sealableRoot(inlined))
+      case None =>
+        plainLowering(cteDef, inlined)
+    }
+  }
+
   private def replaceWithRepartition(
       plan: LogicalPlan,
-      cteMap: mutable.HashMap[Long, LogicalPlan]): LogicalPlan = plan match {
+      cteMap: mutable.HashMap[Long, LogicalPlan],
+      ctx: LoweringContext): LogicalPlan = plan match {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
-        val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        // The sealing-oriented lowering (plan-reuse id, pinned partitioning) only runs when
-        // guaranteed reuse is enabled; otherwise this rule must not change the plan shape (e.g.
-        // add an extra shuffle), so turning the flag off fully rolls the feature back. Sealing also
-        // requires `forceSkipInline`: a pin on a non-forceSkipInline definition is ignored because
-        // such a definition may be inlined by `InlineCTE` before this rule runs.
-        val sealForReuse = cteDef.forceSkipInline &&
-          SQLConf.get.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)
-        val withRepartition = (sealForReuse, cteDef.forcePartitioning) match {
-          case (true, Some(h: HashPartitioning)) =>
-            // A pinned partitioning materializes the CTE as a plan-reuse RepartitionByExpression
-            // on the pinned expressions, so guaranteed CTE reuse can pick it up. It takes
-            // precedence over `canSkipExtraRepartition` -- the pin states the exact partitioning
-            // (keys and number of partitions) we must produce.
-            RepartitionByExpression(
-              h.expressions, inlined, optNumPartitions = Some(h.numPartitions))
-              .addRepartitionId(reassign = true)
-          case (true, Some(other)) =>
-            // forcePartitioning is an internal dev API; only HashPartitioning is supported
-            // today (see CTERelationDef.forcePartitioning).
-            throw new UnsupportedOperationException(
-              s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
-                s"${other.getClass.getSimpleName}")
-          case (true, None) =>
-            // A forced CTE must always carry the plan-reuse identity so every reference seals into
-            // a CTEReuseRelation and materializes once, whatever the body's root shape. Stamp an
-            // existing reusable repartition in place (no extra shuffle); wrap any other root -- a
-            // plain repartition, a rebalance, or a merged-subquery body -- in a plan-reuse
-            // RepartitionByExpression.
-            inlined match {
-              case r: PlanReusableRepartition => r.addRepartitionId()
-              case _ =>
-                RepartitionByExpression(Seq.empty, inlined, None)
-                  .addRepartitionId(reassign = true)
-            }
-          case _ =>
-            // Not sealing (a non-forceSkipInline CTE, or the reuse flag is off): keep the original
-            // OSS behavior -- a plain repartition that is not sealed for reuse (no repartitionId),
-            // and no extra shuffle when the body already repartitions or hosts a merged subquery.
-            // Any forcePartitioning pin is ignored in this branch.
-            if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-              inlined
-            } else {
-              RepartitionByExpression(Seq.empty, inlined, None)
-            }
-        }
-        cteMap.put(cteDef.id, withRepartition)
+        val inlined = replaceWithRepartition(cteDef.child, cteMap, ctx)
+        cteMap.put(cteDef.id, lower(cteDef, inlined, ctx))
       }
-      replaceWithRepartition(child, cteMap)
+      replaceWithRepartition(child, cteMap, ctx)
 
     case ref: CTERelationRef =>
       val cteDefPlan = cteMap.getOrElse(ref.cteId,
@@ -121,10 +195,10 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
 
     case _ if plan.containsPattern(CTE) =>
       plan
-        .withNewChildren(plan.children.map(c => replaceWithRepartition(c, cteMap)))
+        .withNewChildren(plan.children.map(c => replaceWithRepartition(c, cteMap, ctx)))
         .transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
           case e: SubqueryExpression =>
-            e.withNewPlan(replaceWithRepartition(e.plan, cteMap))
+            e.withNewPlan(replaceWithRepartition(e.plan, cteMap, ctx))
         }
 
     case _ => plan

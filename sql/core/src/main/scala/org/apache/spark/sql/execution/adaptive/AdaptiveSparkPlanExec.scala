@@ -359,9 +359,6 @@ case class AdaptiveSparkPlanExec(
   def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
 
   /**
-   * Run `fun` on finalized physical plan
-   */
-  /**
    * Drive this AQE to completion of all non-result stages without creating a
    * [[ResultQueryStageExec]] on top. Used by [[CTEReuseQueryStageExec]] for shared CTE
    * materialization: all references to a CTE wrap this same inner AQE, whose materialization runs
@@ -400,6 +397,13 @@ case class AdaptiveSparkPlanExec(
     scalaPromise.future
   }
 
+  /**
+   * Run `fun` on finalized physical plan.
+   *
+   * @param skipResultStage When true, drive the plan only until every non-result stage is
+   *                        materialized, create no [[ResultQueryStageExec]], never call `fun`,
+   *                        and return `()`. Used by `materialize()` for a shared CTE inner plan.
+   */
   private[adaptive] def withFinalPlanUpdate[T](
       fun: SparkPlan => T,
       skipResultStage: Boolean = false): T = lock.synchronized {

@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.adaptive
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{classic, SparkSession}
+import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
 import org.apache.spark.sql.execution.exchange.{PipelinedShuffleTestSession, ShuffleExchangeExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /** End-to-end coverage of channel eligibility and regular-shuffle fallbacks under AQE. */
 class AQEPipelinedShuffleSuite extends SparkFunSuite
@@ -201,6 +203,41 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       }
       // The inner pipelined query still runs.
       assert(inner.collect().map(_.getLong(1)).sum === 1000L)
+    }
+  }
+
+  test("a shared forced CTE stays regular across repeated actions") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      session.conf.set(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      // forceSkipInline has no SQL syntax: tag the analyzed CTE definition and re-run it.
+      val analyzed = session.sql(
+        """WITH cte AS (SELECT id AS k, rand() AS r FROM range(0, 100, 1, 2))
+          |SELECT c1.k, c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+        case d: CTERelationDef => d.copy(forceSkipInline = true)
+      })
+      val expected = (0L until 100L).map(k => (k, true))
+      def run(): Seq[(Long, Boolean)] =
+        df.collect().map(r => (r.getLong(0), r.getBoolean(1))).toSeq.sortBy(_._1)
+      assert(run() === expected)
+      val plan = df.queryExecution.executedPlan
+      val cteStages = collect(plan) { case s: CTEReuseQueryStageExec => s }
+      assert(cteStages.size == 2, s"expected two CTE reuse stages; plan:\n$plan")
+      cteStages.foreach { s =>
+        val root = s.innerAQE.executedPlan match {
+          case r: AQEShuffleReadExec => r.child
+          case other => other
+        }
+        assert(root.isInstanceOf[ShuffleQueryStageExec],
+          s"expected the shared inner plan to root at a regular shuffle stage; plan:\n$plan")
+      }
+      assert(pipelinedExchanges(plan).isEmpty,
+        s"no exchange of a plan reading a CTE reuse stage may be pipelined; plan:\n$plan")
+      // The second collect of the same DataFrame must succeed with the same rows.
+      assert(run() === expected)
     }
   }
 }

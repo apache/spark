@@ -367,6 +367,10 @@ case class CTEReuseQueryStageExec(
   override def executeToIterator(): Iterator[InternalRow] =
     innerAQE.executedPlan.executeToIterator()
 
+  // Report the inner plan's executed root, not the inner AdaptiveSparkPlanExec, which always claims
+  // row support: a columnar-only root (e.g. from a columnar plugin) then gets a columnar-to-row
+  // transition above this stage when a row-based consumer reads it.
+  override def supportsRowBased: Boolean = innerAQE.executedPlan.supportsRowBased
   override def supportsColumnar: Boolean = innerAQE.executedPlan.supportsColumnar
 
   override def outputPartitioning: Partitioning = innerAQE.inputPlan.outputPartitioning match {

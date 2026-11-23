@@ -2357,18 +2357,22 @@ object RepartitionIdGenerator {
 }
 
 /**
- * A trait for repartition operations that support plan reuse. Repartitions marked for plan reuse
- * carry a unique id, used to guarantee exchange reuse across references.
+ * A trait for repartition operations that support plan reuse. A repartition marked for plan reuse
+ * carries a nonzero id that every copy of the same shared body keeps, used to guarantee exchange
+ * reuse across references. [[RepartitionByExpression]] is the only implementation, and
+ * `ReplaceCTERefWithRepartition` assigns ids only for `forceSkipInline` CTE definitions with two
+ * or more references.
  */
 trait PlanReusableRepartition extends RepartitionOperation {
   /**
-   * Unique identifier for this repartition node, used for plan reuse.
+   * Identifier of the shared body this repartition belongs to, used for plan reuse: every copy of
+   * one body (for example every reference of one CTE definition) carries the same id.
    * A value of 0 indicates this repartition is not used for plan reuse.
    */
   def repartitionId: Long
 
   /**
-   * Whether this repartition is used for plan reuse (CTE, decorrelation, etc.).
+   * Whether this repartition is used for plan reuse (today only for forced CTE definitions).
    * True when repartitionId is non-zero.
    */
   def isForPlanReuse: Boolean = repartitionId != 0L
@@ -2379,8 +2383,8 @@ trait PlanReusableRepartition extends RepartitionOperation {
   def withRepartitionId(newId: Long): PlanReusableRepartition
 
   /**
-   * Assigns a new repartition id (or reassigns if already set).
-   * @param reassign If true, reassigns a new id even if one is already assigned.
+   * Assigns a new repartition id if none is set, and otherwise keeps the existing one.
+   * @param reassign If true, assigns a new id even if one is already assigned.
    */
   def addRepartitionId(reassign: Boolean = false): PlanReusableRepartition = {
     if (reassign || repartitionId == 0L) {

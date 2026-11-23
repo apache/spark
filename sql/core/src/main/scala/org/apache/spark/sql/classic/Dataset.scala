@@ -1851,7 +1851,9 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def inputFiles: Array[String] = {
-    val files: Seq[String] = queryExecution.optimizedPlan.collect {
+    // A sealed forced CTE keeps its body in `CTEReuseRelation.sharedSubplan`, which is not a
+    // child, so descend into it explicitly.
+    def collectFiles(plan: LogicalPlan): Seq[String] = plan.collect {
       case LogicalRelationWithTable(fsBasedRelation: FileRelation, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
@@ -1860,8 +1862,10 @@ class Dataset[T] private[sql](
         r.tableMeta.storage.locationUri.map(_.toString).toArray
       case ExtractV2ScanInfo(ExtractV2Table(table: FileTable), _, _) =>
         table.fileIndex.inputFiles
+      case r: CTEReuseRelation =>
+        collectFiles(r.sharedSubplan).toArray
     }.flatten
-    files.toSet.toArray
+    collectFiles(queryExecution.optimizedPlan).toSet.toArray
   }
 
   /** @inheritdoc */

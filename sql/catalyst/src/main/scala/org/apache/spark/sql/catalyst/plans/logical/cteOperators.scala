@@ -121,7 +121,8 @@ case class UnionLoopRef(
  *                        force the CTE to be materialized instead of duplicated, e.g. when the
  *                        CTE wraps a non-deterministic source that must be evaluated exactly once.
  * @param forcePartitioning If set, the CTE will be repartitioned with the given partitioning when
- *                          materialized for guaranteed reuse. Only honored together with
+ *                          its references are replaced with a repartition, whether or not it is
+ *                          sealed for guaranteed reuse. Only honored together with
  *                          `forceSkipInline`: a pin on a definition that is not `forceSkipInline`
  *                          is ignored, because such a definition may be inlined by [[InlineCTE]]
  *                          before the pin is applied, which would be inconsistent with the

@@ -18,24 +18,28 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery
-import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
-import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
-import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Tests for CTE reuse when AQE is off, using [[exchange.UnwrapCTEReuseExchange]] and
- * [[exchange.VerifyCTEReuse]]. Each CTEReuseExchange is unwrapped into a tagged
- * LOCAL_SHUFFLE_FOR_CTE shuffle; the stock ReuseExchangeAndSubquery then reuses the
- * canonically-equal copies into ReusedExchangeExec, and VerifyCTEReuse confirms reuse held.
+ * [[exchange.VerifyCTEReuse]]. Each CTEReuseExchange is unwrapped into its shuffle, whose
+ * LOCAL_SHUFFLE_FOR_CTE origin carries the cteId; the stock ReuseExchangeAndSubquery then reuses
+ * the canonically-equal copies into ReusedExchangeExec, and VerifyCTEReuse confirms reuse held.
  */
 class CTEReuseWithoutAQESuite
     extends QueryTest with SharedSparkSession {
 
-  private val cteReuseConf =
-    "spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled"
+  private val cteReuseConf = SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE.key
 
   private def withCTEReuseNoAQE(f: => Unit): Unit = {
     withSQLConf(
@@ -49,8 +53,9 @@ class CTEReuseWithoutAQESuite
 
   /**
    * Asserts guaranteed CTE shuffle reuse held (AQE off): the executed plan has at least one
-   * [[ReusedExchangeExec]] and no [[CTEReuseExchange]] left. (With FAIL_ON_CTE_REUSE_WITHOUT_AQE
-   * test-defaulting to true, a reuse failure would already have thrown during preparation.)
+   * [[ReusedExchangeExec]] and no [[CTEReuseExchange]] left. (`withCTEReuseNoAQE` turns
+   * FAIL_ON_CTE_REUSE_WITHOUT_AQE on, so a reuse failure would already have thrown during
+   * preparation; the flag itself defaults to false.)
    */
   private def assertCTEReuseApplied(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
@@ -107,6 +112,22 @@ class CTEReuseWithoutAQESuite
     classic.Dataset.ofRows(spark, tagged)
   }
 
+  /**
+   * Like [[sqlWithForcedCTEReuse]], and also pins every CTE to a hash partitioning on its `id`
+   * column into `numPartitions` partitions. The pin is built from the body's own output (below the
+   * analyzer's `SubqueryAlias`), the attributes the optimized definition keeps.
+   */
+  private def sqlWithPinnedCTEReuse(text: String, numPartitions: Int): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef =>
+        val keys = EliminateSubqueryAliases(d.child).output.filter(_.name == "id")
+        d.copy(forceSkipInline = true,
+          forcePartitioning = Some(HashPartitioning(keys, numPartitions)))
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
   test("basic: 2-ref CTE join") {
     withCTEReuseNoAQE {
       withTable("cte_noaqe_src") {
@@ -130,7 +151,6 @@ class CTEReuseWithoutAQESuite
           s"Expected 2 CTEReuseExchange in sparkPlan, " +
             s"got ${cteExchanges.size}")
 
-        // executedPlan should have no CTEReuseExchange
         // executedPlan should have no CTEReuseExchange, and reuse should be applied.
         assertCTEReuseApplied(df)
 
@@ -256,10 +276,10 @@ class CTEReuseWithoutAQESuite
   // ---------------------------------------------------------------------------
   // Dangling-reference / subquery-interaction tests.
   //
-  // The CTE shuffle is deduplicated into ReusedExchangeExec, and subqueries add their own
-  // reuse scope (ReuseExchangeAndSubquery runs per-subquery in PlanSubqueries, then again on the
-  // main plan, re-pointing reused nodes). These tests make sure the CTE-shuffle reuse survives
-  // that interaction with no dangling ReusedExchangeExec references.
+  // The CTE shuffle is deduplicated into ReusedExchangeExec. Subquery preparation in PlanSubqueries
+  // does not run ReuseExchangeAndSubquery; it runs once on the main plan, reaching into the
+  // subquery plans and re-pointing reused nodes across scopes. These tests make sure the
+  // CTE-shuffle reuse survives that interaction with no dangling ReusedExchangeExec references.
   // ---------------------------------------------------------------------------
 
   private def withReuseSrc(f: => Unit): Unit = withTable("reuse_src") {
@@ -386,7 +406,7 @@ class CTEReuseWithoutAQESuite
     withCTEReuseNoAQE {
       withReuseSrc {
         // CTE body carries a REPARTITION(id) hint -> HashPartitioning partitioning on the
-        // CTEReuseRelation, exercising the partitioning path (not just LocalPartition).
+        // CTEReuseRelation, exercising the partitioning path (not just round-robin).
         val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT /*+ REPARTITION(4, id) */ id, v, rand() as r FROM reuse_src
@@ -432,11 +452,10 @@ class CTEReuseWithoutAQESuite
       withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         withReuseSrc {
           // With exchange reuse off, the CTE shuffles are not deduplicated. VerifyCTEReuse sees
-          // >= 2 live shuffles sharing a cteId; the FAIL_ON_CTE_REUSE_WITHOUT_AQE_NOT_APPLIED flag
-          // governs whether that throws. Turn the flag off here so the query runs and we assert the
-          // fallback: no reuse, the "reuse not applied" signal recorded, correct results.
-          withSQLConf(
-            "spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled" -> "false") {
+          // >= 2 live shuffles sharing a cteId; FAIL_ON_CTE_REUSE_WITHOUT_AQE governs whether
+          // that throws. Turn the flag off here so VerifyCTEReuse only logs, and check that no
+          // shuffle is reused and that the query still runs.
+          withSQLConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE.key -> "false") {
             val df = sqlWithForcedCTEReuse(
               """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
                 |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
@@ -474,6 +493,30 @@ class CTEReuseWithoutAQESuite
     }
   }
 
+  /**
+   * Builds `text`, which must reference its one CTE exactly twice, with every CTE forced to
+   * materialize and both references sharing the first reference's attributes, and skips
+   * re-analysis. A second reference normally gets fresh attributes, and replacing it with the
+   * CTE body then goes through `DeduplicateRelations.deduplicateRight`, which leaves the body's
+   * dynamic-pruning subquery keyed on the old attributes and the plan unresolved. Sharing the
+   * attributes keeps that path out of a test about the AQE-off rule order.
+   */
+  private def forcedCTEWithSharedReferences(text: String): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val refs = analyzed.collect { case r: CTERelationRef => r }
+    assert(refs.size == 2, analyzed.treeString)
+    val mapping = AttributeMap(refs(1).output.zip(refs(0).output))
+    val shared: LogicalPlan = analyzed.transformUp {
+      case r: CTERelationRef if r.output == refs(1).output => r.copy(output = refs(0).output)
+    }.transformAllExpressions {
+      case a: Attribute if mapping.contains(a) => mapping(a)
+    }.transformWithSubqueries {
+      case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    shared.foreach(_.setAnalyzed())
+    classic.Dataset.ofRows(spark, shared)
+  }
+
   test("dynamic partition pruning inside a force-materialized CTE body is planned (AQE off)") {
     withCTEReuseNoAQE {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
@@ -485,16 +528,23 @@ class CTEReuseWithoutAQESuite
           sql("INSERT INTO dpp_dim VALUES (1, 'NL'), (2, 'NL'), (3, 'DE'), (4, 'US')")
 
           // The join -- which produces the dynamic partition-pruning filter over the partitioned
-          // fact scan -- lives inside the force-materialized CTE body. In AQE-off mode the body
-          // must be unwrapped before PlanDynamicPruningFilters; otherwise the
-          // DynamicPruningSubquery is left unplanned and collecting results fails at execution.
-          val df = sqlWithForcedCTEReuse(
+          // fact scan -- lives inside the force-materialized CTE body, which is referenced twice
+          // so it is sealed. In AQE-off mode the body must be unwrapped before
+          // PlanDynamicPruningFilters; otherwise the DynamicPruningSubquery is left unplanned and
+          // collecting results fails at execution.
+          val df = forcedCTEWithSharedReferences(
             """WITH cte AS (
               |  SELECT f.date_id, f.store_id
               |  FROM dpp_fact f JOIN dpp_dim d ON f.store_id = d.store_id AND d.country = 'NL'
               |)
               |SELECT date_id, store_id FROM cte
+              |UNION ALL
+              |SELECT date_id, store_id FROM cte
               |""".stripMargin)
+          assert(df.queryExecution.optimizedPlan.collectWithSubqueries {
+            case r: CTEReuseRelation => r
+          }.size == 2, s"Expected the CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+          assertCTEReuseApplied(df)
 
           // No raw (unevaluable) DynamicPruningSubquery may survive into the prepared plan.
           val prepared = df.queryExecution.executedPlan
@@ -504,16 +554,18 @@ class CTEReuseWithoutAQESuite
           assert(unplanned.isEmpty,
             s"Unexpected unplanned DynamicPruningSubquery remaining:\n${prepared.treeString}")
 
-          checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+          // Collect from this Dataset's own plan: a derived Dataset would be analyzed again.
+          val rows = df.collect().map(r => (r.getInt(0), r.getInt(1))).toSeq.sorted
+          assert(rows == Seq((1000, 1), (1000, 1), (1010, 2), (1010, 2), (1020, 2), (1020, 2)))
         }
       }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Broader scenarios ported from the CTE-reuse prototype (#218516): ref-count,
-  // distinct-CTE, and non-trivial materialized-body shapes. Each asserts reuse held via the
-  // canonical-equality path (assertCTEReuseApplied + assertNoDanglingReusedExchange).
+  // Broader scenarios: ref-count, distinct-CTE, and non-trivial materialized-body shapes. Each
+  // asserts reuse held via the canonical-equality path (assertCTEReuseApplied +
+  // assertNoDanglingReusedExchange).
   // ---------------------------------------------------------------------------
 
   test("5 refs unioned share one materialization") {
@@ -592,8 +644,8 @@ class CTEReuseWithoutAQESuite
   // ---------------------------------------------------------------------------
   // Subquery *inside* the materialized CTE body (distinct from a subquery that references the
   // CTE). The body is planned eagerly in SparkStrategies and lifted into the tree by
-  // UnwrapCTEReuseExchange, which runs AFTER PlanSubqueries -- so the body's own subquery
-  // expressions must still be physically planned for execution to succeed.
+  // UnwrapCTEReuseExchange, which runs BEFORE PlanSubqueries -- so PlanSubqueries reaches the
+  // body's own subquery expressions and plans them physically, as execution requires.
   // ---------------------------------------------------------------------------
 
   test("scalar subquery inside the CTE body is fully planned and reused") {
@@ -836,6 +888,253 @@ class CTEReuseWithoutAQESuite
           assertNoDanglingReusedExchange(df)
           df.collect()
         }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // VerifyCTEReuse runs only for plans that seal a CTE.
+  // ---------------------------------------------------------------------------
+
+  // Exposes the main-query preparation rules of a query.
+  private class PreparationsInspector(df: DataFrame)
+      extends QueryExecution(spark, df.queryExecution.logical) {
+    def rules: Seq[Rule[SparkPlan]] = preparations
+  }
+
+  // The main-query preparation rules of `df`'s query.
+  private def mainQueryPreparations(df: DataFrame): Seq[Rule[SparkPlan]] = {
+    val qe = new PreparationsInspector(df)
+    qe.assertOptimized()
+    qe.rules
+  }
+
+  private def hasVerifier(rules: Seq[Rule[SparkPlan]]): Boolean =
+    rules.exists(_.isInstanceOf[VerifyCTEReuse])
+
+  test("VerifyCTEReuse is not added for a query without a sealed CTE") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        val df = sql("SELECT v, count(*) FROM reuse_src GROUP BY v")
+        assert(!hasVerifier(mainQueryPreparations(df)))
+        // A forced CTE referenced once is not sealed either.
+        val single = sqlWithForcedCTEReuse(
+          "WITH cte AS (SELECT id, rand() AS r FROM reuse_src) SELECT * FROM cte")
+        assert(!hasVerifier(mainQueryPreparations(single)))
+        val shared = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM reuse_src)
+            |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        assert(hasVerifier(mainQueryPreparations(shared)))
+      }
+    }
+  }
+
+  test("VerifyCTEReuse is not added and nothing is unwrapped with the reuse flag off") {
+    withCTEReuseNoAQE {
+      withSQLConf(cteReuseConf -> "false") {
+        withReuseSrc {
+          val df = sqlWithForcedCTEReuse(
+            """WITH cte AS (SELECT id, rand() AS r FROM reuse_src)
+              |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+              |""".stripMargin)
+          assert(!hasVerifier(mainQueryPreparations(df)))
+          assert(df.queryExecution.sparkPlan.collectWithSubqueries {
+            case c: CTEReuseExchange => c
+          }.isEmpty)
+          df.collect()
+        }
+      }
+    }
+  }
+
+  test("exchange reuse disabled: a CTE shared only inside a subquery still fails verification") {
+    withCTEReuseNoAQE {
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        withReuseSrc {
+          // Both references sit in one scalar subquery, so only the subquery plan holds the
+          // CTE reuse relations; the main-query verifier must still be added and must throw.
+          val df = sqlWithForcedCTEReuse(
+            """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
+              |SELECT id FROM reuse_src o
+              |WHERE o.v >= (SELECT min(c1.v) FROM cte c1 JOIN cte c2 ON c1.id = c2.id)
+              |""".stripMargin)
+          val e = intercept[SparkException] {
+            df.queryExecution.executedPlan
+          }
+          assert(e.getMessage.contains("Guaranteed CTE shuffle reuse (AQE off) failed"),
+            s"Expected the fail-on-reuse internal error, got:\n${e.getMessage}")
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Root shapes, identical bodies, pins and the immutable CTE shuffle.
+  // ---------------------------------------------------------------------------
+
+  // The live (non-reused) LOCAL_SHUFFLE_FOR_CTE shuffles of `df`'s executed plan.
+  private def liveCTEShuffles(df: DataFrame): Seq[ShuffleExchangeExec] =
+    df.queryExecution.executedPlan.collectWithSubqueries {
+      case s: ShuffleExchangeExec if s.shuffleOrigin.isInstanceOf[LOCAL_SHUFFLE_FOR_CTE] => s
+    }
+
+  test("a REPARTITION(n) root plans one CTE shuffle with n partitions") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT /*+ REPARTITION(3) */ id, rand() AS r FROM reuse_src)
+            |SELECT c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        assertCTEReuseApplied(df)
+        val shuffles = liveCTEShuffles(df)
+        assert(shuffles.size == 1 && shuffles.head.outputPartitioning.numPartitions == 3,
+          s"Expected one live 3-partition CTE shuffle:\n${df.queryExecution.executedPlan}")
+        // The root is stamped in place: no second shuffle sits below the CTE shuffle.
+        assert(shuffles.head.child.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          s"Expected no shuffle below the CTE shuffle:\n${shuffles.head.treeString}")
+        checkAnswer(df, (1 to 5).map(_ => Row(true)))
+      }
+    }
+  }
+
+  test("forced CTEs with identical deterministic bodies run one shuffle") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        def run(bodyA: String, bodyB: String): DataFrame = sqlWithForcedCTEReuse(
+          s"""WITH a AS ($bodyA), b AS ($bodyB)
+             |SELECT * FROM a UNION ALL SELECT * FROM a
+             |UNION ALL SELECT * FROM b UNION ALL SELECT * FROM b
+             |""".stripMargin)
+        val same =
+          run("SELECT id, v * 2 AS w FROM reuse_src", "SELECT id, v * 2 AS w FROM reuse_src")
+        assert(liveCTEShuffles(same).size == 1,
+          s"Expected one live CTE shuffle:\n${same.queryExecution.executedPlan}")
+        assert(same.queryExecution.executedPlan.collectWithSubqueries {
+          case r: ReusedExchangeExec => r
+        }.size == 3, s"Expected three reused exchanges:\n${same.queryExecution.executedPlan}")
+        assert(same.collect().length == 20)
+        val nondeterministic = run(
+          "SELECT id, rand(42) AS w FROM reuse_src", "SELECT id, rand(42) AS w FROM reuse_src")
+        assert(liveCTEShuffles(nondeterministic).size == 2,
+          s"Expected two live CTE shuffles:\n${nondeterministic.queryExecution.executedPlan}")
+        val different = run(
+          "SELECT id, v * 2 AS w FROM reuse_src", "SELECT id, v * 3 AS w FROM reuse_src")
+        assert(liveCTEShuffles(different).size == 2,
+          s"Expected two live CTE shuffles:\n${different.queryExecution.executedPlan}")
+      }
+    }
+  }
+
+  test("a CTE shuffle that is not the co-partition target is wrapped, not rewritten") {
+    withCTEReuseNoAQE {
+      // No inferred IS NOT NULL filter, so the CTE shuffle is the join's direct child.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        withReuseSrc {
+          withTable("bucketed_side") {
+            sql("CREATE TABLE bucketed_side (id INT, w INT) USING parquet " +
+              "CLUSTERED BY (id) INTO 8 BUCKETS")
+            sql("INSERT INTO bucketed_side VALUES (1, 100), (2, 200), (3, 300)")
+            // c1's CTE shuffle (hash on id into 4 partitions) satisfies the join's clustering, but
+            // the bucketed side (8 buckets, no exchange) is the co-partition target, so the CTE
+            // shuffle must be wrapped in a new shuffle rather than rewritten in place; c2 reads
+            // the CTE as is, and both copies must stay reusable.
+            val df = sqlWithForcedCTEReuse(
+              """WITH cte AS (SELECT /*+ REPARTITION(4, id) */ id, v, rand() AS r FROM reuse_src)
+                |SELECT c1.id FROM cte c1 JOIN bucketed_side b ON c1.id = b.id
+                |UNION ALL
+                |SELECT c2.id FROM cte c2
+                |""".stripMargin)
+            assertCTEReuseApplied(df)
+            assertNoDanglingReusedExchange(df)
+            // The join side reads the CTE through a new 8-partition shuffle over the CTE shuffle.
+            val wrappers = df.queryExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec if s.child.isInstanceOf[ReusedExchangeExec] ||
+                  s.child.isInstanceOf[ShuffleExchangeExec] => s
+            }
+            assert(wrappers.exists(_.outputPartitioning.numPartitions == 8),
+              s"Expected a shuffle above the CTE shuffle:\n${df.queryExecution.executedPlan}")
+            checkAnswer(df, Seq(1, 2, 3, 1, 2, 3, 4, 5).map(Row(_)))
+          }
+        }
+      }
+    }
+  }
+
+  test("a pinned forced CTE materializes on the pinned keys and partition count") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        val df = sqlWithPinnedCTEReuse(
+          """WITH cte AS (SELECT id, v, rand() AS r FROM reuse_src)
+            |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin, numPartitions = 3)
+        assertCTEReuseApplied(df)
+        val shuffles = liveCTEShuffles(df)
+        assert(shuffles.size == 1, df.queryExecution.executedPlan.treeString)
+        shuffles.head.outputPartitioning match {
+          case h: HashPartitioning =>
+            assert(h.numPartitions == 3 && h.expressions.map(_.references.head.name) == Seq("id"),
+              s"Expected the pinned partitioning, got $h")
+          case other => fail(s"Expected a hash partitioning, got $other")
+        }
+        checkAnswer(df, Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40), Row(5, 50)))
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Streaming and Dataset.inputFiles.
+  // ---------------------------------------------------------------------------
+
+  test("a streaming forced CTE with a stateful body referenced twice runs micro-batches") {
+    withCTEReuseNoAQE {
+      import testImplicits._
+      val input = new MemoryStream[Int](0, spark)
+      withTempView("cte_stream_src") {
+        input.toDF().createOrReplaceTempView("cte_stream_src")
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (SELECT value % 2 AS k, count(*) AS cnt FROM cte_stream_src GROUP BY 1)
+            |SELECT k, cnt FROM c WHERE k = 0
+            |UNION ALL
+            |SELECT k, cnt FROM c WHERE k = 1
+            |""".stripMargin)
+        val query = df.writeStream
+          .format("memory")
+          .queryName("cte_stream_sink")
+          .outputMode(OutputMode.Complete())
+          .start()
+        try {
+          input.addData(1, 2, 3)
+          query.processAllAvailable()
+          checkAnswer(spark.table("cte_stream_sink"), Seq(Row(0, 1L), Row(1, 2L)))
+          input.addData(4, 5)
+          query.processAllAvailable()
+          checkAnswer(spark.table("cte_stream_sink"), Seq(Row(0, 2L), Row(1, 3L)))
+          val lastOptimized = query.asInstanceOf[StreamingQueryWrapper]
+            .streamingQuery.lastExecution.optimizedPlan
+          assert(lastOptimized.collectWithSubqueries { case r: CTEReuseRelation => r }.isEmpty,
+            s"Expected no CTE reuse relation in a micro-batch:\n$lastOptimized")
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  test("inputFiles includes the files read inside a sealed forced CTE") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        val plain = spark.table("reuse_src").inputFiles.toSet
+        assert(plain.nonEmpty)
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, v, rand() AS r FROM reuse_src)
+            |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        assert(df.queryExecution.optimizedPlan.collectWithSubqueries {
+          case r: CTEReuseRelation => r
+        }.nonEmpty)
+        assert(df.inputFiles.toSet == plain)
       }
     }
   }

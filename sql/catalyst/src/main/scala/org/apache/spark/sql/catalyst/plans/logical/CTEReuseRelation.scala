@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * physically reused (materialized once, results shared across all consumers).
  *
  * All nodes with the same [[cteId]] are guaranteed to have [[sharedSubplan]] objects
- * having the same canonicalized form. Theses shared subplans will be backed by the
- * same physical exchange stage in AQE.
+ * having the same canonicalized form. These shared subplans are backed by the same
+ * physical exchange stage in AQE.
  *
  * [[sharedSubplan]] is NOT a child of this node. This design is intended to allow
  * the AQE reoptimization for the outer plan to be independent of the reoptimization
@@ -36,14 +36,18 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * leaf node and does not descend into it while the reoptimization for the shared subplan
  * is handled separately by the inner AQE thread.
  *
- * This node is generated from [[Repartition]] nodes which are marked for plan reuse (CTE references
- * are first turned into such repartitions by [[ReplaceCTERefWithRepartition]]). This generation
- * happens in the [[ReplaceRepartitionWithCTEReuse]] rule.
+ * This node is generated from [[RepartitionByExpression]] nodes marked for plan reuse (the
+ * references of a shared `forceSkipInline` CTE definition are first turned into such repartitions
+ * by [[ReplaceCTERefWithRepartition]]). This generation happens in the
+ * [[ReplaceRepartitionWithCTEReuse]] rule.
  *
  * @param cteId Unique identifier for the subplan or CTE to be reused.
- * @param partitioning Pre-determined partitioning for the shared exchange: a HashPartitioning
- *                     when the CTE is pinned via forcePartitioning, otherwise a round-robin
- *                     partitioning (RoundRobinPartitioning) as the fallback.
+ * @param partitioning Pre-determined partitioning for the shared exchange, taken from the
+ *                     plan-reuse repartition at the root of [[sharedSubplan]]: a HashPartitioning
+ *                     when the CTE is pinned via forcePartitioning, round-robin over the session
+ *                     shuffle partitions when the root was wrapped, or the partitioning of a root
+ *                     stamped in place, which can also be a hash, range, single-partition or
+ *                     pass-through partitioning.
  * @param sharedSubplan The logical plan of the CTE definition. NOT a child node.
  */
 case class CTEReuseRelation(

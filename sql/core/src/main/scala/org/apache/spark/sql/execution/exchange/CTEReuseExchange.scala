@@ -27,21 +27,23 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * A physical leaf node representing a reference to a shared CTE subplan. The [[subplan]]
- * (a [[ShuffleExchangeExec]] over the CTE body, produced from the Repartition in
- * [[CTEReuseRelation.sharedSubplan]]) is stored as metadata, not as a tree child, so
- * AQE's bottom-up stage creation does not traverse into it and redundantly plan its
+ * (a [[ShuffleExchangeExec]] over the CTE body, produced from the plan-reuse
+ * RepartitionByExpression in [[CTEReuseRelation.sharedSubplan]]) is stored as metadata, not as a
+ * tree child, so AQE's bottom-up stage creation does not traverse into it and redundantly plan its
  * substages before CTEReuseExchange is resolved.
  *
  * Consumed before execution:
- *  - AQE on: `createNonResultQueryStages` replaces this with [[CTEReuseQueryStageExec]],
- *    building a shared inner `AdaptiveSparkPlanExec` keyed by `cteId`.
- *  - AQE off: `UnwrapCTEReuseExchange` replaces each ref with its `LOCAL_SHUFFLE_FOR_CTE`
- *    shuffle (tagged with `cteId`); the final `ReuseExchangeAndSubquery` then reuses the
- *    canonically-equal copies via [[ReusedExchangeExec]], and `VerifyCTEReuse` confirms it held.
+ *  - AQE on: `createNonResultQueryStages` replaces this with [[CTEReuseQueryStageExec]] over the
+ *    shared inner `AdaptiveSparkPlanExec` that `PlanCTEReuse` built and registered for `cteId`
+ *    in `AdaptiveExecutionContext.cteAQERegistry`.
+ *  - AQE off: `UnwrapCTEReuseExchange` replaces each ref with its shuffle, whose
+ *    `LOCAL_SHUFFLE_FOR_CTE(cteId)` origin carries the `cteId`; the final
+ *    `ReuseExchangeAndSubquery` then reuses the canonically-equal copies via
+ *    [[ReusedExchangeExec]], and `VerifyCTEReuse` confirms it held.
  *
  * @param cteId    Unique identifier for the CTE definition to be reused.
  * @param subplan  The [[ShuffleExchangeLike]] over the shared subplan. Its logical link
- *                 points to the Repartition in [[CTEReuseRelation.sharedSubplan]] so the
+ *                 points to the repartition in [[CTEReuseRelation.sharedSubplan]] so the
  *                 inner AQE can re-optimize correctly.
  */
 case class CTEReuseExchange(
