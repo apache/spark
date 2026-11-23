@@ -307,8 +307,9 @@ class AbstractTranspiler(object):
         combo the caller passed in. A variety that works out its own input types
         returns ``(Column, list[str])`` instead -- one category per public param
         (``"integer"`` / ``"float"`` / ``"numeric"`` / ``"string"`` / ``"bool"`` /
-        ``"binary"`` / ``"timestamp"`` / ``"map"`` / ``"array"``) describing the option it
-        built, which the caller uses in place of the combo. ``"timestamp"``
+        ``"binary"`` / ``"timestamp"`` / ``"map"`` / ``"array"``, or an element-aware
+        ``"array<c>"`` for any of these ``c``, e.g. ``"array<integer>"``) describing
+        the option it built, which the caller uses in place of the combo. ``"timestamp"``
         matches TIMESTAMP_NTZ only: a TIMESTAMP (local time zone) value reaches
         Python as a naive datetime in the worker's zone while Catalyst uses
         ``spark.sql.session.timeZone``, so a lowering over it can silently
@@ -1800,10 +1801,21 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
     )
 
 
-# The input categories a variety may report; mirrors ``optionMatchesTypes`` on the JVM.
+# The input categories a variety may report; mirrors ``categoryMatches`` on the JVM,
+# which also takes an element-aware ``"array<c>"`` for any of them (see
+# ``_is_variety_category``).
 _VARIETY_CATEGORIES = frozenset(
     ("integer", "float", "numeric", "string", "bool", "binary", "timestamp", "map", "array")
 )
+
+
+def _is_variety_category(cat: Any) -> bool:
+    """True for a category the JVM knows: one of ``_VARIETY_CATEGORIES``, or
+    ``"array<c>"`` for such a ``c``, recursively (``"array<array<string>>"``)."""
+    if not isinstance(cat, str):
+        return False
+    elem = _array_element_cat(cat)
+    return cat in _VARIETY_CATEGORIES or (elem is not None and _is_variety_category(elem))
 
 
 def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, List[str]]:
@@ -1843,11 +1855,12 @@ def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, 
                 f"{num_params} parameters"
             )
         # The JVM silently drops an option whose category it does not know.
-        bad = [c for c in categories if not isinstance(c, str) or c not in _VARIETY_CATEGORIES]
+        bad = [c for c in categories if not _is_variety_category(c)]
         if bad:
             raise UnsupportedOperationException(
                 f"transpiler returned unknown input categories {bad!r}; "
-                f"expected strings from {sorted(_VARIETY_CATEGORIES)}"
+                f"expected strings from {sorted(_VARIETY_CATEGORIES)}, "
+                "or 'array<c>' for any of them"
             )
         return column, list(categories)
     raise UnsupportedOperationException(

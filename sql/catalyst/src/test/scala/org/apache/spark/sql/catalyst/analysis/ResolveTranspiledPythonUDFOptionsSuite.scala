@@ -302,18 +302,25 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
 
   test("map and array options are dropped over a map keyed by a nanosecond timestamp") {
     // Python refuses such a map (TIMESTAMP_NANOS_PYTHON_MAP_KEY); an option over it would answer
-    // where the Python UDF raises. Nanoseconds elsewhere, e.g. as a value, are fine.
+    // where the Python UDF raises. Nanoseconds elsewhere, e.g. as a value, are fine. An
+    // element-aware "array<c>" reaches the nested map through the "map"/"array" element match.
     val ntz = TimestampNTZNanosType(9)
     val nanosKeyed = MapType(ntz, IntegerType)
     val structKeyed = MapType(new StructType().add("t", TimestampLTZNanosType(7)), IntegerType)
-    Seq(
+    val cases = Seq(
       ("map", nanosKeyed, false),
       ("map", structKeyed, false),
       ("map", MapType(StringType, nanosKeyed), false),
       ("map", MapType(StringType, ntz), true),
       ("array", ArrayType(nanosKeyed), false),
       ("array", ArrayType(new StructType().add("m", nanosKeyed)), false),
-      ("array", ArrayType(ntz), true)).foreach { case (cat, dt, kept) =>
+      ("array", ArrayType(ntz), true),
+      ("array<map>", ArrayType(nanosKeyed), false),
+      ("array<map>", ArrayType(MapType(StringType, ntz)), true),
+      ("array<array>", ArrayType(ArrayType(nanosKeyed)), false),
+      ("array<array<map>>", ArrayType(ArrayType(nanosKeyed)), false),
+      ("array<array<map>>", ArrayType(ArrayType(MapType(ntz, ntz))), false))
+    cases.foreach { case (cat, dt, kept) =>
       val a = AttributeReference("a", dt)()
       val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(a), List(List(cat)))
       val pruned = prune(node, LocalRelation(a))

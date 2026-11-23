@@ -2083,7 +2083,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col
         from pyspark.sql.transpile import AbstractTranspiler
 
-        for bad in (LongType(), "Numeric", None):
+        for bad in (LongType(), "Numeric", None, "array<Numeric>", "array<>", "array<integer"):
 
             class BadCategoryTranspiler(AbstractTranspiler):
                 variety = "bad_category_55213"
@@ -2176,6 +2176,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "timestamp",
             "map",
             "array",
+            "array<integer>",
+            "array<map>",
+            "array<array<string>>",
         )
 
         def ident(a):
