@@ -4448,6 +4448,51 @@ class DataFrameAggregateSuite extends SharedSparkSession
         }
       }
     }
+
+    test(s"kll_sketch_get_quantile_$valueType returns NULL for an empty sketch") {
+      val function = s"kll_sketch_get_quantile_$valueType"
+      val sketchAgg = s"kll_sketch_agg_$valueType(CAST(v AS $valueType))"
+      // kll_sketch_agg_* returns a valid empty sketch for a group whose values are all NULL.
+      val grouped = Seq(("a", Some(-10L)), ("a", Some(0L)), ("a", Some(10L)), ("b", None))
+        .toDF("k", "v").groupBy("k").agg(expr(sketchAgg).as("sketch"))
+      Seq("true", "false").foreach { codegenEnabled =>
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+          val quantiles = grouped.selectExpr("k", s"kll_sketch_get_n_$valueType(sketch)",
+            s"$function(sketch, 0.5D)", s"$function(sketch, array(0.0D, 1.0D))",
+            s"$function(sketch, array(NULL, 1.0D))")
+          checkAnswer(quantiles, Seq(
+            Row("a", 3L, 0, Seq(-10, 10), Seq(-10, 10)), Row("b", 0L, null, null, null)))
+          assert(quantiles.schema.drop(2).forall(_.nullable))
+          // The optimizer must not assume a non-NULL result.
+          checkAnswer(
+            grouped.selectExpr(s"$function(sketch, 0.5D) IS NULL",
+              s"coalesce($function(sketch, 0.5D), 1)", s"$function(sketch, array(0.5D)) IS NULL"),
+            Seq(Row(false, 0, false), Row(true, 1, true)))
+          checkAnswer(grouped.selectExpr(s"count($function(sketch, 0.5D))"), Row(1L))
+        }
+      }
+
+      // It also returns a valid empty sketch for no input rows. A rank outside [0, 1] fails
+      // for it too, but an invalid sketch buffer still fails first, and a NULL sketch returns
+      // NULL without checking the rank.
+      val noRows = spark.range(0).selectExpr("id AS v").agg(expr(sketchAgg).as("sketch"))
+      checkAnswer(
+        noRows.selectExpr(s"$function(sketch, 0.5D)", s"$function(sketch, array(0.5D, NULL))",
+          s"$function(CAST(NULL AS BINARY), 1.5D)"),
+        Row(null, null, null))
+      Seq(s"$function(sketch, 1.5D)", s"$function(sketch, array(0.5D, -0.5D))").foreach { q =>
+        checkError(
+          exception = intercept[SparkRuntimeException](noRows.selectExpr(q).collect()),
+          condition = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+          parameters = Map("functionName" -> toSQLId(function)))
+      }
+      Seq(s"$function(X'', 0.5D)", s"$function(substr(sketch, 1, 4), 1.5D)").foreach { q =>
+        checkError(
+          exception = intercept[SparkRuntimeException](noRows.selectExpr(q).collect()),
+          condition = "KLL_INVALID_INPUT_SKETCH_BUFFER",
+          parameters = Map("function" -> toSQLId(function)))
+      }
+    }
   }
 
   test("kll_sketch with null values") {

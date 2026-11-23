@@ -681,6 +681,183 @@ Project [kll_sketch_get_rank_float(cast(null as binary), cast(5.0 as float)) AS 
 
 
 -- !query
+SELECT k,
+       kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5) AS median,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), array(0.25, 0.75)) AS quartiles,
+       percentile_approx(v, 0.5) AS approx_median
+FROM VALUES ('a', 1L), ('a', 3L), ('b', CAST(NULL AS BIGINT)) AS tab(k, v)
+GROUP BY k
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x, kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0)) AS n#xL, kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0), cast(0.5 as double)) AS median#xL, kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0), cast(array(0.25, 0.75) as array<double>)) AS quartiles#x, percentile_approx(v#xL, cast(0.5 as double), 10000, 0, 0) AS approx_median#xL]
+   +- SubqueryAlias tab
+      +- LocalRelation [k#x, v#xL]
+
+
+-- !query
+SELECT kll_sketch_get_quantile_float(agg, 0.5) AS median,
+       kll_sketch_get_quantile_float(agg, array(0.5D, NULL)) AS quantiles,
+       kll_sketch_get_quantile_float(agg, 0.5) IS NULL AS median_is_null,
+       coalesce(kll_sketch_get_quantile_float(agg, 0.5), -1.0F) AS median_or_default
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+    WHERE col1 > 1000
+)
+-- !query analysis
+Project [kll_sketch_get_quantile_float(agg#x, cast(0.5 as double)) AS median#x, kll_sketch_get_quantile_float(agg#x, array(0.5, cast(null as double))) AS quantiles#x, isnull(kll_sketch_get_quantile_float(agg#x, cast(0.5 as double))) AS median_is_null#x, coalesce(kll_sketch_get_quantile_float(agg#x, cast(0.5 as double)), -1.0) AS median_or_default#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_float(col1#x, None, 0, 0) AS agg#x]
+      +- Filter (cast(col1#x as double) > cast(1000 as double))
+         +- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+            +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT count(kll_sketch_get_quantile_double(agg, 0.5)) AS non_null_medians
+FROM (
+    SELECT col1 > 4 AS big, kll_sketch_agg_double(IF(col1 > 4, NULL, col1)) AS agg
+    FROM t_double_1_5_through_7_11
+    GROUP BY col1 > 4
+)
+-- !query analysis
+Aggregate [count(kll_sketch_get_quantile_double(agg#x, cast(0.5 as double))) AS non_null_medians#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [(col1#x > cast(4 as double))], [(col1#x > cast(4 as double)) AS big#x, kll_sketch_agg_double(if ((col1#x > cast(4 as double))) cast(null as double) else col1#x, None, 0, 0) AS agg#x]
+      +- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+         +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_merge_bigint(agg, agg), 0.5) AS merged_median
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+    WHERE col1 > 1000
+)
+-- !query analysis
+Project [kll_sketch_get_quantile_bigint(kll_sketch_merge_bigint(agg#x, agg#x), cast(0.5 as double)) AS merged_median#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_bigint(col1#xL, None, 0, 0) AS agg#x]
+      +- Filter (col1#xL > cast(1000 as bigint))
+         +- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+            +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
+SELECT kll_sketch_get_quantile_double(kll_merge_agg_double(agg), 0.5) AS merge_agg_median
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+    WHERE col1 > 1000
+)
+-- !query analysis
+Aggregate [kll_sketch_get_quantile_double(kll_merge_agg_double(agg#x, None, 0, 0), cast(0.5 as double)) AS merge_agg_median#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_double(col1#x, None, 0, 0) AS agg#x]
+      +- Filter (col1#x > cast(1000 as double))
+         +- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+            +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+CREATE TABLE t_empty_kll_sketch AS
+SELECT kll_sketch_agg_bigint(col1) AS sketch
+FROM t_long_1_5_through_7_11
+WHERE col1 > 1000
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t_empty_kll_sketch`, ErrorIfExists, [sketch]
+   +- Aggregate [kll_sketch_agg_bigint(col1#xL, None, 0, 0) AS sketch#x]
+      +- Filter (col1#xL > cast(1000 as bigint))
+         +- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+            +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(sketch) AS n,
+       kll_sketch_get_quantile_bigint(sketch, 0.5) AS median,
+       kll_sketch_get_quantile_bigint(sketch, array(0.5, 0.9)) AS quantiles
+FROM t_empty_kll_sketch
+-- !query analysis
+Project [kll_sketch_get_n_bigint(sketch#x) AS n#xL, kll_sketch_get_quantile_bigint(sketch#x, cast(0.5 as double)) AS median#xL, kll_sketch_get_quantile_bigint(sketch#x, cast(array(0.5, 0.9) as array<double>)) AS quantiles#x]
++- SubqueryAlias spark_catalog.default.t_empty_kll_sketch
+   +- Relation spark_catalog.default.t_empty_kll_sketch[sketch#x] parquet
+
+
+-- !query
+DROP TABLE t_empty_kll_sketch
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t_empty_kll_sketch
+
+
+-- !query
+SELECT k,
+       (SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5)
+        FROM VALUES (1, 10L), (1, 20L), (1, 30L) AS inner_tab(ik, v)
+        WHERE inner_tab.ik = outer_tab.k) AS median
+FROM VALUES (1), (2) AS outer_tab(k)
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, scalar-subquery#x [k#x] AS median#xL]
+   :  +- Aggregate [kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0), cast(0.5 as double)) AS kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5)#xL]
+   :     +- Filter (ik#x = outer(k#x))
+   :        +- SubqueryAlias inner_tab
+   :           +- LocalRelation [ik#x, v#xL]
+   +- SubqueryAlias outer_tab
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(agg, 1.5) AS invalid_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+    WHERE col1 > 1000
+)
+-- !query analysis
+Project [kll_sketch_get_quantile_bigint(agg#x, cast(1.5 as double)) AS invalid_quantile#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_bigint(col1#xL, None, 0, 0) AS agg#x]
+      +- Filter (col1#xL > cast(1000 as bigint))
+         +- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+            +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
+SELECT kll_sketch_get_quantile_float(agg, array(0.5, -0.1)) AS invalid_quantiles
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+    WHERE col1 > 1000
+)
+-- !query analysis
+Project [kll_sketch_get_quantile_float(agg#x, cast(array(0.5, -0.1) as array<double>)) AS invalid_quantiles#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_float(col1#x, None, 0, 0) AS agg#x]
+      +- Filter (cast(col1#x as double) > cast(1000 as double))
+         +- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+            +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_quantile_double(X'0201', 1.5) AS invalid_binary
+-- !query analysis
+Project [kll_sketch_get_quantile_double(0x0201, cast(1.5 as double)) AS invalid_binary#x]
++- OneRowRelation
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(X'', 0.5) AS empty_binary
+-- !query analysis
+Project [kll_sketch_get_quantile_bigint(0x, cast(0.5 as double)) AS empty_binary#xL]
++- OneRowRelation
+
+
+-- !query
 SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
 FROM t_long_1_5_through_7_11
 -- !query analysis

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
+import org.apache.datasketches.quantilescommon.QuantilesUtil
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
@@ -378,6 +379,8 @@ abstract class KllSketchMergeBase
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    An empty sketch, such as the one that kll_sketch_agg_bigint returns for no non-NULL input
+    values, also returns NULL, but a rank outside [0, 1] still fails.
     When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
     the minimum quantile. A NULL-containing array that needs an implicit element cast fails
     analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
@@ -404,12 +407,18 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
   override def outputDataType: DataType = LongType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
     withQuantileErrorHandling(rank) {
-      KllLongsSketch.wrap(memory).getQuantile(rank)
+      val sketch = KllLongsSketch.wrap(memory)
+      if (sketch.isEmpty) emptySketchResult(Array(rank)) else sketch.getQuantile(rank)
     }
   }
   override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
     withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
-      KllLongsSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
+      val sketch = KllLongsSketch.wrap(memory)
+      if (sketch.isEmpty) {
+        emptySketchResult(ranks)
+      } else {
+        sketch.getQuantiles(ranks).map(_.asInstanceOf[Any])
+      }
     }
   }
 }
@@ -421,6 +430,8 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    An empty sketch, such as the one that kll_sketch_agg_float returns for no non-NULL input
+    values, also returns NULL, but a rank outside [0, 1] still fails.
     When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
     the minimum quantile. A NULL-containing array that needs an implicit element cast fails
     analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
@@ -447,12 +458,18 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
   override def outputDataType: DataType = FloatType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
     withQuantileErrorHandling(rank) {
-      KllFloatsSketch.wrap(memory).getQuantile(rank)
+      val sketch = KllFloatsSketch.wrap(memory)
+      if (sketch.isEmpty) emptySketchResult(Array(rank)) else sketch.getQuantile(rank)
     }
   }
   override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
     withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
-      KllFloatsSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
+      val sketch = KllFloatsSketch.wrap(memory)
+      if (sketch.isEmpty) {
+        emptySketchResult(ranks)
+      } else {
+        sketch.getQuantiles(ranks).map(_.asInstanceOf[Any])
+      }
     }
   }
 }
@@ -464,6 +481,8 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    An empty sketch, such as the one that kll_sketch_agg_double returns for no non-NULL input
+    values, also returns NULL, but a rank outside [0, 1] still fails.
     When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
     the minimum quantile. A NULL-containing array that needs an implicit element cast fails
     analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
@@ -490,12 +509,18 @@ case class KllSketchGetQuantileDouble(left: Expression, right: Expression)
   override def outputDataType: DataType = DoubleType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
     withQuantileErrorHandling(rank) {
-      KllDoublesSketch.wrap(memory).getQuantile(rank)
+      val sketch = KllDoublesSketch.wrap(memory)
+      if (sketch.isEmpty) emptySketchResult(Array(rank)) else sketch.getQuantile(rank)
     }
   }
   override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
     withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
-      KllDoublesSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
+      val sketch = KllDoublesSketch.wrap(memory)
+      if (sketch.isEmpty) {
+        emptySketchResult(ranks)
+      } else {
+        sketch.getQuantiles(ranks).map(_.asInstanceOf[Any])
+      }
     }
   }
 }
@@ -515,7 +540,7 @@ abstract class KllSketchGetQuantileBase
    * Kll*Sketch.wrap method, and then calls getQuantile on the result.
    * @param memory The input KLL quantiles sketch buffer to extract the quantile from
    * @param rank The input rank to use to compute the quantile
-   * @return The result quantile
+   * @return The result quantile, or null if the sketch is empty
    */
   protected def kllSketchGetQuantile(memory: Memory, rank: Double): Any
 
@@ -524,9 +549,21 @@ abstract class KllSketchGetQuantileBase
    * Kll*Sketch.wrap method, and then calls getQuantiles on the result (batch API).
    * @param memory The input KLL quantiles sketch buffer to extract the quantiles from
    * @param ranks The input ranks array to use to compute the quantiles
-   * @return The result quantiles as an array
+   * @return The result quantiles as an array, or null if the sketch is empty
    */
   protected def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any]
+
+  /**
+   * Returns the result for a valid empty sketch, such as the sketch that kll_sketch_agg_*
+   * returns when it has no non-NULL input values: NULL, as its quantiles are undefined. Like the
+   * quantiles of a non-empty sketch, it fails if a rank is not a valid normalized rank.
+   * @param ranks The input ranks to check
+   * @return null
+   */
+  protected def emptySketchResult(ranks: Array[Double]): Null = {
+    ranks.foreach(QuantilesUtil.checkNormalizedRankBounds)
+    null
+  }
 
   /**
    * Helper method to wrap quantile operations with consistent error handling.
@@ -567,6 +604,8 @@ abstract class KllSketchGetQuantileBase
   }
 
   override def nullIntolerant: Boolean = true
+  // The result for an empty sketch is NULL, so it can be NULL even if the inputs are not.
+  override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       BinaryType,
@@ -594,7 +633,7 @@ abstract class KllSketchGetQuantileBase
         // Array case - use batch API for better performance
         val ranks = arrayData.toDoubleArray()
         val results = kllSketchGetQuantiles(memory, ranks)
-        new GenericArrayData(results)
+        if (results == null) null else new GenericArrayData(results)
     }
   }
 }

@@ -355,6 +355,93 @@ SELECT kll_sketch_get_quantile_bigint(CAST(NULL AS BINARY), 0.5) AS null_sketch;
 -- NULL sketch to get_rank
 SELECT kll_sketch_get_rank_float(CAST(NULL AS BINARY), 5.0) AS null_sketch;
 
+-- Tests covering empty sketches
+-- An aggregate over a group whose values are all NULL returns an empty sketch, whose quantiles
+-- are NULL, as percentile_approx is for the group
+SELECT k,
+       kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5) AS median,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), array(0.25, 0.75)) AS quartiles,
+       percentile_approx(v, 0.5) AS approx_median
+FROM VALUES ('a', 1L), ('a', 3L), ('b', CAST(NULL AS BIGINT)) AS tab(k, v)
+GROUP BY k
+ORDER BY k;
+
+-- An aggregate over no rows also returns an empty sketch
+SELECT kll_sketch_get_quantile_float(agg, 0.5) AS median,
+       kll_sketch_get_quantile_float(agg, array(0.5D, NULL)) AS quantiles,
+       kll_sketch_get_quantile_float(agg, 0.5) IS NULL AS median_is_null,
+       coalesce(kll_sketch_get_quantile_float(agg, 0.5), -1.0F) AS median_or_default
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+    WHERE col1 > 1000
+);
+
+SELECT count(kll_sketch_get_quantile_double(agg, 0.5)) AS non_null_medians
+FROM (
+    SELECT col1 > 4 AS big, kll_sketch_agg_double(IF(col1 > 4, NULL, col1)) AS agg
+    FROM t_double_1_5_through_7_11
+    GROUP BY col1 > 4
+);
+
+-- Merging empty sketches returns an empty sketch
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_merge_bigint(agg, agg), 0.5) AS merged_median
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+    WHERE col1 > 1000
+);
+
+SELECT kll_sketch_get_quantile_double(kll_merge_agg_double(agg), 0.5) AS merge_agg_median
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+    WHERE col1 > 1000
+);
+
+-- A stored empty sketch
+CREATE TABLE t_empty_kll_sketch AS
+SELECT kll_sketch_agg_bigint(col1) AS sketch
+FROM t_long_1_5_through_7_11
+WHERE col1 > 1000;
+
+SELECT kll_sketch_get_n_bigint(sketch) AS n,
+       kll_sketch_get_quantile_bigint(sketch, 0.5) AS median,
+       kll_sketch_get_quantile_bigint(sketch, array(0.5, 0.9)) AS quantiles
+FROM t_empty_kll_sketch;
+
+DROP TABLE t_empty_kll_sketch;
+
+-- An outer row without matching rows gets the result of the subquery aggregate on no rows
+SELECT k,
+       (SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5)
+        FROM VALUES (1, 10L), (1, 20L), (1, 30L) AS inner_tab(ik, v)
+        WHERE inner_tab.ik = outer_tab.k) AS median
+FROM VALUES (1), (2) AS outer_tab(k)
+ORDER BY k;
+
+-- An invalid quantile rank fails for an empty sketch too
+SELECT kll_sketch_get_quantile_bigint(agg, 1.5) AS invalid_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+    WHERE col1 > 1000
+);
+
+SELECT kll_sketch_get_quantile_float(agg, array(0.5, -0.1)) AS invalid_quantiles
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+    WHERE col1 > 1000
+);
+
+-- An invalid sketch buffer fails before the rank is checked
+SELECT kll_sketch_get_quantile_double(X'0201', 1.5) AS invalid_binary;
+
+-- A zero-length binary value is not a valid empty sketch
+SELECT kll_sketch_get_quantile_bigint(X'', 0.5) AS empty_binary;
+
 -- Tests for the optional k parameter
 -- Positive tests with valid k values
 SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
