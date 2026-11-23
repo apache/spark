@@ -654,7 +654,10 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
             session.sessionState.conf.resolver)
           // EVOLUTION views don't use stored query-output names, but a later ALTER VIEW ... WITH
           // SCHEMA would copy them, so drop any left by older versions whenever the schema is
-          // rewritten. Reads that need no sync leave them in place.
+          // rewritten.
+          // TODO: views that Spark 4.1.0+ synced before this fix keep stale names, as their reads
+          // need no sync, and ALTER VIEW ... WITH SCHEMA still copies them, so they can return
+          // swapped columns until their schema changes again or they are recreated.
           val newProperties = if (viewSchemaMode == SchemaEvolution) {
             metaData.properties.filterNot(_._1.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
           } else {
