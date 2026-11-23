@@ -6423,8 +6423,8 @@ object SQLConf {
       .internal()
       .doc("When true, kll_sketch_merge_{bigint,float,double}(left, right) returns a sketch " +
         "with k = min(k of the first non-empty input, k of `right`), where the k of `right` " +
-        "counts only if `right` is in estimation mode. Two empty inputs give the default k " +
-        "(200). When false, the result has the k of `left`.")
+        "counts only if `right` is in estimation mode. Two empty inputs keep the k of `left`. " +
+        "When false, the result has the k of `left`.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

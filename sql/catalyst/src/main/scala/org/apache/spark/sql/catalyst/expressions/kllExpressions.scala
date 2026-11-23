@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
 import org.apache.datasketches.memory.Memory
 
@@ -250,7 +252,10 @@ abstract class KllSketchGetNBase
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Merges two sketch buffers together into one.
+    _FUNC_(left, right) - Merges two sketch buffers together into one. The result has the
+    smaller of the k of the first non-empty input and the k of `right`, where the k of `right`
+    counts only if `right` has started compacting. Two empty inputs keep the k of `left`. So the
+    k can depend on the order of the inputs and on how nested merges are grouped.
   """,
   arguments = """
     Arguments:
@@ -277,14 +282,16 @@ case class KllSketchMergeBigint(
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_bigint"
   override def nullSafeEval(left: Any, right: Any): Any =
-    mergeSketches(left, right)(
-      KllLongsSketch.heapify, KllLongsSketch.wrap, KllLongsSketch.newHeapInstance).toByteArray
+    mergeSketches(left, right, KllLongsSketch.heapify, KllLongsSketch.wrap).toByteArray
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Merges two sketch buffers together into one.
+    _FUNC_(left, right) - Merges two sketch buffers together into one. The result has the
+    smaller of the k of the first non-empty input and the k of `right`, where the k of `right`
+    counts only if `right` has started compacting. Two empty inputs keep the k of `left`. So the
+    k can depend on the order of the inputs and on how nested merges are grouped.
   """,
   arguments = """
     Arguments:
@@ -311,14 +318,16 @@ case class KllSketchMergeFloat(
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_float"
   override def nullSafeEval(left: Any, right: Any): Any =
-    mergeSketches(left, right)(
-      KllFloatsSketch.heapify, KllFloatsSketch.wrap, KllFloatsSketch.newHeapInstance).toByteArray
+    mergeSketches(left, right, KllFloatsSketch.heapify, KllFloatsSketch.wrap).toByteArray
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Merges two sketch buffers together into one.
+    _FUNC_(left, right) - Merges two sketch buffers together into one. The result has the
+    smaller of the k of the first non-empty input and the k of `right`, where the k of `right`
+    counts only if `right` has started compacting. Two empty inputs keep the k of `left`. So the
+    k can depend on the order of the inputs and on how nested merges are grouped.
   """,
   arguments = """
     Arguments:
@@ -345,8 +354,7 @@ case class KllSketchMergeDouble(
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_double"
   override def nullSafeEval(left: Any, right: Any): Any =
-    mergeSketches(left, right)(
-      KllDoublesSketch.heapify, KllDoublesSketch.wrap, KllDoublesSketch.newHeapInstance).toByteArray
+    mergeSketches(left, right, KllDoublesSketch.heapify, KllDoublesSketch.wrap).toByteArray
 }
 
 /** This is a base class for the above expressions to reduce boilerplate. */
@@ -368,10 +376,11 @@ abstract class KllSketchMergeBase
    * Merges the sketch buffers `left` and `right`. A merge keeps the k of its target, so the target
    * is a heap copy of the input whose k the result takes.
    */
-  protected def mergeSketches[T <: KllSketch](left: Any, right: Any)(
+  protected def mergeSketches[T <: KllSketch](
+      left: Any,
+      right: Any,
       heapify: Memory => T,
-      wrap: Memory => T,
-      newHeapInstance: Int => T): T = {
+      wrap: Memory => T): T = {
     try {
       val leftMem = Memory.wrap(left.asInstanceOf[Array[Byte]])
       val rightMem = Memory.wrap(right.asInstanceOf[Array[Byte]])
@@ -380,9 +389,8 @@ abstract class KllSketchMergeBase
       } else {
         val leftView = wrap(leftMem)
         val rightView = wrap(rightMem)
-        if (leftView.isEmpty && rightView.isEmpty) {
-          (newHeapInstance(KllSketch.DEFAULT_K), rightView)
-        } else if (leftView.isEmpty ||
+        // Empty inputs count as absent, so two empty inputs keep the k of left.
+        if ((leftView.isEmpty && !rightView.isEmpty) ||
             (rightView.isEstimationMode && rightView.getK < leftView.getK)) {
           (heapify(rightMem), leftView)
         } else {
@@ -392,7 +400,7 @@ abstract class KllSketchMergeBase
       target.merge(input)
       target
     } catch {
-      case _: Exception =>
+      case NonFatal(_) =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }

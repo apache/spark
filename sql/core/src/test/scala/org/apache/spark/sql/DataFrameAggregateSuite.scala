@@ -23,7 +23,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketches => TupleSketches}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
@@ -4355,17 +4355,18 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq((400, 0), (8, 160)) -> 8,
       Seq((400, 8000), (8, 0)) -> 400,
       Seq((20, 3), (8, 0)) -> 20,
-      // Two empty inputs give the default k.
-      Seq((8, 0), (400, 0)) -> KllSketch.DEFAULT_K,
-      Seq((1000, 0), (8, 0)) -> KllSketch.DEFAULT_K,
-      Seq((100, 0), (100, 0)) -> KllSketch.DEFAULT_K,
+      // Two empty inputs keep the k of left.
+      Seq((8, 0), (400, 0)) -> 8,
+      Seq((1000, 0), (8, 0)) -> 1000,
+      Seq((1000, 0), (1000, 0)) -> 1000,
       // Chains of more than two inputs.
       Seq((8, 0), (50, 10), (4096, 5000), (100, 300)) -> 50,
       Seq((50, 0), (8, 0), (400, 10), (100, 0), (200, 1000)) -> 200,
-      Seq((1000, 10), (400, 5000), (16, 5), (200, 3000), (50, 50)) -> 200)
+      Seq((1000, 10), (400, 5000), (16, 5), (200, 3000), (50, 50)) -> 200,
+      Seq((50, 0), (8, 0), (1000, 0)) -> 50)
     def ruleK(inputs: Seq[(Int, Int)]): Int = inputs.dropWhile(_._2 == 0) match {
       case first +: rest => (first._1 +: rest.collect { case (k, n) if n > k => k }).min
-      case _ => KllSketch.DEFAULT_K
+      case _ => inputs.head._1
     }
     examples.foreach { case (inputs, k) => assert(ruleK(inputs) == k, s"inputs $inputs") }
     val rng = new Random(20261116)
@@ -4451,6 +4452,29 @@ class DataFrameAggregateSuite extends SharedSparkSession
       withSQLConf(confKey -> conf.toString) {
         val merged = df.selectExpr("kll_sketch_merge_bigint(l, r)").head().getAs[Array[Byte]](0)
         assert(kOf("bigint", merged) == k, s"conf = $conf")
+      }
+    }
+  }
+
+  // Empty sketches come from an empty group, from only NULL values, and from kll_merge_agg over
+  // only NULL sketches, which gives the default k 200.
+  test("SPARK-61981: kll_sketch_merge of two empty sketches keeps the k of left") {
+    import KllMergeKRule._
+    for (t <- types; conf <- Seq(true, false)) {
+      val emptyGroup = s"(SELECT kll_sketch_agg_$t(CAST(id AS $t), 1000) FROM range(0))"
+      val onlyNulls = s"(SELECT kll_sketch_agg_$t(CAST(NULL AS $t), 8) FROM range(5))"
+      val mergeAggOfNulls = s"(SELECT kll_merge_agg_$t(CAST(NULL AS BINARY)) FROM range(5))"
+      val cases = Seq(
+        (emptyGroup, onlyNulls, 1000),
+        (onlyNulls, emptyGroup, 8),
+        (mergeAggOfNulls, emptyGroup, 200))
+      withSQLConf(confKey -> conf.toString) {
+        for ((left, right, k) <- cases) {
+          val row = sql(s"SELECT m, kll_sketch_get_n_$t(m) " +
+            s"FROM (SELECT kll_sketch_merge_$t($left, $right) AS m)").head()
+          assert((kOf(t, row.getAs[Array[Byte]](0)), row.getLong(1)) == ((k, 0L)),
+            s"$t, conf = $conf, left = $left")
+        }
       }
     }
   }
