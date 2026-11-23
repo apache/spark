@@ -3740,13 +3740,26 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         fn = _ast.parse("def f(s: Sequence, b, c): return b").body[0]
         self.assertEqual(len(_param_category_combos(fn, ["s", "b", "c"])), 2 * 3 * 3)
         # Past it a Sequence param counts as unpinned and gets the collapsed fills,
-        # as an untyped param does, while dict/list stay pinned.
+        # but only those it can take: the numeric fills keep its array category,
+        # so `s is None` over an array column still has an option. dict stays pinned.
         fn = _ast.parse("def f(s: Sequence, a: dict, b, c, d): return b").body[0]
         self.assertEqual(
             _param_category_combos(fn, ["s", "a", "b", "c", "d"]),
             [
-                {0: fill, 1: "map", 2: fill, 3: fill, 4: fill}
-                for fill in ("integer", "float", "string")
+                {0: "array", 1: "map", 2: "integer", 3: "integer", 4: "integer"},
+                {0: "array", 1: "map", 2: "float", 3: "float", 4: "float"},
+                {0: "string", 1: "map", 2: "string", 3: "string", 4: "string"},
+            ],
+        )
+        # Fills that leave every param on the same candidate collapse to one combo.
+        fn = _ast.parse(
+            "def f(a: Sequence[int], b: Sequence[int], c: Sequence, d: Sequence): return a"
+        ).body[0]
+        self.assertEqual(
+            _param_category_combos(fn, ["a", "b", "c", "d"]),
+            [
+                {0: "array<integer>", 1: "array<integer>", 2: "array", 3: "array"},
+                {0: "string", 1: "string", 2: "string", 3: "string"},
             ],
         )
 

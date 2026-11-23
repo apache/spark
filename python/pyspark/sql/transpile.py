@@ -1549,8 +1549,10 @@ def _param_category_combos(
     ``"array"`` and ``"string"``. To cap plan growth, when more than three
     params are unpinned (untyped or ``Sequence``) we collapse them to one
     variant per base category (encourage typing inputs to keep the matrix
-    small) while keeping every typed param pinned. A ``None`` ``function_ast``
-    means no trustworthy source, hence no annotations: every param is untyped.
+    small) while keeping every typed param pinned. A param that cannot take a
+    fill keeps its first candidate instead, so a ``Sequence`` param still gets
+    its array option. A ``None`` ``function_ast`` means no trustworthy source,
+    hence no annotations: every param is untyped.
     """
     n = len(public_params)
     if function_ast is None:
@@ -1561,12 +1563,15 @@ def _param_category_combos(
         candidates = [_annotation_candidates(arg.annotation) for arg in public_args]
     unpinned = sum(1 for c in candidates if len(c) > 1)
     if unpinned > 3:
-        # Cap the blow-up of the product; collapse unpinned params to one
-        # variant per base fill while keeping typed params pinned.
-        return [
-            {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
-            for fill in ("integer", "float", "string")
-        ]
+        # Cap the blow-up of the product: one variant per base fill. Each param
+        # takes the fill only when it is one of its own candidates, so a typed
+        # param stays pinned and a Sequence keeps "array" for the numeric fills.
+        capped: List[dict] = []
+        for fill in ("integer", "float", "string"):
+            combo = {i: fill if fill in c else c[0] for i, c in enumerate(candidates)}
+            if combo not in capped:
+                capped.append(combo)
+        return capped
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
 
