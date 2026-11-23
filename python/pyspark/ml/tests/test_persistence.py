@@ -368,7 +368,7 @@ class PersistenceTest(SparkSessionTestCase):
             loadedModel = OneVsRestModel.load(modelPath)
             self._compare_pipelines(model, loadedModel)
 
-        reload_and_compare(OneVsRest(classifier=lr), "ovr")
+        reload_and_compare(OneVsRest(classifier=lr, intermediateStorageLevel="DISK_ONLY"), "ovr")
         reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
 
     def test_onevsrest(self):

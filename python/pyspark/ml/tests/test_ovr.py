@@ -51,11 +51,21 @@ class OneVsRestTestsMixin:
         self.assertEqual(svc.getMaxIter(), 1)
         self.assertEqual(svc.getRegParam(), 1.0)
 
-        ovr = OneVsRest(classifier=svc, parallelism=1)
+        self.assertEqual(OneVsRest().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        ovr = OneVsRest(classifier=svc, parallelism=1, intermediateStorageLevel="DISK_ONLY")
+        self.assertEqual(ovr.getIntermediateStorageLevel(), "DISK_ONLY")
+        ovr.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(ovr.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        ovr.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(ovr.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(ovr.getParallelism(), 1)
 
         model = ovr.fit(df)
         self.assertIsInstance(model, OneVsRestModel)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
+        model.setIntermediateStorageLevel("MEMORY_ONLY")
+        self.assertEqual(model.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        model.setIntermediateStorageLevel("DISK_ONLY")
         self.assertEqual(len(model.models), 3)
         for submodel in model.models:
             self.assertIsInstance(submodel, LinearSVCModel)
@@ -108,15 +118,41 @@ class OneVsRestTestsMixin:
         with tempfile.TemporaryDirectory(prefix="linear_svc") as d:
             ovr.write().overwrite().save(d)
             ovr2 = OneVsRest.load(d)
+            self.assertEqual(ovr2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(ovr), str(ovr2))
 
             model.write().overwrite().save(d)
             model2 = OneVsRestModel.load(d)
+            self.assertEqual(model2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(model), str(model2))
 
 
 class OneVsRestTests(OneVsRestTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_intermediate_storage_level_conversion(self):
+        from pyspark import StorageLevel
+
+        ovr = OneVsRest()
+        for entry in self.sc._jvm.org.apache.spark.storage.StorageLevelMapper.values():
+            name = entry.name()
+            if name == "NONE":
+                continue
+            with self.subTest(storageLevel=name):
+                expected = self.sc._jvm.org.apache.spark.storage.StorageLevel.fromString(name)
+                actual = ovr.setIntermediateStorageLevel(name)._getIntermediateStorageLevel()
+                self.assertEqual(
+                    actual,
+                    StorageLevel(
+                        expected.useDisk(),
+                        expected.useMemory(),
+                        expected.useOffHeap(),
+                        expected.deserialized(),
+                        expected.replication(),
+                    ),
+                )
+
+        for name in ["NONE", "INVALID", "MEMORY_AND_DISK_DESER"]:
+            with self.subTest(storageLevel=name), self.assertRaises(ValueError):
+                ovr.setIntermediateStorageLevel(name)._getIntermediateStorageLevel()
 
 
 if __name__ == "__main__":

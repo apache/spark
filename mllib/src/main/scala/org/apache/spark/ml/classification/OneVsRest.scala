@@ -32,7 +32,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.functions._
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
+import org.apache.spark.ml.param.shared.{HasIntermediateStorageLevel, HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
@@ -57,7 +57,7 @@ private[ml] trait ClassifierTypeTrait {
  * Params for [[OneVsRest]].
  */
 private[ml] trait OneVsRestParams extends ClassifierParams
-  with ClassifierTypeTrait with HasWeightCol {
+  with ClassifierTypeTrait with HasWeightCol with HasIntermediateStorageLevel {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -170,6 +170,11 @@ final class OneVsRestModel private[ml] (
   @Since("2.4.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
+  /** @group expertSetParam */
+  @Since("4.5.0")
+  def setIntermediateStorageLevel(value: String): this.type =
+    set(intermediateStorageLevel, value)
+
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false,
@@ -209,7 +214,7 @@ final class OneVsRestModel private[ml] (
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
-      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+      newDataset.persist(StorageLevel.fromString($(intermediateStorageLevel)))
     }
 
     // update the accumulator column with the result of prediction of models
@@ -389,6 +394,11 @@ final class OneVsRest @Since("1.4.0") (
   @Since("2.3.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("4.5.0")
+  def setIntermediateStorageLevel(value: String): this.type =
+    set(intermediateStorageLevel, value)
+
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
@@ -401,7 +411,7 @@ final class OneVsRest @Since("1.4.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol,
-      rawPredictionCol, parallelism)
+      rawPredictionCol, parallelism, intermediateStorageLevel)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -433,7 +443,7 @@ final class OneVsRest @Since("1.4.0") (
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
-      multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+      multiclassLabeled.persist(StorageLevel.fromString($(intermediateStorageLevel)))
     }
 
     val executionContext = getExecutionContext
