@@ -189,11 +189,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case u @ UnresolvedExtractValue(child, field) =>
           val newChild = innerResolve(child, isTopLevel = false)
-          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
-            innerResolve(field, isTopLevel = false)
-          } else {
-            field
-          }
+          val resolvedField = innerResolve(field, isTopLevel = false)
           if (newChild.resolved) {
             // applyOrNull propagates NULL when the base is NullType instead of throwing
             // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
