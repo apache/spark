@@ -1611,6 +1611,10 @@ abstract class SQLViewSuite extends QueryTest {
   private def viewQueryColumnNames(viewName: String): Seq[String] =
     spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).viewQueryColumnNames
 
+  private def viewQueryOutputPropertyKeys(viewName: String): Set[String] =
+    spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).properties.keySet
+      .filter(_.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
+
   // Stores query column names the way older versions did for EVOLUTION views.
   private def setViewQueryColumnNames(viewName: String, names: String*): Unit = {
     val cols = names.zipWithIndex.map { case (name, i) =>
@@ -1627,13 +1631,14 @@ abstract class SQLViewSuite extends QueryTest {
         sql("CREATE TABLE t (c1 INT, c2 INT) USING parquet")
         sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
         setViewQueryColumnNames("v", "c1", "c2")
+        assert(viewQueryOutputPropertyKeys("v").size == 3)
 
         sql("DROP TABLE t")
         sql("CREATE TABLE t (c2 INT, c1 INT) USING parquet")
         sql("INSERT INTO t VALUES (20, 10)")
         // The read syncs the view schema to the new column order.
         checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
-        assert(viewQueryColumnNames("v").isEmpty)
+        assert(viewQueryOutputPropertyKeys("v").isEmpty)
 
         sql("ALTER VIEW v WITH SCHEMA BINDING")
         checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
