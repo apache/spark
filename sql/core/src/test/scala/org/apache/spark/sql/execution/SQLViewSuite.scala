@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
@@ -1603,6 +1604,73 @@ abstract class SQLViewSuite extends QueryTest {
             sql("USE default")
           }
         }
+      }
+    }
+  }
+
+  private def viewQueryColumnNames(viewName: String): Seq[String] =
+    spark.sessionState.catalog.getTableMetadata(TableIdentifier(viewName)).viewQueryColumnNames
+
+  // Stores query column names the way older versions did for EVOLUTION views.
+  private def setViewQueryColumnNames(viewName: String, names: String*): Unit = {
+    val cols = names.zipWithIndex.map { case (name, i) =>
+      s"'${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}$i' = '$name'"
+    }
+    sql(s"ALTER VIEW $viewName SET TBLPROPERTIES (" +
+      s"'${CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS}' = '${names.length}', " +
+      s"${cols.mkString(", ")})")
+  }
+
+  test("schema sync of an EVOLUTION view removes stale query column names") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 INT, c2 INT) USING parquet")
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+        setViewQueryColumnNames("v", "c1", "c2")
+
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (c2 INT, c1 INT) USING parquet")
+        sql("INSERT INTO t VALUES (20, 10)")
+        // The read syncs the view schema to the new column order.
+        checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
+        assert(viewQueryColumnNames("v").isEmpty)
+
+        sql("ALTER VIEW v WITH SCHEMA BINDING")
+        checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
+      }
+    }
+  }
+
+  test("reading an unchanged EVOLUTION view keeps its stored query column names") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 INT, c2 INT) USING parquet")
+        sql("INSERT INTO t VALUES (10, 20)")
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+        setViewQueryColumnNames("v", "c1", "c2")
+
+        // The schema did not change, so the read does not write the view.
+        checkAnswer(sql("SELECT c1, c2 FROM v"), Row(10, 20))
+        assert(viewQueryColumnNames("v") == Seq("c1", "c2"))
+      }
+    }
+  }
+
+  test("schema sync of a TYPE EVOLUTION view keeps its query column names") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 INT) USING parquet")
+        sql("CREATE VIEW v (a) WITH SCHEMA TYPE EVOLUTION AS SELECT * FROM t")
+        assert(viewQueryColumnNames("v") == Seq("c1"))
+
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (c1 BIGINT) USING parquet")
+        sql("INSERT INTO t VALUES (1)")
+        // The read syncs the view schema to the new type.
+        checkAnswer(sql("SELECT a FROM v"), Row(1L))
+        val meta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+        assert(meta.schema.fields.map(_.dataType).toSeq == Seq(LongType))
+        assert(meta.viewQueryColumnNames == Seq("c1"))
       }
     }
   }

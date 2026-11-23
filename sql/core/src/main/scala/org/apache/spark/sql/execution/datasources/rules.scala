@@ -652,7 +652,14 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
-          val updatedViewMeta = metaData.copy(schema = newSchema)
+          // EVOLUTION views don't use stored query column names. Names written by older
+          // versions no longer match the new schema, so remove them.
+          val newProperties = if (viewSchemaMode == SchemaEvolution) {
+            metaData.properties.filterNot(_._1.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
+          } else {
+            metaData.properties
+          }
+          val updatedViewMeta = metaData.copy(schema = newSchema, properties = newProperties)
           try {
             session.sessionState.catalog.alterTable(updatedViewMeta)
           } catch {
