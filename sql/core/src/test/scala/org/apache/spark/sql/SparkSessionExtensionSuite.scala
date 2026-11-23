@@ -863,7 +863,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         checkError(
           exception = intercept[AnalysisException](modify()),
           condition = "CANNOT_MODIFY_STATIC_CONFIG",
-          parameters = Map("key" -> s"\"$key\""))
+          parameters = Map("key" -> s"\"${key}\""))
       }
     }
   }
