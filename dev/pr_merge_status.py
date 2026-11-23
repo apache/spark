@@ -105,9 +105,9 @@ def detect_remote():
     """Returns the name of the git remote pointing to apache/spark, or None. A clone may
     have several aliases for the same upstream; any one works (the script fetches it
     before reading, so its refs are current), and picking just one keeps the branch
-    lookups fast. Preference order: the remote named `upstream` (the convention in
-    `.agents/pre-flight.md`) first; then SSH over HTTPS (key auth, no credential
-    prompts); then declaration order in `git remote -v`."""
+    lookups fast. Preference order: the remote named `upstream` (the AGENTS.md convention)
+    first; then SSH over HTTPS (key auth, no credential prompts); then declaration order
+    in `git remote -v`."""
     matches = []  # (name, url) for each fetch remote whose URL is apache/spark
     seen = set()
     for line in git("remote", "-v").splitlines():
