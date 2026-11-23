@@ -100,6 +100,7 @@ class ViewCatalogSuite extends SparkFunSuite {
 
     assert(invalidations === 1)
     assert(updated.queryText === concurrent.queryText)
-    assert(updated.properties.asScala === Map("concurrent" -> "value", "new" -> "value"))
+    val expectedProperties = concurrent.properties.asScala.toMap + ("new" -> "value")
+    assert(updated.properties.asScala === expectedProperties)
   }
 }
