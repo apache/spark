@@ -75,7 +75,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
  * A deterministic extra conjunct alongside the top-1 predicate (e.g. `rn = 1 AND v > 6`) is kept
  * as a `Filter` over the new `Project` rather than dropped, since it is evaluated on the same
  * single surviving row either way. A nondeterministic one is left in place instead (keeping the
- * `Window`/`Filter` unchanged), since relocating it would change which rows it is evaluated on.
+ * `Window`/`Filter` unchanged), as a conservative choice not to move it to another operator.
  * This special case never applies when `partitionSpec` is empty and `limit` is below
  * `spark.sql.execution.topKSortFallbackThreshold` (the default), since that case is instead
  * rewritten straight to a `Limit` on top of the `Window`, with no `WindowGroupLimit` involved.

@@ -1718,6 +1718,90 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61729: Eliminate redundant Window/Filter for top-1 row_number dedup end-to-end") {
+    val df = Seq(
+      ("a", Some(1), "x1"),
+      ("a", Some(2), "x2"),
+      ("A", Some(3), "x3"),
+      ("b", Some(1), "y1"),
+      ("b", Some(1), "y1"), // tied order key via a duplicate row, so the winner is unambiguous
+      ("c", None, "z1"), // NULL order key, ranked first by asc_nulls_first
+      ("c", Some(1), "z2")
+    ).toDF("k", "ts", "tag")
+
+    def dedup(keyCol: Column): DataFrame = {
+      val w = Window.partitionBy(keyCol).orderBy($"ts".asc_nulls_first)
+      df.withColumn("rn", row_number().over(w)).where($"rn" === 1)
+    }
+
+    // UTF8_BINARY: "a" and "A" are different partitions.
+    val binary = dedup($"k")
+    checkAnswer(binary,
+      Seq(
+        Row("a", 1, "x1", 1),
+        Row("A", 3, "x3", 1),
+        Row("b", 1, "y1", 1),
+        Row("c", null, "z1", 1)))
+    assert(!stripAQEPlan(binary.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+
+    // UTF8_LCASE: "a" and "A" fall in the same partition; only the lowest ts survives. The
+    // partition key isn't binary-stable, so the elimination doesn't fire and WindowExec stays
+    // to re-check WindowGroupLimit's output, which is what keeps this result correct.
+    val collated = dedup(collate($"k", "UTF8_LCASE"))
+    checkAnswer(collated,
+      Seq(
+        Row("a", 1, "x1", 1),
+        Row("b", 1, "y1", 1),
+        Row("c", null, "z1", 1)))
+    assert(stripAQEPlan(collated.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+  }
+
+  test("SPARK-61729: top-1 row_number dedup over FLOAT/DOUBLE partition keys normalizes " +
+      "0.0/-0.0/NaN") {
+    val df = Seq(
+      (0.0, 1, "p1"),
+      (-0.0, 2, "p2"),
+      (Double.NaN, 1, "n1"),
+      (-Double.NaN, 2, "n2"), // a different NaN bit pattern, SQL-equal to the one above
+      (1.0, 1, "q1")
+    ).toDF("k", "ts", "tag")
+
+    val w = Window.partitionBy($"k").orderBy($"ts")
+    val dedup = df.withColumn("rn", row_number().over(w)).where($"rn" === 1)
+
+    checkAnswer(dedup,
+      Seq(
+        Row(0.0, 1, "p1", 1), // 0.0 and -0.0 are one SQL-equal group; ts=1 wins
+        Row(Double.NaN, 1, "n1", 1), // both NaN bit patterns are one SQL-equal group
+        Row(1.0, 1, "q1", 1)))
+    assert(!stripAQEPlan(dedup.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+  }
+
+  test("SPARK-61729: top-1 row_number dedup keeps a deterministic extra conjunct correct " +
+      "inside an IN subquery") {
+    withTempView("t_outer", "t_inner") {
+      Seq(1, 2, 3, 4).toDF("a").createOrReplaceTempView("t_outer")
+      Seq(
+        (1, 1, 5), // key 1's top-ranked row fails v > 6
+        (1, 2, 10), // key 1's second-ranked row would pass, but rn must be 1
+        (2, 1, 10), // key 2's top-ranked row passes
+        (3, 1, 10) // key 3's only row passes
+      ).toDF("k", "ts", "v").createOrReplaceTempView("t_inner")
+
+      val df = sql(
+        """
+          |SELECT a FROM t_outer WHERE a IN (
+          |  SELECT k FROM (
+          |    SELECT k, v, row_number() OVER (PARTITION BY k ORDER BY ts) AS rn FROM t_inner
+          |  ) WHERE rn = 1 AND v > 6
+          |)
+          |""".stripMargin)
+
+      checkAnswer(df, Seq(Row(2), Row(3)))
+      assert(!stripAQEPlan(df.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+    }
+  }
+
   test("SPARK-42525: collapse two adjacent windows with the same partition/order in subquery") {
     withTempView("t1") {
       Seq((1, 1), (2, 2)).toDF("a", "b").createOrReplaceTempView("t1")
