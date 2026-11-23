@@ -413,7 +413,7 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
-          // The legacy setting restores keeping the table's metadata, as in Spark 4.3.
+          // The legacy setting restores keeping the table's metadata, as in Spark 4.4.
           mergeWithDesiredMetadata =
             !context.spark.sessionState.conf.legacyPipelinesKeepStreamingTableColumnMetadata,
           caseSensitive = effectiveCaseSensitive
@@ -695,6 +695,8 @@ object DatasetManager extends Logging {
       caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
     val targetSchema = if (mergeWithExistingSchema && mergeWithDesiredMetadata) {
+      // Only comment changes are applied; other metadata changes (e.g. defaults, SPARK-59269) are
+      // only logged.
       SchemaMergingUtils.mergeSchemasWithDataMetadata(currentSchema, desiredSchema, caseSensitive)
     } else if (mergeWithExistingSchema) {
       // Shared columns keep the existing table's metadata.

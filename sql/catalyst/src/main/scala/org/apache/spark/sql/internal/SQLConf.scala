@@ -9522,7 +9522,7 @@ object SQLConf {
       .internal()
       .doc("When true, an incremental update of a Declarative Pipelines streaming table keeps " +
         "the column comments and other column metadata the table already has on the columns " +
-        "it shares with the pipeline's declared or inferred schema, as Spark 4.3 does. When " +
+        "it shares with the pipeline's declared or inferred schema, as Spark 4.4 does. When " +
         "false (default), those columns take their metadata from the pipeline's schema, as a " +
         "full refresh and an update of a materialized view do.")
       .version("4.5.0")
