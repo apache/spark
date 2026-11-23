@@ -162,6 +162,23 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-62149: try_abs and try_negative over strings") {
+    // A string that is not a number gives NULL in both modes, as for try_add, through a TRY cast
+    // to DOUBLE, while an error of the argument itself still surfaces.
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        checkEvaluation(new TryAbs(Literal("-1.5")).replacement, 1.5d)
+        checkEvaluation(new TryNegative(Literal("1.5")).replacement, -1.5d)
+        checkEvaluation(new TryAbs(Literal("abc")).replacement, null)
+        checkEvaluation(new TryNegative(Literal("abc")).replacement, null)
+        val failing = Cast(Add(Literal(Int.MaxValue), Literal(1), EvalMode.ANSI), StringType)
+        Seq(new TryAbs(failing).replacement, new TryNegative(failing).replacement).foreach {
+          e => checkExceptionInExpression[ArithmeticException](e, "ARITHMETIC_OVERFLOW")
+        }
+      }
+    }
+  }
+
   test("SPARK-62149: the null-on-overflow expressions accept only the types that overflow") {
     Seq(AbsOrNull(Literal(1.5d)), AbsOrNull(Literal(new CalendarInterval(1, 2, 3L))),
         NegateOrNull(Literal(Decimal("1.5")))).foreach { e =>

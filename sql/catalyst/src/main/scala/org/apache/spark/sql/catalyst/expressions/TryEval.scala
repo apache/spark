@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AnsiIntervalType, CalendarIntervalType, DataType, IntegralType, NumericType}
+import org.apache.spark.sql.types.{AnsiIntervalType, CalendarIntervalType, DataType, DoubleType, IntegralType, NumericType, StringType}
 
 case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -77,6 +77,9 @@ case class TryAbs(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(expr: Expression) = this(expr, expr.dataType match {
     case _: IntegralType | _: AnsiIntervalType => AbsOrNull(expr)
+    // A string is cast to DOUBLE as for `abs`, but by `try_cast`, so that a string that is not a
+    // number gives NULL, as for `try_add`, while an error of the argument itself still surfaces.
+    case _: StringType => Abs(Cast(expr, DoubleType, evalMode = EvalMode.TRY))
     // The other types that `abs` accepts cannot overflow.
     case _ => Abs(expr)
   })
@@ -112,6 +115,8 @@ case class TryNegative(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(expr: Expression) = this(expr, expr.dataType match {
     case _: IntegralType | _: AnsiIntervalType | CalendarIntervalType => NegateOrNull(expr)
+    // A string is cast to DOUBLE by `try_cast`, as in `TryAbs`.
+    case _: StringType => UnaryMinus(Cast(expr, DoubleType, evalMode = EvalMode.TRY))
     // The other types that `negative` accepts cannot overflow.
     case _ => UnaryMinus(expr)
   })

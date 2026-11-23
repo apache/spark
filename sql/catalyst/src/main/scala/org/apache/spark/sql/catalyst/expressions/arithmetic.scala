@@ -312,12 +312,7 @@ case class NegateOrNull(child: Expression) extends UnaryArithmeticOrNull with No
 
   override protected def nonNullEvaluator: Any => Any = dataType match {
     case CalendarIntervalType => input =>
-      val v = input.asInstanceOf[CalendarInterval]
-      if (v.months == Int.MinValue || v.days == Int.MinValue || v.microseconds == Long.MinValue) {
-        null
-      } else {
-        IntervalUtils.negate(v)
-      }
+      IntervalUtils.negateOrNull(input.asInstanceOf[CalendarInterval])
     case _ => super.nonNullEvaluator
   }
 
@@ -326,12 +321,8 @@ case class NegateOrNull(child: Expression) extends UnaryArithmeticOrNull with No
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, c =>
         s"""
-           |if ($c.months == Integer.MIN_VALUE || $c.days == Integer.MIN_VALUE ||
-           |    $c.microseconds == Long.MIN_VALUE) {
-           |  ${ev.isNull} = true;
-           |} else {
-           |  ${ev.value} = $iu.negate($c);
-           |}
+           |${ev.value} = $iu.negateOrNull($c);
+           |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin)
     case _ => super.doGenCode(ctx, ev)
   }

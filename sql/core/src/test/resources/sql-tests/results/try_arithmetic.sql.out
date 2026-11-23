@@ -1132,26 +1132,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_negative('abc')
 -- !query schema
-struct<>
+struct<try_negative(abc):double>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 26,
-    "fragment" : "try_negative('abc')"
-  } ]
-}
+NULL
 
 
 -- !query

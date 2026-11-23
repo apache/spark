@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -327,10 +327,14 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       evalEach(t, values)(Abs(_, failOnError = true))
     }
     // The null-on-overflow forms of try_abs and try_negative.
-    for ((t, values) <- Seq(longs, ints, shorts, bytes)) {
+    for ((t, values) <- Seq(longs, ints, shorts, bytes,
+        (DayTimeIntervalType(), longs._2), (YearMonthIntervalType(), ints._2))) {
       evalEach(t, values)(AbsOrNull(_))
       evalEach(t, values)(NegateOrNull(_))
     }
+    evalEach(CalendarIntervalType, Seq(new CalendarInterval(1, -2, 3L),
+      new CalendarInterval(Int.MinValue, 0, 0L), new CalendarInterval(0, Int.MinValue, 0L),
+      new CalendarInterval(0, 0, Long.MinValue)))(NegateOrNull(_))
     for ((t, values) <- nonDecimals ++ Seq(decimals, smallDecimals)) {
       Seq(legacy, tryMode).foreach(ctx => evalPairs(t, values)(Remainder(_, _, ctx)))
       evalPairs(t, values)(Pmod(_, _, legacy))
@@ -735,9 +739,8 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       "GetArrayStructFields", "GetMapValue", "GetStructField", "GreaterThan",
       "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull", "Length",
       "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "NegateOrNull", "Not",
-      "NullIf",
-      "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith",
-      "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
+      "NullIf", "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size",
+      "StartsWith", "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
     // The ones that decide it by their input types or eval mode.
     val conditional = others.filter { c =>
       c != classOf[Expression] && c.getMethod("isTotal").getDeclaringClass != classOf[Expression]
