@@ -274,8 +274,11 @@ trait PredicateHelper extends AliasHelper with Logging {
    * If `atJoin` is true, only the columns that a condition over more than one input of a join can
    * fail on are returned. Such a condition is evaluated at the join, where a watermark, a
    * repartition and an aggregation, for a grouping key, have computed the column on every row they
-   * got, so none is returned through them. A window still passes them through: once the condition
-   * is in the join, `ColumnPruning` can remove a window whose results are not read.
+   * got, so none is returned through them. The other operators still pass them through: a union
+   * and the other operators of `canPushThrough`, e.g. `Generate`, can pass a column on to the join
+   * as it is, and once the condition is in the join, `ColumnPruning` can remove a window whose
+   * results are not read. `PushExtraPredicateThroughJoin` can still push the parts of a disjunction
+   * in the join condition that read one side below the join, which this does not account for.
    *
    * Other columns and operators do not count:
    *  - A non-deterministic column, computed for every row the operator outputs, and the
@@ -338,9 +341,11 @@ trait PredicateHelper extends AliasHelper with Logging {
    * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
-   * dropped. A conjunct over more than one of `plans` is only evaluated where they are joined, so
-   * it is checked against the columns that can fail there (see `atJoin` of `failableOutput`).
-   * The conjuncts that may not move are returned in their written order.
+   * dropped. A conjunct over more than one of `plans`, or of the inputs of a join among them, is
+   * only evaluated where they are joined, so it is checked against the columns that can fail there
+   * (see `atJoin` of `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push
+   * the parts of a disjunction that read one side below the join. The conjuncts that may not move
+   * are returned in their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
@@ -358,8 +363,9 @@ trait PredicateHelper extends AliasHelper with Logging {
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput(_)))
     lazy val failableAtJoin =
       AttributeSet.fromAttributeSets(plans.map(failableOutput(_, atJoin = true)))
+    lazy val inputs = plans.flatMap(joinInputs)
     val (cannotFail, stayUp) = following.partition { cond =>
-      val columns = if (plans.count(p => cond.references.exists(p.outputSet.contains)) > 1) {
+      val columns = if (inputs.count(p => cond.references.exists(p.outputSet.contains)) > 1) {
         failableAtJoin
       } else {
         failable
@@ -367,6 +373,12 @@ trait PredicateHelper extends AliasHelper with Logging {
       ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(columns.contains)
     }
     (leading ++ cannotFail, stayUp)
+  }
+
+  /** The inputs of the joins at the top of `plan`, or `plan` itself if it is not a join. */
+  private def joinInputs(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
+    case j: Join => joinInputs(j.left) ++ joinInputs(j.right)
+    case _ => Seq(plan)
   }
 
   /**

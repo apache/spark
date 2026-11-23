@@ -1358,6 +1358,46 @@ class FilterPushdownSuite extends PlanTest {
           PushPredicateThroughJoin(side.join(testRelation1).where(Rand(0) > 0.1 && cond).analyze),
           side.where(cond).join(testRelation1).where(Rand(0) > 0.1).analyze)
     }
+
+    // `atJoin` is passed on through the operators between the join and the aggregation, and a
+    // round-robin repartition and a coalesce stop it as the other repartitions do.
+    val agg = projected.groupBy($"a", $"q")($"a", $"q")
+    Seq(
+      agg.select($"a", $"q"),
+      agg.join(LocalRelation($"x".int)),
+      agg.orderBy($"a".asc),
+      agg.generate(Explode(CreateArray(Seq(Literal(1), Literal(2))))),
+      agg.union(projected.groupBy($"a", $"q")($"a", $"q")),
+      projected.repartition(2),
+      projected.coalesce(1)
+    ).foreach { side =>
+      comparePlans(
+        PushPredicateThroughJoin(
+          side.join(testRelation1).where(Rand(0) > 0.1 && $"q" > 0 && $"q" === $"d").analyze),
+        side.join(testRelation1, condition = Some($"q" === $"d"))
+          .where(Rand(0) > 0.1 && $"q" > 0).analyze)
+    }
+  }
+
+  test("SPARK-62195: joins: an equality over both inputs of a lower join goes into it after a " +
+    "non-deterministic condition") {
+    // `k` is a grouping key that can fail as the ANSI cast below the aggregation does. `k = bk`
+    // reads both inputs of the lower join, where the aggregation has computed `k` on every row,
+    // so after `rand(0) > 0.1` it still goes into the lower join, below an inner or a left outer
+    // join.
+    val agg = LocalRelation($"s".string)
+      .select(Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("k"))
+      .groupBy($"k")($"k")
+    val b = LocalRelation($"bk".int, $"bx".int)
+    val c = LocalRelation($"cx".int)
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = agg.join(b).join(c, joinType, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1 && $"k" === $"bk")
+      val correctAnswer = agg.join(b, condition = Some($"k" === $"bk"))
+        .join(c, joinType, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1)
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
   }
 
   test("joins: push to one side after transformCondition") {
