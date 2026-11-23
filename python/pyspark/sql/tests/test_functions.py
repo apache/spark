@@ -32,7 +32,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StringType, StructField, StructType
+from pyspark.sql.types import DecimalType, StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual, have_numpy
 
@@ -3504,6 +3504,27 @@ class FunctionsTestsMixin:
         t = datetime.time(12, 34, 56)
         actual = self.spark.range(1).select(F.lit(t)).first()[0]
         self.assertEqual(actual, t)
+
+    def test_lit_decimal_precision(self):
+        import decimal
+
+        for value, expected in [
+            ("1.230", DecimalType(4, 3)),
+            ("0.001", DecimalType(3, 3)),
+            ("-0.5", DecimalType(1, 1)),
+            ("1E+5", DecimalType(6, 0)),
+            ("0", DecimalType(1, 0)),
+            ("123456789012.5", DecimalType(13, 1)),
+        ]:
+            with self.subTest(value=value):
+                df = self.spark.range(1).select(F.lit(decimal.Decimal(value)).alias("x"))
+                self.assertEqual(df.schema["x"].dataType, expected)
+                self.assertEqual(df.first()[0], decimal.Decimal(value))
+
+        a, b = F.lit(decimal.Decimal("1.5")), F.lit(decimal.Decimal("2.25"))
+        df = self.spark.range(1).select((a * b).alias("x"))
+        self.assertEqual(df.schema["x"].dataType, DecimalType(6, 3))
+        self.assertEqual(df.first()[0], decimal.Decimal("3.375"))
 
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)

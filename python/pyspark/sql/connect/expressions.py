@@ -345,6 +345,14 @@ class LiteralExpression(Expression):
         elif isinstance(value, (str, np.str_)):
             return StringType()
         elif isinstance(value, decimal.Decimal):
+            # Use the value's own precision and scale, as a JVM BigDecimal literal does.
+            # DecimalType() would default to precision 10 and widen the literal's type.
+            _, digits, exponent = value.as_tuple()
+            if isinstance(exponent, int):
+                scale = max(-exponent, 0)
+                precision = max(len(digits) + max(exponent, 0), scale)
+                if precision <= 38:
+                    return DecimalType(precision, scale)
             return DecimalType()
         elif isinstance(value, datetime.datetime):
             return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
