@@ -74,7 +74,8 @@ object JDBCRDD extends Logging {
     } catch {
       // Must precede isObjectNotFoundException, whose default matches any 42xxx SQLSTATE.
       case e: SQLException if dialect.isPermissionDeniedException(e) =>
-        throw QueryExecutionErrors.jdbcExternalEnginePermissionError(fullQuery, e)
+        throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+          fullQuery, e, isSchemaResolution = true)
       // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can
@@ -366,6 +367,10 @@ class JDBCRDD(
       try {
         stmt.executeQuery()
       } catch {
+        // Before the syntax check, as in resolveTable: some dialects treat any 42xxx as syntax.
+        case e: SQLException if dialect.isPermissionDeniedException(e) =>
+          throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+            sqlText, e, isSchemaResolution = false)
         case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
           throw QueryExecutionErrors.jdbcExternalEngineSyntaxError(
             sqlText, e, isSchemaResolution = false)

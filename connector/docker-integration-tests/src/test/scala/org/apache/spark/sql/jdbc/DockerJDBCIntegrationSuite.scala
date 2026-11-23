@@ -88,6 +88,12 @@ abstract class DatabaseOnDocker {
   def dropRestrictedUser(conn: Connection): Unit = {}
 
   /**
+   * A `sessionInitStatement` that makes an admin session act as the user from
+   * `createRestrictedUser`, or None (the default) if the database has none.
+   */
+  def restrictedUserSessionInitStatement: Option[String] = None
+
+  /**
    * Optional entry point when container starts
    *
    * Startup process is a parameter of entry point. This may or may not be considered during

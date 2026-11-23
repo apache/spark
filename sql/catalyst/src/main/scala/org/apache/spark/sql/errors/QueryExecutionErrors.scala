@@ -1201,22 +1201,27 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       jdbcQuery: String,
       cause: SQLException,
       isSchemaResolution: Boolean): SparkException = {
-    val subClass =
-      if (isSchemaResolution) "DURING_OUTPUT_SCHEMA_RESOLUTION" else "DURING_QUERY_EXECUTION"
-    jdbcExternalEngineError(s"JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.$subClass", jdbcQuery, cause)
+    jdbcExternalEngineError(
+      "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR", jdbcQuery, cause, isSchemaResolution)
   }
 
-  def jdbcExternalEnginePermissionError(jdbcQuery: String, cause: SQLException): SparkException = {
+  def jdbcExternalEnginePermissionError(
+      jdbcQuery: String,
+      cause: SQLException,
+      isSchemaResolution: Boolean): SparkException = {
     jdbcExternalEngineError(
-      "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION", jdbcQuery, cause)
+      "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR", jdbcQuery, cause, isSchemaResolution)
   }
 
   private def jdbcExternalEngineError(
-      errorClass: String,
+      condition: String,
       jdbcQuery: String,
-      cause: SQLException): SparkException = {
+      cause: SQLException,
+      isSchemaResolution: Boolean): SparkException = {
+    val subClass =
+      if (isSchemaResolution) "DURING_OUTPUT_SCHEMA_RESOLUTION" else "DURING_QUERY_EXECUTION"
     new SparkException(
-      errorClass = errorClass,
+      errorClass = s"$condition.$subClass",
       messageParameters = Map(
         "jdbcQuery" -> jdbcQuery,
         "externalEngineError" -> cause.getMessage.replaceAll("\\.+$", ""),

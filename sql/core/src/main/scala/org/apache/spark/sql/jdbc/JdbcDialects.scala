@@ -850,9 +850,9 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns true if the given exception means the remote engine denied access because the user
-   * lacks a privilege on the object (e.g. PostgreSQL SQLSTATE 42501). During output schema
-   * resolution, Spark then reports `JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR`. Dialects override this
-   * to recognize their own error codes; the default is false.
+   * lacks a privilege on the object (e.g. PostgreSQL SQLSTATE 42501). Spark then reports
+   * `JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR`, during output schema resolution or query execution.
+   * Dialects override this to recognize their own error codes; the default is false.
    */
   @Since("4.4.0")
   def isPermissionDeniedException(e: SQLException): Boolean = false

@@ -6189,6 +6189,11 @@
         "message" : [
           "The error occurred during output schema resolution."
         ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
+        ]
       }
     },
     "sqlState" : "42501"

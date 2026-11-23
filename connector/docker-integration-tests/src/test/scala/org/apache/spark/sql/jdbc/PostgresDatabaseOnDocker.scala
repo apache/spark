@@ -49,4 +49,7 @@ class PostgresDatabaseOnDocker extends DatabaseOnDocker with Logging {
   override def dropRestrictedUser(conn: Connection): Unit = {
     conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
   }
+
+  override def restrictedUserSessionInitStatement: Option[String] =
+    Some(s"SET ROLE $restrictedUser")
 }
