@@ -4288,12 +4288,11 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(merged.asInstanceOf[Array[Byte]].length > 0)
   }
 
-  // Helpers for the kll_sketch_merge k-rule tests.
   private object KllMergeKRule {
     val confKey = SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K.key
     val types = Seq("bigint", "float", "double")
 
-    // A sketch over the values from until from + n compacts iff n > k. n = 0 is an empty sketch.
+    // A sketch over [from, from + n). It compacts iff n > k, and n = 0 gives an empty sketch.
     def sketch(t: String, k: Int, n: Int, from: Int = 0): Array[Byte] = t match {
       case "bigint" =>
         val s = KllLongsSketch.newHeapInstance(k)
@@ -4344,7 +4343,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       // An exact right never lowers k.
       Seq((400, 8000), (8, 3)) -> 400,
       Seq((200, 4000), (100, 100)) -> 200,
-      // No input compacts: the result takes the k of left, also when it compacts itself.
+      // No input compacts: the result takes the k of left, also when the result compacts.
       Seq((20, 3), (8, 3)) -> 20,
       Seq((1000, 10), (8, 3)) -> 1000,
       Seq((8, 3), (1000, 10)) -> 8,
@@ -4441,17 +4440,32 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  // A merged right can be in estimation mode with n < k. Its k still counts.
+  test("SPARK-61981: kll_sketch_merge counts the k of a right in estimation mode with n < k") {
+    import KllMergeKRule._
+    val right = KllLongsSketch.heapify(Memory.wrap(sketch("bigint", 1000, 10)))
+    right.merge(KllLongsSketch.heapify(Memory.wrap(sketch("bigint", 8, 9))))
+    assert(right.isEstimationMode && right.getN < right.getK)
+    val df = Seq((sketch("bigint", 4000, 30), right.toByteArray)).toDF("l", "r")
+    for ((conf, k) <- Seq(true -> 1000, false -> 4000)) {
+      withSQLConf(confKey -> conf.toString) {
+        val merged = df.selectExpr("kll_sketch_merge_bigint(l, r)").head().getAs[Array[Byte]](0)
+        assert(kOf("bigint", merged) == k, s"conf = $conf")
+      }
+    }
+  }
+
   test("SPARK-61981: kll_sketch_merge returns NULL for a NULL input, " +
       "with the lowestCompactingK conf on and off") {
-    for (t <- Seq("bigint", "float", "double"); conf <- Seq(true, false)) {
-      withSQLConf(SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K.key -> conf.toString) {
-        val s = spark.range(8000).selectExpr(s"kll_sketch_agg_$t(CAST(id AS $t), 400)")
-          .head().getAs[Array[Byte]](0)
+    import KllMergeKRule._
+    for (t <- types; conf <- Seq(true, false)) {
+      withSQLConf(confKey -> conf.toString) {
+        val s = sketch(t, 400, 8000)
         val inputs = Seq[(Option[Array[Byte]], Option[Array[Byte]])](
           (None, Some(s)), (Some(s), None), (None, None), (Some(s), Some(s)))
-        val merged = inputs.toDF("l", "r").selectExpr(s"kll_sketch_merge_$t(l, r)")
-          .collect().map(_.get(0))
-        assert(merged.map(_ == null).toSeq == Seq(true, true, true, false), s"$t, conf = $conf")
+        val isNull = inputs.toDF("l", "r").selectExpr(s"kll_sketch_merge_$t(l, r)")
+          .collect().map(_.isNullAt(0)).toSeq
+        assert(isNull == Seq(true, true, true, false), s"$t, conf = $conf")
       }
     }
   }

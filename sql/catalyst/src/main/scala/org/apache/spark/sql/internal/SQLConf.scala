@@ -6421,14 +6421,14 @@ object SQLConf {
   val KLL_SKETCH_MERGE_LOWEST_COMPACTING_K =
     buildConf("spark.sql.function.kllSketchMerge.lowestCompactingK.enabled")
       .internal()
-      .doc("When true, kll_sketch_merge_{bigint,float,double}(left, right) returns the smaller " +
-        "of the k of the first non-empty input and the k of `right` if `right` is in " +
-        "estimation mode. Two empty inputs give the default k. When false, the result takes " +
-        "the k of `left`.")
+      .doc("When true, kll_sketch_merge_{bigint,float,double}(left, right) returns a sketch " +
+        "with k = min(k of the first non-empty input, k of `right`), where the k of `right` " +
+        "counts only if `right` is in estimation mode. Two empty inputs give the default k " +
+        "(200). When false, the result has the k of `left`.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +

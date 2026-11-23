@@ -1961,6 +1961,62 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l, r)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT kll_sketch_agg_bigint(id, 1000) AS l FROM range(10)),
+     (SELECT kll_sketch_agg_bigint(id, 100) AS r FROM range(100000))
+-- !query schema
+struct<k:string>
+-- !query output
+100
+
+
+-- !query
+SELECT kll_sketch_merge_bigint(agg1, agg2) AS incompatible_merge_right_target
+FROM (
+    SELECT kll_sketch_agg_float(CAST(id AS FLOAT), 1000) AS agg1,
+           kll_sketch_agg_bigint(id, 100) AS agg2
+    FROM range(100000)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`kll_sketch_merge_bigint`"
+  }
+}
+
+
+-- !query
+SET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.function.kllSketchMerge.lowestCompactingK.enabled	false
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l, r)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT kll_sketch_agg_bigint(id, 1000) AS l FROM range(10)),
+     (SELECT kll_sketch_agg_bigint(id, 100) AS r FROM range(100000))
+-- !query schema
+struct<k:string>
+-- !query output
+1000
+
+
+-- !query
+RESET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE IF EXISTS t_int_1_5_through_7_11
 -- !query schema
 struct<>

@@ -1885,6 +1885,62 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l, r)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT kll_sketch_agg_bigint(id, 1000) AS l FROM range(10)),
+     (SELECT kll_sketch_agg_bigint(id, 100) AS r FROM range(100000))
+-- !query analysis
+Project [regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l#x, r#x)), K +: ([0-9]+), 1) AS k#x]
++- Join Inner
+   :- SubqueryAlias __auto_generated_subquery_name
+   :  +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS l#x]
+   :     +- Range (0, 10, step=1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(100), 0, 0) AS r#x]
+         +- Range (0, 100000, step=1)
+
+
+-- !query
+SELECT kll_sketch_merge_bigint(agg1, agg2) AS incompatible_merge_right_target
+FROM (
+    SELECT kll_sketch_agg_float(CAST(id AS FLOAT), 1000) AS agg1,
+           kll_sketch_agg_bigint(id, 100) AS agg2
+    FROM range(100000)
+)
+-- !query analysis
+Project [kll_sketch_merge_bigint(agg1#x, agg2#x) AS incompatible_merge_right_target#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [kll_sketch_agg_float(cast(id#xL as float), Some(1000), 0, 0) AS agg1#x, kll_sketch_agg_bigint(id#xL, Some(100), 0, 0) AS agg2#x]
+      +- Range (0, 100000, step=1)
+
+
+-- !query
+SET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled=false
+-- !query analysis
+SetCommand (spark.sql.function.kllSketchMerge.lowestCompactingK.enabled,Some(false))
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l, r)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT kll_sketch_agg_bigint(id, 1000) AS l FROM range(10)),
+     (SELECT kll_sketch_agg_bigint(id, 100) AS r FROM range(100000))
+-- !query analysis
+Project [regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l#x, r#x)), K +: ([0-9]+), 1) AS k#x]
++- Join Inner
+   :- SubqueryAlias __auto_generated_subquery_name
+   :  +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS l#x]
+   :     +- Range (0, 10, step=1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(100), 0, 0) AS r#x]
+         +- Range (0, 100000, step=1)
+
+
+-- !query
+RESET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled
+-- !query analysis
+ResetCommand spark.sql.function.kllSketchMerge.lowestCompactingK.enabled
+
+
+-- !query
 DROP TABLE IF EXISTS t_int_1_5_through_7_11
 -- !query analysis
 DropTable true, false

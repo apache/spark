@@ -276,19 +276,9 @@ case class KllSketchMergeBigint(
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_bigint"
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    try {
-      val leftBuffer = left.asInstanceOf[Array[Byte]]
-      val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
-        KllLongsSketch.heapify, KllLongsSketch.wrap, KllLongsSketch.newHeapInstance)
-      target.merge(input)
-      target.toByteArray
-    } catch {
-      case _: Exception =>
-        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
-    }
-  }
+  override def nullSafeEval(left: Any, right: Any): Any =
+    mergeSketches(left, right)(
+      KllLongsSketch.heapify, KllLongsSketch.wrap, KllLongsSketch.newHeapInstance).toByteArray
 }
 
 // scalastyle:off line.size.limit
@@ -320,19 +310,9 @@ case class KllSketchMergeFloat(
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_float"
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    try {
-      val leftBuffer = left.asInstanceOf[Array[Byte]]
-      val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
-        KllFloatsSketch.heapify, KllFloatsSketch.wrap, KllFloatsSketch.newHeapInstance)
-      target.merge(input)
-      target.toByteArray
-    } catch {
-      case _: Exception =>
-        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
-    }
-  }
+  override def nullSafeEval(left: Any, right: Any): Any =
+    mergeSketches(left, right)(
+      KllFloatsSketch.heapify, KllFloatsSketch.wrap, KllFloatsSketch.newHeapInstance).toByteArray
 }
 
 // scalastyle:off line.size.limit
@@ -364,19 +344,9 @@ case class KllSketchMergeDouble(
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_double"
-  override def nullSafeEval(left: Any, right: Any): Any = {
-    try {
-      val leftBuffer = left.asInstanceOf[Array[Byte]]
-      val rightBuffer = right.asInstanceOf[Array[Byte]]
-      val (target, input) = mergeTargetAndInput(Memory.wrap(leftBuffer), Memory.wrap(rightBuffer))(
-        KllDoublesSketch.heapify, KllDoublesSketch.wrap, KllDoublesSketch.newHeapInstance)
-      target.merge(input)
-      target.toByteArray
-    } catch {
-      case _: Exception =>
-        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
-    }
-  }
+  override def nullSafeEval(left: Any, right: Any): Any =
+    mergeSketches(left, right)(
+      KllDoublesSketch.heapify, KllDoublesSketch.wrap, KllDoublesSketch.newHeapInstance).toByteArray
 }
 
 /** This is a base class for the above expressions to reduce boilerplate. */
@@ -395,24 +365,35 @@ abstract class KllSketchMergeBase
   override protected def stringArgs: Iterator[Any] = Iterator(left, right)
 
   /**
-   * Returns (target, input) for `target.merge(input)`. The merge keeps the k of `target`, so
-   * `target` has the k that the result takes.
+   * Merges the sketch buffers `left` and `right`. A merge keeps the k of its target, so the target
+   * is a heap copy of the input whose k the result takes.
    */
-  protected def mergeTargetAndInput[T <: KllSketch](
-      left: Memory,
-      right: Memory)(
+  protected def mergeSketches[T <: KllSketch](left: Any, right: Any)(
       heapify: Memory => T,
       wrap: Memory => T,
-      newHeapInstance: Int => T): (T, T) = {
-    val rightView = wrap(right)
-    lazy val leftView = wrap(left)
-    if (lowestCompactingK && rightView.isEmpty && leftView.isEmpty) {
-      (newHeapInstance(KllSketch.DEFAULT_K), rightView)
-    } else if (lowestCompactingK && !rightView.isEmpty &&
-        (leftView.isEmpty || rightView.isEstimationMode && rightView.getK < leftView.getK)) {
-      (heapify(right), leftView)
-    } else {
-      (heapify(left), rightView)
+      newHeapInstance: Int => T): T = {
+    try {
+      val leftMem = Memory.wrap(left.asInstanceOf[Array[Byte]])
+      val rightMem = Memory.wrap(right.asInstanceOf[Array[Byte]])
+      val (target, input) = if (!lowestCompactingK) {
+        (heapify(leftMem), wrap(rightMem))
+      } else {
+        val leftView = wrap(leftMem)
+        val rightView = wrap(rightMem)
+        if (leftView.isEmpty && rightView.isEmpty) {
+          (newHeapInstance(KllSketch.DEFAULT_K), rightView)
+        } else if (leftView.isEmpty ||
+            (rightView.isEstimationMode && rightView.getK < leftView.getK)) {
+          (heapify(rightMem), leftView)
+        } else {
+          (heapify(leftMem), rightView)
+        }
+      }
+      target.merge(input)
+      target
+    } catch {
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
