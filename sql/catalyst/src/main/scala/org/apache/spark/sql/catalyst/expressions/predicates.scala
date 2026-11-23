@@ -330,9 +330,16 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
-   * Whether `cond` cannot fail by `cannotFail` and reads no column of `failable`, the columns of
-   * the plans below that can fail (see `failableOutputWith`), which is only computed when
-   * `cannotFail` accepts `cond`.
+   * Returns true if `condition`, the condition of a join or a filter whose inputs are `plans`, has
+   * a conjunct that may not move (see [[splitMovable]]).
+   */
+  protected def hasImmovableConjunct(condition: Expression, plans: Seq[LogicalPlan]): Boolean =
+    splitMovable(splitConjunctivePredicates(condition), plans)._2.nonEmpty
+
+  /**
+   * Whether `cannotFail` accepts `cond` and `cond` reads no column of `failable`, the columns of
+   * the plans below that can fail (see `failableOutputWith`). `failable` is only evaluated when
+   * `cannotFail` accepts `cond`, so a caller can pass a lazy value.
    */
   protected def cannotFailOver(
       cond: Expression,

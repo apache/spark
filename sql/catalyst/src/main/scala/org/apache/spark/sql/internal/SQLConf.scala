@@ -4762,7 +4762,7 @@ object SQLConf {
     buildConf("spark.sql.codegen.binBy.enabled")
       .internal()
       .doc("When true, enable code-gen for the BIN BY relation operator.")
-      .version("4.5.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
@@ -6687,7 +6687,7 @@ object SQLConf {
         "input relation resolves, so errors that leave it unresolved, such as a missing " +
         "table, are reported first.")
       .internal()
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -7209,10 +7209,10 @@ object SQLConf {
     buildConf("spark.sql.legacy.listAllSessionsResources")
       .internal()
       .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
-        "of every session, as before Spark 4.4, also in a session whose artifacts are isolated. " +
+        "of every session, as before Spark 4.5, also in a session whose artifacts are isolated. " +
         "When false, such a session lists those added to it and those added to the SparkContext " +
         "outside of any session.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

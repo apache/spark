@@ -3105,7 +3105,8 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql3)
         },
-        condition = "_LEGACY_ERROR_TEMP_0047",
+        condition = "INVALID_SQL_SYNTAX.ROW_FORMAT_SERDE_WITHOUT_STORED_AS",
+        sqlState = "42000",
         parameters = Map.empty,
         context = ExpectedContext(fragment = sql3, start = 0, stop = 153)
       )

@@ -61,12 +61,36 @@ case class SortMergeJoinExec(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
     case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
-    // There are null rows in both streams, so there is no order.
-    case FullOuter => Nil
+    case FullOuter => fullOuterOutputOrdering
     case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
+  }
+
+  /**
+   * For a single key or non-nullable composite keys, a FULL OUTER join merges in ascending
+   * order. Coalescing each key pair preserves that order when the absent side's key evaluates
+   * to NULL on the padded output row.
+   *
+   * A single nullable key is safe: NULL keys precede all non-NULL keys. With multiple keys, the
+   * scanners emit a row containing any NULL before comparing its leading components, e.g.
+   * (2, NULL) before (1, 0), so every input key must be non-nullable in that case.
+   */
+  private lazy val fullOuterOutputOrdering: Seq[SortOrder] = {
+    val supportsKeyNullability = leftKeys.length == 1 ||
+      (leftKeys.forall(!_.nullable) && rightKeys.forall(!_.nullable))
+
+    if (!supportsKeyNullability ||
+        !leftKeys.forall(isNullOnNullPadding(_, left.outputSet)) ||
+        !rightKeys.forall(isNullOnNullPadding(_, right.outputSet))) {
+      Nil
+    } else {
+      val Seq(leftFirst, rightFirst) = coalescedKeys(leftKeys.zip(rightKeys))
+      leftFirst.zip(rightFirst).map { case (l, r) =>
+        SortOrder(l, Ascending, NullsFirst, Seq(r))
+      }
+    }
   }
 
   /**

@@ -507,7 +507,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       exception = intercept[ParseException] {
         parseAndResolve(v2)
       },
-      condition = "_LEGACY_ERROR_TEMP_0032",
+      condition = "DUPLICATE_TABLE_PATH",
+      sqlState = "42613",
       parameters = Map("pathOne" -> "/tmp/file", "pathTwo" -> "/tmp/file"),
       context = ExpectedContext(
         fragment = v2,
@@ -3253,7 +3254,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query)
       },
-      condition = "_LEGACY_ERROR_TEMP_0046",
+      condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_WITHOUT_PROVIDER",
+      sqlState = "42000",
       parameters = Map(),
       context = ExpectedContext(fragment = query, start = 0, stop = 48))
   }

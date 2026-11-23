@@ -464,7 +464,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
       // The SparkContext lists those of every session.
       assert(sc.listFiles().exists(_.contains(root)))
       assert(sc.listArchives().exists(_.contains(root)))
-      // So does a session with the legacy flag, as before Spark 4.4.
+      // So does a session with the legacy flag, as before Spark 4.5.
       session2.conf.set(SQLConf.LEGACY_LIST_ALL_SESSIONS_RESOURCES.key, "true")
       assert(list(session2, "FILES") == normalize(sc.listFiles()))
       assert(list(session2, "JARS") == normalize(sc.listJars()))

@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -615,7 +616,8 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       Year(date), YearOfWeek(date), Quarter(date), Month(date), DayOfMonth(date),
       DayOfYear(date), DayOfWeek(date), WeekDay(date), WeekOfYear(date), MonthName(date),
       DayName(date), Hour(ts, Some("UTC")), Minute(ts, Some("UTC")), Second(ts, Some("UTC")),
-      SecondWithFraction(ts, Some("UTC")))
+      SecondWithFraction(ts, Some("UTC")), NormalizeNaNAndZero(d), KnownFloatingPointNormalized(d),
+      CollationKey(s))
     always.foreach { e =>
       assert(e.isInstanceOf[NoThrow], e)
       assert(e.isTotal, e)
@@ -726,13 +728,14 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
     val (always, others) = classes.partition(classOf[NoThrow].isAssignableFrom)
     always.foreach(c => assert(!Modifier.isAbstract(c.getModifiers), c))
     assert(always.map(_.getSimpleName).sorted === Seq(
-      "And", "Coalesce", "Collate", "Contains", "CreateArray", "CreateNamedStruct", "DayName",
-      "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith", "EqualNullSafe", "EqualTo",
-      "GetArrayStructFields", "GetMapValue", "GetStructField", "GreaterThan",
-      "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull", "Length",
-      "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "Not", "NullIf",
-      "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith",
-      "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
+      "And", "Coalesce", "Collate", "CollationKey", "Contains", "CreateArray",
+      "CreateNamedStruct", "DayName", "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith",
+      "EqualNullSafe", "EqualTo", "GetArrayStructFields", "GetMapValue", "GetStructField",
+      "GreaterThan", "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull",
+      "KnownFloatingPointNormalized", "Length", "LessThan", "LessThanOrEqual", "Minute", "Month",
+      "MonthName", "NormalizeNaNAndZero", "Not", "NullIf", "OctetLength", "Or", "Quarter",
+      "Second", "SecondWithFraction", "Size", "StartsWith", "Substring", "WeekDay", "WeekOfYear",
+      "Year", "YearOfWeek"))
     // The ones that decide it by their input types or eval mode.
     val conditional = others.filter { c =>
       c != classOf[Expression] && c.getMethod("isTotal").getDeclaringClass != classOf[Expression]
