@@ -107,8 +107,16 @@ abstract class DataStreamReader {
    * Specifies a name for the streaming source. This name is used to identify the source in
    * checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
+   * For a new micro-batch checkpoint, naming a source opts its query into source evolution:
+   * every source must be named, and sources can be added, removed, or reordered across restarts.
+   * An existing checkpoint retains its recorded tracking mode. A positional checkpoint cannot
+   * switch to named tracking, and a named checkpoint requires names on restart. Legacy positional
+   * checkpoints that already stored source metadata under the same names remain positional.
+   * Source naming is not supported with continuous processing.
+   *
    * @param sourceName
-   *   the name to assign to this streaming source
+   *   the name to assign to this streaming source. Must contain only ASCII letters, digits, and
+   *   underscores.
    * @since 4.2.0
    */
   @Experimental

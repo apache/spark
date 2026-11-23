@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.Except
-import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
@@ -321,6 +321,14 @@ class StreamingQueryManager private[sql] (
           .getOrElse(sparkSession)
         (analysisSession, resolvedDataStreamWritePlan)
       case _ => (sparkSession, dataStreamWritePlan)
+    }
+
+    if (trigger.isInstanceOf[ContinuousTrigger] &&
+        StreamingSourceIdentifyingName.collectSources(analyzedPlan)
+          .exists(_._2.nameOpt.isDefined)) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR." +
+          "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED")
     }
 
     val analyzedStreamWritePlan =

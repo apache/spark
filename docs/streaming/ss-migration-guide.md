@@ -25,6 +25,18 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, assigning a streaming source name with `DataStreamReader.name` or SQL
+  `IDENTIFIED BY` opts a new micro-batch query into source evolution without a session setting.
+  Every source in that query must be named. Source names become checkpoint identities and must
+  remain stable across restarts. Existing checkpoints retain their recorded tracking mode:
+  positional checkpoints cannot switch to named tracking, and named checkpoints cannot drop
+  names. Legacy positional checkpoints whose source metadata is already under the same
+  `sources/<name>` paths continue in positional mode; they do not gain source evolution.
+  Source naming is not supported with continuous processing. There is no new rollback setting:
+  setting `spark.sql.streaming.queryEvolution.enableSourceEvolution` to `false` does not undo
+  the per-query opt-in or change a checkpoint's recorded tracking mode. To keep a new query
+  positional, leave its sources unnamed and leave that setting disabled.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
