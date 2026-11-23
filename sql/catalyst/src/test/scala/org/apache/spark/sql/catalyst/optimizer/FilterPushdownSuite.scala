@@ -1060,6 +1060,21 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(Filter(runtimeFilters, generate)),
       generate.copy(child = Filter(runtimeFilters, generate.child)))
 
+    // A FLOAT or DOUBLE key comes from the join normalized (see `NormalizeFloatingNumbers`).
+    val doubleRelation = LocalRelation($"x".double, $"x_arr".array(IntegerType))
+    val doubleGenerate = doubleRelation
+      .generate(Explode($"x_arr"), alias = Some("arr")).analyze.asInstanceOf[Generate]
+    val normalizedKey =
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(doubleRelation.output.head))
+    val buildSide = LocalRelation($"y".double)
+    val normalizedFilters = DynamicPruningSubquery(
+      normalizedKey, buildSide, buildSide.output, Seq(0), onlyInBroadcast = false)() &&
+      BloomFilterMightContain(
+        ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(normalizedKey))) &&
+      PerPartitionRuntimeFilterSubquery(normalizedKey, buildSide, PerPartitionSizing(1L, None, 1L))
+    comparePlans(Optimize.execute(Filter(normalizedFilters, doubleGenerate)),
+      doubleGenerate.copy(child = Filter(normalizedFilters, doubleGenerate.child)))
+
     // The key is built in ANSI mode, where it can fail.
     val failingKey = Filter(
       dynamicPruning(Add(a, Literal(1), NumericEvalContext(EvalMode.ANSI))), generate)

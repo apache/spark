@@ -3043,12 +3043,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * once, wherever the filter is.
    */
   private def cannotFailOnDroppedRows(cond: Expression): Boolean = cond match {
-    case d: DynamicPruningSubquery => ExprUtils.canEvaluateUnconditionally(d.pruningKey)
-    case p: PerPartitionRuntimeFilterSubquery => ExprUtils.canEvaluateUnconditionally(p.key)
+    case d: DynamicPruningSubquery => cannotFail(d.pruningKey)
+    case p: PerPartitionRuntimeFilterSubquery => cannotFail(p.key)
     case BloomFilterMightContain(bloomFilter, XxHash64(Seq(key), _))
-        if bloomFilter.references.isEmpty => ExprUtils.canEvaluateUnconditionally(key)
-    case _ => ExprUtils.canEvaluateUnconditionally(cond)
+        if bloomFilter.references.isEmpty => cannotFail(key)
+    case _ => cannotFail(cond)
   }
+
+  // Whether `ExprUtils.canEvaluateUnconditionally` accepts `e` after it replaces, bottom-up, the
+  // normalization that `NormalizeFloatingNumbers` puts around a FLOAT or DOUBLE join key, over a
+  // child that it accepts, with a stand-in of the same type, as `InjectRuntimeFilter.cannotFail`
+  // does. The dynamic partition pruning and runtime filters take such a key from the join.
+  private def cannotFail(e: Expression): Boolean =
+    ExprUtils.canEvaluateUnconditionally(e.transformUp {
+      case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child))
+          if ExprUtils.canEvaluateUnconditionally(child) =>
+        AttributeReference("normalized", n.dataType, n.nullable)()
+    })
 
   // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
   // it, rewritten in terms of the aggregate's child, and the ones that stay above it. A conjunct
