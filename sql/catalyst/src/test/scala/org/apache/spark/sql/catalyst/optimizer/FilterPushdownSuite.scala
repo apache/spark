@@ -209,6 +209,18 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62069: a condition that can fail is not combined after a throwable one") {
+    // The inner filter drops a row on which its condition is NULL, but `NULL AND x` evaluates
+    // `x`, so a condition that can fail stays above a throwable one, while one that can not fail
+    // is combined.
+    val throwing = If($"a" > 0, $"b" > $"c", IsNull(RaiseError(Literal("boom"))))
+    val canFail = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
+    val originalQuery = testRelation.where(throwing).where(canFail && $"a" > 1)
+    val correctAnswer = testRelation.where(throwing && $"a" > 1).where(canFail).analyze
+
+    comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
@@ -1249,6 +1261,51 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of an inner join") {
+    // The divisions are built in ANSI mode, where they can fail. An inner or cross join
+    // evaluates its condition before the filter above it, so after the throwable conjunct of the
+    // join condition, a filter condition that can fail stays above the join, whichever sides it
+    // reads. A condition that can not fail is pushed, or moved into the join condition.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val throwing = IsNull(RaiseError(Literal("boom")))
+    Seq(Inner, Cross).foreach { joinType =>
+      val originalQuery = testRelation
+        .join(testRelation1, joinType, Some($"a" === $"d" && throwing))
+        .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1 && $"b" > 1 &&
+          $"c" === $"d")
+
+      val correctAnswer = testRelation.where($"b" > 1)
+        .join(testRelation1, joinType, Some($"c" === $"d" && $"a" === $"d" && throwing))
+        .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1)
+        .analyze
+
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
+    }
+  }
+
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of a left semi or left anti join") {
+    // The division is built in ANSI mode, where it can fail. The condition of a left semi or
+    // left anti join decides which left rows reach the filter above it, so after the throwable
+    // conjunct of the join condition, a filter condition that can fail stays above the join. A
+    // condition that can not fail is pushed. A left outer join keeps every left row, so both are
+    // pushed below it.
+    val divide = Divide($"b", Literal(2), NumericEvalContext(EvalMode.ANSI))
+    val condition = Some($"a" === $"d" && IsNull(RaiseError(Literal("boom"))))
+    Seq(LeftSemi, LeftAnti, LeftOuter).foreach { joinType =>
+      val originalQuery = testRelation.join(testRelation1, joinType, condition)
+        .where(divide > 1 && $"c" > 1)
+      val correctAnswer = if (joinType == LeftOuter) {
+        testRelation.where(divide > 1 && $"c" > 1).join(testRelation1, joinType, condition)
+      } else {
+        testRelation.where($"c" > 1).join(testRelation1, joinType, condition).where(divide > 1)
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
@@ -1671,6 +1728,60 @@ class FilterPushdownSuite extends PlanTest {
     val onQuery = asOfJoin(asOfLeft, asOfRight, Some(leftKey === rightKey && raiseError), Inner)
       .analyze
     comparePlans(Optimize.execute(onQuery), onQuery)
+  }
+
+  test("SPARK-62137: as-of joins: do not push a where condition that can fail ahead of a " +
+    "throwable join condition") {
+    // The division is built in ANSI mode, where it can fail. An inner as-of join drops the left
+    // rows that its condition gives no match, so after the throwable conjunct of the condition, a
+    // where condition that can fail stays above the join. A condition that can not fail is
+    // pushed. A left outer as-of join keeps every left row, so both are pushed below it.
+    val divide = Divide(leftValue, Literal(2), NumericEvalContext(EvalMode.ANSI))
+    val condition = Some(leftKey === rightKey && IsNull(RaiseError(Literal("boom"))))
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft, asOfRight, condition, joinType)
+        .where(divide > 1 && leftValue > 1)
+      val correctAnswer = if (joinType == LeftOuter) {
+        asOfJoin(asOfLeft.where(divide > 1 && leftValue > 1), asOfRight, condition, joinType)
+      } else {
+        asOfJoin(asOfLeft.where(leftValue > 1), asOfRight, condition, joinType).where(divide > 1)
+      }
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-62137: as-of joins: do not push a condition that can fail ahead of a throwable " +
+    "as-of key") {
+    // A nearest as-of join that allows exact matches without a tolerance has its keys only in the
+    // sort keys of the sort-merge operator, which evaluates the ON condition only on the pairs
+    // that it matches. After a throwable key, a where condition over the left side of an inner
+    // join that can fail stays above the join, and an ON conjunct that can fail stays in the ON
+    // condition, also one over the right side of a left outer join. The others move.
+    val leftTime = asOfLeft.output(0)
+    val throwingKey = If(leftTime < 0, Cast(RaiseError(Literal("neg")), IntegerType), leftTime)
+    def nearest(
+        left: LogicalPlan,
+        right: LogicalPlan,
+        condition: Expression,
+        joinType: JoinType): LogicalPlan =
+      AsOfJoin(left, right, throwingKey, asOfRight.output(0), Some(condition), joinType,
+        tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
+    val leftDivide = Divide(leftValue, Literal(2), NumericEvalContext(EvalMode.ANSI)) > 1
+    val rightDivide = Divide(rightValue, Literal(2), NumericEvalContext(EvalMode.ANSI)) > 1
+    val keys = leftKey === rightKey
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      comparePlans(
+        Optimize.execute(
+          nearest(asOfLeft, asOfRight, keys, Inner).where(leftDivide && leftValue > 1).analyze),
+        nearest(asOfLeft.where(leftValue > 1), asOfRight, keys, Inner).where(leftDivide).analyze)
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        comparePlans(
+          Optimize.execute(nearest(asOfLeft, asOfRight,
+            keys && leftDivide && rightDivide && rightValue > 2, joinType).analyze),
+          nearest(asOfLeft, asOfRight.where(rightValue > 2),
+            keys && leftDivide && rightDivide, joinType).analyze)
+      }
+    }
   }
 
   test("as-of joins: push a right-side join condition into the right side") {
