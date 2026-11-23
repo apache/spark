@@ -746,7 +746,8 @@ trait SupportQueryContext extends Expression with Serializable {
   //       It is copied only when the replaced node has one with an origin: a node without a
   //       context, such as a non-ANSI `Divide` that the analyzer turns into an interval
   //       division, or with one built from an empty "Origin", would otherwise leave the
-  //       expression that replaces it, which raises in every mode, without a usable one.
+  //       expression that replaces it, such as an interval division, which raises in every
+  //       mode, without a usable one.
   override def copyTagsFrom(other: Expression): Unit = {
     other match {
       case s: SupportQueryContext if s.queryContext.exists(SupportQueryContext.hasOrigin) =>
@@ -761,7 +762,7 @@ object SupportQueryContext {
   /**
    * Whether `context` comes from an origin. A SQL context built from an empty "Origin" has no
    * text and no start index. This test is O(1), unlike `SQLQueryContext.isValid`, which counts
-   * the code points of a text with supplementary characters, so it can run on every transform.
+   * the code points of any non-Latin-1 text, so it can run on every transform.
    */
   def hasOrigin(context: QueryContext): Boolean = context match {
     case c: SQLQueryContext => c.sqlText.isDefined && c.originStartIndex.isDefined

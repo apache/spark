@@ -576,7 +576,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         { val e = newExpr(); Cast(e, e.dataType, None, EvalMode.ANSI) } -> context
       ).map { case (cast, expected) =>
         val plan = Project(Seq(Alias(cast, "c")()), OneRowRelation())
-        SimplifyCasts(plan).expressions.head.children.head -> expected
+        val replaced = SimplifyCasts(plan).expressions.head.children.head
+        assert(!replaced.isInstanceOf[Cast], s"SimplifyCasts kept $cast")
+        replaced -> expected
       }
       // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
       // node with an empty `origin`, and the rebuilt node takes the context of the copy.
