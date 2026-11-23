@@ -3289,7 +3289,15 @@ class Analyzer(
             // resolution order.
             UnresolvedHaving(newCond, newChild)
           }
-        })
+        }) match {
+          // The Project hides the aggregate expressions that HAVING added, see
+          // `HavingHiddenAggregates`. It is not marked over GROUPING SETS, CUBE and ROLLUP, as an
+          // aggregate function of ORDER BY over them can resolve a grouping column to the output
+          // of Expand, which is null in the rolled up rows (SPARK-57346).
+          case project @ Project(_, _: Filter) if !agg.child.isInstanceOf[Expand] =>
+            HavingHiddenAggregates.mark(project)
+          case other => other
+        }
 
       case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
@@ -3312,6 +3320,59 @@ class Analyzer(
           }
           s.copy(order = newSortOrder, child = f.copy(child = newChild))
         })
+
+      case s @ Sort(_, _, HavingHiddenAggregates(project, filter, agg), _)
+          if agg.resolved && filter.condition.resolved && s.order.forall(_.resolved) &&
+            s.order.exists(_.containsAnyPattern(TEMP_RESOLVED_COLUMN, AGGREGATE_EXPRESSION)) =>
+        resolveSortOnHavingHiddenAggregates(s, project, filter, agg)
+    }
+
+    /**
+     * Resolves the grouping expressions and aggregate functions of a [[Sort]] on top of the
+     * [[Project]] that hides the aggregate expressions added for HAVING, see
+     * [[HavingHiddenAggregates]]. Like the single-pass analyzer, it resolves them with the
+     * aggregate expressions of the SELECT list, adds the ones that the [[Aggregate]] does not
+     * compute for the SELECT list to it, and passes them through the Project. Another Project on
+     * top of the Sort keeps the output of the SELECT list.
+     */
+    private def resolveSortOnHavingHiddenAggregates(
+        sort: Sort,
+        project: Project,
+        filter: Filter,
+        agg: Aggregate): LogicalPlan = {
+      val selectList =
+        agg.aggregateExpressions.filter(e => project.outputSet.contains(e.toAttribute))
+      val (extraAggExprs, resolvedExprs) = resolveExprsWithAggregate(
+        sort.order.map(_.child), agg.copy(aggregateExpressions = selectList))
+      if (resolvedExprs.exists(_.containsPattern(TEMP_RESOLVED_COLUMN))) {
+        // A column is neither a grouping expression nor the input of an aggregate function. Keep
+        // the Sort on top of the Project, so that the column fails to resolve with the output of
+        // the SELECT list, not with the hidden aggregate expressions.
+        sort.copy(order = sort.order.map(_.transformUp {
+          case t: TempResolvedColumn => markTried(t)
+        }.asInstanceOf[SortOrder]))
+      } else if (extraAggExprs.isEmpty) {
+        sort.copy(order = sort.order.zip(resolvedExprs).map {
+          case (sortOrder, expr) => sortOrder.copy(child = expr)
+        })
+      } else {
+        // Pass the added grouping columns through the Project as they are, and alias the other
+        // added expressions again, as the single-pass analyzer does.
+        val passedThrough = extraAggExprs.map {
+          case attr: Attribute => attr
+          case other => Alias(other.toAttribute, other.name)()
+        }
+        val attrMap = AttributeMap(
+          extraAggExprs.map(_.toAttribute).zip(passedThrough.map(_.toAttribute)))
+        val newSortOrder = sort.order.zip(resolvedExprs).map { case (sortOrder, expr) =>
+          sortOrder.copy(child = expr.transform { case a: Attribute => attrMap.getOrElse(a, a) })
+        }
+        // A grouping column that HAVING already added is only passed through the Project.
+        val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++
+          extraAggExprs.filterNot(e => agg.outputSet.contains(e.toAttribute)))
+        val newProject = Project(project.projectList ++ passedThrough, filter.copy(child = newAgg))
+        Project(project.output, sort.copy(order = newSortOrder, child = newProject))
+      }
     }
 
     /**

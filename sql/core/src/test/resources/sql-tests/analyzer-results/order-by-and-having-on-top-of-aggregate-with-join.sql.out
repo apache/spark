@@ -2256,22 +2256,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + col1 > 5 ORDER BY 1 + col1, 2 + col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 103,
-    "stopIndex" : 106,
-    "fragment" : "col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2298,22 +2299,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v1.col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 118,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2340,22 +2342,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v2.col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 118,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+            +- Project [col1#x, col2#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2382,253 +2385,265 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 77,
-    "stopIndex" : 94,
-    "fragment" : "ORDER BY MAX(col1)"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 90,
-    "stopIndex" : 93,
-    "fragment" : "col2"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, max(col2#x) AS max(col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col1) > 5 ORDER BY MAX(v1.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 83,
-    "stopIndex" : 103,
-    "fragment" : "ORDER BY MAX(v1.col1)"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col2) > 5 ORDER BY MAX(v1.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v1.col2"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, max(col2#x) AS max(col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col1) > 5 ORDER BY MAX(v2.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v2.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x]
+            +- Project [col1#x, col2#x, col1#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col2) > 5 ORDER BY MAX(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v2.col2"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, max(col2#x) AS max(col2)#x]
+            +- Project [col1#x, col2#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col1) > 5 ORDER BY 1 + MAX(col1), 2 + MIN(col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 115,
-    "fragment" : "col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col2) > 5 ORDER BY 1 + MAX(col2), 2 + MIN(col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 115,
-    "fragment" : "col2"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col2)#x) ASC NULLS FIRST, (2 + min(col1)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+      +- Filter ((1 + max(col2)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, max(col2#x) AS max(col2)#x, min(col1#x) AS min(col1)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v1.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col2) > 5 ORDER BY 1 + MAX(v1.col2), 2 + MIN(v1.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col2"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col2)#x) ASC NULLS FIRST, (2 + min(col1)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+      +- Filter ((1 + max(col2)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, max(col2#x) AS max(col2)#x, min(col1#x) AS min(col1)#x]
+            +- Project [col1#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+            +- Project [col1#x, col2#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [sum(col2)#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [sum(col2)#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+            +- Project [col1#x, col2#x, col2#x]
+               +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                  :- SubqueryAlias v1
+                  :  +- View (`v1`, [col1#x, col2#x])
+                  :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  :        +- Project [col1#x, col2#x]
+                  :           +- LocalRelation [col1#x, col2#x]
+                  +- SubqueryAlias v2
+                     +- View (`v2`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2768,22 +2783,26 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + col1 > 5 ORDER BY 1 + col1, 2 + col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 132,
-    "stopIndex" : 135,
-    "fragment" : "col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, (1 + col1)#x AS (1 + col1)#x, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+            +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2810,22 +2829,26 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v1.col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 147,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, (1 + col1)#x AS (1 + col1)#x, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+            +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2852,22 +2875,26 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v2.col2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 147,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + col1)#x ASC NULLS FIRST, (2 + col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+      +- Filter ((1 + col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, (1 + col1)#x AS (1 + col1)#x, (1 + col1)#x AS (1 + col1)#x, (2 + col2)#x AS (2 + col2)#x]
+            +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, (1 + col1)#x, (2 + col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, (1 + col1#x) AS (1 + col1)#x, (2 + col2#x) AS (2 + col2)#x]
+                     +- Project [col1#x, col2#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -2894,253 +2921,301 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 106,
-    "stopIndex" : 123,
-    "fragment" : "ORDER BY MAX(col1)"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 119,
-    "stopIndex" : 122,
-    "fragment" : "col2"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col2)#x AS max(col2)#x, max(col2)#x AS max(col2)#x]
+            +- Project [sum(col2)#xL, max(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col1) > 5 ORDER BY MAX(v1.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 132,
-    "fragment" : "ORDER BY MAX(v1.col1)"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col2) > 5 ORDER BY MAX(v1.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v1.col2"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col2)#x AS max(col2)#x, max(col2)#x AS max(col2)#x]
+            +- Project [sum(col2)#xL, max(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col1) > 5 ORDER BY MAX(v2.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v2.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col1)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x]
+      +- Filter (max(col1)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x]
+                     +- Project [col1#x, col2#x, col1#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col2) > 5 ORDER BY MAX(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v2.col2"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [max(col2)#x ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col2)#x AS max(col2)#x]
+      +- Filter (max(col2)#x > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col2)#x AS max(col2)#x, max(col2)#x AS max(col2)#x]
+            +- Project [sum(col2)#xL, max(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [col1#x], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x]
+                     +- Project [col1#x, col2#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col1) > 5 ORDER BY 1 + MAX(col1), 2 + MIN(col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 144,
-    "fragment" : "col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col2) > 5 ORDER BY 1 + MAX(col2), 2 + MIN(col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 144,
-    "fragment" : "col2"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col2)#x) ASC NULLS FIRST, (2 + min(col1)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+      +- Filter ((1 + max(col2)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col2)#x AS max(col2)#x, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+            +- Project [sum(col2)#xL, max(col2)#x, min(col1)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col2)#x, min(col1)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, min(col1#x) AS min(col1)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v1.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col2) > 5 ORDER BY 1 + MAX(v1.col2), 2 + MIN(v1.col1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col2"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col2)#x) ASC NULLS FIRST, (2 + min(col1)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+      +- Filter ((1 + max(col2)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col2)#x AS max(col2)#x, max(col2)#x AS max(col2)#x, min(col1)#x AS min(col1)#x]
+            +- Project [sum(col2)#xL, max(col2)#x, min(col1)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col2)#x, min(col1)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col2#x) AS max(col2)#x, min(col1#x) AS min(col1)#x]
+                     +- Project [col1#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+                     +- Project [col1#x, col2#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+Project [a#xL, b#xL, c#xL]
++- Sort [(1 + max(col1)#x) ASC NULLS FIRST, (2 + min(col2)#x) ASC NULLS FIRST], true
+   +- Project [a#xL, b#xL, c#xL, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+      +- Filter ((1 + max(col1)#x) > 5)
+         +- Project [a#xL, b#xL, (b#xL + cast(1 as bigint)) AS c#xL, max(col1)#x AS max(col1)#x, max(col1)#x AS max(col1)#x, min(col2)#x AS min(col2)#x]
+            +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, a#xL, (a#xL + cast(1 as bigint)) AS b#xL]
+               +- Project [sum(col2)#xL, max(col1)#x, min(col2)#x, sum(col2)#xL AS a#xL]
+                  +- Aggregate [(col1#x + 1), (col2#x + 2)], [sum(col2#x) AS sum(col2)#xL, max(col1#x) AS max(col1)#x, min(col2#x) AS min(col2)#x]
+                     +- Project [col1#x, col2#x, col2#x]
+                        +- Join Inner, ((col1#x = col1#x) AND (col2#x = col2#x))
+                           :- SubqueryAlias v1
+                           :  +- View (`v1`, [col1#x, col2#x])
+                           :     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           :        +- Project [col1#x, col2#x]
+                           :           +- LocalRelation [col1#x, col2#x]
+                           +- SubqueryAlias v2
+                              +- View (`v2`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- LocalRelation [col1#x, col2#x]
 
 
 -- !query

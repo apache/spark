@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,11 +36,14 @@ import org.apache.spark.sql.internal.SQLConf
  *    includes metadata columns as well.
  * 3. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
- * 4. If the child plan is Aggregate or Filter(_, Aggregate), resolves the column to
- *    [[TempResolvedColumn]] with the output of Aggregate's child plan.
+ * 4. If the child plan is Aggregate or Filter(_, Aggregate), or the Project that hides the
+ *    aggregate expressions added for HAVING on top of Filter(_, Aggregate) (see
+ *    [[HavingHiddenAggregates]]), resolves the column to [[TempResolvedColumn]] with the output of
+ *    Aggregate's child plan.
  *    This is to allow Sort to host grouping expressions and aggregate functions, which can
  *    be pushed down to the Aggregate later. For example,
- *    `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)`.
+ *    `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)` and
+ *    `SELECT b FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)`.
  * 5. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
  *    Spark will propagate the missing attributes from the descendant plan node to the Sort node.
  *    This is to allow users to ORDER BY columns that are not in the SELECT clause, which is
@@ -78,6 +82,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
     val resolvedBasic = sort.order.map(resolveExpressionByPlanOutput(_, sort.child))
     val resolvedWithAgg = sort.child match {
       case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
+      case HavingHiddenAggregates(_, _, agg) => resolvedBasic.map(resolveColWithAgg(_, agg))
       case _ => resolvedBasic.map(resolveColWithAgg(_, sort.child))
     }
     val (missingAttrResolved, newChild) =
@@ -112,5 +117,35 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
         child.output.map(a => order.copy(child = a))
       case _ => orders
     }
+  }
+}
+
+/**
+ * The [[Project]] that the analyzer puts on top of the [[Filter]] of a HAVING clause whose
+ * condition uses aggregate expressions that the SELECT list does not compute, e.g. `sum(a)` in
+ * `SELECT b FROM t GROUP BY b HAVING sum(a) > 1`. `ResolveAggregateFunctions` adds them to the
+ * [[Aggregate]] below the Filter, and the Project keeps the output of the SELECT list. A [[Sort]]
+ * on top of the Project can still host grouping expressions and aggregate functions, as on top of
+ * the Filter, see [[ResolveReferencesInSort]] and `ResolveAggregateFunctions`.
+ *
+ * The Project is marked with a tag, so that a Project of the same shape that the query specifies
+ * itself, e.g. a DataFrame `select` after `filter` on an aggregation, still defines the columns
+ * that a Sort on top of it can reference.
+ */
+object HavingHiddenAggregates {
+  private val TAG = TreeNodeTag[Unit]("havingHiddenAggregates")
+
+  /** Marks `project` as the Project that hides the aggregate expressions added for HAVING. */
+  def mark(project: Project): Project = {
+    project.setTagValue(TAG, ())
+    project
+  }
+
+  /** Matches a marked Project, and returns it with the Filter and the Aggregate below it. */
+  def unapply(plan: LogicalPlan): Option[(Project, Filter, Aggregate)] = plan match {
+    case project @ Project(_, filter @ Filter(_, agg: Aggregate))
+        if project.getTagValue(TAG).isDefined =>
+      Some((project, filter, agg))
+    case _ => None
   }
 }

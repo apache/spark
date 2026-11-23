@@ -380,13 +380,12 @@ GROUP BY col1
 HAVING col1.id > 0
 ORDER BY col1.name
 -- !query analysis
-Project [name#x]
-+- Sort [col1#x.name ASC NULLS FIRST], true
-   +- Project [name#x, col1#x]
-      +- Filter (col1#x.id > 0)
-         +- Aggregate [col1#x], [col1#x.name AS name#x, col1#x]
-            +- SubqueryAlias t
-               +- LocalRelation [col1#x]
+Sort [name#x ASC NULLS FIRST], true
++- Project [name#x]
+   +- Filter (col1#x.id > 0)
+      +- Aggregate [col1#x], [col1#x.name AS name#x, col1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [col1#x]
 
 
 -- !query
@@ -410,13 +409,12 @@ GROUP BY col1
 HAVING col1.data['num'] IS NOT NULL
 ORDER BY col1.data['key']
 -- !query analysis
-Project [col1.data[key]#x]
-+- Sort [col1#x.data[key] ASC NULLS FIRST], true
-   +- Project [col1.data[key]#x, col1#x]
-      +- Filter isnotnull(col1#x.data[num])
-         +- Aggregate [col1#x], [col1#x.data[key] AS col1.data[key]#x, col1#x]
-            +- SubqueryAlias t
-               +- LocalRelation [col1#x]
+Sort [col1.data[key]#x ASC NULLS FIRST], true
++- Project [col1.data[key]#x]
+   +- Filter isnotnull(col1#x.data[num])
+      +- Aggregate [col1#x], [col1#x.data[key] AS col1.data[key]#x, col1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [col1#x]
 
 
 -- !query
@@ -428,13 +426,12 @@ GROUP BY col1
 HAVING col1.users[0].age > 25
 ORDER BY col1.users[0].name
 -- !query analysis
-Project [col1.users[0].name#x]
-+- Sort [col1#x.users[0].name ASC NULLS FIRST], true
-   +- Project [col1.users[0].name#x, col1#x]
-      +- Filter (col1#x.users[0].age > 25)
-         +- Aggregate [col1#x], [col1#x.users[0].name AS col1.users[0].name#x, col1#x]
-            +- SubqueryAlias t
-               +- LocalRelation [col1#x]
+Sort [col1.users[0].name#x ASC NULLS FIRST], true
++- Project [col1.users[0].name#x]
+   +- Filter (col1#x.users[0].age > 25)
+      +- Aggregate [col1#x], [col1#x.users[0].name AS col1.users[0].name#x, col1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [col1#x]
 
 
 -- !query
@@ -446,13 +443,12 @@ GROUP BY col1
 HAVING col1.person.address.zip > 10000
 ORDER BY col1.person.address.city
 -- !query analysis
-Project [city#x]
-+- Sort [col1#x.person.address.city ASC NULLS FIRST], true
-   +- Project [city#x, col1#x]
-      +- Filter (col1#x.person.address.zip > 10000)
-         +- Aggregate [col1#x], [col1#x.person.address.city AS city#x, col1#x]
-            +- SubqueryAlias t
-               +- LocalRelation [col1#x]
+Sort [city#x ASC NULLS FIRST], true
++- Project [city#x]
+   +- Filter (col1#x.person.address.zip > 10000)
+      +- Aggregate [col1#x], [col1#x.person.address.city AS city#x, col1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [col1#x]
 
 
 -- !query
@@ -464,13 +460,12 @@ GROUP BY col1
 HAVING col1.matrix[0][0] < 5
 ORDER BY col1.matrix[0][1]
 -- !query analysis
-Project [col1.matrix[0][1]#x]
-+- Sort [col1#x.matrix[0][1] ASC NULLS FIRST], true
-   +- Project [col1.matrix[0][1]#x, col1#x]
-      +- Filter (col1#x.matrix[0][0] < 5)
-         +- Aggregate [col1#x], [col1#x.matrix[0][1] AS col1.matrix[0][1]#x, col1#x]
-            +- SubqueryAlias t
-               +- LocalRelation [col1#x]
+Sort [col1.matrix[0][1]#x ASC NULLS FIRST], true
++- Project [col1.matrix[0][1]#x]
+   +- Filter (col1#x.matrix[0][0] < 5)
+      +- Aggregate [col1#x], [col1#x.matrix[0][1] AS col1.matrix[0][1]#x, col1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [col1#x]
 
 
 -- !query

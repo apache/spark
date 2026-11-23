@@ -89,13 +89,12 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), udf(c)
 -- !query analysis
-Project [udf(b)#x, udf(c)#x]
-+- Sort [cast(udf(cast(b#x as string)) as int) ASC NULLS FIRST, cast(udf(cast(c#x as string)) as string) ASC NULLS FIRST], true
-   +- Project [udf(b)#x, udf(c)#x, b#x, c#x]
-      +- Filter (cast(udf(cast(count(1)#xL as string)) as bigint) = cast(1 as bigint))
-         +- Aggregate [b#x, c#x], [cast(udf(cast(b#x as string)) as int) AS udf(b)#x, cast(udf(cast(c#x as string)) as string) AS udf(c)#x, count(1) AS count(1)#xL, b#x, c#x]
-            +- SubqueryAlias spark_catalog.default.test_having
-               +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
+Sort [udf(b)#x ASC NULLS FIRST, udf(c)#x ASC NULLS FIRST], true
++- Project [udf(b)#x, udf(c)#x]
+   +- Filter (cast(udf(cast(count(1)#xL as string)) as bigint) = cast(1 as bigint))
+      +- Aggregate [b#x, c#x], [cast(udf(cast(b#x as string)) as int) AS udf(b)#x, cast(udf(cast(c#x as string)) as string) AS udf(c)#x, count(1) AS count(1)#xL]
+         +- SubqueryAlias spark_catalog.default.test_having
+            +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
 
 
 -- !query
