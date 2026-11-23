@@ -99,6 +99,84 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("binary writer reuses slices in unsafe rows and arrays") {
+    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
+    val padding = 16
+    val backing = Array.fill[Byte](original.getSizeInBytes + 2 * padding)(42)
+    original.writeToMemory(backing, Platform.BYTE_ARRAY_OFFSET + padding)
+    val row = new UnsafeRow(2)
+    row.pointTo(backing, Platform.BYTE_ARRAY_OFFSET + padding, original.getSizeInBytes)
+
+    val binaries = captureBinaryWrites(row)
+    binaries.zip(Seq(Array[Byte](0, -1, -128), Array.emptyByteArray)).foreach {
+      case (binary, expected) =>
+        assert(binary.isBackingBytesReused)
+        assert(binary.toByteBuffer.array() eq backing)
+        assert(binary.getBytes.sameElements(expected))
+    }
+  }
+
+  test("binary writer copies off-heap rows and arrays") {
+    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
+    val address = Platform.allocateMemory(original.getSizeInBytes)
+    try {
+      original.writeToMemory(null, address)
+      val row = new UnsafeRow(2)
+      row.pointTo(null, address, original.getSizeInBytes)
+      val binaries = captureBinaryWrites(row)
+      Platform.setMemory(address, 42.toByte, original.getSizeInBytes)
+      assertCopiedBinaries(binaries)
+    } finally {
+      Platform.freeMemory(address)
+    }
+  }
+
+  test("binary writer copies rows and arrays backed by other primitive arrays") {
+    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
+    val backing = new Array[Long](original.getSizeInBytes / 8)
+    val offset = Platform.LONG_ARRAY_OFFSET
+    original.writeToMemory(backing, offset)
+    val row = new UnsafeRow(2)
+    row.pointTo(backing, offset, original.getSizeInBytes)
+    val binaries = captureBinaryWrites(row)
+    Arrays.fill(backing, 0L)
+    assertCopiedBinaries(binaries)
+  }
+
+  test("binary writer accepts byte arrays in generic rows and arrays") {
+    val row = binaryCaptureRow
+    val binaries = captureBinaryWrites(row)
+    assert(binaries.head.isBackingBytesReused)
+    assert(binaries.head.toByteBuffer.array() eq row.getBinary(0))
+    assert(binaries.head.getBytes.sameElements(Array[Byte](0, -1, -128)))
+    assert(binaries(1).isBackingBytesReused)
+    assert(binaries(1).toByteBuffer.array() eq row.getArray(1).getBinary(0))
+    assert(binaries(1).length() == 0)
+  }
+
+  for {
+    (dictionary, enabled, pageSize, dictionaryPages, plainPages) <- Seq(
+      ("off", false, 1024 * 1024, false, true),
+      ("on", true, 1024 * 1024, true, false),
+      ("fallback", true, 4096, true, true))
+    version <- ParquetProperties.WriterVersion.values()
+  } {
+    test(s"binary writer preserves reused heap rows, dictionary $dictionary, writer $version") {
+      val projection = UnsafeProjection.create(reusedBinarySchema)
+      val backing = new Array[Byte](64 * 1024)
+      val row = new UnsafeRow(reusedBinarySchema.length)
+      checkReusedBinaryWrites(version, enabled, pageSize, dictionaryPages, plainPages) {
+        (writer, input) =>
+          val projected = projection(input)
+          Arrays.fill(backing, 42.toByte)
+          projected.writeToMemory(backing, Platform.BYTE_ARRAY_OFFSET + 16)
+          row.pointTo(backing, Platform.BYTE_ARRAY_OFFSET + 16, projected.getSizeInBytes)
+          writer.write(row)
+          Arrays.fill(backing, 63.toByte)
+      }
+    }
+  }
+
   test("SPARK-11694 Parquet logical types are not being tested properly") {
     val parquetSchema = MessageTypeParser.parseMessageType(
       """message root {
@@ -197,6 +275,25 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
     // scalastyle:on nonascii
+  }
+
+  private def parquetWriterConf(schema: StructType): Configuration = {
+    val conf = spark.sessionState.newHadoopConf()
+    ParquetWriteSupport.setSchema(schema, conf)
+    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
+    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
+    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
+    conf
+  }
+
+  private class InternalRowParquetWriterBuilder(path: Path)
+    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
+
+    override protected def self(): InternalRowParquetWriterBuilder = this
+
+    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
+      new ParquetWriteSupport
   }
 
   test("SPARK-60321: string writer reuses the backing array of a UTF8String slice") {
@@ -303,84 +400,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         } finally {
           reader.close()
         }
-      }
-    }
-  }
-
-  test("binary writer reuses slices in unsafe rows and arrays") {
-    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
-    val padding = 16
-    val backing = Array.fill[Byte](original.getSizeInBytes + 2 * padding)(42)
-    original.writeToMemory(backing, Platform.BYTE_ARRAY_OFFSET + padding)
-    val row = new UnsafeRow(2)
-    row.pointTo(backing, Platform.BYTE_ARRAY_OFFSET + padding, original.getSizeInBytes)
-
-    val binaries = captureBinaryWrites(row)
-    binaries.zip(Seq(Array[Byte](0, -1, -128), Array.emptyByteArray)).foreach {
-      case (binary, expected) =>
-        assert(binary.isBackingBytesReused)
-        assert(binary.toByteBuffer.array() eq backing)
-        assert(binary.getBytes.sameElements(expected))
-    }
-  }
-
-  test("binary writer copies off-heap rows and arrays") {
-    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
-    val address = Platform.allocateMemory(original.getSizeInBytes)
-    try {
-      original.writeToMemory(null, address)
-      val row = new UnsafeRow(2)
-      row.pointTo(null, address, original.getSizeInBytes)
-      val binaries = captureBinaryWrites(row)
-      Platform.setMemory(address, 42.toByte, original.getSizeInBytes)
-      assertCopiedBinaries(binaries)
-    } finally {
-      Platform.freeMemory(address)
-    }
-  }
-
-  test("binary writer copies rows and arrays backed by other primitive arrays") {
-    val original = UnsafeProjection.create(binaryCaptureSchema)(binaryCaptureRow)
-    val backing = new Array[Long](original.getSizeInBytes / 8)
-    val offset = Platform.LONG_ARRAY_OFFSET
-    original.writeToMemory(backing, offset)
-    val row = new UnsafeRow(2)
-    row.pointTo(backing, offset, original.getSizeInBytes)
-    val binaries = captureBinaryWrites(row)
-    Arrays.fill(backing, 0L)
-    assertCopiedBinaries(binaries)
-  }
-
-  test("binary writer accepts byte arrays in generic rows and arrays") {
-    val row = binaryCaptureRow
-    val binaries = captureBinaryWrites(row)
-    assert(binaries.head.isBackingBytesReused)
-    assert(binaries.head.toByteBuffer.array() eq row.getBinary(0))
-    assert(binaries.head.getBytes.sameElements(Array[Byte](0, -1, -128)))
-    assert(binaries(1).isBackingBytesReused)
-    assert(binaries(1).toByteBuffer.array() eq row.getArray(1).getBinary(0))
-    assert(binaries(1).length() == 0)
-  }
-
-  for {
-    (dictionary, enabled, pageSize, dictionaryPages, plainPages) <- Seq(
-      ("off", false, 1024 * 1024, false, true),
-      ("on", true, 1024 * 1024, true, false),
-      ("fallback", true, 4096, true, true))
-    version <- ParquetProperties.WriterVersion.values()
-  } {
-    test(s"binary writer preserves reused heap rows, dictionary $dictionary, writer $version") {
-      val projection = UnsafeProjection.create(reusedBinarySchema)
-      val backing = new Array[Byte](64 * 1024)
-      val row = new UnsafeRow(reusedBinarySchema.length)
-      checkReusedBinaryWrites(version, enabled, pageSize, dictionaryPages, plainPages) {
-        (writer, input) =>
-          val projected = projection(input)
-          Arrays.fill(backing, 42.toByte)
-          projected.writeToMemory(backing, Platform.BYTE_ARRAY_OFFSET + 16)
-          row.pointTo(backing, Platform.BYTE_ARRAY_OFFSET + 16, projected.getSizeInBytes)
-          writer.write(row)
-          Arrays.fill(backing, 63.toByte)
       }
     }
   }
@@ -2850,25 +2869,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     .add("nested", new StructType().add("value", BinaryType))
     .add("elements", ArrayType(BinaryType))
     .add("entries", MapType(StringType, BinaryType))
-
-  private def parquetWriterConf(schema: StructType): Configuration = {
-    val conf = spark.sessionState.newHadoopConf()
-    ParquetWriteSupport.setSchema(schema, conf)
-    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
-    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
-    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
-    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
-    conf
-  }
-
-  private class InternalRowParquetWriterBuilder(path: Path)
-    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
-
-    override protected def self(): InternalRowParquetWriterBuilder = this
-
-    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
-      new ParquetWriteSupport
-  }
 
   private def checkReusedBinaryWrites(
       version: ParquetProperties.WriterVersion,
