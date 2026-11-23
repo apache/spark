@@ -2098,7 +2098,9 @@ def _transpile_func(
             seen: set = set()
             for combo in combos:
                 try:
-                    hook_args = (
+                    # Typed loosely: slicing to ``arity`` makes each element's
+                    # position unknown to a type checker.
+                    hook_args: Tuple[Any, ...] = (
                         src,
                         ast_info,
                         function_ast,
