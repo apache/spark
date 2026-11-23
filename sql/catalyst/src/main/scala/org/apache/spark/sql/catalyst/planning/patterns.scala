@@ -191,13 +191,39 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression],
       Option[Expression], Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
-  def unapply(join: Join): Option[ReturnType] = join match {
+  def unapply(join: Join): Option[ReturnType] = extract(join, allEqualities = false)
+
+  /**
+   * Returns the keys of `join`. If `allEqualities` is false, a conjunct that may not be evaluated
+   * ahead of the rest of the condition is not a key (see below), otherwise every equality
+   * between the two sides is.
+   */
+  private[planning] def extract(
+      join: Join,
+      allEqualities: Boolean): Option[ReturnType] = join match {
     case Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
-      // as join keys.
+      // as join keys. A join computes its keys on every row of its inputs, ahead of the rest of
+      // its condition, so a conjunct that may not be evaluated ahead of the others (see
+      // `splitMovable`), e.g. one that can fail written after a throwable one, is not a key. It
+      // stays in the other condition, in its written order. The first conjunct is evaluated
+      // first on every pair anyway, so it may be a key unless it is non-deterministic, also when
+      // it is throwable. As `PushPredicateThroughJoin` puts the conjuncts that may move first, a
+      // throwable one is still first only when none after it may move, e.g. when it is the only
+      // equality, and then it is the only key. The columns of the inputs that can fail
+      // (`failableOutput`) do not count: a key over such a column reads the value that the
+      // projection below computes, while a filter pushed below the projection evaluates its
+      // expression again. This also keeps the keys the same when the inputs change, e.g. when
+      // AQE replaces them with query stages.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val joinKeys = predicates.flatMap {
+      val notMovable = predicates match {
+        case _ if allEqualities => Nil
+        case first +: rest if first.deterministic =>
+          splitMovable(rest, Nil, afterBarrier = first.throwable)._2
+        case _ => splitMovable(predicates, Nil)._2
+      }
+      val joinKeys = predicates.filterNot(notMovable.contains).flatMap {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
@@ -216,6 +242,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case _ => None
       }
       val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
+        case p if notMovable.contains(p) => false
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
@@ -232,6 +259,18 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         None
       }
   }
+}
+
+/**
+ * [[ExtractEquiJoinKeys]] with every equality between the two sides of the join as a key,
+ * wherever it is in the condition. Every pair of rows that a join outputs satisfies each of them,
+ * so this is for the rules that only reason about the rows a join outputs, e.g. which of its
+ * columns are unique or how many rows it outputs. It is not for planning a join, or for a rule
+ * that evaluates the keys ahead of the join condition.
+ */
+object ExtractAllEquiJoinKeys {
+  def unapply(join: Join): Option[ExtractEquiJoinKeys.ReturnType] =
+    ExtractEquiJoinKeys.extract(join, allEqualities = true)
 }
 
 /**
