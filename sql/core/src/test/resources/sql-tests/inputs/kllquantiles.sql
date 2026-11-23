@@ -297,6 +297,48 @@ FROM (
     ) sketches_without_nulls
 ) WITHOUT_NULLS;
 
+-- Without k, a compacting input with a lower k than the first input sets k (here 200, not 1000)
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)));
+
+-- Without k, an exact input after the first does not change k (here 1000)
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(5)));
+
+-- Without k, empty inputs do not take part. If every input is empty, the result keeps the k of the first one (here 1000, not 8)
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)));
+
+-- Type mismatch: a FLOAT sketch fails in kll_merge_agg_bigint, also as a compacting input with a lower k
+SELECT kll_merge_agg_bigint(s) AS incompatible_merge_lower_k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_float(CAST(id AS FLOAT), 100) AS s FROM range(100000)));
+
+-- With the k rule off, the result takes the k of the first input: 1000, then 8 for an empty first input
+SET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled=false;
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)));
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)));
+RESET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled;
+
 -- Tests verifying that NULL input values are ignored by aggregate functions
 
 -- Test BIGINT aggregate ignores NULL values

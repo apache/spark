@@ -506,8 +506,9 @@ case class KllSketchAggDouble(
       The input expression should contain binary sketch representations (e.g., from kll_sketch_agg_bigint).
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch takes the lowest k among the first non-empty input
-      sketch and the input sketches that have started compacting, or the default k (200) if
-      every input is empty.
+      sketch and the input sketches that have started compacting. If every input sketch is
+      empty, it takes the k of the first one, and without input sketches the default k (200).
+      So the k can depend on the order and the partitioning of the inputs.
   """,
   arguments = """
     Arguments:
@@ -594,8 +595,9 @@ case class KllMergeAggBigint(
       The input expression should contain binary sketch representations (e.g., from kll_sketch_agg_float).
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch takes the lowest k among the first non-empty input
-      sketch and the input sketches that have started compacting, or the default k (200) if
-      every input is empty.
+      sketch and the input sketches that have started compacting. If every input sketch is
+      empty, it takes the k of the first one, and without input sketches the default k (200).
+      So the k can depend on the order and the partitioning of the inputs.
   """,
   arguments = """
     Arguments:
@@ -682,8 +684,9 @@ case class KllMergeAggFloat(
       The input expression should contain binary sketch representations (e.g., from kll_sketch_agg_double).
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch takes the lowest k among the first non-empty input
-      sketch and the input sketches that have started compacting, or the default k (200) if
-      every input is empty.
+      sketch and the input sketches that have started compacting. If every input sketch is
+      empty, it takes the k of the first one, and without input sketches the default k (200).
+      So the k can depend on the order and the partitioning of the inputs.
   """,
   arguments = """
     Arguments:
@@ -810,13 +813,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
     } else {
       try {
         val sketchBytes = v.asInstanceOf[Array[Byte]]
-        val inputSketch = wrapSketch(sketchBytes)
-        // With `lowestCompactingK`, an empty input counts as absent, like a NULL.
-        if (takesLowestCompactingK && inputSketch.isEmpty()) {
-          sketchOption
-        } else {
-          Some(mergeSketch(sketchOption, inputSketch, heapifySketch(sketchBytes)))
-        }
+        Some(mergeSketch(sketchOption, wrapSketch(sketchBytes), heapifySketch(sketchBytes)))
       } catch {
         case _: Exception =>
           throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -826,11 +823,16 @@ abstract class KllMergeAggBase[T <: KllSketch]
 
   /**
    * Returns the merge of the buffer and `input`. Without k and with `lowestCompactingK`, the
-   * result takes the lowest k among the first non-empty input and the compacting inputs.
-   * `heapInput` returns `input` as a heap sketch that can change.
+   * result takes the lowest k among the first non-empty input and the compacting inputs, or the
+   * k of the first input if every input is empty. `heapInput` returns `input` as a heap sketch
+   * that can change.
    */
   private def mergeSketch(sketchOption: Option[T], input: T, heapInput: => T): T =
     sketchOption match {
+      // An empty input does not change the buffer. A buffer that holds only empty inputs keeps the
+      // k of the first one until a non-empty input replaces it.
+      case Some(buffer) if takesLowestCompactingK && input.isEmpty() => buffer
+      case Some(buffer) if takesLowestCompactingK && buffer.isEmpty() => heapInput
       case Some(buffer) if rebuildsAtInputK(buffer, input) =>
         // A merge keeps the k of its target, so the buffer goes into the input.
         val sketch = heapInput
@@ -852,8 +854,6 @@ abstract class KllMergeAggBase[T <: KllSketch]
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBufferOption: Option[T], inputOption: Option[T]): Option[T] = {
     (updateBufferOption, inputOption) match {
-      // An empty partial result, for example of an empty partition, is absent too.
-      case (_, Some(input)) if takesLowestCompactingK && input.isEmpty() => updateBufferOption
       case (Some(_), Some(input)) =>
         try {
           // `deserialize` returns a new heap sketch, so merging into it is safe.
@@ -880,6 +880,9 @@ abstract class KllMergeAggBase[T <: KllSketch]
   override def serialize(sketchOption: Option[T]): Array[Byte] = {
     sketchOption match {
       case Some(sketch) => toByteArray(sketch)
+      // Zero bytes deserialize as no input. So a partition without input sketches does not add an
+      // empty sketch with the default k to the final merge.
+      case None if takesLowestCompactingK => Array.emptyByteArray
       case None => toByteArray(newHeapInstance(kValue))
     }
   }

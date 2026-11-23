@@ -510,6 +510,101 @@ true
 
 
 -- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)))
+-- !query schema
+struct<k:string>
+-- !query output
+200
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(5)))
+-- !query schema
+struct<k:string>
+-- !query output
+1000
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)))
+-- !query schema
+struct<k:string>
+-- !query output
+1000
+
+
+-- !query
+SELECT kll_merge_agg_bigint(s) AS incompatible_merge_lower_k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_float(CAST(id AS FLOAT), 100) AS s FROM range(100000)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`kll_merge_agg_bigint`"
+  }
+}
+
+
+-- !query
+SET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.function.kllMergeAgg.lowestCompactingK.enabled	false
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)))
+-- !query schema
+struct<k:string>
+-- !query output
+1000
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)))
+-- !query schema
+struct<k:string>
+-- !query output
+8
+
+
+-- !query
+RESET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT abs(kll_sketch_get_quantile_bigint(agg_with_nulls, 0.5) - 
            kll_sketch_get_quantile_bigint(agg_without_nulls, 0.5)) < 1 AS medians_match,
        abs(kll_sketch_get_rank_bigint(agg_with_nulls, 4) - 

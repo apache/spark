@@ -6239,8 +6239,9 @@ object SQLConf {
       .internal()
       .doc("When true, kll_merge_agg_* without k returns a sketch with the lowest k among its " +
         "first non-empty input sketch and the input sketches that have started compacting " +
-        "(estimation mode), or the default k (200) if every input is empty. When false, it takes " +
-        "the k of its first input sketch.")
+        "(estimation mode). If every input sketch is empty, it takes the k of the first one, and " +
+        "without input sketches the default k (200). When false, it takes the k of its first " +
+        "input sketch.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

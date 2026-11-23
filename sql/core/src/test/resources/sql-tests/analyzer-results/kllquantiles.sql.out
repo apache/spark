@@ -583,6 +583,132 @@ Project [(abs((kll_sketch_get_quantile_bigint(agg_with_nulls#x, cast(0.5 as doub
 
 
 -- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)))
+-- !query analysis
+Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, None, 0, 0)), K +: ([0-9]+), 1) AS k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+               :  +- Range (0, 10, step=1)
+               +- Aggregate [kll_sketch_agg_bigint(id#xL, None, 0, 0) AS s#x]
+                  +- Range (0, 100000, step=1)
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(5)))
+-- !query analysis
+Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, None, 0, 0)), K +: ([0-9]+), 1) AS k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+               :  +- Range (0, 10, step=1)
+               +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(8), 0, 0) AS s#x]
+                  +- Range (0, 5, step=1)
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)))
+-- !query analysis
+Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, None, 0, 0)), K +: ([0-9]+), 1) AS k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+               :  +- Range (0, 0, step=1)
+               +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(8), 0, 0) AS s#x]
+                  +- Range (0, 0, step=1)
+
+
+-- !query
+SELECT kll_merge_agg_bigint(s) AS incompatible_merge_lower_k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_float(CAST(id AS FLOAT), 100) AS s FROM range(100000)))
+-- !query analysis
+Aggregate [kll_merge_agg_bigint(s#x, None, 0, 0) AS incompatible_merge_lower_k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+               :  +- Range (0, 10, step=1)
+               +- Aggregate [kll_sketch_agg_float(cast(id#xL as float), Some(100), 0, 0) AS s#x]
+                  +- Range (0, 100000, step=1)
+
+
+-- !query
+SET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled=false
+-- !query analysis
+SetCommand (spark.sql.function.kllMergeAgg.lowestCompactingK.enabled,Some(false))
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id) AS s FROM range(100000)))
+-- !query analysis
+Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, None, 0, 0)), K +: ([0-9]+), 1) AS k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+               :  +- Range (0, 10, step=1)
+               +- Aggregate [kll_sketch_agg_bigint(id#xL, None, 0, 0) AS s#x]
+                  +- Range (0, 100000, step=1)
+
+
+-- !query
+SELECT regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s)), 'K +: ([0-9]+)', 1) AS k
+FROM (SELECT /*+ COALESCE(1) */ s FROM (
+    SELECT kll_sketch_agg_bigint(id, 8) AS s FROM range(0)
+    UNION ALL
+    SELECT kll_sketch_agg_bigint(id, 1000) AS s FROM range(10)))
+-- !query analysis
+Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, None, 0, 0)), K +: ([0-9]+), 1) AS k#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Repartition 1, false
+      +- Project [s#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Union false, false
+               :- Aggregate [kll_sketch_agg_bigint(id#xL, Some(8), 0, 0) AS s#x]
+               :  +- Range (0, 0, step=1)
+               +- Aggregate [kll_sketch_agg_bigint(id#xL, Some(1000), 0, 0) AS s#x]
+                  +- Range (0, 10, step=1)
+
+
+-- !query
+RESET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+-- !query analysis
+ResetCommand spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+
+
+-- !query
 SELECT abs(kll_sketch_get_quantile_bigint(agg_with_nulls, 0.5) - 
            kll_sketch_get_quantile_bigint(agg_without_nulls, 0.5)) < 1 AS medians_match,
        abs(kll_sketch_get_rank_bigint(agg_with_nulls, 4) - 

@@ -23,7 +23,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketches => TupleSketches}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
@@ -4489,136 +4489,316 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(n == 5L)
   }
 
-  private def kllSketch(sketchType: String, k: Int, n: Int): Array[Byte] =
-    spark.range(n).selectExpr(s"kll_sketch_agg_$sketchType(CAST(id AS $sketchType), $k)")
-      .head().getAs[Array[Byte]](0)
+  private object KllMergeAggKRule {
+    val confKey = SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key
+    val types = Seq("bigint", "float", "double")
+    // An input with c items compacts for every k that the tests use with c.
+    val c = 10000
 
-  private def heapifyKll(sketchType: String, bytes: Array[Byte]): KllSketch = {
-    val mem = Memory.wrap(bytes)
-    sketchType match {
-      case "bigint" => KllLongsSketch.heapify(mem)
-      case "float" => KllFloatsSketch.heapify(mem)
-      case "double" => KllDoublesSketch.heapify(mem)
+    // A sketch over [from, from + n). It compacts iff n > k, and n = 0 gives an empty sketch.
+    def sketch(t: String, k: Int, n: Int, from: Int = 0): Array[Byte] = t match {
+      case "bigint" =>
+        val s = KllLongsSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toLong))
+        s.toByteArray
+      case "float" =>
+        val s = KllFloatsSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toFloat))
+        s.toByteArray
+      case "double" =>
+        val s = KllDoublesSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toDouble))
+        s.toByteArray
+    }
+    // The k, n and estimation mode of a sketch.
+    def state(t: String, bytes: Array[Byte]): (Int, Long, Boolean) = t match {
+      case "bigint" =>
+        val s = KllLongsSketch.heapify(Memory.wrap(bytes))
+        (s.getK, s.getN, s.isEstimationMode)
+      case "float" =>
+        val s = KllFloatsSketch.heapify(Memory.wrap(bytes))
+        (s.getK, s.getN, s.isEstimationMode)
+      case "double" =>
+        val s = KllDoublesSketch.heapify(Memory.wrap(bytes))
+        (s.getK, s.getN, s.isEstimationMode)
+    }
+    def kAndN(t: String, bytes: Array[Byte]): (Int, Long) = {
+      val (k, n, _) = state(t, bytes)
+      (k, n)
+    }
+    // The k rule for non-NULL (k, n) inputs in merge order.
+    def ruleK(inputs: Seq[(Int, Int)]): Int = inputs.filter(_._2 > 0) match {
+      case first +: rest => (first._1 +: rest.collect { case (k, n) if n > k => k }).min
+      case _ => inputs.headOption.map(_._1).getOrElse(200)
+    }
+    // Merges the rows of each case, in order, in a group of its own. With one partition and a
+    // high fallback threshold, the object hash aggregate reads each group in order.
+    def mergedInOrder(
+        t: String,
+        cases: Seq[Seq[Option[Array[Byte]]]],
+        lowestCompactingK: Boolean): Seq[(Int, Long)] = {
+      withSQLConf(confKey -> lowestCompactingK.toString,
+          SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100000") {
+        val rows = for ((inputs, id) <- cases.zipWithIndex; s <- inputs) yield (id, s)
+        spark.sparkContext.parallelize(rows, 1).toDF("id", "s").groupBy("id")
+          .agg(expr(s"kll_merge_agg_$t(s)").as("m")).orderBy("id").collect()
+          .map(r => kAndN(t, r.getAs[Array[Byte]](1))).toSeq
+      }
+    }
+    // Merges `rows` in a global aggregate over `numPartitions` partitions.
+    def mergedGlobal(
+        t: String,
+        rows: Seq[Option[Array[Byte]]],
+        numPartitions: Int,
+        lowestCompactingK: Boolean,
+        kArg: String = ""): Array[Byte] =
+      withSQLConf(confKey -> lowestCompactingK.toString) {
+        spark.sparkContext.parallelize(rows, numPartitions).toDF("s")
+          .agg(expr(s"kll_merge_agg_$t(s$kArg)")).head().getAs[Array[Byte]](0)
+      }
+  }
+
+  test("SPARK-61368: kll_merge_agg without k follows the k rule with the conf on, " +
+      "and the k of the first input with it off") {
+    import KllMergeAggKRule._
+
+    // (k, n) of each input, merged in this order, and the expected k with the conf on.
+    val examples: Seq[(Seq[(Int, Int)], Int)] = Seq(
+      // A compacting input with a smaller k lowers k, also after the first input.
+      Seq((400, 8000), (100, 2000)) -> 100,
+      Seq((400, 3), (100, 2000)) -> 100,
+      Seq((200, 4000), (100, 101)) -> 100,
+      Seq((65535, 70000), (8, 9)) -> 8,
+      Seq((400, c), (100, c), (1000, c)) -> 100,
+      Seq((1000, 10), (400, c), (16, 5), (200, c), (50, 50)) -> 200,
+      // The k of the first input counts, compacting or exact.
+      Seq((100, 2000), (400, 8000)) -> 100,
+      Seq((8, 3), (400, 8000)) -> 8,
+      Seq((200, c), (200, 50), (200, c)) -> 200,
+      // An exact input after the first never lowers k.
+      Seq((400, 8000), (8, 3)) -> 400,
+      Seq((200, 4000), (100, 100)) -> 200,
+      // No input compacts: the k of the first input, also when the result compacts.
+      Seq((20, 3), (8, 3)) -> 20,
+      Seq((1000, 10), (200, 10), (8, 3)) -> 1000,
+      Seq((8, 3), (200, 10), (1000, 10)) -> 8,
+      Seq((65535, 10), (8, 3)) -> 65535,
+      Seq((100, 60), (200, 60)) -> 100,
+      Seq(1300, 1000, 1900, 1100, 1600, 1200, 1800, 1400, 1700, 1500).map((_, 1000)) -> 1300,
+      // Empty inputs do not take part.
+      Seq((8, 0), (400, 8000)) -> 400,
+      Seq((8, 0), (400, 3)) -> 400,
+      Seq((400, 0), (8, 160)) -> 8,
+      Seq((400, 8000), (8, 0)) -> 400,
+      Seq((20, 3), (8, 0)) -> 20,
+      Seq((8, 0), (100, 10), (400, c)) -> 100,
+      Seq((50, 0), (8, 0), (1000, c), (16, 3)) -> 1000,
+      // Only empty inputs: the k of the first input.
+      Seq((1000, 0)) -> 1000,
+      Seq((1000, 0), (1000, 0), (1000, 0)) -> 1000,
+      Seq((8, 0), (400, 0)) -> 8,
+      Seq((1000, 0), (8, 0)) -> 1000,
+      // One input.
+      Seq((1000, 10)) -> 1000,
+      Seq((100, c)) -> 100)
+    examples.foreach { case (inputs, k) => assert(ruleK(inputs) == k, s"inputs $inputs") }
+    val rng = new Random(20261123)
+    val random = Seq.fill(200) {
+      val inputs = Seq.fill(1 + rng.nextInt(6)) {
+        val k = Seq(8, 50, 100, 200, 400, 1000)(rng.nextInt(6))
+        // 20% empty, 40% exact, 40% compacting.
+        val n = rng.nextInt(5) match {
+          case 0 => 0
+          case kind if kind < 3 => 1 + rng.nextInt(k)
+          case _ => k + 1 + rng.nextInt(2 * k)
+        }
+        (k, n)
+      }
+      inputs -> ruleK(inputs)
+    }
+
+    val cases = examples ++ random
+    val ns = cases.map(_._1.map(_._2.toLong).sum)
+    for (t <- types) {
+      val sketches = cases.map(_._1.map { case (k, n) =>
+        val bytes = sketch(t, k, n)
+        // `ruleK` assumes that an input compacts iff n > k.
+        assert(state(t, bytes)._3 == (n > k), (t, k, n))
+        Some(bytes)
+      })
+      assert(mergedInOrder(t, sketches, lowestCompactingK = true) == cases.map(_._2).zip(ns), t)
+      assert(mergedInOrder(t, sketches, lowestCompactingK = false) ==
+        cases.map(_._1.head._1).zip(ns), t)
     }
   }
 
-  // Puts `sketches` in order into `numPartitions` partitions, merges them, and returns the k and
-  // n of the result.
-  private def kllMergedKAndN(
-      sketchType: String,
-      sketches: Seq[Array[Byte]],
-      numPartitions: Int,
-      lowestCompactingK: Boolean,
-      kArg: String = ""): (Int, Long) = {
-    withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> lowestCompactingK.toString) {
-      val bytes = spark.sparkContext.parallelize(sketches, numPartitions).toDF("s")
-        .agg(expr(s"kll_merge_agg_$sketchType(s$kArg)"))
-        .head().getAs[Array[Byte]](0)
-      val merged = heapifyKll(sketchType, bytes)
-      (merged.getK, merged.getN)
+  // One partition per sketch, plus one with only a NULL and two empty partitions. The merge order
+  // is not fixed, so each case gives the same k in every order.
+  test("SPARK-61368: kll_merge_agg k rule ignores partitions without input sketches") {
+    import KllMergeAggKRule._
+    val anyOrder = Seq(
+      // Only empty inputs: their k, not the default k of a partition without input.
+      Seq((1000, 0)) -> 1000,
+      Seq((1000, 0), (1000, 0)) -> 1000,
+      Seq((100, 0), (100, 0), (100, 0)) -> 100,
+      // Empty inputs do not take part.
+      Seq((8, 0), (100, 10)) -> 100,
+      Seq((400, c), (8, 0)) -> 400,
+      Seq((1000, 0), (50, c), (1000, 0)) -> 50,
+      // Compacting inputs.
+      Seq((1000, 10), (200, c), (400, 10)) -> 200,
+      Seq((400, c), (100, c), (1000, c)) -> 100)
+    for (t <- types; (inputs, k) <- anyOrder) {
+      val sketches = inputs.map { case (k, n) => Some(sketch(t, k, n)) }
+      val n = inputs.map(_._2.toLong).sum
+      for (rows <- Seq(None +: sketches, sketches :+ None, None +: sketches.reverse)) {
+        assert(kAndN(t, mergedGlobal(t, rows, rows.size + 2, lowestCompactingK = true)) ==
+          ((k, n)), (t, inputs))
+      }
     }
   }
 
-  for (sketchType <- Seq("bigint", "float", "double")) {
-    test(s"SPARK-61368: kll_merge_agg_$sketchType without k takes the lowest k among the " +
-        "first input and the compacting inputs") {
-      // Input sketches as (k, n), merged in this order in one partition, then the expected k with
-      // the conf on: the lowest k among the first non-empty input and the inputs that compact
-      // (n > k). With the conf off, the result takes the k of the first input.
-      val c = 10000
-      val inOrder = Seq(
-        // No input compacts.
-        Seq((1000, 10), (200, 10), (8, 3)) -> 1000,
-        Seq((8, 3), (200, 10), (1000, 10)) -> 8,
-        Seq(1300, 1000, 1900, 1100, 1600, 1200, 1800, 1400, 1700, 1500).map((_, 1000)) -> 1300,
-        Seq((1000, 10), (100, 100)) -> 1000,
-        Seq((65535, 10), (8, 3)) -> 65535,
-        // Every input compacts.
-        Seq((400, c), (100, c), (1000, c)) -> 100,
-        Seq((100, c), (400, c)) -> 100,
-        // Some inputs compact.
-        Seq((8, 3), (200, c)) -> 8,
-        Seq((1000, 10), (200, c)) -> 200,
-        Seq((1000, 10), (100, 101)) -> 100,
-        Seq((65535, 10), (8, c)) -> 8,
-        Seq((400, c), (8, 3)) -> 400,
-        Seq((1000, 10), (8, 3), (200, c)) -> 200,
-        Seq((1000, 10), (400, c), (16, 5), (200, c), (50, 50)) -> 200,
-        Seq((200, c), (200, 50), (200, c)) -> 200,
-        // Empty inputs.
-        Seq((200, 0), (400, 10)) -> 400,
-        Seq((200, 0), (400, c)) -> 400,
-        Seq((8, 0), (100, 10), (400, c)) -> 100,
-        Seq((50, 0), (8, 0), (1000, c), (16, 3)) -> 1000,
-        Seq((400, c), (8, 0)) -> 400,
-        Seq((300, 0), (100, 0)) -> 200)
-      // One partition per sketch plus two empty partitions. The final aggregate merges the partial
-      // results in no fixed order, so these cases are picked to have the same result in every
-      // order.
-      val anyOrder = Seq(
-        Seq((1000, 10), (200, c), (400, 10)) -> 200,
-        Seq((400, c), (100, c), (1000, c)) -> 100,
-        Seq((8, 0), (100, 10)) -> 100,
-        Seq((400, c), (8, 0)) -> 400,
-        Seq((300, 0), (100, 0)) -> 200)
-
-      val sketchOf = (inOrder ++ anyOrder).flatMap(_._1).distinct.map { case (k, n) =>
-        val bytes = kllSketch(sketchType, k, n)
-        // The table assumes that an input compacts iff n > k.
-        assert(heapifyKll(sketchType, bytes).isEstimationMode == (n > k))
-        (k, n) -> bytes
-      }.toMap
-      for ((inputs, expectedK) <- inOrder) {
-        val sketches = inputs.map(sketchOf)
-        val n = inputs.map(_._2.toLong).sum
-        assert(kllMergedKAndN(sketchType, sketches, 1, lowestCompactingK = false) ==
-          ((inputs.head._1, n)), inputs)
-        assert(kllMergedKAndN(sketchType, sketches, 1, lowestCompactingK = true) ==
-          ((expectedK, n)), inputs)
-      }
-      for ((inputs, expectedK) <- anyOrder; ordered <- Seq(inputs, inputs.reverse)) {
-        val n = inputs.map(_._2.toLong).sum
-        assert(kllMergedKAndN(sketchType, ordered.map(sketchOf), inputs.size + 2,
-          lowestCompactingK = true) == ((expectedK, n)), ordered)
-      }
-
-      // GROUP BY: one group per in-order case. With one partition and fewer groups than the
-      // sort-based fallback threshold (128), the object hash aggregate reads each group in order.
-      val rows = for (((inputs, _), g) <- inOrder.zipWithIndex; in <- inputs)
-        yield (g, sketchOf(in))
-      for (on <- Seq(false, true)) {
-        withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> on.toString) {
-          val ks = spark.sparkContext.parallelize(rows, 1).toDF("g", "s").groupBy("g")
-            .agg(expr(s"kll_merge_agg_$sketchType(s)").as("m")).orderBy("g").collect()
-            .map(r => heapifyKll(sketchType, r.getAs[Array[Byte]](1)).getK).toSeq
-          assert(ks == inOrder.map { case (inputs, k) => if (on) k else inputs.head._1 })
+  test("SPARK-61368: kll_merge_agg k rule in GROUP BY with the sort-based fallback " +
+      "and with SortAggregate") {
+    import KllMergeAggKRule._
+    // The inputs of a group and the expected k, the same in every input order.
+    val kinds = Seq(
+      Seq((50, 0), (1000, 10), (8, 0)) -> 1000,
+      Seq((300, 0), (300, 0)) -> 300,
+      Seq((50, 0), (100, c), (1000, 10)) -> 100,
+      Seq((400, c), (100, c), (1000, c)) -> 100)
+    val groups = 200
+    for (t <- types) {
+      val sketchOf = kinds.flatMap(_._1).distinct.map { case (k, n) => (k, n) -> sketch(t, k, n) }
+        .toMap
+      val rows = for (g <- 0 until groups; in <- kinds(g % kinds.size)._1) yield (g, sketchOf(in))
+      val expected = (0 until groups).map(g => g -> kinds(g % kinds.size)._2).toMap
+      for (objectHash <- Seq(true, false); threshold <- Seq(1, 128); numPartitions <- Seq(1, 4)) {
+        withSQLConf(confKey -> "true", SQLConf.USE_OBJECT_HASH_AGG.key -> objectHash.toString,
+            SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> threshold.toString) {
+          val shuffled = new Random(threshold).shuffle(rows)
+          val ks = spark.sparkContext.parallelize(shuffled, numPartitions).toDF("g", "s")
+            .groupBy("g").agg(expr(s"kll_merge_agg_$t(s)").as("m")).collect()
+            .map(r => r.getInt(0) -> state(t, r.getAs[Array[Byte]](1))._1).toMap
+          assert(ks == expected, (t, objectHash, threshold, numPartitions))
         }
       }
+    }
+  }
 
-      // A running window frame reads its rows in order. The first frame has only an empty input.
-      withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "true") {
-        val window = Window.orderBy("ord").rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        val ks = Seq((8, 0), (1000, 10), (8, 3), (200, c)).map(sketchOf).zipWithIndex
-          .toDF("s", "ord").select(expr(s"kll_merge_agg_$sketchType(s)").over(window)).collect()
-          .map(r => heapifyKll(sketchType, r.getAs[Array[Byte]](0)).getK).toSeq
-        assert(ks == Seq(200, 1000, 1000, 200))
+  test("SPARK-61368: kll_merge_agg k rule in running and sliding window frames") {
+    import KllMergeAggKRule._
+    val inputs = Seq(None, Some((1000, 0)), Some((8, 0)), Some((1000, 10)), Some((8, 3)),
+      Some((200, c)), Some((50, 0)), Some((100, c)), None)
+    val frames = Seq((Window.unboundedPreceding, 0L), (-1L, 0L), (-2L, 1L))
+    for (t <- types; on <- Seq(true, false); (start, end) <- frames) {
+      // Window partition 1 has the inputs in reverse order.
+      val orders = Seq(inputs, inputs.reverse)
+      val rows = for ((ordered, p) <- orders.zipWithIndex; (in, i) <- ordered.zipWithIndex)
+        yield (p, i, in.map { case (k, n) => sketch(t, k, n) })
+      withSQLConf(confKey -> on.toString) {
+        val window = Window.partitionBy("p").orderBy("i").rowsBetween(start, end)
+        val ks = rows.toDF("p", "i", "s")
+          .select($"p", $"i", expr(s"kll_merge_agg_$t(s)").over(window).as("m"))
+          .orderBy("p", "i").collect().map(r => state(t, r.getAs[Array[Byte]](2))._1).toSeq
+        // A frame reads its rows in order, so the rule applies to the rows of the frame.
+        val expected = for (ordered <- orders; i <- ordered.indices) yield {
+          val from = if (start == Window.unboundedPreceding) 0 else math.max(0, i + start.toInt)
+          val frame = ordered.slice(from, i + end.toInt + 1).flatten
+          if (on) ruleK(frame) else frame.headOption.map(_._1).getOrElse(200)
+        }
+        assert(ks == expected, (t, on, start, end))
       }
+    }
+  }
 
-      // An explicit k is kept, also when the final aggregate merges the partial results.
-      val compacted = Seq.fill(2)(sketchOf((100, c)))
-      for (numPartitions <- Seq(1, 2)) {
-        assert(kllMergedKAndN(sketchType, compacted, numPartitions, lowestCompactingK = true,
-          kArg = ", 400") == ((400, 2L * c)))
-      }
+  // The inner merge compacts, so the outer merge takes its k (100), not the k of the first input
+  // (1000). One merge of all three inputs has no compacting input and keeps 1000.
+  test("SPARK-61368: kll_merge_agg counts a compacted merge result as a compacting input") {
+    import KllMergeAggKRule._
+    for (t <- types; on <- Seq(true, false)) {
+      val first = Some(sketch(t, 1000, 10))
+      val rest = Seq(Some(sketch(t, 100, 60)), Some(sketch(t, 200, 60)))
+      val inner = mergedGlobal(t, rest, 1, on)
+      assert(state(t, inner) == ((100, 120L, true)), (t, on))
+      val nested = mergedGlobal(t, Seq(first, Some(inner)), 1, on)
+      assert(kAndN(t, nested) == ((if (on) 100 else 1000, 130L)), (t, on))
+      assert(kAndN(t, mergedGlobal(t, first +: rest, 1, on)) == ((1000, 130L)), (t, on))
+    }
+  }
 
-      // The conf is read when the function is resolved.
-      val resolvedOff = withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "false") {
-        spark.sparkContext.parallelize(Seq(sketchOf((1000, 10)), sketchOf((200, c))), 1)
-          .toDF("s").agg(expr(s"kll_merge_agg_$sketchType(s)"))
+  test("SPARK-61368: kll_merge_agg skips NULL inputs and gives the default k without input") {
+    import KllMergeAggKRule._
+    // Inputs in merge order, with None for a NULL, and the expected k with the conf on and off.
+    val cases = Seq(
+      Seq(None) -> ((200, 200)),
+      Seq(None, None) -> ((200, 200)),
+      Seq(None, Some((1000, 0))) -> ((1000, 1000)),
+      Seq(None, Some((1000, 10)), None, Some((100, c))) -> ((100, 1000)),
+      Seq(Some((1000, 0)), None, Some((400, 10))) -> ((400, 1000)))
+    for (t <- types; on <- Seq(true, false)) {
+      val sketches = cases.map(_._1.map(_.map { case (k, n) => sketch(t, k, n) }))
+      val expected = cases.map { case (inputs, (kOn, kOff)) =>
+        (if (on) kOn else kOff, inputs.flatten.map(_._2.toLong).sum)
       }
-      withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "true") {
-        assert(heapifyKll(sketchType, resolvedOff.head().getAs[Array[Byte]](0)).getK == 1000)
-      }
+      assert(mergedInOrder(t, sketches, on) == expected, (t, on))
+      assert(kAndN(t, mergedGlobal(t, Seq.empty, 2, on)) == ((200, 0L)), (t, on))
+    }
+  }
+
+  test("SPARK-61368: kll_merge_agg with k keeps that k, with the conf on and off") {
+    import KllMergeAggKRule._
+    val cases = Seq(
+      Seq(Some((100, c)), Some((100, c))),
+      Seq(Some((1000, 10)), Some((100, c))),
+      Seq(Some((1000, 0)), Some((1000, 0))),
+      Seq(Some((8, 3)), None),
+      Seq(None))
+    for (t <- types; on <- Seq(true, false); numPartitions <- Seq(1, 2, 4); inputs <- cases) {
+      val rows = inputs.map(_.map { case (k, n) => sketch(t, k, n) })
+      val n = inputs.flatten.map(_._2.toLong).sum
+      assert(kAndN(t, mergedGlobal(t, rows, numPartitions, on, kArg = ", 400")) == ((400, n)),
+        (t, on, numPartitions, inputs))
+    }
+  }
+
+  test("SPARK-61368: kll_merge_agg keeps the conf value from when it was resolved") {
+    import KllMergeAggKRule._
+    val rows = Seq(sketch("bigint", 1000, 10), sketch("bigint", 200, c))
+    def merged(): DataFrame =
+      spark.sparkContext.parallelize(rows, 1).toDF("s").agg(expr("kll_merge_agg_bigint(s)"))
+    val builtOn = withSQLConf(confKey -> "true") { merged() }
+    val builtOff = withSQLConf(confKey -> "false") { merged() }
+    withSQLConf(confKey -> "false") {
+      assert(kAndN("bigint", builtOn.head().getAs[Array[Byte]](0)) == ((200, 10L + c)))
+    }
+    withSQLConf(confKey -> "true") {
+      assert(kAndN("bigint", builtOff.head().getAs[Array[Byte]](0)) == ((1000, 10L + c)))
+    }
+  }
+
+  // 50000 is the median of the union [0, 100000), so its rank is about 0.5.
+  test("SPARK-61368: kll_merge_agg keeps the data of every input when a later input sets k") {
+    import KllMergeAggKRule._
+    for (t <- types; numPartitions <- Seq(1, 2)) {
+      val rows = Seq(Some(sketch(t, 400, 50000)), Some(sketch(t, 100, 50000, 50000)))
+      val merged = mergedGlobal(t, rows, numPartitions, lowestCompactingK = true)
+      assert(kAndN(t, merged) == ((100, 100000L)), (t, numPartitions))
+      val rank = Seq(merged).toDF("m")
+        .selectExpr(s"kll_sketch_get_rank_$t(m, CAST(50000 AS $t))").head().getDouble(0)
+      assert(math.abs(rank - 0.5) < 0.1, (t, numPartitions))
+    }
+  }
+
+  // A merged input can be in estimation mode with n < k. It counts as compacting.
+  test("SPARK-61368: kll_merge_agg counts the k of an input in estimation mode with n < k") {
+    import KllMergeAggKRule._
+    val input = KllLongsSketch.heapify(Memory.wrap(sketch("bigint", 1000, 10)))
+    input.merge(KllLongsSketch.heapify(Memory.wrap(sketch("bigint", 8, 9))))
+    assert(input.isEstimationMode && input.getN < input.getK)
+    val rows = Seq(Some(sketch("bigint", 4000, 30)), Some(input.toByteArray))
+    for ((on, k) <- Seq(true -> 1000, false -> 4000)) {
+      assert(kAndN("bigint", mergedGlobal("bigint", rows, 1, on)) == ((k, 49L)), s"conf = $on")
     }
   }
 
