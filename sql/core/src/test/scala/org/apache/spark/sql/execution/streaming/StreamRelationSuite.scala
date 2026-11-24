@@ -72,9 +72,10 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
   test("Analysis Exception: non-streaming Relation within STREAM keyword") {
     // Entity within STREAM keyword must be a streaming relation
     // "table" here is a temp view with a batch relation, so it should throw.
-    assertAnalysisError(
+    assertAnalysisErrorCondition(
       inputPlan = parsePlan("SELECT * FROM STREAM table"),
-      expectedErrors = Seq("is not a temp view of streaming logical plan")
+      expectedErrorCondition = "CANNOT_READ_VIEW_AS_STREAM.BATCH_TEMP_VIEW",
+      expectedMessageParameters = Map("viewName" -> "`table`")
     )
   }
 

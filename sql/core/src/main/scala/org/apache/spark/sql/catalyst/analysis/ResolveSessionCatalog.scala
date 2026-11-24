@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.{ClusterBySpec, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -167,9 +167,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.columnNotFoundError(u.name)
         case a: Attribute =>
           DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
+        case a: Alias =>
+          throw QueryCompilationErrors.describeNestedColumnNotSupportedError(
+            DescribeColumn.nestedColumnNameParts(a))
         case _ =>
           throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
       }

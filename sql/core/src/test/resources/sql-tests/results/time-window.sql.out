@@ -773,7 +773,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -793,7 +794,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1223,7 +1225,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1487,7 +1490,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1578,10 +1582,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "errorClass" : "NON_AGGREGATED_COLUMN_IN_PIVOT",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "sql" : "window"
-  }
+    "columnName" : "`window`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 81,
+    "fragment" : "PIVOT (window(ts, '5 minutes').start FOR a IN ('A1', 'A2'))"
+  } ]
 }
 
 
@@ -1595,7 +1607,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1788,7 +1801,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1039",
+  "errorClass" : "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

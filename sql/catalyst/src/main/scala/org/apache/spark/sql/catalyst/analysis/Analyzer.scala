@@ -1270,7 +1270,7 @@ class Analyzer(
           // OK and leave the argument check to CheckAnalysis.
         }
       case e: Attribute =>
-        throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
+        throw QueryCompilationErrors.nonAggregatedColumnInPivotError(e)
       case e => e.children.foreach(checkValidAggregateExpression)
     }
   }
@@ -3798,8 +3798,9 @@ class Analyzer(
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 
-          case AggregateExpression(aggFunc, _, _, _, _) if hasWindowFunction(aggFunc.children) =>
-            throw QueryCompilationErrors.windowFunctionInsideAggregateFunctionNotAllowedError()
+          case ae @ AggregateExpression(aggFunc, _, _, _, _)
+              if hasWindowFunction(aggFunc.children) =>
+            throw QueryCompilationErrors.windowFunctionInsideAggregateFunctionNotAllowedError(ae)
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).

@@ -240,12 +240,14 @@ class DataFrameSessionWindowingSuite extends SharedSparkSession {
     val df = Seq(
       ("2016-03-27 09:00:02", 3),
       ("2016-03-27 09:00:35", 6)).toDF("time", "value")
-    val e = intercept[AnalysisException] {
-      df.select(session_window($"time", "10 second"), session_window($"time", "15 second"))
-        .collect()
-    }
-    assert(e.getMessage.contains(
-      "Multiple time/session window expressions would result in a cartesian product"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(session_window($"time", "10 second"), session_window($"time", "15 second"))
+          .collect()
+      },
+      condition = "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+      sqlState = "0A000",
+      parameters = Map.empty)
   }
 
   test("aliased session windows") {
@@ -307,13 +309,20 @@ class DataFrameSessionWindowingSuite extends SharedSparkSession {
 
   test("SPARK-36465: Unsupported dynamic gap datatype") {
     withTempTable { table =>
-      val err = intercept[AnalysisException] {
-        spark.sql(s"""select session_window(time, 1.0), value from $table""")
-          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
-            $"value")
-      }
-      assert(err.message.contains("Gap duration expression used in session window must be " +
-        "CalendarIntervalType, but got DecimalType(2,1)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"""select session_window(time, 1.0), value from $table""")
+            .select($"session_window.start".cast(StringType),
+              $"session_window.end".cast(StringType), $"value")
+        },
+        condition = "UNEXPECTED_INPUT_TYPE",
+        sqlState = "42K09",
+        parameters = Map(
+          "paramIndex" -> "second",
+          "functionName" -> "`session_window`",
+          "requiredType" -> "\"INTERVAL\"",
+          "inputSql" -> "\"1.0\"",
+          "inputType" -> "\"DECIMAL(2,1)\""))
     }
   }
 

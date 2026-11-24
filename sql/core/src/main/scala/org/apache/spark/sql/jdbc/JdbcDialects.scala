@@ -452,10 +452,12 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitNamedReference(namedRef: NamedReference): String = {
       if (namedRef.fieldNames().length > 1) {
-        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-          "Filter push down", namedRef.toString)
+        // JDBC SQL cannot reference nested fields. `compileExpression` catches the error and
+        // gives up the push-down.
+        visitUnexpectedExpr(namedRef)
+      } else {
+        quoteIdentifier(namedRef.fieldNames.head)
       }
-      quoteIdentifier(namedRef.fieldNames.head)
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {

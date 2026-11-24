@@ -62,7 +62,8 @@ class AlterTableSetLocationSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
         },
-        condition = "_LEGACY_ERROR_TEMP_1045",
+        condition = "UNSUPPORTED_FEATURE.ALTER_TABLE_SET_PARTITION_LOCATION",
+        sqlState = "0A000",
         parameters = Map.empty
       )
     }

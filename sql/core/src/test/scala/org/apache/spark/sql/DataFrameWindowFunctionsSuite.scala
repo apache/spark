@@ -703,6 +703,26 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         Row("b", 2, null, null, null, null)))
   }
 
+  test("window functions with a fixed window frame reject other frames") {
+    Seq(
+      ("lag(a)", "`lag`", "\"ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING\""),
+      ("lead(a, 2)", "`lead`", "\"ROWS BETWEEN 2 FOLLOWING AND 2 FOLLOWING\""),
+      ("row_number()", "`row_number`", "\"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\"")
+    ).foreach { case (function, funcName, requiredFrame) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT $function OVER (ORDER BY a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) " +
+            "FROM VALUES (1), (2) AS t(a)").collect()
+        },
+        condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+        sqlState = "42P20",
+        parameters = Map(
+          "funcName" -> funcName,
+          "requiredFrame" -> requiredFrame,
+          "windowFrame" -> "\"ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\""))
+    }
+  }
+
   test("nth_value with ignoreNulls over offset window frame") {
     val nullStr: String = null
     val df = Seq(

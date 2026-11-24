@@ -167,7 +167,8 @@ object ResolveHints {
             case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported =>
-              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
+              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(
+                h.name.toUpperCase(Locale.ROOT), unsupported)
           }.toSet
           val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
           val applied = applyJoinStrategyHint(

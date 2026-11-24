@@ -59,15 +59,9 @@ object WindowResolution {
    * is unspecified.
    */
   def resolveFrame(windowExpression: WindowExpression): WindowExpression = windowExpression match {
-    case WindowExpression(
-        wf: FrameLessOffsetWindowFunction,
-        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)
-        ) if wf.frame != f =>
-      throw QueryCompilationErrors.cannotSpecifyWindowFrameError(wf.prettyName)
-
     case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
         if wf.frame != UnspecifiedFrame && wf.frame != f =>
-      throw QueryCompilationErrors.windowFrameNotMatchRequiredFrameError(f, wf.frame)
+      throw QueryCompilationErrors.windowFrameNotMatchRequiredFrameError(wf, f)
 
     case WindowExpression(wf: WindowFunction, s @ WindowSpecDefinition(_, _, UnspecifiedFrame))
         if wf.frame != UnspecifiedFrame =>

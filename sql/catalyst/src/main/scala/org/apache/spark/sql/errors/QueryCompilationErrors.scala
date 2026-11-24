@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentif
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedPlanId, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, Literal, NamedExpression, SortOrder, SpecifiedWindowFrame, UnaryMinus, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
@@ -680,12 +680,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       )
   }
 
-  def selectExprNotInGroupByError(expr: Expression, groupByAliases: Seq[Alias]): Throwable = {
+  def nonDeterministicGroupingSetExpressionError(expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1005",
-      messageParameters = Map(
-        "expr" -> expr.toString,
-        "groupByAliases" -> groupByAliases.toString()))
+      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      messageParameters = Map("sqlExprs" -> toSQLExpr(expr)),
+      origin = expr.origin)
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
@@ -700,10 +699,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
+  def nonAggregatedColumnInPivotError(column: Attribute): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1006",
-      messageParameters = Map("sql" -> sql))
+      errorClass = "NON_AGGREGATED_COLUMN_IN_PIVOT",
+      messageParameters = Map("columnName" -> toSQLId(column.name)),
+      origin = column.origin)
   }
 
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
@@ -712,10 +712,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> quoted))
   }
 
-  def readNonStreamingTempViewError(quoted: String): Throwable = {
+  def readNonStreamingTempViewError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1008",
-      messageParameters = Map("quoted" -> quoted))
+      errorClass = "CANNOT_READ_VIEW_AS_STREAM.BATCH_TEMP_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(nameParts)))
   }
 
   def viewDepthExceedsMaxResolutionDepthError(
@@ -760,8 +760,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1012",
-      messageParameters = Map("identifier" -> identifier.toString),
+      errorClass = "UNSUPPORTED_FEATURE.DATAFRAME_WRITER_V2_TO_V1_TABLE",
+      messageParameters = Map("tableName" -> toSQLId(identifier.nameParts)),
       origin = t.origin)
   }
 
@@ -823,10 +823,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def permanentViewNotSupportedByStreamingReadingAPIError(quoted: String): Throwable = {
+  def permanentViewNotSupportedByStreamingReadingAPIError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1018",
-      messageParameters = Map("quoted" -> quoted))
+      errorClass = "CANNOT_READ_VIEW_AS_STREAM.PERMANENT_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(nameParts)))
   }
 
   def starNotAllowedWhenGroupByOrdinalPositionUsedError(): Throwable = {
@@ -996,25 +996,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> expression))
   }
 
-  def windowFunctionInsideAggregateFunctionNotAllowedError(): Throwable = {
+  def windowFunctionInsideAggregateFunctionNotAllowedError(aggExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1031",
-      messageParameters = Map.empty)
+      errorClass = "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+      messageParameters = Map.empty,
+      origin = aggExpr.origin)
   }
 
   def expressionWithoutWindowExpressionError(expr: NamedExpression): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1032",
-      messageParameters = Map("expr" -> expr.toString))
+    SparkException.internalError(s"$expr does not contain a window expression.")
   }
 
   def expressionWithMultiWindowExpressionsError(
       expr: NamedExpression, distinctWindowSpec: Seq[WindowSpecDefinition]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1033",
-      messageParameters = Map(
-        "expr" -> expr.toString,
-        "distinctWindowSpec" -> distinctWindowSpec.toString()))
+    SparkException.internalError(
+      s"$expr has multiple window specifications: ${distinctWindowSpec.mkString(", ")}.")
   }
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
@@ -1036,19 +1032,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = aggregateExpr.origin)
   }
 
-  def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {
+  def windowFrameNotMatchRequiredFrameError(
+      wf: WindowFunction, f: SpecifiedWindowFrame): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1035",
-      messageParameters = Map("prettyName" -> prettyName))
+      errorClass = "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+      messageParameters = Map(
+        "funcName" -> toSQLId(wf.prettyName),
+        "requiredFrame" -> toSQLWindowFrame(wf.frame),
+        "windowFrame" -> toSQLWindowFrame(f)))
   }
 
-  def windowFrameNotMatchRequiredFrameError(
-      f: SpecifiedWindowFrame, required: WindowFrame): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1036",
-      messageParameters = Map(
-        "wf" -> f.toString,
-        "required" -> required.toString))
+  // A frame bound can be a negative literal, such as the folded offset of `lag(x)` or a bound
+  // from `Window.rowsBetween(-1, 1)`. `SpecifiedWindowFrame.sql` shows -1 as `-1 FOLLOWING`, so
+  // show it as `1 PRECEDING`, the way it is written in SQL.
+  private def toSQLWindowFrame(frame: WindowFrame): String = {
+    toSQLExpr(frame.transform {
+      case Literal(v: Int, IntegerType) if v < 0 && v != Int.MinValue => UnaryMinus(Literal(-v))
+      case Literal(v: Long, LongType) if v < 0 && v != Long.MinValue => UnaryMinus(Literal(-v))
+    })
   }
 
   def windowFunctionWithWindowFrameNotOrderedError(wf: WindowFunction): Throwable = {
@@ -1061,15 +1062,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def multiTimeWindowExpressionsNotSupportedError(t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1039",
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
       messageParameters = Map.empty,
       origin = t.origin)
   }
 
-  def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1040",
-      messageParameters = Map("dt" -> dt.toString))
+  def sessionWindowGapDurationDataTypeError(gapDuration: Expression): Throwable = {
+    unexpectedInputDataTypeError("session_window", 2, CalendarIntervalType, gapDuration)
   }
 
   def duplicateAssignmentsError(nameList: String): Throwable = {
@@ -1199,30 +1198,31 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1045",
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_SET_PARTITION_LOCATION",
       messageParameters = Map.empty)
   }
 
-  def joinStrategyHintParameterNotSupportedError(unsupported: Expression): Throwable = {
+  def joinStrategyHintParameterNotSupportedError(
+      hintName: String, unsupported: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1046",
+      errorClass = "INVALID_HINT_PARAMETER.JOIN_STRATEGY_RELATION",
       messageParameters = Map(
-        "unsupported" -> toSQLExpr(unsupported),
-        "class" -> unsupported.getClass.toString))
+        "hintName" -> hintName,
+        "parameter" -> toSQLExpr(unsupported)))
   }
 
   def invalidHintParameterError(
       hintName: String, invalidParams: Seq[Expression]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1047",
+      errorClass = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
       messageParameters = Map(
         "hintName" -> hintName,
-        "invalidParams" -> invalidParams.map(toSQLExpr).mkString(", ")))
+        "parameters" -> invalidParams.map(toSQLExpr).mkString(", ")))
   }
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1048",
+      errorClass = "INVALID_HINT_PARAMETER.COALESCE_PARTITION_NUMBER",
       messageParameters = Map("hintName" -> hintName))
   }
 
@@ -1235,10 +1235,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "advisoryPartitionSize" -> advisoryPartitionSize))
   }
 
-  def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
+  def starExpandDataTypeNotSupportedError(
+      attribute: Seq[String], dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1050",
-      messageParameters = Map("attributes" -> attributes.toString()))
+      errorClass = "STAR_EXPAND_NON_STRUCT_TYPE",
+      messageParameters = Map(
+        "attribute" -> toSQLId(attribute),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def cannotResolveStarExpandGivenInputColumnsError(
@@ -1389,12 +1392,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("serdeInfo" -> serdeInfo.storedAs.get))
   }
 
-  def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
+  def describeNestedColumnNotSupportedError(columnNameParts: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1060",
-      messageParameters = Map(
-        "command" -> command,
-        "column" -> quoted))
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_NESTED_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnNameParts)))
   }
 
   def renameTempViewToExistingViewError(newName: String): Throwable = {
@@ -1442,11 +1443,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dropNonExistentColumnsNotSupportedError(
-      nonExistentColumnNames: Seq[String]): Throwable = {
+      tableName: TableIdentifier, nonExistentColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1071",
+      errorClass = "UNSUPPORTED_FEATURE.DROP_COLUMNS_FROM_DATA_SCHEMA",
       messageParameters = Map(
-        "nonExistentColumnNames" -> nonExistentColumnNames.mkString("[", ",", "]")))
+        "tableName" -> toSQLId(tableName.nameParts),
+        "columnNames" -> nonExistentColumnNames.map(toSQLId).mkString(", ")))
   }
 
   def cannotRetrieveTableOrViewNotInSameDatabaseError(
@@ -1643,9 +1645,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1098",
-      messageParameters = Map("x" -> x.toString, "className" -> className))
+    SparkException.internalError(s"Unexpected data type $x for $className.")
   }
 
   def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
@@ -1678,14 +1678,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1103",
-      messageParameters = Map("clz" -> clz.toString))
+      errorClass = "UNSUPPORTED_FEATURE.LITERAL_ARRAY_ELEMENT_TYPE",
+      messageParameters = Map("elementClass" -> clz.toString))
   }
 
-  def secondArgumentNotDoubleLiteralError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1104",
-      messageParameters = Map.empty)
+  def secondArgumentNotDoubleLiteralError(
+      functionName: String, relativeSD: Expression): Throwable = {
+    invalidParameter("DOUBLE", functionName, "relativeSD", relativeSD)
   }
 
   def dataTypeUnsupportedByExtractValueError(

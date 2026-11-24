@@ -319,7 +319,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1048",
+  "errorClass" : "INVALID_HINT_PARAMETER.COALESCE_PARTITION_NUMBER",
+  "sqlState" : "42601",
   "messageParameters" : {
     "hintName" : "COALESCE"
   }

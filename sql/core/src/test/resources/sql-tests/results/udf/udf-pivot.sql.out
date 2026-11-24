@@ -200,10 +200,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "errorClass" : "NON_AGGREGATED_COLUMN_IN_PIVOT",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "sql" : "coursesales.earnings"
-  }
+    "columnName" : "`earnings`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 83,
+    "fragment" : "PIVOT (\n  udf(abs(earnings))\n  FOR year IN (2012, 2013)\n)"
+  } ]
 }
 
 
@@ -220,10 +228,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "errorClass" : "NON_AGGREGATED_COLUMN_IN_PIVOT",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "sql" : "__auto_generated_subquery_name.year"
-  }
+    "columnName" : "`year`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 68,
+    "stopIndex" : 138,
+    "fragment" : "PIVOT (\n  udf(sum(earnings)), year\n  FOR course IN ('dotNET', 'Java')\n)"
+  } ]
 }
 
 

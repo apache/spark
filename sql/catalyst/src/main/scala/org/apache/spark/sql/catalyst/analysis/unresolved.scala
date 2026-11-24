@@ -632,8 +632,8 @@ trait UnresolvedStarBase extends Star with Unevaluable {
             Alias(extract, f.name)()
         }
 
-        case _ =>
-          throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
+        case other =>
+          throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get, other)
       }
     } else {
       val from = parameters.suggestedAttributes.map(_.name).map(toSQLId).mkString(", ")

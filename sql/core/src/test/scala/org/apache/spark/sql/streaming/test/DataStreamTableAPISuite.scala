@@ -117,11 +117,29 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
   test("read: stream table API with non-streaming temp view") {
     val tblName = "my_table"
-    withTable(tblName) {
+    withTempView(tblName) {
       spark.range(3).createOrReplaceTempView(tblName)
-      intercept[AnalysisException] {
-        spark.readStream.table(tblName)
-      }.message.contains("is not a temp view of streaming logical plan")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream.table(tblName)
+        },
+        condition = "CANNOT_READ_VIEW_AS_STREAM.BATCH_TEMP_VIEW",
+        sqlState = "42KDE",
+        parameters = Map("viewName" -> s"`$tblName`"))
+    }
+  }
+
+  test("read: stream table API with permanent view") {
+    val viewName = "my_view"
+    withView(viewName) {
+      spark.sql(s"CREATE VIEW $viewName AS SELECT 1 AS a")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream.table(viewName)
+        },
+        condition = "CANNOT_READ_VIEW_AS_STREAM.PERMANENT_VIEW",
+        sqlState = "42KDE",
+        parameters = Map("viewName" -> s"`spark_catalog`.`default`.`$viewName`"))
     }
   }
 

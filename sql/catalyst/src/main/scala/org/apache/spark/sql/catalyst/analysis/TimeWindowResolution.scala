@@ -145,7 +145,7 @@ object TimeWindowResolution {
       case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
         Cast(expr, CalendarIntervalType)
       case other =>
-        throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
+        throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other)
     }
     val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
       session.timeColumn.dataType, LongType)
