@@ -3025,6 +3025,14 @@ class Analyzer(
         // before rewriting aggregate.
         h.copy(child = a.copy(child = rewrite(a.child)))
 
+      case s @ Sort(_, _, HavingHiddenAggregates(project, filter, a), _)
+          if HavingHiddenAggregates.isPendingSort(s) =>
+        // Similarly a Sort on top of the Project that hides the aggregate expressions added for
+        // HAVING should be resolved by ResolveAggregateFunctions first, see
+        // `HavingHiddenAggregates`. The rebuilt nodes keep their tags, e.g. the mark.
+        val newAgg = a.withNewChildren(Seq(rewrite(a.child)))
+        s.withNewChildren(Seq(project.withNewChildren(Seq(filter.withNewChildren(Seq(newAgg))))))
+
       case a: Aggregate if a.resolved && hasSQLFunctionExpression(a.expressions) =>
         val child = rewrite(a.child)
         // Extract SQL functions in the grouping expressions and place them in a project list
@@ -3276,8 +3284,8 @@ class Analyzer(
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
-      case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
-        resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
+      case having @ UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+        val resolved = resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           val newCond = newExprs.head
           if (newCond.resolved) {
             Filter(newCond, newChild)
@@ -3290,11 +3298,13 @@ class Analyzer(
             UnresolvedHaving(newCond, newChild)
           }
         })
+        markHavingHiddenAggregates(resolved, having, agg)
 
-      case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
-        resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
+      case filter @ Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+        val resolved = resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           Filter(newExprs.head, newChild)
         })
+        markHavingHiddenAggregates(resolved, filter, agg)
 
       case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
         resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
@@ -3312,6 +3322,87 @@ class Analyzer(
           }
           s.copy(order = newSortOrder, child = f.copy(child = newChild))
         })
+
+      case s @ Sort(_, _, HavingHiddenAggregates(project, filter, agg), _)
+          if agg.resolved && filter.condition.resolved && s.order.forall(_.resolved) &&
+            s.order.exists(_.containsAnyPattern(TEMP_RESOLVED_COLUMN, AGGREGATE_EXPRESSION)) =>
+        resolveSortOnHavingHiddenAggregates(s, project, filter, agg)
+    }
+
+    /**
+     * Marks the [[Project]] that `resolveOperatorWithAggregate` puts on top of `replaced`, a
+     * HAVING clause or a filter on an aggregation, to hide the aggregate expressions that it adds
+     * to `agg` for the condition, see [[HavingHiddenAggregates]]. The child of the Project is a
+     * [[Filter]], or an [[UnresolvedHaving]] that a later iteration resolves to one, e.g. when the
+     * condition also references an alias of the SELECT list.
+     *
+     * The Project is not marked over an [[Expand]], i.e. for GROUPING SETS, CUBE and ROLLUP with
+     * grouping columns: an aggregate function of ORDER BY can resolve a grouping column to the
+     * output of the Expand, which is null in the rolled up rows (SPARK-57346). A grand total, e.g.
+     * `GROUP BY GROUPING SETS (())`, has no grouping columns, and is by default an Aggregate
+     * without an Expand.
+     */
+    private def markHavingHiddenAggregates(
+        plan: LogicalPlan,
+        replaced: LogicalPlan,
+        agg: Aggregate): LogicalPlan = plan match {
+      case project @ Project(_, _: Filter | _: UnresolvedHaving)
+          if !agg.child.isInstanceOf[Expand] =>
+        HavingHiddenAggregates.mark(project, replaced)
+      case other => other
+    }
+
+    /**
+     * Resolves the grouping expressions and aggregate functions of a [[Sort]] on top of the
+     * [[Project]] that hides the aggregate expressions added for a HAVING clause or a filter on
+     * an aggregation, see [[HavingHiddenAggregates]]. Like the single-pass analyzer, it resolves
+     * them with the aggregate expressions that the Project outputs, i.e. the SELECT list, adds the
+     * ones that the [[Aggregate]] does not compute for the SELECT list to it, and passes them
+     * through the Project. Another Project on top of the Sort keeps the output of the SELECT list.
+     */
+    private def resolveSortOnHavingHiddenAggregates(
+        sort: Sort,
+        project: Project,
+        filter: Filter,
+        agg: Aggregate): LogicalPlan = {
+      val selectList =
+        agg.aggregateExpressions.filter(e => project.outputSet.contains(e.toAttribute))
+      val (extraAggExprs, resolvedExprs) = resolveExprsWithAggregate(
+        sort.order.map(_.child), agg.copy(aggregateExpressions = selectList))
+      if (resolvedExprs.exists(_.containsPattern(TEMP_RESOLVED_COLUMN))) {
+        // A column is neither a grouping expression nor the input of an aggregate function. Keep
+        // the Sort on top of the Project, so that the column fails to resolve with the output of
+        // the SELECT list, not with the hidden aggregate expressions.
+        sort.copy(order = sort.order.map(_.transformUp {
+          case t: TempResolvedColumn => markTried(t)
+        }.asInstanceOf[SortOrder]))
+      } else if (extraAggExprs.isEmpty) {
+        sort.copy(order = sort.order.zip(resolvedExprs).map {
+          case (sortOrder, expr) => sortOrder.copy(child = expr)
+        })
+      } else {
+        // Pass the added grouping columns through the Project as they are, and alias the other
+        // added expressions again, as the single-pass analyzer does.
+        val passedThrough = extraAggExprs.map {
+          case attr: Attribute => attr
+          case other => Alias(other.toAttribute, other.name)()
+        }
+        val attrMap = AttributeMap(
+          extraAggExprs.map(_.toAttribute).zip(passedThrough.map(_.toAttribute)))
+        val newSortOrder = sort.order.zip(resolvedExprs).map { case (sortOrder, expr) =>
+          sortOrder.copy(child = expr.transform { case a: Attribute => attrMap.getOrElse(a, a) })
+        }
+        // A grouping column that HAVING already added is only passed through the Project.
+        val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++
+          extraAggExprs.filterNot(e => agg.outputSet.contains(e.toAttribute)))
+        // The rebuilt Project keeps its tags, e.g. the mark and a Spark Connect plan id or a
+        // Dataset id. The Aggregate has no tags here, as `resolveOperatorWithAggregate` already
+        // replaced it with a copy for the condition of the Filter, so copying them is defensive.
+        newAgg.copyTagsFrom(agg)
+        val newProject = ColumnResolutionHelper.rebuildProject(
+          project, project.projectList ++ passedThrough, filter.withNewChildren(Seq(newAgg)))
+        Project(project.output, sort.copy(order = newSortOrder, child = newProject))
+      }
     }
 
     /**
@@ -4421,7 +4512,8 @@ class Analyzer(
         val (newCond, newChild) = resolveQualifyCondition(
           subqueryResolved, candidateAttrs, p.child)
         val missingAttrs = (newCond.references -- p.outputSet).intersect(newChild.outputSet)
-        val newProject = p.copy(projectList = p.projectList ++ missingAttrs, child = newChild)
+        val newProject = ColumnResolutionHelper.rebuildProject(
+          p, p.projectList ++ missingAttrs, newChild)
         (newCond, newProject)
 
       case w: Window =>

@@ -224,6 +224,33 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testWithAllStateVersions("SPARK-39022: sort by an aggregate on top of HAVING in complete mode") {
+    def check(aggregate: DataFrame => DataFrame): Unit = {
+      val inputData = MemoryStream[(String, Int)]
+      val aggregated = aggregate(inputData.toDF().toDF("k", "v")).as[(String, Long)]
+      testStream(aggregated, Complete)(
+        AddData(inputData, ("a", 1), ("b", 3)),
+        CheckLastBatch(isSorted = true, ("b", 1)),
+        AddData(inputData, ("a", 5), ("c", 2)),
+        CheckLastBatch(isSorted = true, ("a", 2), ("b", 1)),
+        StopStream,
+        StartStream(),
+        AddData(inputData, ("c", 7)),
+        CheckLastBatch(isSorted = true, ("c", 2), ("a", 2), ("b", 1))
+      )
+    }
+    // HAVING, or a filter on the aggregation, adds `sum(v)` to the aggregation and hides it, and
+    // the sort adds `max(v)`.
+    withTempView("events") {
+      check { df =>
+        df.createOrReplaceTempView("events")
+        spark.sql(
+          "SELECT k, count(*) FROM events GROUP BY k HAVING sum(v) > 2 ORDER BY max(v) DESC")
+      }
+    }
+    check(_.groupBy($"k").agg(count("*")).where(sum($"v") > 2).orderBy(max($"v").desc))
+  }
+
   testWithAllStateVersions("state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()

@@ -1566,24 +1566,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + col1 > 5 ORDER BY 1 + col1, 2 + col2
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 103,
-    "stopIndex" : 106,
-    "fragment" : "col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
@@ -1612,24 +1600,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v1.col2
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 118,
-    "fragment" : "v1.col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
@@ -1658,24 +1634,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v2.col2
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 118,
-    "fragment" : "v1.col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
@@ -1704,277 +1668,119 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 77,
-    "stopIndex" : 94,
-    "fragment" : "ORDER BY MAX(col1)"
-  } ]
-}
+7
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 90,
-    "stopIndex" : 93,
-    "fragment" : "col2"
-  } ]
-}
+14
+18
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col1) > 5 ORDER BY MAX(v1.col1)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 83,
-    "stopIndex" : 103,
-    "fragment" : "ORDER BY MAX(v1.col1)"
-  } ]
-}
+7
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col2) > 5 ORDER BY MAX(v1.col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v1.col2"
-  } ]
-}
+14
+18
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col1) > 5 ORDER BY MAX(v2.col1)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v2.col1"
-  } ]
-}
+7
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col2) > 5 ORDER BY MAX(v2.col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 102,
-    "fragment" : "v2.col2"
-  } ]
-}
+14
+18
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col1) > 5 ORDER BY 1 + MAX(col1), 2 + MIN(col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 115,
-    "fragment" : "col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col2) > 5 ORDER BY 1 + MAX(col2), 2 + MIN(col1)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 115,
-    "fragment" : "col2"
-  } ]
-}
+5
+14
+18
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v1.col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col2) > 5 ORDER BY 1 + MAX(v1.col2), 2 + MIN(v1.col1)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col2"
-  } ]
-}
+5
+14
+18
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query schema
-struct<>
+struct<sum(col2):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`sum(col2)`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 127,
-    "fragment" : "v1.col1"
-  } ]
-}
+14
+2
+5
+3
 
 
 -- !query
@@ -2090,24 +1896,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + col1 > 5 ORDER BY 1 + col1, 2 + col2
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 132,
-    "stopIndex" : 135,
-    "fragment" : "col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
@@ -2136,24 +1930,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v1.col2
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 147,
-    "fragment" : "v1.col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
@@ -2182,24 +1964,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v1.col1 > 5 ORDER BY 1 + v1.col1, 2 + v2.col2
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 147,
-    "fragment" : "v1.col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
@@ -2228,277 +1998,119 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 106,
-    "stopIndex" : 123,
-    "fragment" : "ORDER BY MAX(col1)"
-  } ]
-}
+7	8	9
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 119,
-    "stopIndex" : 122,
-    "fragment" : "col2"
-  } ]
-}
+14	15	16
+18	19	20
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col1) > 5 ORDER BY MAX(v1.col1)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSqls" : "\"max(col1)\"",
-    "operator" : "Sort"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 112,
-    "stopIndex" : 132,
-    "fragment" : "ORDER BY MAX(v1.col1)"
-  } ]
-}
+7	8	9
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v1.col2) > 5 ORDER BY MAX(v1.col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v1.col2"
-  } ]
-}
+14	15	16
+18	19	20
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col1) > 5 ORDER BY MAX(v2.col1)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v2.col1"
-  } ]
-}
+7	8	9
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 HAVING MAX(v2.col2) > 5 ORDER BY MAX(v2.col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v2`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 125,
-    "stopIndex" : 131,
-    "fragment" : "v2.col2"
-  } ]
-}
+14	15	16
+18	19	20
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col1) > 5 ORDER BY 1 + MAX(col1), 2 + MIN(col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 144,
-    "fragment" : "col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 + 1, col2 + 2 HAVING 1 + MAX(col2) > 5 ORDER BY 1 + MAX(col2), 2 + MIN(col1)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`col2`",
-    "proposal" : "`a`, `b`, `c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 141,
-    "stopIndex" : 144,
-    "fragment" : "col2"
-  } ]
-}
+5	6	7
+14	15	16
+18	19	20
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v1.col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v1.col2 + 2 HAVING 1 + MAX(v1.col2) > 5 ORDER BY 1 + MAX(v1.col2), 2 + MIN(v1.col1)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col2`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col2"
-  } ]
-}
+5	6	7
+14	15	16
+18	19	20
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + MAX(v1.col1) > 5 ORDER BY 1 + MAX(v1.col1), 2 + MIN(v2.col2)
 -- !query schema
-struct<>
+struct<a:bigint,b:bigint,c:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`v1`.`col1`",
-    "proposal" : "`c`, `a`, `b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 156,
-    "fragment" : "v1.col1"
-  } ]
-}
+14	15	16
+2	3	4
+5	6	7
+3	4	5
 
 
 -- !query

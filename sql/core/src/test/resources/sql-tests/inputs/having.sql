@@ -40,6 +40,28 @@ SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v);
 -- SPARK-28386: Resolve ORDER BY agg function with HAVING clause, while the agg function does not present on SELECT list
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v);
 
+-- SPARK-39022: Resolve ORDER BY agg function and grouping column with HAVING clause, while the HAVING agg function does not present on SELECT list
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v);
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY max(v) DESC;
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY count(*) DESC, k;
+SELECT k, sum(v) FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY sum(v);
+SELECT k, sum(v) AS s, s * 2 AS s2 FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY sum(v);
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v) DESC LIMIT 1;
+SELECT k FROM hav GROUP BY k, v HAVING sum(v) > 2 ORDER BY v DESC;
+SELECT k FROM hav GROUP BY k, v HAVING sum(v) > 2 ORDER BY v DESC, max(v);
+SELECT k FROM hav GROUP BY k, v HAVING v > 1 AND sum(v) > 2 ORDER BY v DESC, max(v);
+SELECT k FROM hav GROUP BY k, v + 1 HAVING sum(v) > 2 ORDER BY v + 1;
+-- the HAVING condition also references an alias of the SELECT list
+SELECT k, sum(v) AS v FROM hav GROUP BY k HAVING v > 2 AND max(v) > 1 ORDER BY count(*);
+-- a grand total has no grouping columns
+SELECT count(*) FROM hav GROUP BY GROUPING SETS (()) HAVING sum(v) > 2 ORDER BY max(v);
+-- ORDER BY agg function with such a HAVING clause is not supported yet over GROUPING SETS, CUBE and ROLLUP other than a grand total
+SELECT k FROM hav GROUP BY GROUPING SETS ((k), ()) HAVING sum(v) > 2 ORDER BY sum(v);
+SELECT k FROM hav GROUP BY CUBE(k) HAVING sum(v) > 2 ORDER BY sum(v);
+SELECT k FROM hav GROUP BY ROLLUP(k) HAVING sum(v) > 2 ORDER BY sum(v);
+-- invalid: the ORDER BY column is neither a grouping column nor in an agg function
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY v;
+
 -- SPARK-52385: Remove TempResolvedColumns from InheritAnalysisRules name
 SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1;
 SELECT sum(v) FROM hav HAVING sum(try_add(v, 1)) = 1;

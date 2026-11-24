@@ -155,6 +155,204 @@ three	3
 
 
 -- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<k:string>
+-- !query output
+three
+one
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY max(v) DESC
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY count(*) DESC, k
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<k:string,sum(v):bigint>
+-- !query output
+three	3
+one	6
+
+
+-- !query
+SELECT k, sum(v) AS s, s * 2 AS s2 FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<k:string,s:bigint,s2:bigint>
+-- !query output
+three	3	6
+one	6	12
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v) DESC LIMIT 1
+-- !query schema
+struct<k:string>
+-- !query output
+one
+
+
+-- !query
+SELECT k FROM hav GROUP BY k, v HAVING sum(v) > 2 ORDER BY v DESC
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k FROM hav GROUP BY k, v HAVING sum(v) > 2 ORDER BY v DESC, max(v)
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k FROM hav GROUP BY k, v HAVING v > 1 AND sum(v) > 2 ORDER BY v DESC, max(v)
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k FROM hav GROUP BY k, v + 1 HAVING sum(v) > 2 ORDER BY v + 1
+-- !query schema
+struct<k:string>
+-- !query output
+three
+one
+
+
+-- !query
+SELECT k, sum(v) AS v FROM hav GROUP BY k HAVING v > 2 AND max(v) > 1 ORDER BY count(*)
+-- !query schema
+struct<k:string,v:bigint>
+-- !query output
+three	3
+one	6
+
+
+-- !query
+SELECT count(*) FROM hav GROUP BY GROUPING SETS (()) HAVING sum(v) > 2 ORDER BY max(v)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+4
+
+
+-- !query
+SELECT k FROM hav GROUP BY GROUPING SETS ((k), ()) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 83,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY CUBE(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 67,
+    "stopIndex" : 67,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY ROLLUP(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 69,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY v
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 57,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
 SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1
 -- !query schema
 struct<sum(v):bigint>

@@ -387,7 +387,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    * avoid adding an extra projection. This is because all of [[Sort]], [[Project]], [[Filter]] and
    * [[Aggregate]] belong to the same [[NameScope]] since [[Project]] was artificially inserted.
    *
-   * However, fixed-point can't handle this case properly and produces the following plan:
+   * With flag set to true, the analyzed plan uses the missing attribute `col1#1` instead:
    *
    * Project [a#3]
    * +- Sort [col1#1 ASC NULLS FIRST], true
@@ -396,8 +396,10 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    *          +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1]
    *             +- LocalRelation [col1#1, col2#2]
    *
-   * Therefore, we need to match this behavior of fixed-point in single-pass in order to avoid
-   * logical plan mismatches.
+   * This used to be the plan of fixed-point, which the flag matched in order to avoid logical plan
+   * mismatches. Now fixed-point sorts by the alias `a#3` as well, on top of `Project [a#3]` and an
+   * Aggregate that does not output `col1#1` again, so with the flag set to true the plans of the
+   * two analyzers differ for this query.
    */
   def retainOriginalOutput(
       operator: LogicalPlan,

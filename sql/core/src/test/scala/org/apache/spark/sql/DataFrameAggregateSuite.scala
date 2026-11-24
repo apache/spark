@@ -6041,6 +6041,52 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(Row(",", 6))
     )
   }
+
+  test("SPARK-39022: ORDER BY an aggregate after filtering an aggregation by an unselected one") {
+    val df = Seq(("a", 1), ("a", 5), ("b", 2), ("c", 3)).toDF("k", "v")
+    // Like HAVING, the filter adds `sum(v)` to the aggregation and hides it again.
+    val filtered = df.groupBy($"k").agg(max($"v")).where(sum($"v") > 2)
+
+    // A column that is neither grouped nor aggregated is reported against the output.
+    checkError(
+      exception = intercept[AnalysisException](filtered.orderBy($"v").collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`k`, `max(v)`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
+
+    withTempView("t") {
+      df.createOrReplaceTempView("t")
+      val expected =
+        sql("SELECT k, max(v) FROM t GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v) DESC")
+      checkAnswer(expected, Seq(Row("a", 5), Row("c", 3)))
+      checkAnswer(filtered.orderBy(sum($"v").desc), expected.collect().toSeq)
+    }
+    checkAnswer(filtered.orderBy(min($"v")), Seq(Row("a", 5), Row("c", 3)))
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      // A grouping column that the aggregation does not output.
+      val withoutGroupColumns = df.groupBy($"k").agg(max($"v")).where(sum($"v") > 2)
+      checkAnswer(withoutGroupColumns.orderBy($"k".desc), Seq(Row(3), Row(5)))
+    }
+    // Like HAVING, not over CUBE, ROLLUP and GROUPING SETS with grouping columns.
+    checkError(
+      exception = intercept[AnalysisException](
+        df.cube($"k").agg(max($"v")).where(sum($"v") > 2).orderBy(sum($"v")).collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`k`, `max(v)`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
+  }
+
+  test("SPARK-39022: ORDER BY cannot use the aggregation under a select of its output") {
+    val df = Seq(("a", 1), ("a", 5), ("b", 2), ("c", 3)).toDF("k", "v")
+    // The select defines the only columns that ORDER BY can use, unlike the Project that hides
+    // the aggregates added for a filter on the aggregation.
+    val selected = df.groupBy($"k").agg(max($"v").as("m")).where($"m" > 2).select($"m")
+    checkError(
+      exception = intercept[AnalysisException](selected.orderBy(sum($"v")).collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`m`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
+  }
 }
 
 

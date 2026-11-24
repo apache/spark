@@ -441,6 +441,130 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan2, expected2)
   }
 
+  test("SPARK-39022: resolve sort references - aggregate hidden by HAVING") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+    val sumC = sum(c).as("sum(c)")
+    val maxC = max(c).as("max(c)")
+
+    // HAVING adds `sum(c)`, which the SELECT list does not compute, to the Aggregate and hides it
+    // with a Project. ORDER BY can still use aggregate functions and grouping expressions: they
+    // are added to the Aggregate and passed through that Project, and a Project on top keeps the
+    // output of the SELECT list.
+    val plan1 = testRelation2
+      .having($"a")($"a")(sum($"c") > 1.0)
+      .orderBy(max($"c").desc)
+    val maxCInProject = maxC.toAttribute.as("max(c)")
+    val expected1 = testRelation2
+      .groupBy(a)(a, sumC, maxC)
+      .where(sumC.toAttribute > 1.0)
+      .select(a, maxCInProject)
+      .orderBy(maxCInProject.toAttribute.desc)
+      .select(a)
+    checkAnalysis(plan1, expected1)
+
+    // Like an aggregate function that the SELECT list does not compute, the one that HAVING hides
+    // is added to the Aggregate for ORDER BY.
+    val plan2 = testRelation2
+      .having($"a")($"a")(sum($"c") > 1.0)
+      .orderBy(sum($"c").asc)
+    val sumCForSort = sum(c).as("sum(c)")
+    val sumCInProject = sumCForSort.toAttribute.as("sum(c)")
+    val expected2 = testRelation2
+      .groupBy(a)(a, sumC, sumCForSort)
+      .where(sumC.toAttribute > 1.0)
+      .select(a, sumCInProject)
+      .orderBy(sumCInProject.toAttribute.asc)
+      .select(a)
+    checkAnalysis(plan2, expected2)
+
+    // A grouping column that is not selected is passed through the Project as it is.
+    val plan3 = testRelation2
+      .having($"a", $"b")($"a")(sum($"c") > 1.0)
+      .orderBy($"b".asc, max($"c").desc)
+    val expected3 = testRelation2
+      .groupBy(a, b)(a, sumC, b, maxC)
+      .where(sumC.toAttribute > 1.0)
+      .select(a, b, maxCInProject)
+      .orderBy(b.asc, maxCInProject.toAttribute.desc)
+      .select(a)
+    checkAnalysis(plan3, expected3)
+
+    // ORDER BY the output of the SELECT list does not need the Aggregate: the plan is unchanged.
+    val plan4 = testRelation2
+      .having($"a")($"a")(sum($"c") > 1.0)
+      .orderBy($"a".asc)
+    val expected4 = testRelation2
+      .groupBy(a)(a, sumC)
+      .where(sumC.toAttribute > 1.0)
+      .select(a)
+      .orderBy(a.asc)
+    checkAnalysis(plan4, expected4)
+
+    // A column that is neither a grouping expression nor the input of an aggregate function is
+    // still reported against the output of the SELECT list, not the hidden aggregates.
+    assertAnalysisErrorCondition(
+      testRelation2
+        .having($"a")($"a")(sum($"c") > 1.0)
+        .orderBy($"c".asc),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`", "proposal" -> "`a`"))
+    assertAnalysisErrorCondition(
+      testRelation2
+        .having($"a")($"a")(sum($"c") > 1.0)
+        .orderBy(max($"c").asc, $"c".asc),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`", "proposal" -> "`a`"))
+  }
+
+  test("SPARK-39022: keep the tags of HAVING when a Project hides its aggregates") {
+    // The Project that hides `sum(c)` replaces the HAVING clause and keeps its tags, e.g. the plan
+    // id with which a DataFrame column of Spark Connect refers to the HAVING clause.
+    val having = testRelation2.having($"a")($"a")(sum($"c") > 1.0)
+    having.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    assert(getAnalyzer.execute(having).getTagValue(LogicalPlan.PLAN_ID_TAG).contains(1L))
+    val column = UnresolvedAttribute("a")
+    column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    assertAnalysisSuccess(Project(Seq(column), having))
+    // ORDER BY rebuilds that Project, which keeps its tags as well.
+    assertAnalysisSuccess(Project(Seq(column), having.orderBy(max($"c").desc)))
+  }
+
+  test("SPARK-39022: resolve sort references - aggregate hidden by a filter on an aggregation") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+    val maxC = max(c).as("max(c)")
+    val sumC = sum(c).as("sum(c)")
+
+    // Like HAVING, a filter on an aggregation, e.g. a DataFrame `where` after `agg`, adds `sum(c)`
+    // to the Aggregate and hides it with a Project.
+    val plan = testRelation2
+      .groupBy($"a")($"a", max($"c"))
+      .where(sum($"c") > 1.0)
+      .orderBy(sum($"c").asc)
+    val sumCForSort = sum(c).as("sum(c)")
+    val sumCInProject = sumCForSort.toAttribute.as("sum(c)")
+    val expected = testRelation2
+      .groupBy(a)(a, maxC, sumC, sumCForSort)
+      .where(sumC.toAttribute > 1.0)
+      .select(a, maxC.toAttribute, sumCInProject)
+      .orderBy(sumCInProject.toAttribute.asc)
+      .select(a, maxC.toAttribute)
+    checkAnalysis(plan, expected)
+
+    // A Project that the query specifies itself, e.g. a DataFrame `select`, still defines the only
+    // columns that ORDER BY can use.
+    assertAnalysisErrorCondition(
+      testRelation2
+        .groupBy($"a")($"a", max($"c").as("m"))
+        .where($"m" > 1.0)
+        .select($"m")
+        .orderBy(sum($"c").asc),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`", "proposal" -> "`m`"))
+  }
+
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
     checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
