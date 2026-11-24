@@ -1810,6 +1810,11 @@ class SortMergeAsOfJoinSuite extends QueryTest
                |FROM t LEFT JOIN q ON t.k = q.k AND t.ts $base q.ts AND $bound
                |GROUP BY t.id
                |""".stripMargin).collect().toSeq
+          // With tolerance 0, no right row passes unless the bound and the match both allow an
+          // equal key. The optimizer can then fold a condition such as l < r AND r <= l + 0
+          // into false, which has no keys to move a cursor, so the scan is not checked then.
+          val canMatch = tolerance > 0 || (allowExactMatches && inclusive)
+          if (!canMatch) assert(expected.forall(_.isNullAt(1)), expected)
           // The default spill thresholds: a one-row threshold makes the buffered scan open one
           // spill file per right row of the group for every left row.
           for (cursorScan <- Seq(false, true)) {
@@ -1828,8 +1833,10 @@ class SortMergeAsOfJoinSuite extends QueryTest
                     ).select(left.col("id"), right.col("tag"))
                     checkAnswer(df, expected)
                     val op = assertAsOfJoinCodegen(df, codegen)
-                    assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan,
-                      "Unexpected scan: the cursor scan runs exactly when it is on")
+                    if (canMatch) {
+                      assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan,
+                        "Unexpected scan: the cursor scan runs exactly when it is on")
+                    }
                   }
                 }
               }
