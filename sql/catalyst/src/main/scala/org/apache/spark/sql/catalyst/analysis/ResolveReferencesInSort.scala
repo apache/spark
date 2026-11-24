@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TEMP_RESOLVED_COLUMN}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
@@ -132,7 +133,8 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
  * The Project is marked with a tag, so that a Project of the same shape that the query specifies
  * itself, e.g. a DataFrame `select` after `filter` on an aggregation, still defines the columns
  * that a Sort on top of it can reference. The rules that rebuild a Project before the Sort is
- * resolved must keep the tag, see `ColumnResolutionHelper.rebuildProject`.
+ * resolved must keep the tag, see `ColumnResolutionHelper.rebuildProject`, and must keep the Filter
+ * and the Aggregate directly below the Project, see `isPendingSort`.
  */
 object HavingHiddenAggregates {
   private val TAG = TreeNodeTag[Unit]("havingHiddenAggregates")
@@ -147,6 +149,19 @@ object HavingHiddenAggregates {
     project.copyTagsFrom(replaced)
     project.setTagValue(TAG, ())
     project
+  }
+
+  /**
+   * Returns true if `sort` is on top of a marked Project, and still has to resolve grouping
+   * expressions or aggregate functions with the Aggregate below the Project, see
+   * `ResolveAggregateFunctions`. Until then, the rules must not put a node between the Project,
+   * the Filter and the Aggregate, e.g. `ResolveSQLFunctions` does not rewrite the Aggregate.
+   */
+  def isPendingSort(sort: Sort): Boolean = sort.child match {
+    case HavingHiddenAggregates(_, _, _) =>
+      !sort.order.forall(_.resolved) ||
+        sort.order.exists(_.containsAnyPattern(TEMP_RESOLVED_COLUMN, AGGREGATE_EXPRESSION))
+    case _ => false
   }
 
   /** Matches a marked Project, and returns it with the Filter and the Aggregate below it. */

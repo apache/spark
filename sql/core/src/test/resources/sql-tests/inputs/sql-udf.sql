@@ -636,6 +636,10 @@ SELECT foo3_1b(c1), c2, GROUPING(foo3_1b(c1)), SUM(c1) FROM t1 GROUP BY ROLLUP(f
 SELECT c1, SUM(c2) FROM t1 GROUP BY c1 HAVING foo3_1b(SUM(c2)) > 1;
 SELECT c1, SUM(c2) FROM t1 GROUP BY CUBE(c1) HAVING foo3_1b(GROUPING(c1)) = 0;
 
+-- in SELECT, with an aggregate function of ORDER BY on top of HAVING that uses a grouping column or an aggregate function that the SELECT list does not compute
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1, c2 HAVING c2 > 1 ORDER BY MAX(c1) DESC;
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1 HAVING SUM(c2) > 1 ORDER BY MIN(c2) DESC;
+
 -- in join
 SELECT * FROM t1 JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2;
 SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c2) = foo3_1b(t2.c2);

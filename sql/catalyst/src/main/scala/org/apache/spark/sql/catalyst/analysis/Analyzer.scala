@@ -3025,6 +3025,14 @@ class Analyzer(
         // before rewriting aggregate.
         h.copy(child = a.copy(child = rewrite(a.child)))
 
+      case s @ Sort(_, _, HavingHiddenAggregates(project, filter, a), _)
+          if HavingHiddenAggregates.isPendingSort(s) =>
+        // Similarly a Sort on top of the Project that hides the aggregate expressions added for
+        // HAVING should be resolved by ResolveAggregateFunctions first, see
+        // `HavingHiddenAggregates`. The rebuilt nodes keep their tags, e.g. the mark.
+        val newAgg = a.withNewChildren(Seq(rewrite(a.child)))
+        s.withNewChildren(Seq(project.withNewChildren(Seq(filter.withNewChildren(Seq(newAgg))))))
+
       case a: Aggregate if a.resolved && hasSQLFunctionExpression(a.expressions) =>
         val child = rewrite(a.child)
         // Extract SQL functions in the grouping expressions and place them in a project list

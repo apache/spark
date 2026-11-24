@@ -3091,6 +3091,24 @@ struct<c1:int,sum(c2):bigint>
 
 
 -- !query
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1, c2 HAVING c2 > 1 ORDER BY MAX(c1) DESC
+-- !query schema
+struct<spark_catalog.default.foo3_1b(c1):int>
+-- !query output
+1
+0
+
+
+-- !query
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1 HAVING SUM(c2) > 1 ORDER BY MIN(c2) DESC
+-- !query schema
+struct<spark_catalog.default.foo3_1b(c1):int>
+-- !query output
+1
+0
+
+
+-- !query
 SELECT * FROM t1 JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
 -- !query schema
 struct<c1:int,c2:int,c1:int,c2:int>

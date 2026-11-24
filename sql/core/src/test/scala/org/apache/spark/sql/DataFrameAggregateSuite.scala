@@ -6048,10 +6048,11 @@ class DataFrameAggregateSuite extends SharedSparkSession
     val filtered = df.groupBy($"k").agg(max($"v")).where(sum($"v") > 2)
 
     // A column that is neither grouped nor aggregated is reported against the output.
-    val e = intercept[AnalysisException](filtered.orderBy($"v").collect())
-    assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", e.getMessage)
-    assert(e.getMessageParameters.get("objectName") == "`v`", e.getMessage)
-    assert(e.getMessageParameters.get("proposal") == "`k`, `max(v)`", e.getMessage)
+    checkError(
+      exception = intercept[AnalysisException](filtered.orderBy($"v").collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`k`, `max(v)`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
 
     withTempView("t") {
       df.createOrReplaceTempView("t")
@@ -6067,10 +6068,12 @@ class DataFrameAggregateSuite extends SharedSparkSession
       checkAnswer(withoutGroupColumns.orderBy($"k".desc), Seq(Row(3), Row(5)))
     }
     // Like HAVING, not over CUBE, ROLLUP and GROUPING SETS with grouping columns.
-    val cubeError = intercept[AnalysisException](
-      df.cube($"k").agg(max($"v")).where(sum($"v") > 2).orderBy(sum($"v")).collect())
-    assert(cubeError.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", cubeError.getMessage)
-    assert(cubeError.getMessageParameters.get("objectName") == "`v`", cubeError.getMessage)
+    checkError(
+      exception = intercept[AnalysisException](
+        df.cube($"k").agg(max($"v")).where(sum($"v") > 2).orderBy(sum($"v")).collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`k`, `max(v)`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-39022: ORDER BY cannot use the aggregation under a select of its output") {
@@ -6078,10 +6081,11 @@ class DataFrameAggregateSuite extends SharedSparkSession
     // The select defines the only columns that ORDER BY can use, unlike the Project that hides
     // the aggregates added for a filter on the aggregation.
     val selected = df.groupBy($"k").agg(max($"v").as("m")).where($"m" > 2).select($"m")
-    val e = intercept[AnalysisException](selected.orderBy(sum($"v")).collect())
-    assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", e.getMessage)
-    assert(e.getMessageParameters.get("objectName") == "`v`", e.getMessage)
-    assert(e.getMessageParameters.get("proposal") == "`m`", e.getMessage)
+    checkError(
+      exception = intercept[AnalysisException](selected.orderBy(sum($"v")).collect()),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`v`", "proposal" -> "`m`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 }
 

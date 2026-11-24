@@ -2845,6 +2845,38 @@ Project [c1#x, sum(c2)#xL]
 
 
 -- !query
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1, c2 HAVING c2 > 1 ORDER BY MAX(c1) DESC
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(c1)#x]
++- Sort [max(c1)#x DESC NULLS LAST], true
+   +- Project [spark_catalog.default.foo3_1b(c1)#x, max(c1)#x AS max(c1)#x]
+      +- Filter (c2#x > 1)
+         +- Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1)#x, c2#x, max(c1)#x]
+            +- Project [c1#x, c2#x, max(c1)#x, cast(c1#x as int) AS x#x]
+               +- Aggregate [c1#x, c2#x], [c1#x, c2#x, max(c1#x) AS max(c1)#x]
+                  +- SubqueryAlias spark_catalog.default.t1
+                     +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                        +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT foo3_1b(c1) FROM t1 GROUP BY c1 HAVING SUM(c2) > 1 ORDER BY MIN(c2) DESC
+-- !query analysis
+Project [spark_catalog.default.foo3_1b(c1)#x]
++- Sort [min(c2)#x DESC NULLS LAST], true
+   +- Project [spark_catalog.default.foo3_1b(c1)#x, min(c2)#x AS min(c2)#x]
+      +- Filter (sum(c2)#xL > cast(1 as bigint))
+         +- Project [spark_catalog.default.foo3_1b(x#x) AS spark_catalog.default.foo3_1b(c1)#x, sum(c2)#xL, min(c2)#x]
+            +- Project [c1#x, sum(c2)#xL, min(c2)#x, cast(c1#x as int) AS x#x]
+               +- Aggregate [c1#x], [c1#x, sum(c2#x) AS sum(c2)#xL, min(c2#x) AS min(c2)#x]
+                  +- SubqueryAlias spark_catalog.default.t1
+                     +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+                        +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 SELECT * FROM t1 JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
 -- !query analysis
 Project [c1#x, c2#x, c1#x, c2#x]
