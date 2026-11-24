@@ -514,7 +514,7 @@ case class MakeDTInterval(
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
       sec.asInstanceOf[Decimal],
-      origin.context)
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -571,7 +571,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    makeYearMonthInterval(year.asInstanceOf[Int], month.asInstanceOf[Int], origin.context)
+    makeYearMonthInterval(year.asInstanceOf[Int], month.asInstanceOf[Int], getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -694,7 +694,17 @@ case class MultiplyDTInterval(
     copy(interval = newLeft, num = newRight)
 }
 
-trait IntervalDivide {
+/**
+ * The division of an interval by a number. It raises on a zero divisor, and on overflow with an
+ * integral divisor, in every mode, so it has a query context in every mode, unlike `Divide`,
+ * whose context is set only under ANSI. It keeps it as a `SupportQueryContext` field rather than
+ * reading `origin` when it evaluates: `origin` is not serialized, so a copy of the expression
+ * deserialized on an executor, where an interpreted or a non-whole-stage projection is built,
+ * has an empty one.
+ */
+trait IntervalDivide extends SupportQueryContext {
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
+
   def checkDivideOverflow(
       value: Any,
       minValue: Any,
@@ -762,13 +772,13 @@ case class DivideYMInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(
-      interval.asInstanceOf[Int], Int.MinValue, right, num, origin.context)
-    divideByZeroCheck(right.dataType, num, origin.context)
+      interval.asInstanceOf[Int], Int.MinValue, right, num, getContextOrNull())
+    divideByZeroCheck(right.dataType, num, getContextOrNull())
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    val errorContext = getContextOrNullCode(ctx)
     right.dataType match {
       case t: IntegralType =>
         val math = t match {
@@ -841,13 +851,13 @@ case class DivideDTInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(
-      interval.asInstanceOf[Long], Long.MinValue, right, num, origin.context)
-    divideByZeroCheck(right.dataType, num, origin.context)
+      interval.asInstanceOf[Long], Long.MinValue, right, num, getContextOrNull())
+    divideByZeroCheck(right.dataType, num, getContextOrNull())
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    val errorContext = getContextOrNullCode(ctx)
     right.dataType match {
       case _: IntegralType =>
         val math = classOf[LongMath].getName
