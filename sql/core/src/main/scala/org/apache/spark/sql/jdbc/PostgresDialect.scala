@@ -272,6 +272,10 @@ private case class PostgresDialect()
     exception.getSQLState == "42601"
   }
 
+  override def isPermissionDeniedException(e: SQLException): Boolean = {
+    e.getSQLState == "42501"
+  }
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(
