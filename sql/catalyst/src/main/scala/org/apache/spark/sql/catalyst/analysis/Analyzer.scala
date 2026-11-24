@@ -3387,8 +3387,9 @@ class Analyzer(
         // A grouping column that HAVING already added is only passed through the Project.
         val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++
           extraAggExprs.filterNot(e => agg.outputSet.contains(e.toAttribute)))
-        // The rebuilt operators keep their tags, e.g. the mark and a Spark Connect plan id or a
-        // Dataset id of the Project, and the grand total tag of the Aggregate.
+        // The rebuilt Project keeps its tags, e.g. the mark and a Spark Connect plan id or a
+        // Dataset id. The Aggregate has no tags here, as `resolveOperatorWithAggregate` already
+        // replaced it with a copy for the condition of the Filter, so copying them is defensive.
         newAgg.copyTagsFrom(agg)
         val newProject = ColumnResolutionHelper.rebuildProject(
           project, project.projectList ++ passedThrough, filter.withNewChildren(Seq(newAgg)))

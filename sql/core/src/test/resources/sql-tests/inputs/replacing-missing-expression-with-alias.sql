@@ -33,7 +33,8 @@ SELECT col2 AS b, col2, b as c FROM VALUES(1,2) GROUP BY 1,2 HAVING col2 > 0 ORD
 -- We run the following tests in fixed-point and single-pass modes separately because their plans differ, and in golden
 -- files we have to run them one after another. Fixed point sorts by the alias `a` of `col1` in the SELECT list. With
 -- `preventUsingAliasesFromNonDirectChildren`, single pass does not use that alias below the Project that HAVING adds: it
--- sorts by `col1`, which it adds to the Aggregate and passes through that Project.
+-- sorts by `col1`, which it passes up to the Sort, adding it to the output of the Aggregate if the Aggregate does not
+-- output it yet.
 
 -- Fixed-point mode
 SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false;
