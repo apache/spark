@@ -469,6 +469,31 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       }
     }
 
+    test(s"one scan keeps its bloom filters and another drops them in the same plan " +
+        s"(AQE $adaptive)") {
+      // The first branch joins on `id`, which pairs as a storage-partitioned join. The second joins
+      // on `id` and `x`, which shuffles both sides, so its scan of `fact` reads without them.
+      createTwoKeyTables()
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = sql(
+            """SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d ON f.id = d.id
+              |WHERE d.flag = 1
+              |UNION ALL
+              |SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d
+              |ON f.id = d.id AND f.x = d.x WHERE d.flag = 1
+              |""".stripMargin)
+          assert(perPartitionFilters(df).size == 2, "test setup: each join gets a placeholder")
+          checkAnswer(df, expectedRows ++ expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedScans(plan, "fact").size == 2, plan)
+          assert(storageFilterScans(plan).map(tableOf) == Seq("fact"), plan)
+          assert(executedShuffles(plan).forall(storageFilterScans(_).isEmpty),
+            s"the scan below the shuffle must read without its bloom filters:\n$plan")
+        }
+      }
+    }
+
     test(s"the scan reads without its bloom filters when the join shuffles on more keys " +
         s"(AQE $adaptive)") {
       // The join's keys are more than the partition key, so it shuffles both sides. The 4 splits
