@@ -144,6 +144,35 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
     }
   }
 
+  // With the rule of earlier versions, the constant-only conjunct caps the left cutoff at 10 s, so
+  // the output watermark stays at 10 s too, and the window that starts at 20 s is not finalized
+  // while the join can still emit (1, 20, null).
+  for (version <- Seq(2, 4)) {
+    test(s"the output watermark keeps the earlier cutoffs for a checkpoint of an earlier " +
+        s"version, V$version") {
+      withJoinStateVersion(version) {
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key -> "false") {
+          val (leftInput, rightInput, left, right) = inputs()
+          val counts = left.join(right, expr("leftKey = rightKey AND " +
+              "lt > rt - INTERVAL 5 SECONDS AND CAST(lt AS LONG) > 10"), "left_outer")
+            .groupBy(window($"lt", "10 seconds")).count()
+            .select($"window.start".cast("long"), $"count")
+          testStream(counts)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, 20L), (2, 22L)), AddData(rightInput, (2, 25L)))),
+            CheckNewAnswer(),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 40L)), AddData(rightInput, (9, 40L)))),
+            CheckNewAnswer(),
+            AddData(rightInput, (9, 41L)),
+            CheckNewAnswer(),
+            AddData(rightInput, (9, 42L)),
+            CheckNewAnswer())
+        }
+      }
+    }
+  }
+
   for (version <- Seq(2, 4)) {
     test(s"a new outer join whose only range condition has a negative sign fails analysis, " +
         s"V$version") {

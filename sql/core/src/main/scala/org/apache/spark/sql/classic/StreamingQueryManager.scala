@@ -29,6 +29,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Except, Join}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
@@ -286,15 +287,16 @@ class StreamingQueryManager private[sql] (
 
     // Unsupported-operation checks run during this initial analysis, before the normal offset-log
     // configuration restoration. Read the compatibility values early for existing queries that
-    // contain a streaming EXCEPT, or a stream-stream join, whose range cutoffs follow
+    // contain a streaming EXCEPT, or a stream-stream outer join, whose range cutoffs follow
     // STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK, so that upgrading does not change whether the
-    // query is accepted.
+    // query is accepted. Analysis of inner and left semi stream-stream joins does not read it.
     def hasExceptWithStreamingLeft: Boolean = analyzedPlan.exists {
       case Except(left, _, _) if left.isStreaming => true
       case _ => false
     }
-    def hasStreamStreamJoin: Boolean = analyzedPlan.exists {
-      case Join(left, right, _, _, _) => left.isStreaming && right.isStreaming
+    def hasStreamStreamOuterJoin: Boolean = analyzedPlan.exists {
+      case Join(left, right, LeftOuter | RightOuter | FullOuter, _, _) =>
+        left.isStreaming && right.isStreaming
       case _ => false
     }
 
@@ -305,7 +307,7 @@ class StreamingQueryManager private[sql] (
       case _: ContinuousTrigger => (sparkSession, dataStreamWritePlan)
       case _ if recoverFromCheckpointLocation &&
           hasPersistentCheckpointLocation &&
-          (hasExceptWithStreamingLeft || hasStreamStreamJoin) =>
+          (hasExceptWithStreamingLeft || hasStreamStreamOuterJoin) =>
         val (resolvedCheckpointRoot, _) = sparkSession.withActive {
           ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
         }

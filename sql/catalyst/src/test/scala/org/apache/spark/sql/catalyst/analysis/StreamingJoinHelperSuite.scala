@@ -124,8 +124,7 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       leftTime.cast(LongType) + rightTime.cast(LongType) > 100) === Some(100000L))
   }
 
-  test("a cutoff through whole days in a time zone whose offset changes keeps the earlier " +
-      "minimum") {
+  test("a cutoff through whole days added to a TIMESTAMP keeps the earlier minimum") {
     val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
     val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
     val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
@@ -140,11 +139,12 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       Seq[String => Expression](
           zone => rightTime <= plus(leftTime, day, zone),
           zone => leftTime >= plus(rightTime, day.negated(), zone)).foreach { bound =>
-        val la = bound("America/Los_Angeles") && cap
-        assert(cutoff(la) === cutoff(la, risingCutoffsOnly = false), la)
-        assert(cutoff(la) !== Some(13599999L), la)
-        // UTC has a fixed offset, so a day lasts 24 hours.
-        assert(cutoff(bound("UTC") && cap) === Some(13599999L), bound("UTC"))
+        // Also in UTC, so that the result does not change with the session time zone.
+        Seq("America/Los_Angeles", "UTC").foreach { zone =>
+          val condition = bound(zone) && cap
+          assert(cutoff(condition) === cutoff(condition, risingCutoffsOnly = false), condition)
+          assert(cutoff(condition) !== Some(13599999L), condition)
+        }
       }
       // Less than a day is added as an exact number of microseconds.
       assert(cutoff(rightTime <= plus(leftTime, Duration.ofHours(23), "America/Los_Angeles") &&
@@ -162,12 +162,15 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       StreamingJoinHelper.getStateValueWatermarkColumn(Seq(leftTime, expiry),
         AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L)).map(_._1)
     val inexact = expiry.cast(LongType) >= rightTime.cast(LongType)
-    val dayInterval =
-      rightTime <= TimestampAddInterval(expiry, Literal(Duration.ofDays(1)), Some("Europe/Paris"))
+    // The pick orders state format 4 state, so it does not change with the session time zone.
+    def dayInterval(zone: String): Expression =
+      rightTime <= TimestampAddInterval(expiry, Literal(Duration.ofDays(1)), Some(zone))
     Seq(leftTime.cast(LongType) > 10,
         leftTime.cast(LongType) + rightTime.cast(LongType) > 100).foreach { cap =>
       assert(column(inexact && cap) === None, cap)
-      assert(column(dayInterval && cap) === None, cap)
+      Seq("Europe/Paris", "UTC").foreach { zone =>
+        assert(column(dayInterval(zone) && cap) === None, zone)
+      }
       assert(column(rightTime <= expiry && cap) === Some(expiry), cap)
     }
     // Without a cap on the event time, the inexact cutoff on expiry is all there is.

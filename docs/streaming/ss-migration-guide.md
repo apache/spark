@@ -78,10 +78,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   conjuncts still hold back, as in earlier versions, a cutoff that goes through a cast that can
   round or drop digits, such as `CAST(leftTime AS LONG) >= CAST(rightTime AS LONG) - 5`, a cutoff
   that applies to the event time but is solved for another column, a cutoff that adds a whole
-  number of days to a TIMESTAMP in a session time zone whose offset changes, such as
-  `rightTime <= leftTime + INTERVAL 1 DAY` in `America/Los_Angeles`, the check of a left semi join
-  on new right rows, and the output watermark of the join for an input that gets no cutoff. So an
-  input bounded only by such conjuncts does not make the query fail as described above.
+  number of days to a TIMESTAMP, such as `rightTime <= leftTime + INTERVAL 1 DAY`, since a day can
+  last 23 or 25 hours in the session time zone, the check of a left semi join on new right rows,
+  and the output watermark of the join for an input that gets no cutoff. So an input bounded only
+  by such conjuncts does not make the check of an operator that drops late rows, described in the
+  previous item, fail the query.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 

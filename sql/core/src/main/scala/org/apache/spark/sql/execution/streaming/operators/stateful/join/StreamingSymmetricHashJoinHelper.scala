@@ -76,9 +76,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * the semantics of `stateWatermark` and `prevStateWatermark`. `conditionBoundsColumn` is true
    * only when the default mode picked the column that `expr` tests because the join condition
    * bounds it, so that a row with a NULL in it can never match. The legacy mode, the fallback for
-   * an input bounded only through a column cast to TIMESTAMP, and a checkpoint written without the
-   * join output watermark check for an input that the default mode would evict by another column
-   * leave it false and test the event time.
+   * an input bounded only through a column cast to TIMESTAMP, a checkpoint written without the
+   * join output watermark check for an input that the default mode would evict by another column,
+   * and an input whose event time the rising-only rule holds back and whose other column has only
+   * an inexact cutoff leave it false and test the event time.
    */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
@@ -194,16 +195,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
         eventTimeWatermarkForEviction
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
-        // An input that the rising-only rule leaves without a cutoff keeps the state watermark of
-        // earlier versions, which holds back the output watermark for the rows it keeps.
-        def stateWatermark(risingCutoffsOnly: Boolean): Option[Long] =
-          StreamingJoinHelper.getStateValueWatermark(
-            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-            attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-            condition,
-            eventTimeWatermarkForEviction,
-            risingCutoffsOnly)
-        stateWatermark(risingCutoffsOnly = true).orElse(stateWatermark(risingCutoffsOnly = false))
+        // The default rule is the one that eviction uses, which a checkpoint written before the
+        // join output watermark check restores as the rule of earlier versions. An input that the
+        // rising-only rule leaves without a cutoff keeps the state watermark of earlier versions,
+        // which holds back the output watermark for the rows it keeps.
+        val input = AttributeSet(oneSideInputAttributes)
+        val other = AttributeSet(otherSideInputAttributes)
+        StreamingJoinHelper.getStateValueWatermark(input, other, condition,
+          eventTimeWatermarkForEviction).orElse(StreamingJoinHelper.getStateValueWatermark(
+          input, other, condition, eventTimeWatermarkForEviction, risingCutoffsOnly = false))
       } else {
         None
       }
@@ -306,7 +306,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // bounds no TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
         // So does a checkpoint written without the join output watermark check for an input that
         // the default mode would evict by another column, since for such a checkpoint that check
-        // only warns about a later operator that drops the rows this eviction emits late.
+        // only warns about a later operator that drops the rows this eviction emits late. So does
+        // an input whose event time the rising-only rule holds back and whose other column has
+        // only an inexact cutoff (see StreamingJoinHelper.getStateValueWatermarkColumn).
         // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
         //  evicted by its event time with the cast column's cutoff, which can be too early.
         def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
@@ -331,9 +333,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // which evicted only up to the cutoff solved over the whole input, so the scan starts
           // there, or from the beginning when that cutoff is ahead of the late-input watermark.
           // Both assume that the previous batch evicted with the same rule for cutoffs.
-          // TODO: [SPARK-62038] An earlier version also took constant-only and negative-sign
-          //  conjuncts into the cutoff, so it can have evicted less than this bound in the first
-          //  batch after an upgrade. Scan from the start in the first batch of each run.
+          // TODO: [SPARK-62038] State format 4 keeps a restored row with a NULL in the column at
+          //  timestamp 0, below this scan start. Scan from the start in the first batch of each
+          //  run.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
             eventTime.exists(_.semanticEquals(column))
           }.flatMap { lateWatermark =>
