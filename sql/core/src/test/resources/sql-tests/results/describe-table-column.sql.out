@@ -634,8 +634,8 @@ EXECUTE IMMEDIATE 'DESCRIBE describe_column_table id'
 struct<info_name:string,info_value:string>
 -- !query output
 col_name	id
-comment	identifier
 data_type	int
+comment	identifier
 
 
 -- !query
@@ -643,16 +643,16 @@ EXECUTE IMMEDIATE 'DESCRIBE EXTENDED describe_column_temp_view data'
 -- !query schema
 struct<info_name:string,info_value:string>
 -- !query output
-avg_col_len	NULL
 col_name	data
-comment	NULL
 data_type	string
-distinct_count	NULL
-histogram	NULL
-max	NULL
-max_col_len	NULL
+comment	NULL
 min	NULL
+max	NULL
 num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
+histogram	NULL
 
 
 -- !query

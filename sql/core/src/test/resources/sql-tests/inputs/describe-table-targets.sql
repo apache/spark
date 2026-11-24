@@ -91,7 +91,13 @@ DROP VIEW describe_target_dropped_view;
 
 -- Dynamic SQL preserves target lookup and missing-target errors.
 EXECUTE IMMEDIATE 'DESCRIBE TABLE describe_target_table';
-EXECUTE IMMEDIATE 'DESCRIBE TABLE EXTENDED describe_target_table AS JSON';
+-- JDBC sessions add owner metadata to JSON. Exercise dynamic JSON execution in a script;
+-- the direct AS JSON cases above compare the rendered metadata.
+--QUERY-DELIMITER-START
+BEGIN
+  EXECUTE IMMEDIATE 'DESCRIBE TABLE EXTENDED describe_target_table AS JSON';
+END;
+--QUERY-DELIMITER-END
 EXECUTE IMMEDIATE 'DESCRIBE describe_target_temp_view';
 EXECUTE IMMEDIATE 'DESCRIBE TABLE describe_target_missing';
 

@@ -651,11 +651,11 @@ ExecuteImmediateCommand
 
 
 -- !query
-EXECUTE IMMEDIATE 'DESCRIBE TABLE EXTENDED describe_target_table AS JSON'
+BEGIN
+  EXECUTE IMMEDIATE 'DESCRIBE TABLE EXTENDED describe_target_table AS JSON';
+END
 -- !query analysis
-ExecuteImmediateCommand
-   +- DescribeRelationJsonCommand true, [json_metadata#x]
-      +- ResolvedTable V2SessionCatalog(spark_catalog), default.describe_target_table, V1Table(default.describe_target_table), [id#x, data#x]
+LocalRelation <empty>
 
 
 -- !query
