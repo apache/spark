@@ -706,12 +706,22 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogger =
       if (isEventLogEnabled) {
-        val logger =
-          new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
-            _conf, _hadoopConfiguration)
-        logger.start()
-        listenerBus.addToEventLogQueue(logger)
-        Some(logger)
+        try {
+          val logger =
+            new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
+              _conf, _hadoopConfiguration)
+          logger.start()
+          listenerBus.addToEventLogQueue(logger)
+          Some(logger)
+        } catch {
+          case NonFatal(e) if !_conf.get(EVENT_LOG_FAIL_ON_ERROR) =>
+            logError(
+              log"Failed to initialize event logging to ${MDC(LogKeys.PATH, _eventLogDir.get)}; " +
+                log"continuing without event logging because " +
+                log"${MDC(LogKeys.CONFIG, EVENT_LOG_FAIL_ON_ERROR.key)} is set to false. " +
+                log"This application will not appear in the History Server.", e)
+            None
+        }
       } else {
         None
       }

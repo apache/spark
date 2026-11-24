@@ -1752,6 +1752,36 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(!sc.zeroExecutorRequirementAndDrain(failing))
     verify(failing).decommissionExecutors(any(), meq(false), meq(false))
   }
+
+  test("SPARK-62291: spark.eventLog.failOnError=false continues without event logging") {
+    val logDir = new File(Utils.createTempDir(), "nonexistent-eventlog-dir")
+    assert(!logDir.exists())
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(EVENT_LOG_ENABLED, true)
+      .set(EVENT_LOG_DIR, logDir.toURI.toString)
+      .set(EVENT_LOG_FAIL_ON_ERROR, false)
+    sc = new SparkContext(conf)
+    assert(sc.eventLogger.isEmpty)
+    assert(sc.parallelize(1 to 10).count() === 10)
+    assert(!logDir.exists())
+  }
+
+  test("SPARK-62291: spark.eventLog.failOnError default fails SparkContext init") {
+    val logDir = new File(Utils.createTempDir(), "nonexistent-eventlog-dir")
+    assert(!logDir.exists())
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(EVENT_LOG_ENABLED, true)
+      .set(EVENT_LOG_DIR, logDir.toURI.toString)
+    val e = intercept[Exception] {
+      new SparkContext(conf)
+    }
+    assert(e.getMessage.contains(logDir.toURI.toString) ||
+      (e.getCause != null && e.getCause.getMessage.contains(logDir.toURI.toString)))
+  }
 }
 
 object SparkContextSuite {
