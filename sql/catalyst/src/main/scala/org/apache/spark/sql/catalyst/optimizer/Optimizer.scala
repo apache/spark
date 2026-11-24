@@ -134,6 +134,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         NullDownPropagation,
         ConstantPropagation,
         FoldablePropagation,
+        CombineDisjunctiveInPredicates,
         OptimizeIn,
         OptimizeRand,
         ConstantFolding,
