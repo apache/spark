@@ -886,12 +886,12 @@ case class StreamingSymmetricHashJoinExec(
         // adding it to the state, and generate an outer join row immediately (or do nothing in
         // the case of inner join).
         val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
-        // A row whose watermarked join key is NULL can never match, and eviction by that key may
-        // never reach it, so it is handled as a row that fails the pre join filter.
-        // TODO(SPARK-61382): NULLs in the other equality keys still reach the state and can match
-        //   each other. Rows with a NULL watermarked key that a checkpoint already holds are not
-        //   drained: state formats V2 and V3 never evict them.
-        if (key != null && !joinKeyOrdinalForWatermark.exists(key.isNullAt)) {
+        // A row whose join key has a NULL can never match, as in a batch join, and eviction by a
+        // NULL watermarked key may never reach it, so it is handled as a row that fails the pre
+        // join filter. Null-safe equality compares keys that are never NULL.
+        // TODO: Rows with a NULL watermarked key that a checkpoint already holds are not drained:
+        //   state formats V2 and V3 never evict them.
+        if (key != null && !key.anyNull) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.
