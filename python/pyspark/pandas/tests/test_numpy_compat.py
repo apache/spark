@@ -831,10 +831,24 @@ class NumPyCompatTestsMixin:
         pser = pd.Series([np.inf, 1.0])
         psser = ps.from_pandas(pser)
         for np_func in (np.maximum, np.minimum):
-            self.assert_eq(
-                np_func(np.cos(psser), -1.0),
-                np_func(np.cos(pser), -1.0),
-            )
+            if LooseVersion(np.__version__) < LooseVersion("1.25.0"):
+                # NumPy < 1.25 computes float64 cos with an AVX512 SIMD path on CPUs that
+                # support it, which can be a few ULPs off, e.g. 0.5403023058681397 for
+                # cos(1.0) instead of the correctly rounded 0.5403023058681398 that Spark
+                # returns. Allow only an error of a few ULPs. Remove this branch once the
+                # minimum NumPy version is 1.25 or later.
+                pd.testing.assert_series_equal(
+                    np_func(np.cos(psser), -1.0).to_pandas(),
+                    np_func(np.cos(pser), -1.0),
+                    check_exact=False,
+                    rtol=4 * np.finfo(np.float64).eps,
+                    atol=0,
+                )
+            else:
+                self.assert_eq(
+                    np_func(np.cos(psser), -1.0),
+                    np_func(np.cos(pser), -1.0),
+                )
 
         # Preserve integer precision beyond the exact range of float64.
         pdf = pd.DataFrame(
