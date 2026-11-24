@@ -1493,8 +1493,6 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("escape [ in MsSqlServer LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {
-    // MsSqlServer reads `[...]` in a LIKE pattern as a character class, so `[` must be escaped to
-    // be matched literally. `]` alone is literal and stays as is.
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;db=foo")
     def msSqlServerSQL(f: Filter): String =
       msSqlServerDialect.compileExpression(f.toV2).getOrElse("")
