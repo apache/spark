@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.TimeoutException
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import com.github.dockerjava.api.DockerClient
@@ -76,6 +77,21 @@ abstract class DatabaseOnDocker {
    * Return the JDBC properties needed for the connection.
    */
   def getJdbcProperties(): Properties = new Properties()
+
+  /**
+   * Creates a user with no table privileges and returns a JDBC URL that logs in as it, using the
+   * admin connection `conn`. None (the default) makes the shared permission tests check nothing.
+   */
+  def createRestrictedUser(conn: Connection, ip: String, port: Int): Option[String] = None
+
+  /** Drops the user created by `createRestrictedUser`, if any. */
+  def dropRestrictedUser(conn: Connection): Unit = {}
+
+  /**
+   * A `sessionInitStatement` that makes an admin session act as the user from
+   * `createRestrictedUser`, or None (the default) if the database has none.
+   */
+  def restrictedUserSessionInitStatement: Option[String] = None
 
   /**
    * Optional entry point when container starts
@@ -291,6 +307,18 @@ abstract class DockerJDBCIntegrationSuite
    */
   def getConnection(): Connection = {
     DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
+  }
+
+  /** Runs `f` with a JDBC URL for a user without table privileges, if `db` supports one. */
+  protected def withRestrictedUser(f: String => Unit): Unit = {
+    val restrictedUrl = Using.resource(getConnection()) { conn =>
+      db.createRestrictedUser(conn, dockerIp, externalPort)
+    }
+    restrictedUrl.foreach { url =>
+      Utils.tryWithSafeFinally(f(url)) {
+        Using.resource(getConnection())(db.dropRestrictedUser)
+      }
+    }
   }
 
   /**

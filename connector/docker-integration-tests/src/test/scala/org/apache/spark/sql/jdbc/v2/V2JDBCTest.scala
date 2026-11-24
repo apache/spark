@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import java.sql.SQLException
+
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
@@ -27,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1373,6 +1377,32 @@ private[v2] trait V2JDBCTest
         sql(s"SELECT * FROM $invalidTableName")
       }
       assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
+    }
+  }
+
+  protected def withRestrictedUser(f: String => Unit): Unit
+
+  test("SPARK-61982: loadTable reports a permission error for a restricted user") {
+    withRestrictedUser { restrictedUrl =>
+      val restrictedCatalog = s"${catalogName}_restricted"
+      val namespace = namespaceOpt.map(ns => s"$ns.").getOrElse("")
+      withSQLConf(
+          s"spark.sql.catalog.$restrictedCatalog" -> classOf[JDBCTableCatalog].getName,
+          s"spark.sql.catalog.$restrictedCatalog.url" -> restrictedUrl) {
+        val e = intercept[SparkException] {
+          spark.table(s"$restrictedCatalog.$namespace${caseConvert("employee")}")
+        }
+        checkError(
+          exception = e,
+          condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          sqlState = Some("42501"),
+          parameters = Map(
+            "jdbcQuery" -> s"SELECT \\* FROM .*${caseConvert("employee")}.* WHERE 1=0",
+            "externalEngineError" -> "[\\s\\S]+",
+            "externalEngineSqlState" -> ".+"),
+          matchPVals = true)
+        assert(e.getCause.isInstanceOf[SQLException])
+      }
     }
   }
 }

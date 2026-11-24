@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Resolves command target names to a [[ResolvedIdentifier]] or [[ResolvedNamespace]]
- * for [[ResolveCatalogs]].
+ * Resolves command identifiers and namespaces for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     extends LookupCatalog with SQLConfHelper {
@@ -60,6 +60,27 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  /** Resolves the current catalog and namespace, e.g. the target of `SHOW TABLES`. */
+  def resolveCurrentNamespace(): ResolvedNamespace = {
+    ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
+  }
+
+  /**
+   * Resolves a namespace name, preserving its origin and tags and loading metadata on request.
+   */
+  def resolveUnresolvedNamespace(unresolvedNamespace: UnresolvedNamespace): ResolvedNamespace = {
+    CurrentOrigin.withOrigin(unresolvedNamespace.origin) {
+      val resolvedNamespace = unresolvedNamespace match {
+        case UnresolvedNamespace(Seq(), fetchMetadata) =>
+          resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+        case UnresolvedNamespace(CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
+          resolveNamespace(catalog, namespace, fetchMetadata)
+      }
+      resolvedNamespace.copyTagsFrom(unresolvedNamespace)
+      resolvedNamespace
+    }
+  }
+
   /** Converts column definitions to output attributes, honoring CHAR/VARCHAR configuration. */
   def columnsToOutput(columns: Seq[ColumnDefinition]): Seq[AttributeReference] = {
     columns.map { col =>
@@ -72,7 +93,7 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     }
   }
 
-  /** Resolves a namespace target, loading metadata only when requested and supported. */
+  /** Resolves namespace metadata only when requested and supported by the catalog. */
   def resolveNamespace(
       catalog: CatalogPlugin,
       ns: Seq[String],
