@@ -272,9 +272,10 @@ trait PredicateHelper extends AliasHelper with Logging {
    * window whose results are not read, so its other columns count too.
    *
    * If `atJoin` is true, only the columns that a condition over more than one input of a join can
-   * fail on are returned. Such a condition is evaluated at the join, where a watermark, a
-   * repartition and an aggregation, for a grouping key, have computed the column on every row they
-   * got, so none is returned through them. The other operators still pass them through: a union
+   * fail on are returned. Such a condition is evaluated at or above that join, or above an
+   * operator that computes one of its columns (see `splitMovable`), so a watermark, a repartition
+   * and an aggregation, for a grouping key, below it have computed the column on every row they
+   * got, and none is returned through them. The other operators still pass them through: a union
    * and the other operators of `canPushThrough`, e.g. `Generate`, can pass a column on to the join
    * as it is, and once the condition is in the join, `ColumnPruning` can remove a window whose
    * results are not read. `PushExtraPredicateThroughJoin` can still push the parts of a disjunction
@@ -342,11 +343,12 @@ trait PredicateHelper extends AliasHelper with Logging {
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. A conjunct over more than one of `plans`, or of the inputs of a join below one of
-   * them, also through the operators between the joins (see `joinInputsRead`), is only evaluated
-   * where they are joined, so it is checked against the columns that can fail there (see
-   * `atJoin` of `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push the
-   * parts of a disjunction that read one side below the join. The conjuncts that may not move are
-   * returned in their written order.
+   * them, also through the operators between the joins, counting an operator that computes a
+   * column it reads as an input too (see `joinInputsRead`), is not evaluated below that join or
+   * that operator, so it is checked against the columns that can fail there (see `atJoin` of
+   * `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push the parts of a
+   * disjunction that read one side below the join. The conjuncts that may not move are returned in
+   * their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the

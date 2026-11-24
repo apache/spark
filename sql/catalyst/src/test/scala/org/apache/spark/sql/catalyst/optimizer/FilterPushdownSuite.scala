@@ -1379,7 +1379,7 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
-  test("SPARK-62195: joins: an equality over both inputs of a lower join goes into it after a " +
+  test("SPARK-62195: joins: an equality over two inputs below a join moves ahead of a " +
     "non-deterministic condition") {
     // `k` is a grouping key that can fail as the ANSI cast below the aggregation does. `k = bk`
     // reads both inputs of the lower join, where the aggregation has computed `k` on every row,
