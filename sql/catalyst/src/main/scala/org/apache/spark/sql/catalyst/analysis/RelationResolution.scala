@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -40,6 +41,7 @@ import org.apache.spark.sql.connector.catalog.{
   Table,
   TableCatalog,
   V1Table,
+  V1View,
   V2TableWithV1Fallback,
   View,
   ViewCatalog
@@ -110,6 +112,87 @@ class RelationResolution(
    */
   private def normalizeSessionQualifiedViewIdentifier(nameParts: Seq[String]): Seq[String] = {
     Seq(nameParts.last)
+  }
+
+  /**
+   * Resolves DDL and miscellaneous command targets to [[ResolvedTable]], [[ResolvedTempView]] or
+   * [[ResolvedPersistentView]], without expanding view definitions. Temporary views are looked up
+   * before persistent catalog objects.
+   *
+   * When `viewOnly=true`, non-session catalogs that do not implement [[ViewCatalog]] are
+   * rejected with MISSING_CATALOG_ABILITY.VIEWS. [[UnresolvedView]] callers reject non-view results
+   * downstream via `expectViewNotTableError`.
+   *
+   * Persistent catalog lookup order:
+   *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
+   *      once. A returned [[View]] is interpreted as a view; a [[Table]] is a table.
+   *      [[NoSuchTableException]] means neither exists.
+   *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
+   *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
+   *      For the session catalog, a view-like [[V1Table]] from `loadTable` resolves to a
+   *      [[ResolvedPersistentView]] over a [[V1View]].
+   *      Catalogs without table support skip table lookup so MISSING_CATALOG_ABILITY.TABLES
+   *      does not mask the view-resolution path.
+   */
+  def lookupTableOrView(
+      identifier: Seq[String],
+      viewOnly: Boolean = false): Option[LogicalPlan] = {
+    lookupTempView(identifier).map { tempView =>
+      ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+    }.orElse {
+      expandIdentifier(identifier) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
+              !catalog.isInstanceOf[ViewCatalog]) {
+            throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+          }
+          catalog match {
+            case mc: RelationCatalog =>
+              try {
+                Some(mc.loadRelation(ident) match {
+                  case v: View =>
+                    ResolvedPersistentView(catalog, ident, v)
+                  case table: Table =>
+                    ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  case other => throw SparkException.internalError(
+                    s"Catalog ${catalog.name} returned an unexpected relation type for " +
+                      s"$ident: ${other.getClass.getName}. Expected a Table or a View.")
+                })
+              } catch {
+                case _: NoSuchTableException => None
+              }
+            case _ =>
+              val tableResolved: Option[LogicalPlan] = if (
+                CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+              ) {
+                CatalogV2Util.loadTable(catalog, ident).map {
+                  case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                    v1Table.v1Table.isViewLike =>
+                    val v1Ident = v1Table.catalogTable.identifier
+                    val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+                    ResolvedPersistentView(
+                      catalog, v2Ident, new V1View(v1Table.catalogTable))
+                  case table =>
+                    ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                }
+              } else {
+                None
+              }
+              tableResolved.orElse {
+                catalog match {
+                  case vc: ViewCatalog =>
+                    try {
+                      Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
+                    } catch {
+                      case _: NoSuchViewException => None
+                    }
+                  case _ => None
+                }
+              }
+          }
+        case _ => None
+      }
+    }
   }
 
   /**

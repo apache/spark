@@ -1964,6 +1964,26 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-62113: merge with one NOT MATCHED clause and a NULL condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+
+      Seq((1, 101, "support"), (3, 301, "support"))
+        .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN NOT MATCHED AND NULL THEN
+           | INSERT *
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100, "hr")) // unchanged
+    }
+  }
+
   test("merge with multiple matching clauses") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
