@@ -198,6 +198,25 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     assert(keyReads === n)
   }
 
+  test("name the keys of a map in a map by the key type of each map") {
+    def toJson(dataType: MapType, map: ArrayBasedMapData): String = {
+      val writer = new CharArrayWriter()
+      val gen = new JacksonGenerator(dataType, writer, option)
+      gen.write(map)
+      gen.flush()
+      writer.toString
+    }
+    val cafe = Array[Byte](0xCA.toByte, 0xFE.toByte)
+    val binaryKeys = ArrayBasedMapData(Array[Any](cafe), Array[Any](2))
+    val intKeys = ArrayBasedMapData(Array[Any](1), Array[Any](2))
+    val intOfBinary = ArrayBasedMapData(Array[Any](1), Array[Any](binaryKeys))
+    assert(toJson(MapType(IntegerType, MapType(BinaryType, IntegerType)), intOfBinary) ===
+      """{"1":{"yv4=":2}}""")
+    val binaryOfInt = ArrayBasedMapData(Array[Any](cafe), Array[Any](intKeys))
+    assert(toJson(MapType(BinaryType, MapType(IntegerType, IntegerType)), binaryOfInt) ===
+      """{"yv4=":{"1":2}}""")
+  }
+
   test("error handling: initial with StructType but error calling write a map") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = ArrayBasedMapData(Map("a" -> 1))

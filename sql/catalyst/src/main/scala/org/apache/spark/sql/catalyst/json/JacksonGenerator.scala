@@ -47,6 +47,10 @@ class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
+  // A `MapKeyNamer` returns the JSON field name of the key at an ordinal of the key array of a map.
+  // Like a `ValueWriter`, it is made once for a type, the key type of the map.
+  private type MapKeyNamer = (ArrayData, Int) => String
+
   // `JackGenerator` can only be initialized with a `StructType`, a `MapType`, a `ArrayType` or a
   // `VariantType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
@@ -71,6 +75,12 @@ class JacksonGenerator(
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
+    case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
+      dataType, MapType.simpleString)
+  }
+
+  private lazy val mapKeyNamer: MapKeyNamer = dataType match {
+    case mt: MapType => makeMapKeyNamer(mt.keyType)
     case _ => throw QueryExecutionErrors.initialTypeNotTargetDataTypeError(
       dataType, MapType.simpleString)
   }
@@ -223,9 +233,10 @@ class JacksonGenerator(
         writeArray(writeArrayData(row.getArray(ordinal), elementWriter))
 
     case mt: MapType =>
+      val keyNamer = makeMapKeyNamer(mt.keyType)
       val valueWriter = makeWriter(mt.valueType)
       (row: SpecializedGetters, ordinal: Int) =>
-        writeObject(writeMapData(row.getMap(ordinal), mt, valueWriter))
+        writeObject(writeMapData(row.getMap(ordinal), keyNamer, valueWriter))
 
     case VariantType =>
       (row: SpecializedGetters, ordinal: Int) => write(row.getVariant(ordinal))
@@ -292,13 +303,13 @@ class JacksonGenerator(
   }
 
   private def writeMapData(
-      map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
+      map: MapData, keyNamer: MapKeyNamer, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
     // With sortKeys, compute the name of each key once, before writing the map, and sort by the
-    // names: sorting by `mapKeyName` would compute it for both keys of every comparison.
+    // names: sorting by `keyNamer` would compute it for both keys of every comparison.
     val names = if (options.sortKeys) {
-      Array.tabulate(map.numElements())(i => mapKeyName(keyArray, i, mapType.keyType))
+      Array.tabulate(map.numElements())(i => keyNamer(keyArray, i))
     } else {
       null
     }
@@ -306,7 +317,7 @@ class JacksonGenerator(
     var j = 0
     while (j < map.numElements()) {
       val i = if (indices != null) indices(j) else j
-      val name = if (names != null) names(i) else mapKeyName(keyArray, i, mapType.keyType)
+      val name = if (names != null) names(i) else keyNamer(keyArray, i)
       gen.writeFieldName(name)
       if (!valueArray.isNullAt(i)) {
         fieldWriter.apply(valueArray, i)
@@ -317,21 +328,23 @@ class JacksonGenerator(
     }
   }
 
-  // Returns the JSON field name of the key at `ordinal` in the key array of a map. That is the
-  // `toString` of the key, except for a BINARY key: the `toString` of a byte array is its JVM
-  // identity, so a BINARY key is written in base64, with the variant `writeBinary` uses.
-  private def mapKeyName(keyArray: ArrayData, ordinal: Int, keyType: DataType): String =
-    keyType match {
-      case BinaryType => Base64Variants.getDefaultVariant.encode(keyArray.getBinary(ordinal))
-      // The names of other key types are deliberately left unchanged for now, although some do
-      // not identify the key. A user-defined type over BINARY does not match the case above, so
-      // its key is still named by the JVM identity of a byte array, while its value is written
-      // in base64. An ARRAY or STRUCT key is named by the `toString` of its internal form, which
-      // differs between the generic and unsafe forms of the same key. A GEOMETRY or GEOGRAPHY
-      // key is named by a hash of its bytes, and a DATE or TIMESTAMP key by its internal day or
-      // microsecond count.
-      case _ => keyArray.get(ordinal, keyType).toString
-    }
+  // Makes the `MapKeyNamer` for a map with keys of `keyType`. A key is named by its `toString`,
+  // except for a BINARY key: the `toString` of a byte array is its JVM identity, so a BINARY key
+  // is written in base64, with the variant `writeBinary` uses.
+  private def makeMapKeyNamer(keyType: DataType): MapKeyNamer = keyType match {
+    case BinaryType =>
+      val base64 = Base64Variants.getDefaultVariant
+      (keyArray: ArrayData, ordinal: Int) => base64.encode(keyArray.getBinary(ordinal))
+    // The names of other key types are deliberately left unchanged for now, although some do not
+    // identify the key. A user-defined type over BINARY does not match the case above, so its key
+    // is still named by the JVM identity of a byte array, while its value is written in base64.
+    // An ARRAY or STRUCT key is named by the `toString` of its internal form, which differs
+    // between the generic and unsafe forms of the same key. A GEOMETRY or GEOGRAPHY key is named
+    // by a hash of its bytes, and a DATE or TIMESTAMP key by its internal day or microsecond
+    // count.
+    case _ =>
+      (keyArray: ArrayData, ordinal: Int) => keyArray.get(ordinal, keyType).toString
+  }
 
   def close(): Unit = gen.close()
 
@@ -366,8 +379,8 @@ class JacksonGenerator(
   def write(map: MapData): Unit = {
     writeObject(writeMapData(
       fieldWriter = mapElementWriter,
-      map = map,
-      mapType = dataType.asInstanceOf[MapType]))
+      keyNamer = mapKeyNamer,
+      map = map))
   }
 
   def write(v: VariantVal): Unit = {
