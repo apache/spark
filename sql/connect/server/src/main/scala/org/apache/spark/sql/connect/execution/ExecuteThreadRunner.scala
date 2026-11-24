@@ -51,7 +51,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // forwarding of thread locals needs to be taken into account.
   private val executionThread: ExecutionThread = new ExecutionThread()
 
-  /** Set once the execution thread has been started. */
   @volatile private var threadStarted: Boolean = false
 
   /**
@@ -79,12 +78,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     executionThread.isAlive()
   }
 
-  /**
-   * Checks if the execution thread has been started.
-   *
-   * @return
-   *   true if start() launched the execution thread.
-   */
   private[connect] def hasStarted(): Boolean = threadStarted
 
   /**
