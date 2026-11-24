@@ -1119,6 +1119,9 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
         val second = (10 until 30).map(_.toByte).toArray
         vector.putByteArray(1, second)
         assert(byteData.capacity > initialCapacity)
+        // The no-null-tracking check in reserveInternal must still skip allocating a null
+        // buffer for this grown byte-data child.
+        assert(!byteData.hasNullBuffer())
 
         assert(vector.getBinary(0) === first)
         assert(vector.getBinary(1) === second)
@@ -1147,6 +1150,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
           // native address and crashes.
           vector.putByteArray(0, (0 until 30).map(_.toByte).toArray)
           assert(byteData.capacity > defaultCapacity)
+          assert(!byteData.hasNullBuffer())
           vector.reset()
           assert(byteData.capacity == defaultCapacity)
 
@@ -1156,6 +1160,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
           val second = (4 until 30).map(_.toByte).toArray
           vector.putByteArray(1, second)
           assert(byteData.capacity > defaultCapacity)
+          assert(!byteData.hasNullBuffer())
           assert(vector.getBinary(0) === first)
           assert(vector.getBinary(1) === second)
         } finally {
