@@ -159,7 +159,7 @@ object UnsupportedOperationChecker extends Logging {
 
   /**
    * Checks, in append mode, for an operator that drops late rows after a stream-stream join, when
-   * its event time can come from an input of the join whose state has no cutoff, as
+   * its event time can come from an input of the join that has a watermark but no state cutoff, as
    * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
    * plan, whose join conditions eviction uses, and in which the optimizer has replaced every CTE
    * reference, MATERIALIZED ones included. A query from a checkpoint without
@@ -187,7 +187,7 @@ object UnsupportedOperationChecker extends Logging {
           subPlan.foreach {
             case j: Join if j ne subPlan =>
               // An input counts unless the operator's event times come only from other inputs.
-              val sources = eventTimeSources(subPlan, j)
+              lazy val sources = eventTimeSources(subPlan, j)
               joinInputWithoutStateCutoff(j,
                   input => sources.forall(_.exists(input.outputSet.contains))).foreach { side =>
                 throwError("Detected pattern of possible 'correctness' issue: the state of the " +
