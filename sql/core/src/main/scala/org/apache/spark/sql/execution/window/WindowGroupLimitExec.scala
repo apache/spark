@@ -212,9 +212,12 @@ class GroupedLimitIterator(
   // (UnsafeRowKeyOperations) rather than the shared checker's ordering fallback, to
   // avoid the interpreted ordering's work at each group boundary. Float and double keys
   // arrive already normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are
-  // canonical), so byte equality of their binary-stable fields matches the ordering and
-  // the groups are the ones WindowExec forms. Binary-stable keys, and keys whose types
-  // the key operations do not admit, keep the shared checker's single byte comparison.
+  // canonical), so comparing their bytes matches the ordering. Floating-point values
+  // inside a user-defined type are not normalized and can make the groups finer than
+  // WindowExec's; finer groups only forward extra rows, and the key equality never
+  // treats as equal two keys WindowExec separates. Binary-stable keys keep the shared
+  // checker's single byte comparison, and keys whose types the key operations do not
+  // admit get the shared checker's byte check followed by the ordering.
   private val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean = {
     val keyTypes = partitionSpec.map(_.dataType)
     if (!keyTypes.forall(UnsafeRowUtils.isBinaryStable) &&

@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.execution.window.{Final, WindowGroupLimitExec}
+import org.apache.spark.sql.execution.window.{Final, WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType, TestUDT, TimestampType}
@@ -3928,7 +3928,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // ('foo', [v(1.0)]) and ('FOO', [v(1.0)]) are one group whose sessions merge (10:00
     // to 10:15), while ('foo', [v(3.0, 4.0)]) is a separate group (10:08 to 10:18) even
     // though its collated string matches. The base is a view over createDataFrame
-    // because no file format stores user-defined types.
+    // because SQL cannot declare a user-defined type column or construct its values.
     val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
     val udt = new TestUDT.MyDenseVectorUDT
 
@@ -4008,6 +4008,40 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
               |  count(DISTINCT v) FROM t_map
               |  GROUP BY s, m, session_window(ts, '10 minutes')""".stripMargin),
         Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+    }
+  }
+
+  test("window aggregation groups collated keys holding a user-defined type") {
+    // A window partitioned by a collated string and an array of a user-defined type runs
+    // WindowExec, whose partition checker (WindowEvaluatorFactory) reaches a key with the
+    // user-defined type nested inside the array: the interpreted ordering unwraps a
+    // user-defined type only when a key field itself is one, so the checker uses the
+    // generated comparator, which compares the user-defined type through its SQL type at
+    // every depth. ('foo', [v(1.0)]) and ('FOO', [v(1.0)]) are one partition, while
+    // ('foo', [v(3.0, 4.0)]) is a separate partition even though its collated string
+    // matches. The base is a view over createDataFrame because SQL cannot declare a
+    // user-defined type column or construct its values.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val udt = new TestUDT.MyDenseVectorUDT
+
+    withTempView("t_win") {
+      val schema = StructType(Seq(
+        StructField("s", collatedString, nullable = false),
+        StructField("arr", ArrayType(udt, containsNull = false), nullable = false),
+        StructField("v", IntegerType, nullable = false)))
+      def vector(xs: Double*): Seq[TestUDT.MyDenseVector] =
+        Seq(new TestUDT.MyDenseVector(xs.toArray))
+      val rows = Seq(
+        Row("foo", vector(1.0), 1),
+        Row("FOO", vector(1.0), 2),
+        Row("foo", vector(3.0, 4.0), 3))
+      spark.createDataFrame(rows.asJava, schema).createOrReplaceTempView("t_win")
+
+      val result = sql("SELECT v, COUNT(*) OVER (PARTITION BY s, arr) AS cnt FROM t_win")
+      assert(collectFirst(result.queryExecution.executedPlan) {
+        case _: WindowExec => ()
+      }.isDefined, "expected WindowExec in plan")
+      checkAnswer(result, Row(1, 2L) :: Row(2, 2L) :: Row(3, 1L) :: Nil)
     }
   }
 }

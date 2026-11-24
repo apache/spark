@@ -273,6 +273,11 @@ object UnsafeRowUtils {
           dataTypes.exists(containsUserDefinedType)) {
         RowOrdering.createNaturalAscendingOrdering(dataTypes)
       } else {
+        // TODO: for the checkBytesFirst = true callers (the pandas window evaluator and
+        // both session-window iterators), replace this ordering with the window group
+        // limit's byte check followed by UnsafeRowKeyOperations.areEqual if its
+        // per-check cost shows up. That comparison compares float fields by bytes, and
+        // UpdatingSessionsIterator receives float keys before they are normalized.
         InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
       }
       if (checkBytesFirst) {
