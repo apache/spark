@@ -54,6 +54,7 @@ from urllib.request import Request, urlopen
 # Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
 # Importable because Python puts this script's own directory first on sys.path.
 from spark_merge_footer import (
+    backport_pr,
     backport_pr_trailer,
     has_merge_footer,
     merge_footer_pr,
@@ -1743,45 +1744,59 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
     continue_maybe("Push to %s anyway? (experts only!)" % ref, True)
 
 
-# First line of a backport PR body opened by _land_via_fork; the rest is the pick's message.
-_BACKPORT_MARKER_RE = re.compile(r"^Backport-of: #(\d+)\n\n")
 # An @ that starts a GitHub mention, not one inside an e-mail address; see _pick_message.
 _MENTION_RE = re.compile(r"(?<![\w.+-])@")
+# A line of a commit's trailer block: a "Token: value" trailer or `git cherry-pick -x`'s line.
+_TRAILER_LINE_RE = re.compile(r"[A-Za-z][\w-]*: \S|\(cherry picked from commit \w+\)$")
+# The line `git cherry-pick -x` appends, naming the commit picked.
+_CHERRY_PICKED_RE = re.compile(r"^\(cherry picked from commit (\w+)\)$", re.MULTILINE)
 
 
-def _backport_of(body, head_ref, target_ref):
+def _backport_of(first_commit, head_ref, target_ref):
     """(original PR, original message, primary author) if this is a backport PR, else None.
 
-    Needs the marker, a merge footer for that same PR, and the script's own head branch for
-    this target, so a body that merely quotes a footer, or pastes one into a PR against
-    master, is not taken for a backport. The message is read with _pick_message, the same
-    reading merge_pr's soft check applies to the branch's commits, so the two compare equal.
+    `first_commit` is the full message of the PR branch's first commit: for a PR opened by
+    _land_via_fork, the pick, whose body is the original's message and merge footer. The PR
+    body plays no part, so it is free for reviewers' prose. A backport needs the script's own
+    head branch for this target, named for the PR that footer closes, so a branch that merely
+    carries some footer, or a PR against master, is not taken for one. The message returned
+    is the commit body read with _pick_message; the author comes from the last footer on, so
+    a footer quoted earlier in the message cannot set it.
 
     >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
-    >>> message = "Fix it.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
-    >>> crlf = "Backport-of: #7\\r\\n\\r\\n" + message.replace("\\n", "\\r\\n")
+    >>> pick = "Fix\\n\\nFix it.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
+    >>> crlf = pick.replace("\\n", "\\r\\n")
     >>> _backport_of(crlf, "backport-pr7-branch-4.2", "branch-4.2")[::2]
     (7, 'A <a@e.org>')
-    >>> _backport_of("Backport-of: #7\\n\\nHi @bob.\\n\\n" + message, "backport-pr7-branch-4.2",
+    >>> _backport_of(pick, "backport-pr7-branch-4.2", "branch-4.2")[1].splitlines()[0]
+    'Fix it.'
+    >>> _backport_of(pick.replace("Fix it.", "Hi @bob."), "backport-pr7-branch-4.2",
     ...              "branch-4.2")[1].splitlines()[0]
     'Hi bob.'
-    >>> [_backport_of(b, h, "branch-4.2") for b, h in (
-    ...     ("Backport-of: #8\\n\\n" + message, "backport-pr8-branch-4.2"),  # footer is #7's
-    ...     ("Backport-of: #7\\n\\n" + message, "my-feature"),  # not the script's branch
-    ...     (message, "backport-pr7-branch-4.2"),
+    >>> quoted = "Fix\\n\\nReverts:\\n\\nCloses #3 from c/d.\\n\\nAuthored-by: Q <q@e.org>\\n\\n"
+    >>> _backport_of(quoted + pick.split("\\n\\n", 1)[1], "backport-pr7-branch-4.2",
+    ...              "branch-4.2")[2]
+    'A <a@e.org>'
+    >>> [_backport_of(m, h, "branch-4.2") for m, h in (
+    ...     (pick, "backport-pr8-branch-4.2"),  # the footer is #7's
+    ...     (pick, "backport-pr7-branch-4.1"),  # another target's branch
+    ...     (pick, "my-feature"),  # not the script's branch
+    ...     (pick.replace("Authored-by: A <a@e.org>", "Authored-by:"), "backport-pr7-branch-4.2"),
+    ...     ("Fix", "backport-pr7-branch-4.2"),
     ...     (None, "backport-pr7-branch-4.2"),
     ... )]
-    [None, None, None, None]
+    [None, None, None, None, None, None]
     """
-    body = (body or "").replace("\r\n", "\n")
-    m = _BACKPORT_MARKER_RE.match(body)
-    if not m or head_ref != _backport_pr_branch(m.group(1), target_ref):
+    body = (first_commit or "").replace("\r\n", "\n").partition("\n\n")[2]
+    message = _pick_message(body)
+    original = merge_footer_pr(message)
+    if original is None or head_ref != _backport_pr_branch(original, target_ref):
         return None
-    message = _pick_message(body[m.end() :])
-    if merge_footer_pr(message) != int(m.group(1)):
+    footer = message[message.rfind(merge_footer_trailer(original)) :]
+    authors = re.findall(r"^(?:Lead-authored-by|Authored-by): (.+)$", footer, re.MULTILINE)
+    if not authors:
         return None
-    authors = re.findall(r"^(?:Lead-authored-by|Authored-by): (.+)$", message, re.MULTILINE)
-    return int(m.group(1)), message, authors[-1]
+    return original, message, authors[-1]
 
 
 def should_skip_post_merge_ci(target_ref, pr_num):
@@ -1847,14 +1862,27 @@ def remove_inherited_post_merge_ci_skip(message):
     >>> remove_inherited_post_merge_ci_skip(distant) == distant
     True
 
-    A pick of a sampled backport-PR merge keeps its provenance in a paragraph of its own, which
-    `backport_pr` still reads past:
+    The pick's provenance rejoins the footer's trailer block, as in a pick of an unsampled
+    merge, so git reads the authors, sign-offs and provenance as one block of trailers:
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
+    >>> pick = "\\n\\n\\nskip-checks: true\\n(cherry picked from commit abc)"
+    >>> pick += "\\nSigned-off-by: X <x@e.org>"
+    >>> print(remove_inherited_post_merge_ci_skip("Fix\\n\\n" + footer + pick + "\\n"), end="")
+    Fix
+    <BLANKLINE>
+    Closes #7 from a/b.
+    <BLANKLINE>
+    Authored-by: A <a@e.org>
+    Signed-off-by: C <c@e.org>
+    (cherry picked from commit abc)
+    Signed-off-by: X <x@e.org>
+
+    which keeps a pick of a sampled backport-PR merge counting for that backport PR:
 
     >>> from spark_merge_footer import backport_pr
-    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nBackport-PR: #9\\n\\n"
-    >>> pick = "skip-checks: true\\n(cherry picked from commit abc)\\nSigned-off-by: X <x@e.org>"
-    >>> picked = "Fix\\n\\n" + footer + pick
-    >>> backport_pr(remove_inherited_post_merge_ci_skip(picked + "\\n"))
+    >>> merged = footer + "\\nBackport-PR: #9\\nSigned-off-by: M <m@e.org>"
+    >>> backport_pr(remove_inherited_post_merge_ci_skip("Fix\\n\\n" + merged + pick + "\\n"))
     9
     """
     tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
@@ -1866,6 +1894,9 @@ def remove_inherited_post_merge_ci_skip(message):
     marker_index += len(message) - len(tail)
     before = message[:marker_index].rstrip()
     after = message[marker_index + len(marker) :].strip()
+    last = before.rsplit("\n\n", 1)[-1]
+    if after and all(_TRAILER_LINE_RE.match(line) for line in (last + "\n" + after).split("\n")):
+        return "%s\n%s\n" % (before, after)
     return "\n\n".join(part for part in (before, after) if part) + "\n"
 
 
@@ -1891,7 +1922,8 @@ def amend_commit_message(message):
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     """Merge the requested PR and return the merge hash.
 
-    A backport PR keeps the original's message and author, in one trailer block:
+    A backport PR keeps the original's message and author, read from the branch's first
+    commit (the pick), in one trailer block:
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -1900,10 +1932,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     >>> pick = "Fix.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
     >>> config = {"git config --get user.name": "M", "git config --get user.email": "m@e.org"}
     >>> two_fixups = ("F <f@e.org>", "B <b@e.org>")
-    >>> def merge(pick=pick, on_branch=pick, conflicts=False, fixups=two_fixups):
+    >>> def merge(on_branch=pick, conflicts=False, fixups=two_fixups):
     ...     def git_run(cmd):
-    ...         if cmd[:2] == ["git", "log"]:  # the commits on the PR branch
-    ...             return on_branch + "\\0"
+    ...         if cmd[:2] == ["git", "log"]:  # the first commit on the PR branch
+    ...             return "[SPARK-1][SQL] Fix\\n\\n" + on_branch + "\\0\\n"
     ...         if conflicts and cmd[:2] == ["git", "merge"]:
     ...             raise subprocess.CalledProcessError(1, "git merge")
     ...         return config.get(str(cmd), "abc") + "\\n"
@@ -1915,18 +1947,15 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     ...         patch("builtins.input", side_effect=AssertionError("no author prompt")),
     ...         redirect_stdout(StringIO()),
     ...     ):
-    ...         body = "Backport-of: #7\\n\\n" + pick
-    ...         merge_pr(9, "branch-4.2", "[SPARK-1][4.2][SQL] Fix", body,
+    ...         merge_pr(9, "branch-4.2", "[SPARK-1][4.2][SQL] Fix", "Backport of #7.",
     ...                  "me/backport-pr7-branch-4.2", "O <o@e.org>", list(fixups))
     ...     push.assert_called_once_with(
     ...         PUSH_REMOTE_NAME, "PR_TOOL_MERGE_PR_9_BRANCH-4.2", "branch-4.2")
     ...     commit = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["git", "commit"]]
-    ...     prompts = [c.args[0].split(",")[0] for c in ask.call_args_list]
-    ...     asked = [p for p in prompts if "Backport-of" in p]
-    ...     return commit[0][3], "\\n\\n".join(commit[0][5::2]), asked
-    >>> author, message, asked = merge()
-    >>> author, asked
-    ('--author="A <a@e.org>"', [])
+    ...     return commit[0][3], "\\n\\n".join(commit[0][5::2])
+    >>> author, message = merge()
+    >>> author
+    '--author="A <a@e.org>"'
     >>> print(message.split("\\n\\n")[-1])
     Authored-by: A <a@e.org>
     Co-authored-by: B <b@e.org>
@@ -1937,15 +1966,27 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     >>> merge_footer_pr(message), has_merge_footer(message, 9), "Closes #9" in message
     (7, True, False)
 
-    A body that matches none of the branch's commits asks before merging:
+    The pick's own sign-off by the merger goes: the PR it opened landed nothing, and this
+    merge signs below. One by someone else stays, as does each earlier landing's:
 
-    >>> merge(on_branch="Something else.")[2]
-    ['The Backport-of message in the PR body matches none of its commits']
+    >>> chained = pick + "\\nBackport-PR: #8\\nSigned-off-by: M <m@e.org>"
+    >>> chained += "\\n(cherry picked from commit def)"
+    >>> print(merge(chained + "\\nSigned-off-by: M <m@e.org>", fixups=())[1].split("\\n\\n")[-1])
+    Authored-by: A <a@e.org>
+    Co-authored-by: B <b@e.org>
+    (cherry picked from commit abc)
+    Backport-PR: #8
+    Signed-off-by: M <m@e.org>
+    (cherry picked from commit def)
+    Backport-PR: #9
+    Signed-off-by: M <m@e.org>
+    >>> merge(pick + "\\nSigned-off-by: P <p@e.org>", fixups=())[1].split("\\n")[-3:]
+    ['Signed-off-by: P <p@e.org>', 'Backport-PR: #9', 'Signed-off-by: M <m@e.org>']
 
     A conflicts note goes before the original message, so the trailers still end it:
 
     >>> from spark_merge_footer import backport_pr
-    >>> _, message, _ = merge(conflicts=True)
+    >>> _, message = merge(conflicts=True)
     >>> message.index("had conflicts") < message.index("Fix."), backport_pr(message)
     (True, 9)
 
@@ -1953,22 +1994,22 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     >>> quoted = "Reverts:\\n\\nCloses #3 from c/d.\\n\\nAuthored-by: Q <q@e.org>\\n\\n"
     >>> lead = quoted + pick.replace("Authored-by: A", "Lead-authored-by: L")
-    >>> merge(lead, lead)[0]
+    >>> merge(lead)[0]
     '--author="L <a@e.org>"'
 
     A fixup author mentioned in prose or a sign-off still gets authorship credit:
 
     >>> signed = "Discuss F <f@e.org>.\\n\\n" + pick + "\\nSigned-off-by: F <f@e.org>"
-    >>> merge(signed, signed)[1].count("Co-authored-by: F <f@e.org>")
+    >>> merge(signed)[1].count("Co-authored-by: F <f@e.org>")
     1
     >>> credited = pick + "\\nCo-authored-by: F <f@e.org>"
-    >>> merge(credited, credited)[1].count("Co-authored-by: F <f@e.org>")
+    >>> merge(credited)[1].count("Co-authored-by: F <f@e.org>")
     1
     >>> split = pick.replace("\\n(cherry", "\\n\\n(cherry") + "\\nSigned-off-by: P <p@e.org>"
-    >>> merge(split, split, fixups=["A <a@e.org>"])[1].count("Co-authored-by: A <a@e.org>")
+    >>> merge(split, fixups=["A <a@e.org>"])[1].count("Co-authored-by: A <a@e.org>")
     0
     >>> quoted_fixup = "Co-authored-by: F <f@e.org>\\n\\n" + pick
-    >>> merge(quoted_fixup, quoted_fixup)[1].rsplit("\\n\\n", 1)[-1].count(
+    >>> merge(quoted_fixup)[1].rsplit("\\n\\n", 1)[-1].count(
     ...     "Co-authored-by: F <f@e.org>")
     1
     """
@@ -1989,18 +2030,19 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         continue_maybe(msg)
         had_conflicts = True
 
-    backport = _backport_of(body, pr_repo_desc.split("/", 1)[-1], target_ref)
+    # The branch's first commit: for a backport PR, the pick _land_via_fork pushed.
+    commits = git.run(
+        ["git", "log", "--reverse", "--no-merges", "--format=%B%x00", "HEAD..%s" % pr_branch_name]
+    )
+    backport = _backport_of(
+        commits.split("\0")[0].strip(), pr_repo_desc.split("/", 1)[-1], target_ref
+    )
     if backport:
         # The footer already names the author; a different --author would contradict it.
-        print("Backport of #%s: keeping its commit message and author." % backport[0])
-        # Soft check: the marker and footer are plain PR text, so confirm they are some
-        # commit's message on the branch, as _land_via_fork leaves them.
-        commits = git.run(["git", "log", "--format=%b%x00", "HEAD..%s" % pr_branch_name])
-        if backport[1] not in [_pick_message(c) for c in commits.split("\0")]:
-            continue_maybe(
-                "The Backport-of message in the PR body matches none of its commits, so the "
-                "author and footer below are only as good as that text. Merge it anyway?"
-            )
+        print(
+            "Backport of #%s: keeping its commit message and author, %s."
+            % (backport[0], backport[2])
+        )
         primary_author = backport[2]
     else:
         # Use PR author as the primary author for proper GitHub attribution
@@ -2041,7 +2083,15 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
             for a in co_authors
             if "<" + a.split("<")[-1] not in credited_emails
         ]
-        merge_message_flags += ["-m", "\n".join([backport[1]] + trailers + [signoff])]
+        message = backport[1]
+        # One sign-off per landing: the pick's own, when it is the merger's, goes, since the
+        # PR it opened landed nothing and this merge signs below.
+        picked = message[: -len(signoff) - 1]
+        if message.endswith("\n" + signoff) and _CHERRY_PICKED_RE.search(
+            picked.rsplit("\n", 1)[-1]
+        ):
+            message = picked
+        merge_message_flags += ["-m", "\n".join([message] + trailers + [signoff])]
     else:
         if body is not None:
             # We remove @ symbols from the body to avoid triggering e-mails
@@ -2102,10 +2152,10 @@ def _set_skip_trailer(skip):
 
 
 def _pick_message(commit_body):
-    """A backport's message as both _backport_of (from the PR body) and merge_pr's soft check
-    (from the branch's commits) read it: LF line ends, no skip-checks, no mentions, no edge
-    whitespace. Mentions are stripped as merge_pr does for any body, keeping the @ inside
-    e-mail addresses.
+    """A backport's message as _backport_of reads it from the pick's commit body, whether
+    main() has it from the GitHub API or merge_pr from git: LF line ends, no skip-checks, no
+    mentions, no edge whitespace. Mentions are stripped as merge_pr does for any body, keeping
+    the @ inside e-mail addresses.
 
     >>> _pick_message("Fix @bob\\r\\nA <a@e.org>\\n\\n\\nskip-checks: true\\n")
     'Fix bob\\nA <a@e.org>'
@@ -2338,8 +2388,8 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     [call('origin', 'PICK', 'backport-pr7-branch-4.2', force=True)]
     >>> creates[0].args[:3]
     ('branch-4.2', 'me:backport-pr7-branch-4.2', '[SPARK-1][4.2][SQL] Fix')
-    >>> creates[0].args[3]
-    'Backport-of: #7\\n\\nbody'
+    >>> creates[0].args[3].splitlines()[0]
+    'Backport of #7 to `branch-4.2`.'
     >>> land("me", None)[0]
     'fork:me:backport-pr7-branch-4.2'
     >>> land("me", None, push_error=OSError("rejected"))
@@ -2363,14 +2413,7 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nBackport-PR: #9\\n"
     >>> _, pushes, creates = land("me", None, pr=9, body=footer)
     >>> pushes[0].args[2], creates[0].args[3].splitlines()[0]
-    ('backport-pr7-branch-4.2', 'Backport-of: #7')
-    >>> _backport_of(creates[0].args[3], "backport-pr7-branch-4.2", "branch-4.2")[::2]
-    (7, 'A <a@e.org>')
-
-    The pick's skip-checks trailer is not carried into the PR body:
-
-    >>> land("me", None, body="body\\n\\n\\nskip-checks: true\\n")[2][0].args[3]
-    'Backport-of: #7\\n\\nbody'
+    ('backport-pr7-branch-4.2', 'Backport of #7 to `branch-4.2`, the merge of backport PR #9.')
 
     The dry-run seam fakes both effects, so a dry run takes the success branch:
 
@@ -2382,17 +2425,13 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     >>> "would push PICK to origin:backport-pr7-branch-4.2 (forced)" in out.getvalue()
     True
     """
-    # The pick's own message is what GitHub would prefill for a single-commit branch. Its @s
-    # were stripped when the merge commit was built, so it fires no mention mails. The marker
-    # lets merge_pr keep the original message, footer and author when this PR is merged.
-    # merge_pr adds the skip trailer afresh, per the commit count when the PR merges.
-    pr_body = remove_inherited_post_merge_ci_skip(
-        git.run(["git", "log", "-1", "--format=%b", pick_branch_name])
-    ).strip()
+    # merge_pr keeps the original message, footer and author from the pick itself, the
+    # branch's first commit, so the PR body is prose for reviewers.
+    message = git.run(["git", "log", "-1", "--format=%b", pick_branch_name])
     # A run on a merged backport PR picks a commit whose footer names the original PR, and
-    # _backport_of only accepts a marker naming that one.
-    pr_num = merge_footer_pr(pr_body) or pr_num
-    pr_body = "Backport-of: #%s\n\n%s" % (pr_num, pr_body)
+    # _backport_of only accepts the branch named for that one.
+    pr_num = merge_footer_pr(message) or pr_num
+    pr_body = _backport_pr_body(pr_num, pick_ref, message)
     backport_branch = _backport_pr_branch(pr_num, pick_ref)
     pr_title = _backport_pr_title(pick_ref, title)
     push = "git push <your fork> %s:%s" % (pick_branch_name, backport_branch)
@@ -2425,6 +2464,42 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     return _manual_backport_pr(pick_ref, pr_title, pr_body, head=head) or "fork:%s" % head
 
 
+def _backport_pr_body(original, pick_ref, message):
+    """The description of a backport PR of `original`, given the pick's commit `message`.
+
+    It is for the PR's reviewers: merge_pr reads what to commit from the pick, the branch's
+    first commit, so the description carries no markers and can be edited freely.
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: M <m@e.org>"
+    >>> pick = "Fix\\n\\n" + footer + "\\n(cherry picked from commit 0123abc)"
+    >>> body = _backport_pr_body(7, "branch-4.2", pick)
+    >>> print(body.split("\\n\\n")[0])
+    Backport of #7 to `branch-4.2`, cherry-picked from 0123abc.
+    >>> "keeps #7's message, footer and author" in body, "@" in body
+    (True, False)
+
+    A pick of a merged backport PR names it, so reviewers see the whole chain:
+
+    >>> chained = pick + "\\nBackport-PR: #8\\nSigned-off-by: M <m@e.org>"
+    >>> chained += "\\n(cherry picked from commit 4567def)\\nSigned-off-by: M <m@e.org>"
+    >>> _backport_pr_body(7, "branch-4.1", chained).splitlines()[0]
+    'Backport of #7 to `branch-4.1`, cherry-picked from 4567def, the merge of backport PR #8.'
+    """
+    lead = ["Backport of #%s to `%s`" % (original, pick_ref)]
+    picked = _CHERRY_PICKED_RE.findall(message)
+    if picked:
+        lead.append("cherry-picked from %s" % picked[-1])
+    via = backport_pr(message)
+    if via:
+        lead.append("the merge of backport PR #%s" % via)
+    return (
+        "%s.\n\nOpened by `dev/merge_spark_pr.py`. Merging this PR with the script commits its "
+        "first commit's message, which keeps #%s's message, footer and author, and adds "
+        "`Backport-PR` with this PR's number and the merger's sign-off. Fixups go in as further "
+        "commits; their authors get `Co-authored-by`." % (", ".join(lead), original)
+    )
+
+
 def _manual_backport_pr(pick_ref, title, body, push=None, head=None):
     """Walk the committer through opening the backport PR by hand; the URL pasted, or None.
 
@@ -2438,7 +2513,7 @@ def _manual_backport_pr(pick_ref, title, body, push=None, head=None):
     ...     patch("builtins.input", return_value="https://github.com/apache/spark/pull/9"),
     ...     redirect_stdout(StringIO()) as out,
     ... ):
-    ...     url = _manual_backport_pr("branch-4.2", "T", "Backport-of: #7", head="me:b")
+    ...     url = _manual_backport_pr("branch-4.2", "T", "Backport of #7.", head="me:b")
     >>> url
     'https://github.com/apache/spark/pull/9'
     >>> "compare/branch-4.2...me:b?expand=1" in out.getvalue()
@@ -2455,8 +2530,9 @@ def _manual_backport_pr(pick_ref, title, body, push=None, head=None):
     if head:
         print("  https://github.com/apache/spark/compare/%s...%s?expand=1" % (pick_ref, head))
     print(
-        "Title:\n%s\nBody (keep the Backport-of line; merging with this script uses it to "
-        "keep the original author):\n%s" % (title, body)
+        "Title:\n%s\nBody (merging with this script keeps the original's message and author "
+        "from the branch's first commit, the pick, so keep it first and keep the branch name):"
+        "\n%s" % (title, body)
     )
     url = get_input(
         "Paste the backport PR URL once it is open (Enter to skip): ",
@@ -5318,7 +5394,9 @@ def main():
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
 
     # A backport opener may author fixups; credit them alongside the original authors.
-    backport = _backport_of(body, base_ref, target_ref)
+    # GitHub lists a PR's commits oldest first, so the pick comes first.
+    first_commit = pr_commits[0]["commit"].get("message") if pr_commits else None
+    backport = _backport_of(first_commit, base_ref, target_ref)
     co_authors = []
     seen = set()
     for c in pr_commits:
@@ -6000,8 +6078,8 @@ __test__ = {
     >>> from unittest.mock import Mock, patch
     >>> footer = "\\n\\nFix\\n\\nCloses #7 from x/h.\\n\\nAuthored-by: X <x@x>"
     >>> posted = []  # (PR, via) of each merge comment in the last run
-    >>> def run(base="master", head="h", body="b", message=None, interrupt=False):
-    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": body,
+    >>> def run(base="master", head="h", first="Fix", message=None, interrupt=False):
+    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": "b",
     ...           "base": {"ref": base}, "user": {"login": "x"}, "head": {"ref": head},
     ...           "state": "open" if message is None else "closed", "mergeable": True}
     ...     def get_json(url):
@@ -6010,10 +6088,10 @@ __test__ = {
     ...             return [{"name": b} for b in names]
     ...         if url.endswith("/pulls/1"):
     ...             return pr
-    ...         if url.endswith("/pulls/1/commits"):
-    ...             return [{"author": {"login": login}, "commit": {"author": {
-    ...                 "name": name, "email": email}}} for login, name, email in
-    ...                 (("x", "X", "x@x"), ("f", "F", "f@f"))]
+    ...         if url.endswith("/pulls/1/commits"):  # the first is the pick on a backport
+    ...             return [{"author": {"login": login}, "commit": {"message": text, "author": {
+    ...                 "name": name, "email": email}}} for login, name, email, text in
+    ...                 (("x", "X", "x@x", first), ("f", "F", "f@f", "Fixup"))]
     ...         if url.endswith("/users/x"):
     ...             return {"name": "X", "email": "x@x", "id": 1}
     ...         return []
@@ -6071,7 +6149,7 @@ __test__ = {
 
     Merging a backport PR of #7 starts from #7's landed and pending branches:
 
-    >>> run("branch-4.2", "backport-pr7-branch-4.2", "Backport-of: #7" + footer)
+    >>> run("branch-4.2", "backport-pr7-branch-4.2", "[SPARK-1][SQL] Fix" + footer)
     (['branch-4.1', 'branch-4.2'], (('branch-4.2',), ['branch-4.1']), ['branch-4.2'])
 
     and its summary also goes on #7, whose own summary listed it as pending:
@@ -6089,7 +6167,8 @@ __test__ = {
     An interrupt while seeding a backport-PR merge still closes the PR, comments, and
     reaches JIRA:
 
-    >>> run("branch-4.2", "backport-pr7-branch-4.2", "Backport-of: #7" + footer, interrupt=True)
+    >>> run("branch-4.2", "backport-pr7-branch-4.2", "[SPARK-1][SQL] Fix" + footer,
+    ...     interrupt=True)
     (True, [('branch-4.2', 'abc')], ['branch-4.2'])
     >>> posted
     [('1', None), (7, '1')]
