@@ -49,6 +49,7 @@ from typing import (
     overload,
 )
 
+from pyspark import cloudpickle
 from pyspark.errors import (
     PySparkAttributeError,
     PySparkIndexError,
@@ -58,7 +59,6 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.geo_utils import (
     CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
@@ -2337,8 +2337,10 @@ class UserDefinedType(DataType):
                 "sqlType": self.sqlType().jsonValue(),
             }
         else:
-            ser = CloudPickleSerializer()
-            b = ser.dumps(type(self))
+            # The schema can be persisted, e.g. in Parquet metadata, and read by any PySpark
+            # version: pickle the class with the vendored cloudpickle, whose payloads they all
+            # load, rather than with cloudpickle-rust.
+            b = cloudpickle.dumps(type(self))
             schema = {
                 "type": "udt",
                 "pyClass": "%s.%s" % (self.module(), type(self).__name__),

@@ -40,13 +40,13 @@ from typing import (
     Union,
 )
 
-from pyspark import cloudpickle
 from pyspark.ml.dl_util import FunctionPickler
 from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
 from pyspark.resource.information import ResourceInformation
+from pyspark.serializers import _cloudpickle_dumps, _cloudpickle_loads
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.taskcontext import BarrierTaskContext
 
@@ -796,7 +796,7 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                output_bytes = cloudpickle.dumps(output)
+                output_bytes = _cloudpickle_dumps(output)
                 output_size = len(output_bytes)
 
                 # In Spark Connect, DataFrame.collect stacks rows to size
@@ -866,7 +866,7 @@ class TorchDistributor(Distributor):
                 func=spark_task_function, schema="chunk binary", barrier=True
             ).collect()
             output_bytes = b"".join([row.chunk for row in rows])
-            result = cloudpickle.loads(output_bytes)
+            result = _cloudpickle_loads(output_bytes)
         finally:
             log_streaming_server.shutdown()
         self.logger.info(

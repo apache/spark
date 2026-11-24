@@ -23,7 +23,9 @@ By default, PySpark uses :class:`CPickleSerializer` to serialize objects. This i
 that resolves to :class:`CloudPickleSerializer` (which uses the ``cloudpickle`` library and
 can serialize nearly any Python object); setting the ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH=1``
 environment variable makes it resolve to :class:`PickleSerializer` (which uses the standard
-library ``pickle`` module) instead.
+library ``pickle`` module) instead. :class:`CloudPickleSerializer` uses ``cloudpickle-rust``, a
+faster implementation of ``cloudpickle``, when it is installed, unless the
+``PYSPARK_CLOUDPICKLE_RUST=0`` environment variable is set.
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
@@ -426,6 +428,99 @@ class _RestrictedUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
+# cloudpickle-rust (the cloudpickle_rust package) is a Rust implementation of cloudpickle. Its
+# payloads are the ones of the vendored cloudpickle, except that they reference its reconstructors
+# as cloudpickle_rust.cloudpickle.<name>. PySpark pickles with it when it can be imported, unless
+# the environment variable PYSPARK_CLOUDPICKLE_RUST is 0, and loads its payloads also where it
+# cannot be imported.
+_cloudpickle_module = None
+
+
+def _cloudpickle():
+    """
+    Return the cloudpickle module that PySpark pickles with: ``cloudpickle_rust`` if it can be
+    imported and ``PYSPARK_CLOUDPICKLE_RUST`` is not ``0``, otherwise the vendored
+    ``pyspark.cloudpickle``. The choice is made once per process.
+    """
+    global _cloudpickle_module
+    module = _cloudpickle_module
+    if module is None:
+        module = _cloudpickle_module = _choose_cloudpickle()
+    return module
+
+
+def _choose_cloudpickle():
+    if os.environ.get("PYSPARK_CLOUDPICKLE_RUST") == "0":
+        return cloudpickle
+    try:
+        import cloudpickle_rust
+
+        rust = cloudpickle_rust.cloudpickle
+        registry = rust._PICKLE_BY_VALUE_MODULES
+    except Exception:
+        # Not installed, or it fails to import (e.g. cloudpickle-rust 0.3.0 with python -OO).
+        return cloudpickle
+    if not hasattr(rust, "DYNAMIC_CODE_FILENAME"):
+        # Before 0.3.0, it cannot keep the original filenames of the code pickled by value.
+        return cloudpickle
+    # Keep the original filenames of the code pickled by value, as the vendored cloudpickle 3.1
+    # does, for the tracebacks and the profilers of the processes that load it.
+    rust.DYNAMIC_CODE_FILENAME = None
+    # Share one registry of the modules pickled by value, so that
+    # pyspark.cloudpickle.register_pickle_by_value() also applies to cloudpickle_rust. The set of
+    # cloudpickle_rust is updated in place: rebinding its global would make it run upstream's
+    # Python code, which is slower.
+    registry.update(cloudpickle.cloudpickle._PICKLE_BY_VALUE_MODULES)
+    cloudpickle.cloudpickle._PICKLE_BY_VALUE_MODULES = registry
+    return cloudpickle_rust
+
+
+def _cloudpickle_dumps(obj, protocol=pickle_protocol):
+    """Pickle `obj` with :func:`_cloudpickle`."""
+    return _cloudpickle().dumps(obj, protocol)
+
+
+def _cloudpickle_dump(obj, file, protocol=pickle_protocol):
+    """Pickle `obj` into the binary `file` with :func:`_cloudpickle`."""
+    _cloudpickle().dump(obj, file, protocol)
+
+
+class _CloudPickleRustCompatUnpickler(pickle.Unpickler):
+    """
+    Unpickler that loads the payloads of cloudpickle_rust with the vendored cloudpickle, whose
+    reconstructors have the same names and signatures.
+    """
+
+    _MODULES = {
+        "cloudpickle_rust": "pyspark.cloudpickle",
+        "cloudpickle_rust.cloudpickle": "pyspark.cloudpickle.cloudpickle",
+        "cloudpickle_rust.cloudpickle_fast": "pyspark.cloudpickle.cloudpickle_fast",
+    }
+
+    def find_class(self, module, name):
+        return super().find_class(self._MODULES.get(module, module), name)
+
+
+def _cloudpickle_loads(data, encoding="ASCII"):
+    """
+    Like :func:`pickle.loads`, but also loads the payloads of cloudpickle_rust where it cannot be
+    imported. They are first loaded by :func:`pickle.loads`, so that loading only pays for the
+    compatibility unpickler when cloudpickle_rust is missing.
+    """
+    try:
+        return pickle.loads(data, encoding=encoding)
+    except ImportError as e:
+        name = e.name or ""
+        if name != "cloudpickle_rust" and not name.startswith("cloudpickle_rust."):
+            raise
+    return _CloudPickleRustCompatUnpickler(io.BytesIO(data), encoding=encoding).load()
+
+
+def _cloudpickle_load(file, encoding="ASCII"):
+    """Like :func:`pickle.load`, but loads like :func:`_cloudpickle_loads`."""
+    return _cloudpickle_loads(file.read(), encoding=encoding)
+
+
 class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's pickle serializer:
@@ -440,7 +535,9 @@ class PickleSerializer(FramedSerializer):
         return pickle.dumps(obj, pickle_protocol)
 
     def loads(self, obj, encoding="bytes"):
-        return pickle.loads(obj, encoding=encoding)
+        # It also loads the commands that CloudPickleSerializer pickles, which reference
+        # cloudpickle_rust if it pickled them.
+        return _cloudpickle_loads(obj, encoding=encoding)
 
 
 class CloudPickleSerializer(FramedSerializer):
@@ -460,7 +557,7 @@ class CloudPickleSerializer(FramedSerializer):
         from pyspark.util import print_exec
 
         try:
-            return cloudpickle.dumps(obj, pickle_protocol)
+            return _cloudpickle_dumps(obj, pickle_protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
@@ -476,7 +573,7 @@ class CloudPickleSerializer(FramedSerializer):
         if self.allowed_names is not None:
             unpickler = _RestrictedUnpickler(io.BytesIO(obj), self.allowed_names, encoding=encoding)
             return unpickler.load()
-        return cloudpickle.loads(obj, encoding=encoding)
+        return _cloudpickle_loads(obj, encoding=encoding)
 
 
 if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":

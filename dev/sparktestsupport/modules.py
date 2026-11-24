@@ -764,6 +764,7 @@ pyspark_core = Module(
         "pyspark.tests.test_appsubmit",
         "pyspark.tests.test_artifact_spark_context",
         "pyspark.tests.test_broadcast",
+        "pyspark.tests.test_cloudpickle_rust",
         "pyspark.tests.test_conf",
         "pyspark.tests.test_connect_compatibility",
         "pyspark.tests.test_context",
