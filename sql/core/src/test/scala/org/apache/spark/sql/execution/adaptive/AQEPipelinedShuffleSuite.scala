@@ -240,4 +240,43 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       assert(run() === expected)
     }
   }
+
+  test("an eligible exchange beside a branch that reads CTE reuse stages stays regular") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      // Every branch of the union is single-partition, so the union reports a single partition
+      // and its plan fits the local capacity check.
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, "true")
+      // Without a CTE, the same shape pipelines its exchanges: the count's exchange is eligible.
+      val control = session.sql(
+        """SELECT id AS k FROM (SELECT /*+ REPARTITION(1) */ id FROM range(0, 100, 1, 2))
+          |UNION ALL SELECT count(*) AS k FROM range(0, 1000, 1, 2)
+          |""".stripMargin)
+      assert(control.collect().map(_.getLong(0)).sorted.toSeq === (0L until 100L) :+ 1000L)
+      assert(pipelinedExchanges(control.queryExecution.executedPlan).nonEmpty,
+        s"expected the control to pipeline; plan:\n${control.queryExecution.executedPlan}")
+
+      // The count's exchange reads no CTE stage, so only the regular-prefix guard for the CTE
+      // reuse stages in the sibling branches keeps it regular.
+      val analyzed = session.sql(
+        """WITH cte AS (SELECT /*+ REPARTITION(1) */ id AS k, rand() AS r FROM range(0, 100, 1, 2))
+          |SELECT k FROM cte
+          |UNION ALL SELECT k FROM cte
+          |UNION ALL SELECT count(*) AS k FROM range(0, 1000, 1, 2)
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+        case d: CTERelationDef => d.copy(forceSkipInline = true)
+      })
+      val expected = ((0L until 100L) ++ (0L until 100L) :+ 1000L).sorted
+      def run(): Seq[Long] = df.collect().map(_.getLong(0)).toSeq.sorted
+      assert(run() === expected)
+      val plan = df.queryExecution.executedPlan
+      assert(collect(plan) { case s: CTEReuseQueryStageExec => s }.size == 2,
+        s"expected two CTE reuse stages; plan:\n$plan")
+      assert(pipelinedExchanges(plan).isEmpty,
+        s"no exchange of a plan reading a CTE reuse stage may be pipelined; plan:\n$plan")
+      // The second collect of the same DataFrame must succeed with the same rows.
+      assert(run() === expected)
+    }
+  }
 }

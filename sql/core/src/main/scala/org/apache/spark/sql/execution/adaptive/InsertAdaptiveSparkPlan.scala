@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKeys.{CONFIG, SUB_QUERY}
+import org.apache.spark.internal.LogKeys.{CONFIG, QUERY_PLAN, SUB_QUERY}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -92,13 +92,13 @@ case class InsertAdaptiveSparkPlan(
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
               log"but is not supported for sub-query: ${MDC(SUB_QUERY, subquery)}.")
             plan
-          case CTEAdaptiveNotSupportedException(_) =>
+          case CTEAdaptiveNotSupportedException(cteSubplan) =>
             // `PlanCTEReuse` could not wrap a `CTEReuseExchange`'s subplan in an inner AQE. Back
             // the whole query off AQE; the non-AQE path (`UnwrapCTEReuseExchange`) handles the
             // CTE reuse.
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
               log"but a CTE reuse subplan could not be planned adaptively; " +
-              log"falling back to non-AQE.")
+              log"falling back to non-AQE. CTE reuse subplan: ${MDC(QUERY_PLAN, cteSubplan)}.")
             plan
         }
       } else {

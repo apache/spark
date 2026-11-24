@@ -851,14 +851,15 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
-      CoalesceBucketsInJoin,
-      // Unwrap CTEReuseExchange nodes early in the pipeline (AQE off), before
-      // `PlanDynamicPruningFilters`: a `DynamicPruningSubquery` inside a force-materialized CTE
-      // body is only planned if the body is already exposed from the leaf, otherwise it is left
-      // unplanned and fails at execution. It also runs before `ChoosePerPartitionRuntimeFilters`,
-      // so that rule sees the semi joins inside a CTE body. Runs in both main and subquery passes
-      // so CTE references inside subqueries are also unwrapped.
+      // Unwrap CTEReuseExchange nodes first (AQE off): a sealed CTE body is a data field of the
+      // leaf until then, so every preparation rule that must see a CTE body has to run after this
+      // one. `CoalesceBucketsInJoin` then coalesces the joins inside a body, a
+      // `DynamicPruningSubquery` inside a body is planned by `PlanDynamicPruningFilters` (otherwise
+      // it is left unplanned and fails at execution), and `ChoosePerPartitionRuntimeFilters` sees
+      // the semi joins inside a body. Runs in both main and subquery passes so CTE references
+      // inside subqueries are also unwrapped.
       UnwrapCTEReuseExchange,
+      CoalesceBucketsInJoin,
       // Must run before `EnsureRequirements`, which then plans the query without the semi joins
       // this rule drops.
       ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),

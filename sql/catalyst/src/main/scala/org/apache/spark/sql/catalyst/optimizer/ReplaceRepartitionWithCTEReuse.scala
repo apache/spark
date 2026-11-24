@@ -28,11 +28,14 @@ import org.apache.spark.sql.internal.SQLConf
  * Converts plan-reuse repartitions into [[CTEReuseRelation]] nodes for guaranteed exchange reuse.
  *
  * By the time this runs, [[ReplaceCTERefWithRepartition]] has turned the references of each
- * `forceSkipInline` definition with two or more references into plan-reuse
+ * `forceSkipInline` definition that a batch query holds two or more copies of into plan-reuse
  * [[RepartitionByExpression]]s: copies of the definition's lowered body that all carry the same
  * nonzero `repartitionId`. No other rule assigns such ids. This rule seals every id that still has
- * two or more copies into [[CTEReuseRelation]]s sharing that id as their `cteId`, so the body is
- * materialized once (one inner adaptive plan under AQE, one reused exchange without AQE).
+ * two or more copies into [[CTEReuseRelation]]s sharing that id as their `cteId`. With AQE on, the
+ * body is then materialized once, by one inner adaptive plan that every reference reads. With AQE
+ * off, the copies are deduplicated by exchange reuse, which is best effort: a miss, for example
+ * with `spark.sql.exchange.reuse` off, is only detected by `VerifyCTEReuse`, which logs it or,
+ * under [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]], throws.
  *
  * An id that ends up with a single copy, for example because its only references sit inside a
  * definition that is itself never consumed, is not sealed, and its id is reset to zero so the
@@ -59,8 +62,10 @@ object ReplaceRepartitionWithCTEReuse extends Rule[LogicalPlan] {
     }
 
     // Count plan-reuse repartitions by id before converting; keep only the ids with a second
-    // consumer. Counting by `repartitionId` is correct even though `deduplicatePlan` may have
-    // produced copies with fresh exprIds -- the id is preserved across copies.
+    // consumer. Counting by `repartitionId` is correct even though
+    // `DeduplicateRelations.deduplicateRight`, which `ReplaceCTERefWithRepartition` uses to copy
+    // each reference's body, may have produced copies with fresh exprIds -- the id is preserved
+    // across copies.
     val refCount = mutable.HashMap.empty[Long, Int]
     plan.foreachWithSubqueriesAndPruning(_.containsPattern(REPARTITION_OPERATION)) {
       case r: PlanReusableRepartition if r.isForPlanReuse =>

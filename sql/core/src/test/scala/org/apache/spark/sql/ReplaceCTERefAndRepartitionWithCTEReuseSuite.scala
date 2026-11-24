@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, Literal, Rand, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{PushdownPredicatesAndPruneColumnsForCTEDef, ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, RoundRobinPartitioning}
@@ -259,15 +259,16 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   }
 
   // ---------------------------------------------------------------------------
-  // A CTE body already ending in a customer repartition gets no special treatment
+  // A CTE that is not forceSkipInline keeps the plain lowering, whatever its root
   // ---------------------------------------------------------------------------
 
   test("CTE body ending in a customer repartition is not converted to CTEReuseRelation") {
     withCTEReuseEnabled {
-      // The CTE body root is a user Repartition (REPARTITION hint). It is not a plan-reuse
-      // repartition, so ReplaceCTERefWithRepartition leaves it in place (canSkipExtraRepartition)
-      // rather than wrapping it in a plan-reuse shuffle -- the CTE is effectively inlined and its
-      // repartition is not converted. So there is no CTEReuseRelation for this shape.
+      // The CTE is not forceSkipInline, so ReplaceCTERefWithRepartition keeps the plain lowering
+      // whatever its root is: here it leaves the body's user REPARTITION in place
+      // (canSkipExtraRepartition) and assigns no plan-reuse id, so there is no CTEReuseRelation.
+      // The same REPARTITION-rooted body is sealed once it is forced (see "forced CTE rooted at an
+      // existing repartition seals").
       val df = sql(
         """WITH cte AS (
           |  SELECT /*+ REPARTITION(3, id) */ id, rand() as r FROM range(100)
@@ -423,9 +424,9 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // exprIds. The inner repartition uses a HashPartitioning over the copy's own attribute; after
     // conversion it becomes a nested CTEReuseRelation whose partitioning is metadata.
     // Canonicalizing the outer cteId's sharedSubplan recurses into that inner one, so without
-    // partitioning-exprId normalization the two copies' canonical forms differ and
-    // validateCTEReuseRelations forces a fallback to ReplaceCTERefWithRepartition (no
-    // CTEReuseRelation).
+    // partitioning-exprId normalization the two copies' canonical forms differ,
+    // validateCTEReuseRelations fails, and ReplaceRepartitionWithCTEReuse then seals nothing and
+    // resets every plan-reuse id (no CTEReuseRelation).
     def nestedCopy(): LogicalPlan = {
       val leaf = LocalRelation(AttributeReference("a", IntegerType)())
       val inner = RepartitionByExpression(leaf.output, leaf, Some(5), id = 2L)
@@ -713,7 +714,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     }
   }
 
-  test("a forced CTE with a streaming body is not sealed") {
+  test("a forced CTE in a streaming query is not sealed") {
     val streamingRel = LocalRelation(Seq(AttributeReference("a", IntegerType)()), Nil,
       isStreaming = true)
     val cteDef = CTERelationDef(streamingRel, forceSkipInline = true)
@@ -744,6 +745,89 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       assert(cteIds(query(same, "SELECT id, id * 3 AS v FROM range(10)")).size == 2,
         "Expected different bodies to keep separate cteIds")
     }
+  }
+
+  test("a static forced CTE referenced twice in a streaming query is not sealed") {
+    val base = rel
+    val cteDef = CTERelationDef(base, forceSkipInline = true)
+    val refs = (0 until 2).map { _ =>
+      CTERelationRef(cteDef.id, _resolved = true, base.output, isStreaming = false)
+    }
+    val streamingRel = LocalRelation(base.output.map(_.newInstance()), Nil, isStreaming = true)
+    val plan = WithCTE(Union(refs :+ streamingRel), Seq(cteDef))
+    assert(plan.isStreaming)
+    val result = runReuseRules(plan)
+    assert(collectCTEReuseRelationsDeep(result).isEmpty && planReuseRepartitions(result).isEmpty,
+      s"Expected no sealing in a streaming query:\n${result.treeString}")
+    assert(result == runReuseRules(plan, enabled = false),
+      s"Expected the same plan as with the flag off:\n${result.treeString}")
+  }
+
+  // A resolved reference that keeps the output of `cteDef`.
+  private def refTo(cteDef: CTERelationDef): CTERelationRef =
+    CTERelationRef(cteDef.id, _resolved = true, cteDef.output, isStreaming = false)
+
+  test("a forced CTE read once inside a retained CTE read twice is sealed") {
+    // `inner` is forced and referenced once, inside the body of `outer`, a MATERIALIZED CTE that
+    // is not forced and is referenced twice. The lowering copies `outer`'s body, and the forced
+    // body inside it, once per reference, so `inner` must be sealed to be materialized once.
+    val base = rel
+    val inner = CTERelationDef(
+      Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base), forceSkipInline = true)
+    val outer = CTERelationDef(
+      Filter(Literal(true), refTo(inner)), materialized = Some(true))
+    val plan = WithCTE(Union(Seq(refTo(outer), refTo(outer))), Seq(inner, outer))
+    val result = runReuseRules(plan)
+    assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 2)
+    assert(collectCTEReuseRelations(result).forall(_.output == inner.output),
+      s"Expected the forced body to be sealed:\n${result.treeString}")
+  }
+
+  test("a forced CTE with a single copy keeps the plain lowering wherever it is referenced") {
+    // Referenced once in the main query and once inside a definition that nothing reads: the
+    // lowered plan holds one copy, as with the flag off.
+    val base = rel
+    val forced = CTERelationDef(base, forceSkipInline = true)
+    val unread = CTERelationDef(Filter(Literal(true), refTo(forced)), materialized = Some(true))
+    val withUnread = WithCTE(Project(base.output, refTo(forced)), Seq(forced, unread))
+    val unreadResult = runReuseRules(withUnread)
+    assert(unreadResult == runReuseRules(withUnread, enabled = false),
+      s"Expected the same plan as with the flag off:\n${unreadResult.treeString}")
+    assert(collectCTEReuseRelationsDeep(unreadResult).isEmpty &&
+      planReuseRepartitions(unreadResult).isEmpty, unreadResult.treeString)
+
+    // Referenced once inside a sealed forced definition, which is materialized once: only the
+    // outer definition is sealed, and the inner body keeps the plain lowering inside it.
+    val inner = CTERelationDef(base, forceSkipInline = true)
+    val outer = CTERelationDef(Filter(Literal(true), refTo(inner)), forceSkipInline = true)
+    val nested = WithCTE(Union(Seq(refTo(outer), refTo(outer))), Seq(inner, outer))
+    val nestedResult = runReuseRules(nested)
+    val reuses = collectCTEReuseRelationsDeep(nestedResult)
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+    assert(reuses.forall(_.output == outer.output), nestedResult.treeString)
+    assert(planReuseRepartitions(nestedResult).map(_.repartitionId).toSet ==
+      reuses.map(_.cteId).toSet, s"Expected only the outer id:\n${nestedResult.treeString}")
+    reuses.foreach { r =>
+      val innerLowering = r.sharedSubplan.collect {
+        case f: Filter => f.child
+      }
+      assert(innerLowering == Seq(RepartitionByExpression(Seq.empty, base, None)),
+        s"Expected the inner body's plain lowering:\n${r.sharedSubplan.treeString}")
+    }
+  }
+
+  test("a forced CTE whose body only selects another forced CTE shares its plan-reuse id") {
+    // `second`'s body is a reference that keeps `first`'s output, so it lowers to `first`'s
+    // plan-reuse repartition, whose id `second` reuses. The body is non-deterministic, so only that
+    // id-sharing path gives the four references one id.
+    val base = rel
+    val first = CTERelationDef(
+      Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base), forceSkipInline = true)
+    val second = CTERelationDef(refTo(first), forceSkipInline = true)
+    val plan = WithCTE(
+      Union(Seq(refTo(first), refTo(first), refTo(second), refTo(second))), Seq(first, second))
+    val result = runReuseRules(plan)
+    assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 4)
   }
 
   test("forced under-subquery CTE seals (wrapped)") {

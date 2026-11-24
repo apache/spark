@@ -7637,12 +7637,14 @@ object SQLConf {
     buildConf("spark.sql.cteReuse.enabled")
       .internal()
       .doc("When true, a CTE definition marked forceSkipInline that a batch query references " +
-        "two or more times is sealed for guaranteed reuse: its references become CTEReuse " +
-        "nodes that materialize the body once, through a single inner AdaptiveSparkPlanExec " +
-        "with AQE on and through one reused shuffle with AQE off. Such a definition can also " +
-        "pin its partitioning. Ordinary retained or user MATERIALIZED CTEs keep plain " +
-        "repartitions and are unaffected. When false, forceSkipInline definitions are lowered " +
-        "like any other retained CTE.")
+        "two or more times is sealed for reuse: its references become CTEReuse nodes. With " +
+        "AQE on, the body is materialized once, through a single inner AdaptiveSparkPlanExec " +
+        "that every reference reads. With AQE off, the copies are deduplicated by exchange " +
+        "reuse, which is best effort: a miss is only detected, and logged or, under " +
+        "spark.sql.cteReuse.failOnMissWithoutAQE, thrown. Such a definition can also pin its " +
+        "partitioning. Ordinary retained or user MATERIALIZED CTEs keep plain repartitions and " +
+        "are unaffected. When false, forceSkipInline definitions are lowered like any other " +
+        "retained CTE.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

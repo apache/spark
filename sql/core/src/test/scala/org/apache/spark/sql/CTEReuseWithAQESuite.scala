@@ -19,18 +19,19 @@ package org.apache.spark.sql
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkThrowable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTEReuseRelation}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, CTEReuseQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -57,7 +58,8 @@ class CTEReuseWithAQESuite
    * Verify the single-materialization invariant: all [[CTEReuseQueryStageExec]] stages reusing one
    * CTE point to the same inner AdaptiveSparkPlanExec by identity, so a CTE referenced N times
    * creates N stage wrappers but is materialized exactly once. `expectedDistinctCTEs` is the number
-   * of distinct CTE definitions (default 1).
+   * of distinct shared inner plans, one per plan-reuse id (default 1); forced CTEs with identical
+   * deterministic bodies share one.
    */
   private def assertInnerAQEShared(
       df: DataFrame,
@@ -103,6 +105,45 @@ class CTEReuseWithAQESuite
     classic.Dataset.ofRows(spark, tagged)
   }
 
+  /** Like [[sqlWithForcedCTEReuse]], but forces only the CTEs named in `names`. */
+  private def sqlWithForcedCTEs(text: String, names: Set[String]): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef if (d.child match {
+        case a: SubqueryAlias => names.contains(a.alias)
+        case _ => false
+      }) => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
+  /**
+   * Builds `text`, which must reference its one CTE exactly twice, with every CTE forced to
+   * materialize and both references sharing the first reference's attributes, and skips
+   * re-analysis, as `CTEReuseWithoutAQESuite` does for a dynamic-pruning subquery in a CTE body.
+   */
+  private def forcedCTEWithSharedReferences(text: String): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val refs = analyzed.collect { case r: CTERelationRef => r }
+    assert(refs.size == 2, analyzed.treeString)
+    val mapping = AttributeMap(refs(1).output.zip(refs(0).output))
+    val shared: LogicalPlan = analyzed.transformUp {
+      case r: CTERelationRef if r.output == refs(1).output => r.copy(output = refs(0).output)
+    }.transformAllExpressions {
+      case a: Attribute if mapping.contains(a) => mapping(a)
+    }.transformWithSubqueries {
+      case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    shared.foreach(_.setAnalyzed())
+    classic.Dataset.ofRows(spark, shared)
+  }
+
+  /** The rows `text` returns with guaranteed CTE reuse off, computed independently of it. */
+  private def rowsWithoutCTEReuse(text: String): Seq[Row] =
+    withSQLConf(cteReuseConf -> "false") {
+      sqlWithForcedCTEReuse(text).collect().toSeq
+    }
+
   // -----------------------------------------------------------------
   // Inner-AQE sharing tests
   // -----------------------------------------------------------------
@@ -119,7 +160,11 @@ class CTEReuseWithAQESuite
             |)
             |SELECT * FROM cte c1 JOIN cte c2 ON c1.id = c2.id
             |""".stripMargin)
-        df.collect()
+        val rows = df.collect().map(r => (r.getInt(0), r.getDouble(1), r.getInt(2), r.getDouble(3)))
+        assert(rows.map(_._1).sorted.toSeq == (1 to 5), rows.mkString(", "))
+        // One materialization: both references return the same random value for each id.
+        assert(rows.forall { case (id1, r1, id2, r2) => id1 == id2 && r1 == r2 },
+          rows.mkString(", "))
         // Two refs create two CTEReuseQueryStageExec wrappers, both sharing one inner AQE.
         assert(collectWithSubqueries(df.queryExecution.executedPlan) {
           case s: CTEReuseQueryStageExec => s
@@ -278,7 +323,7 @@ class CTEReuseWithAQESuite
           """INSERT INTO items VALUES
             |(1, 'red'), (2, 'blue'), (3, 'red')""".stripMargin)
 
-        val df = sqlWithForcedCTEReuse(
+        val text =
           """WITH ssales AS (
             |  SELECT s.item_id, i.color,
             |    sum(s.amount) as total, rand() as r
@@ -292,14 +337,15 @@ class CTEReuseWithAQESuite
             |HAVING sum(total) > (
             |  SELECT 0.05 * avg(total) FROM ssales
             |)
-            |""".stripMargin)
+            |""".stripMargin
+        val df = sqlWithForcedCTEReuse(text)
 
         val reuses = collectCTEReuseRelations(df)
         assert(reuses.size >= 2,
           s"Expected >= 2 CTEReuseRelation (main + subquery), " +
             s"got ${reuses.size}.\nPlan:\n" +
             df.queryExecution.optimizedPlan.treeString)
-        df.collect()
+        checkAnswer(df, rowsWithoutCTEReuse(text))
         assertInnerAQEShared(df)
       }
     }
@@ -320,7 +366,7 @@ class CTEReuseWithAQESuite
           """INSERT INTO products VALUES
             |(1, 'A'), (2, 'B'), (3, 'A')""".stripMargin)
 
-        val df = sqlWithForcedCTEReuse(
+        val text =
           """WITH agg AS (
             |  SELECT o.pid, p.cat,
             |    sum(o.qty) as total, rand() as r
@@ -330,14 +376,15 @@ class CTEReuseWithAQESuite
             |SELECT pid, total FROM agg a1
             |WHERE cat = 'A'
             |AND total > (SELECT avg(total) FROM agg)
-            |""".stripMargin)
+            |""".stripMargin
+        val df = sqlWithForcedCTEReuse(text)
 
         val reuses = collectCTEReuseRelations(df)
         assert(reuses.size >= 2,
           s"Expected >= 2 CTEReuseRelation (main + subquery), " +
             s"got ${reuses.size}.\nPlan:\n" +
             df.queryExecution.optimizedPlan.treeString)
-        df.collect()
+        checkAnswer(df, rowsWithoutCTEReuse(text))
         assertInnerAQEShared(df)
       }
     }
@@ -411,7 +458,7 @@ class CTEReuseWithAQESuite
           // CTE A referenced twice (c1 + c3), CTE B twice (c2 + c4).
           // Join c1-c2 on a=b, then join with c3 on a=a, then join
           // with c4 on a=b. Forces 2+ AQE iterations.
-          val df = sqlWithForcedCTEReuse(
+          val text =
             """WITH
               |  cte_a AS (
               |    SELECT a, ka, rand() as r FROM replan_a
@@ -424,7 +471,8 @@ class CTEReuseWithAQESuite
               |JOIN cte_b c2 ON c1.a = c2.b
               |JOIN cte_a c3 ON c1.a = c3.a
               |JOIN cte_b c4 ON c1.a = c4.b
-              |""".stripMargin)
+              |""".stripMargin
+          val df = sqlWithForcedCTEReuse(text)
 
           val reuses = collectCTEReuseRelations(df)
           assert(reuses.size >= 4,
@@ -432,7 +480,7 @@ class CTEReuseWithAQESuite
               s"got ${reuses.size}.\nPlan:\n" +
               df.queryExecution.optimizedPlan.treeString)
 
-          df.collect()
+          checkAnswer(df, rowsWithoutCTEReuse(text))
           assertInnerAQEShared(df, expectedDistinctCTEs = 2)
         }
       }
@@ -458,7 +506,7 @@ class CTEReuseWithAQESuite
             |(1, 10), (2, 20), (3, 30),
             |(4, 40), (5, 50)""".stripMargin)
 
-        val df = sqlWithForcedCTEReuse(
+        val text =
           """WITH
             |  cte_inner AS (
             |    SELECT id, v, rand() as ri FROM nested_src
@@ -470,7 +518,8 @@ class CTEReuseWithAQESuite
             |SELECT c1.id, c2.id as id2
             |FROM cte_outer c1
             |JOIN cte_outer c2 ON c1.id = c2.id
-            |""".stripMargin)
+            |""".stripMargin
+        val df = sqlWithForcedCTEReuse(text)
 
         val reuses = collectCTEReuseRelations(df)
         // Only the outer CTE's 2 refs are visible at the top level.
@@ -482,7 +531,7 @@ class CTEReuseWithAQESuite
             s", got ${reuses.size}.\nPlan:\n" +
             df.queryExecution.optimizedPlan.treeString)
 
-        df.collect()
+        checkAnswer(df, rowsWithoutCTEReuse(text))
         // collectWithSubqueries descends into QueryStageExec.plan
         // and AdaptiveSparkPlanExec.executedPlan, so it finds both
         // outer CTE stages (2) and inner CTE stages inside the
@@ -564,19 +613,15 @@ class CTEReuseWithAQESuite
              |""".stripMargin
 
         val df = sqlWithForcedCTEReuse(query)
-        df.collect()
+        // 3 ids self-joined at every level = 3 rows, (1, 1), (2, 2) and (3, 3).
+        checkAnswer(df, rowsWithoutCTEReuse(query))
+        checkAnswer(df, (1 to 3).map(i => Row(i, i)))
 
         val aqe = df.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec]
 
         assert(aqe.context.cteAQERegistry.nonEmpty,
           "Expected cteAQERegistry to contain inner AQE(s)")
-
-        // Verify correct result: 3 ids self-joined = 3 rows
-        val result = df.collect()
-        assert(result.length == 3,
-          s"Expected 3 rows from $numLevels-level nested CTE join, " +
-            s"got ${result.length}")
       }
     }
   }
@@ -810,6 +855,296 @@ class CTEReuseWithAQESuite
   }
 
   // -----------------------------------------------------------------
+  // A forced CTE copied through a retained CTE
+  // -----------------------------------------------------------------
+
+  test("a forced CTE read once inside a MATERIALIZED CTE read twice is materialized once") {
+    withCTEReuseEnabled {
+      // Without exchange reuse, each reference of `m` runs its own copy of `m`'s body, so only
+      // sealing `f` keeps the two copies of its random values the same.
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        withTable("copied_src") {
+          sql("CREATE TABLE copied_src (id INT) USING parquet")
+          sql("INSERT INTO copied_src VALUES (1), (2), (3), (4), (5)")
+          val df = sqlWithForcedCTEs(
+            """WITH f AS (SELECT /*+ REPARTITION(3) */ id, rand() AS r FROM copied_src),
+              |  m AS MATERIALIZED (SELECT id, r FROM f)
+              |SELECT m1.id, m1.r = m2.r AS same FROM m m1 JOIN m m2 ON m1.id = m2.id
+              |""".stripMargin, names = Set("f"))
+          assert(collectCTEReuseRelations(df).size == 2,
+            s"Expected the forced CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+          checkAnswer(df, (1 to 5).map(Row(_, true)))
+          assertInnerAQEShared(df)
+        }
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Dynamic partition pruning with a sealed CTE as the broadcast build side
+  // -----------------------------------------------------------------
+
+  private def withDPPTables(f: => Unit): Unit = {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("cte_dpp_fact", "cte_dpp_dim") {
+        sql("CREATE TABLE cte_dpp_fact (v INT, store_id INT) USING parquet " +
+          "PARTITIONED BY (store_id)")
+        sql("INSERT INTO cte_dpp_fact SELECT CAST(id AS INT), CAST(id % 10 AS INT) FROM range(100)")
+        sql("CREATE TABLE cte_dpp_dim (store_id INT, country STRING) USING parquet")
+        sql("INSERT INTO cte_dpp_dim VALUES (1, 'NL'), (2, 'NL'), (3, 'DE'), (4, 'US')")
+        f
+      }
+    }
+  }
+
+  // The number of partitions the scan of the partitioned fact table read.
+  private def factPartitionsRead(df: DataFrame): Long = {
+    val scans = collectWithSubqueries(df.queryExecution.executedPlan) {
+      case s: FileSourceScanExec if s.tableIdentifier.exists(_.table == "cte_dpp_fact") => s
+    }
+    assert(scans.size == 1, df.queryExecution.executedPlan.treeString)
+    scans.head.metrics("numPartitions").value
+  }
+
+  Seq(
+    "one SQL reference" -> "",
+    "two SQL references" -> "UNION ALL SELECT store_id, store_id FROM d WHERE country = 'NL'"
+  ).foreach {
+    case (name, extra) =>
+      test(s"dynamic partition pruning reuses the broadcast of a sealed CTE ($name)") {
+        withCTEReuseEnabled {
+          withDPPTables {
+            // The selective predicate sits above the reference, where PartitionPruning sees it,
+            // and the dynamic-pruning subquery then holds a second copy of the CTE.
+            Seq(
+              "a plain body" -> "SELECT store_id, country FROM cte_dpp_dim",
+              "a body with a subquery" ->
+                ("SELECT store_id, country FROM cte_dpp_dim " +
+                  "WHERE store_id <= (SELECT max(store_id) FROM cte_dpp_dim)")).foreach {
+              case (bodyName, body) =>
+                val df = sqlWithForcedCTEReuse(
+                  s"""WITH d AS ($body)
+                     |SELECT f.v, f.store_id FROM cte_dpp_fact f
+                     |JOIN d ON f.store_id = d.store_id AND d.country = 'NL'
+                     |$extra
+                     |""".stripMargin)
+                val expected = (0 until 100).filter(i => i % 10 == 1 || i % 10 == 2)
+                  .map(i => Row(i, i % 10)) ++
+                  (if (extra.isEmpty) Nil else Seq(Row(1, 1), Row(2, 2)))
+                checkAnswer(df, expected)
+                assert(collectCTEReuseRelations(df).size >= 2,
+                  s"$bodyName: expected the CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+                assert(factPartitionsRead(df) == 2,
+                  s"$bodyName: expected the scan to read only the two NL partitions:\n" +
+                    df.queryExecution.executedPlan.treeString)
+            }
+          }
+        }
+      }
+  }
+
+  test("references to identical non-deterministic forced CTEs keep distinct canonical forms") {
+    withCTEReuseEnabled {
+      withTable("nondet_canon_src") {
+        sql("CREATE TABLE nondet_canon_src (id INT) USING parquet")
+        sql("INSERT INTO nondet_canon_src VALUES (1), (2)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH a AS (SELECT id, rand(42) AS r FROM nondet_canon_src),
+            |  b AS (SELECT id, rand(42) AS r FROM nondet_canon_src)
+            |SELECT * FROM a UNION ALL SELECT * FROM a
+            |UNION ALL SELECT * FROM b UNION ALL SELECT * FROM b
+            |""".stripMargin)
+        df.collect()
+        assertInnerAQEShared(df, expectedDistinctCTEs = 2)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        assert(stages.size == 4)
+        val byInner = stages.groupBy(s => System.identityHashCode(s.innerAQE)).values.toSeq
+        assert(byInner.forall(_.map(_.canonicalized).distinct.size == 1),
+          "Expected the references of one CTE to share a canonical form")
+        assert(byInner.map(_.head.canonicalized).distinct.size == 2,
+          "Expected the two CTEs to keep distinct canonical forms")
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Runtime statistics of an empty CTE stage
+  // -----------------------------------------------------------------
+
+  test("an empty CTE stage reports zero rows so a join over it is propagated as empty") {
+    withCTEReuseEnabled {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withTable("empty_stats_src", "empty_stats_other") {
+          sql("CREATE TABLE empty_stats_src (id INT, batch_id INT) USING parquet")
+          sql("CREATE TABLE empty_stats_other (id INT) USING parquet")
+          sql("INSERT INTO empty_stats_other VALUES (1), (2), (3)")
+          // The CTE is empty only at runtime: its inner plan collapses to an empty relation once
+          // the aggregate's input stage turns out empty.
+          val df = sqlWithForcedCTEReuse(
+            """WITH flagged AS (
+              |  SELECT batch_id, count(id) AS c FROM empty_stats_src GROUP BY batch_id
+              |)
+              |SELECT f.batch_id FROM flagged f JOIN empty_stats_other o ON f.batch_id = o.id
+              |UNION ALL
+              |SELECT CAST(count(*) AS INT) FROM flagged
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(0)))
+          val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+          val finalPlan = aqe.executedPlan
+          assert(collect(finalPlan) { case j: BaseJoinExec => j }.isEmpty,
+            s"Expected the join over the empty CTE to be propagated as empty:\n$finalPlan")
+          // Empty-relation propagation removes both references' stages from the final plan, so
+          // check the statistics a stage over the shared inner plan reports.
+          val inners = aqe.context.cteAQERegistry.values.toSeq
+          assert(inners.size == 1 && inners.head.executedPlan.isInstanceOf[EmptyRelationExec],
+            inners.mkString("\n"))
+          val inner = inners.head
+          val stats =
+            CTEReuseQueryStageExec(0, inner, inner.output, inner.canonicalized).getRuntimeStatistics
+          assert(stats.rowCount.contains(BigInt(0)) && stats.sizeInBytes == 0, stats)
+        }
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // The CTE stage's collect paths, a failing body, and subqueries in a body
+  // -----------------------------------------------------------------
+
+  // Whether the shared inner plan of `s` still ends in its root shuffle stage, rather than in a
+  // result stage that a collect through the inner adaptive plan would have put on top of it.
+  private def endsInShuffleStage(s: CTEReuseQueryStageExec): Boolean =
+    (s.innerAQE.executedPlan match {
+      case r: AQEShuffleReadExec => r.child
+      case other => other
+    }).isInstanceOf[ShuffleQueryStageExec]
+
+  test("a CTE reuse stage collects, takes, tails and iterates over the shared inner plan") {
+    withCTEReuseEnabled {
+      withTable("collect_paths_src") {
+        sql("CREATE TABLE collect_paths_src (id INT) USING parquet")
+        sql("INSERT INTO collect_paths_src VALUES (1), (2), (3), (4), (5)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM collect_paths_src)
+            |SELECT id, r FROM cte UNION ALL SELECT id, r FROM cte
+            |""".stripMargin)
+        val expected = df.collect().map(r => (r.getInt(0), r.getDouble(1))).toSet
+        assert(expected.size == 5, expected)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        assert(stages.size == 2 && stages.forall(_.isMaterialized))
+        def decode(rows: Iterable[InternalRow]): Seq[(Int, Double)] =
+          rows.map(r => (r.getInt(0), r.getDouble(1))).toSeq
+        stages.foreach { s =>
+          assert(decode(s.executeCollect()).toSet == expected)
+          val taken = decode(s.executeTake(2))
+          assert(taken.size == 2 && taken.toSet.subsetOf(expected), taken)
+          val tail = decode(s.executeTail(2))
+          assert(tail.size == 2 && tail.toSet.subsetOf(expected), tail)
+          assert(decode(s.executeToIterator().map(_.copy()).toSeq).toSet == expected)
+          stages.foreach { other =>
+            assert(endsInShuffleStage(other),
+              s"Expected the shared inner plan to keep its root shuffle stage:\n${other.innerAQE}")
+          }
+        }
+        // The references still read the same materialization.
+        assert(df.collect().map(r => (r.getInt(0), r.getDouble(1))).toSet == expected)
+      }
+    }
+  }
+
+  test("a forced CTE body that fails at runtime fails the query with its own error") {
+    withCTEReuseEnabled {
+      withTable("failing_body_src") {
+        sql("CREATE TABLE failing_body_src (id INT) USING parquet")
+        sql("INSERT INTO failing_body_src VALUES (1), (2), (3)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (
+            |  SELECT id FROM failing_body_src WHERE if(id > 2, raise_error('cte boom'), true)
+            |)
+            |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        val e = intercept[Exception](df.collect())
+        val chain = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).toSeq
+        assert(!chain.exists(_.isInstanceOf[java.util.concurrent.CompletionException]),
+          chain.mkString("\n"))
+        assert(chain.exists {
+          case t: SparkThrowable => t.getCondition == "USER_RAISED_EXCEPTION"
+          case _ => false
+        }, chain.mkString("\n"))
+        assert(chain.exists(t => Option(t.getMessage).exists(_.contains("cte boom"))),
+          chain.mkString("\n"))
+      }
+    }
+  }
+
+  test("forced CTE bodies with subqueries share one inner AQE") {
+    withCTEReuseEnabled {
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+        withTable("body_sub_src", "body_sub_a", "body_sub_b", "body_sub_fact", "body_sub_dim") {
+          sql("CREATE TABLE body_sub_src (id INT, v INT) USING parquet")
+          sql("INSERT INTO body_sub_src VALUES (1, 10), (2, 20), (3, 30)")
+          sql("CREATE TABLE body_sub_a (a INT) USING parquet")
+          sql("INSERT INTO body_sub_a VALUES (2), (3), (7)")
+          sql("CREATE TABLE body_sub_b (b INT) USING parquet")
+          sql("INSERT INTO body_sub_b VALUES (100), (200)")
+          sql("CREATE TABLE body_sub_fact (v INT, store_id INT) USING parquet " +
+            "PARTITIONED BY (store_id)")
+          sql("INSERT INTO body_sub_fact VALUES (10, 1), (20, 2), (30, 2), (40, 3)")
+          sql("CREATE TABLE body_sub_dim (store_id INT, country STRING) USING parquet")
+          sql("INSERT INTO body_sub_dim VALUES (1, 'NL'), (2, 'NL'), (3, 'DE')")
+          Seq(
+            "a scalar subquery" -> (
+              "SELECT id, (SELECT max(a) FROM body_sub_a) AS x, rand() AS r FROM body_sub_src",
+              Seq(Row(1, 7), Row(2, 7), Row(3, 7))),
+            "an IN subquery" -> (
+              "SELECT id, v AS x, rand() AS r FROM body_sub_src " +
+                "WHERE id IN (SELECT a FROM body_sub_a)",
+              Seq(Row(2, 20), Row(3, 30))),
+            "a subquery nested in a subquery" -> (
+              "SELECT id, (SELECT max(a) + (SELECT max(b) FROM body_sub_b) FROM body_sub_a) " +
+                "AS x, rand() AS r FROM body_sub_src",
+              Seq(Row(1, 207), Row(2, 207), Row(3, 207)))).foreach {
+            case (name, (body, expected)) =>
+              val df = sqlWithForcedCTEReuse(
+                s"""WITH cte AS ($body)
+                   |SELECT c1.id, c1.x FROM cte c1 JOIN cte c2 ON c1.id = c2.id AND c1.x = c2.x
+                   |AND c1.r = c2.r
+                   |""".stripMargin)
+              checkAnswer(df, expected)
+              assert(collectCTEReuseRelations(df).size == 2,
+                s"$name: expected the CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+              assertInnerAQEShared(df)
+          }
+
+          // A dynamic-pruning join inside the body. Both references share attributes, as in the
+          // dynamic-pruning test of CTEReuseWithoutAQESuite: copying a body that holds a
+          // dynamic-pruning subquery for a reference with fresh attributes leaves the plan
+          // unresolved, which is outside this test.
+          val dpp = forcedCTEWithSharedReferences(
+            """WITH cte AS (
+              |  SELECT f.store_id AS id, f.v AS x, rand() AS r FROM body_sub_fact f
+              |  JOIN body_sub_dim d ON f.store_id = d.store_id AND d.country = 'NL'
+              |)
+              |SELECT id, x, r FROM cte UNION ALL SELECT id, x, r FROM cte
+              |""".stripMargin)
+          val byKey = dpp.collect().toSeq.groupBy(r => (r.getInt(0), r.getInt(1)))
+          assert(byKey.keySet == Set((1, 10), (2, 20), (2, 30)), byKey)
+          // One materialization: both references return the same random value for each row.
+          assert(byKey.values.forall(rows => rows.size == 2 && rows.map(_.getDouble(2)).distinct
+            .size == 1), byKey)
+          assert(collectCTEReuseRelations(dpp).size == 2,
+            s"Expected the CTE to be sealed:\n${dpp.queryExecution.optimizedPlan}")
+          assertInnerAQEShared(dpp)
+        }
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------
   // Row support of a CTE reuse stage
   // -----------------------------------------------------------------
 
@@ -817,7 +1152,7 @@ class CTEReuseWithAQESuite
     val leaf = ColumnarOnlyLeafExec(spark.range(1).queryExecution.analyzed.output)
     val context = AdaptiveExecutionContext(spark, spark.range(1).queryExecution)
     val inner = AdaptiveSparkPlanExec(leaf, context, Nil, isSubquery = true)
-    val stage = CTEReuseQueryStageExec(0, inner, leaf.output)
+    val stage = CTEReuseQueryStageExec(0, inner, leaf.output, leaf.canonicalized)
     assert(stage.supportsColumnar && !stage.supportsRowBased)
     // A row-based consumer therefore gets a columnar-to-row transition above the stage.
     val withTransitions =

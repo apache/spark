@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Dynam
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
@@ -557,6 +557,90 @@ class CTEReuseWithoutAQESuite
           // Collect from this Dataset's own plan: a derived Dataset would be analyzed again.
           val rows = df.collect().map(r => (r.getInt(0), r.getInt(1))).toSeq.sorted
           assert(rows == Seq((1000, 1), (1000, 1), (1010, 2), (1010, 2), (1020, 2), (1020, 2)))
+        }
+      }
+    }
+  }
+
+  Seq(
+    "one SQL reference" -> "",
+    "two SQL references" -> "UNION ALL SELECT store_id, store_id FROM d WHERE country = 'NL'"
+  ).foreach { case (name, extra) =>
+    test(s"dynamic partition pruning reuses the broadcast of a sealed CTE (AQE off, $name)") {
+      withCTEReuseNoAQE {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+          withTable("cte_dpp_fact", "cte_dpp_dim") {
+            sql("CREATE TABLE cte_dpp_fact (v INT, store_id INT) USING parquet " +
+              "PARTITIONED BY (store_id)")
+            sql("INSERT INTO cte_dpp_fact " +
+              "SELECT CAST(id AS INT), CAST(id % 10 AS INT) FROM range(100)")
+            sql("CREATE TABLE cte_dpp_dim (store_id INT, country STRING) USING parquet")
+            sql("INSERT INTO cte_dpp_dim VALUES (1, 'NL'), (2, 'NL'), (3, 'DE'), (4, 'US')")
+            // The selective predicate sits above the reference, where PartitionPruning sees it,
+            // and the dynamic-pruning subquery then holds a second copy of the CTE.
+            Seq(
+              "a plain body" -> "SELECT store_id, country FROM cte_dpp_dim",
+              "a body with a subquery" ->
+                ("SELECT store_id, country FROM cte_dpp_dim " +
+                  "WHERE store_id <= (SELECT max(store_id) FROM cte_dpp_dim)")).foreach {
+              case (bodyName, body) =>
+                val df = sqlWithForcedCTEReuse(
+                  s"""WITH d AS ($body)
+                     |SELECT f.v, f.store_id FROM cte_dpp_fact f
+                     |JOIN d ON f.store_id = d.store_id AND d.country = 'NL'
+                     |$extra
+                     |""".stripMargin)
+                assert(df.queryExecution.optimizedPlan.collectWithSubqueries {
+                  case r: CTEReuseRelation => r
+                }.size >= 2, s"$bodyName: expected the CTE to be sealed:\n" +
+                  df.queryExecution.optimizedPlan)
+                val expected = (0 until 100).filter(i => i % 10 == 1 || i % 10 == 2)
+                  .map(i => Row(i, i % 10)) ++
+                  (if (extra.isEmpty) Nil else Seq(Row(1, 1), Row(2, 2)))
+                checkAnswer(df, expected)
+                assertCTEReuseApplied(df)
+                val scans = df.queryExecution.executedPlan.collectWithSubqueries {
+                  case s: FileSourceScanExec
+                      if s.tableIdentifier.exists(_.table == "cte_dpp_fact") => s
+                }
+                assert(scans.size == 1 && scans.head.metrics("numPartitions").value == 2,
+                  s"$bodyName: expected the scan to read only the two NL partitions:\n" +
+                    df.queryExecution.executedPlan.treeString)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("joins inside a sealed CTE body are bucket-coalesced (AQE off)") {
+    withCTEReuseNoAQE {
+      withSQLConf(
+          SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withTable("cte_bkt8", "cte_bkt4") {
+          spark.range(32).selectExpr("CAST(id AS INT) AS k", "CAST(id AS INT) AS v")
+            .write.bucketBy(8, "k").saveAsTable("cte_bkt8")
+          spark.range(32).selectExpr("CAST(id AS INT) AS k", "CAST(id * 2 AS INT) AS w")
+            .write.bucketBy(4, "k").saveAsTable("cte_bkt4")
+          val text =
+            """WITH cte AS (
+              |  SELECT a.k, a.v, b.w FROM cte_bkt8 a JOIN cte_bkt4 b ON a.k = b.k
+              |)
+              |SELECT * FROM cte UNION ALL SELECT * FROM cte
+              |""".stripMargin
+          val df = sqlWithForcedCTEReuse(text)
+          checkAnswer(df, (0 until 32).flatMap(i => Seq.fill(2)(Row(i, i, i * 2))))
+          assertCTEReuseApplied(df)
+          assertNoDanglingReusedExchange(df)
+          // The body's sort-merge join reads both bucketed scans without a shuffle, and the only
+          // live shuffle is the one CTE shuffle that both references reuse.
+          val shuffles = df.queryExecution.executedPlan.collectWithSubqueries {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffles.size == 1 &&
+            shuffles.head.shuffleOrigin.isInstanceOf[LOCAL_SHUFFLE_FOR_CTE],
+            s"Expected only the reused CTE shuffle:\n${df.queryExecution.executedPlan}")
         }
       }
     }
@@ -1117,6 +1201,47 @@ class CTEReuseWithoutAQESuite
             s"Expected no CTE reuse relation in a micro-batch:\n$lastOptimized")
         } finally {
           query.stop()
+        }
+      }
+    }
+  }
+
+  test("a static forced CTE in a streaming query gets new random values in every micro-batch") {
+    withCTEReuseNoAQE {
+      import testImplicits._
+      val input = new MemoryStream[Int](0, spark)
+      withTable("cte_static_src") {
+        sql("CREATE TABLE cte_static_src (id INT) USING parquet")
+        sql("INSERT INTO cte_static_src VALUES (1), (2)")
+        withTempView("cte_rand_stream_src") {
+          input.toDF().createOrReplaceTempView("cte_rand_stream_src")
+          val df = sqlWithForcedCTEReuse(
+            """WITH c AS (SELECT id, rand() AS r FROM cte_static_src)
+              |SELECT s.value, c1.r FROM cte_rand_stream_src s
+              |JOIN c c1 ON s.value = c1.id
+              |JOIN c c2 ON c1.id = c2.id
+              |""".stripMargin)
+          val query = df.writeStream
+            .format("memory")
+            .queryName("cte_rand_stream_sink")
+            .outputMode(OutputMode.Append())
+            .start()
+          try {
+            input.addData(1)
+            query.processAllAvailable()
+            input.addData(1)
+            query.processAllAvailable()
+            val rows = spark.table("cte_rand_stream_sink").collect()
+            assert(rows.length == 2 && rows.forall(_.getInt(0) == 1), rows.mkString(", "))
+            assert(rows.map(_.getDouble(1)).distinct.length == 2,
+              s"Expected new random values in each micro-batch, got ${rows.mkString(", ")}")
+            val lastOptimized = query.asInstanceOf[StreamingQueryWrapper]
+              .streamingQuery.lastExecution.optimizedPlan
+            assert(lastOptimized.collectWithSubqueries { case r: CTEReuseRelation => r }.isEmpty,
+              s"Expected no CTE reuse relation in a micro-batch:\n$lastOptimized")
+          } finally {
+            query.stop()
+          }
         }
       }
     }

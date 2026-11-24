@@ -321,15 +321,32 @@ case class TableCacheQueryStageExec(
  * mirroring [[org.apache.spark.sql.execution.exchange.ReusedExchangeExec]]. Execution and stats
  * delegate to the inner AQE's post-iteration `executedPlan` so that going through the inner AQE's
  * own `execute()` (which would re-run iteration and wrap a result stage) is avoided.
+ *
+ * TODO: cancel the shared inner AQE when the outer query fails or no longer needs it, for example
+ * after its consumers are dropped by a replan. This stage is not an [[ExchangeQueryStageExec]], so
+ * the outer plan's stage cancellation does not reach it: until then the inner plan keeps running
+ * its stages to completion, and the shuffles it registers after the query's cleanup are not
+ * removed with the query's other shuffles.
+ *
+ * @param id the query stage id.
+ * @param innerAQE the shared inner adaptive plan of the CTE.
+ * @param output this reference's attributes.
+ * @param _canonicalized the canonical form of the
+ *                       [[org.apache.spark.sql.execution.exchange.CTEReuseExchange]] this stage
+ *                       replaced, which is the canonical form of the CTE's shuffle. Like the
+ *                       exchange query stages, the stage keeps the identity of the node it
+ *                       replaced, so a freshly planned reference to the same CTE, such as a
+ *                       dynamic-pruning build side, has the same result as this stage.
  */
 case class CTEReuseQueryStageExec(
     override val id: Int,
     innerAQE: AdaptiveSparkPlanExec,
-    override val output: Seq[Attribute]) extends QueryStageExec {
+    override val output: Seq[Attribute],
+    _canonicalized: SparkPlan) extends QueryStageExec {
 
   override val plan: SparkPlan = innerAQE
 
-  override def doCanonicalize(): SparkPlan = innerAQE.canonicalized
+  override def doCanonicalize(): SparkPlan = _canonicalized
 
   override protected def doMaterialize(): Future[Any] = innerAQE.materialize()
 
@@ -382,10 +399,13 @@ case class CTEReuseQueryStageExec(
     innerAQE.inputPlan.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
 
   // When the inner AQE collapses to an empty relation (e.g. AQEPropagateEmptyRelation), its
-  // executedPlan roots at an EmptyRelationExec rather than a shuffle stage, so report the empty
-  // stats directly instead of asserting a ShuffleQueryStageExec in `innerShuffleStage`.
+  // executedPlan roots at an EmptyRelationExec rather than a shuffle stage, so report zero size and
+  // zero rows, the statistics `EmptyRelation` itself reports, instead of asserting a
+  // ShuffleQueryStageExec in `innerShuffleStage`. The outer plan's empty-relation propagation then
+  // sees this reference as empty. `EmptyRelationExec.logical` is the plan it replaced, so its stats
+  // are only the pre-collapse estimate.
   override def getRuntimeStatistics: Statistics = innerAQE.executedPlan match {
-    case e: EmptyRelationExec => e.logical.stats
+    case _: EmptyRelationExec => Statistics(sizeInBytes = 0, rowCount = Some(0))
     case _ => innerShuffleStage.getRuntimeStatistics
   }
 

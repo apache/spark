@@ -41,13 +41,16 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * by [[ReplaceCTERefWithRepartition]]). This generation happens in the
  * [[ReplaceRepartitionWithCTEReuse]] rule.
  *
- * @param cteId Unique identifier for the subplan or CTE to be reused.
+ * @param cteId The plan-reuse id of the shared body: every reference of one forced definition
+ *              carries it, and forced definitions whose deterministic bodies are canonically equal
+ *              share it. It is not the [[CTERelationDef]] id that plans print.
  * @param partitioning Pre-determined partitioning for the shared exchange, taken from the
- *                     plan-reuse repartition at the root of [[sharedSubplan]]: a HashPartitioning
- *                     when the CTE is pinned via forcePartitioning, round-robin over the session
- *                     shuffle partitions when the root was wrapped, or the partitioning of a root
- *                     stamped in place, which can also be a hash, range, single-partition or
- *                     pass-through partitioning.
+ *                     plan-reuse repartition at the root of [[sharedSubplan]]: the pinned
+ *                     HashPartitioning when the CTE is pinned via forcePartitioning; for a wrapped
+ *                     root, round-robin over the session shuffle partitions, or over a coalesce
+ *                     root's own partition count; or the partitioning of a root stamped in place,
+ *                     which can be a hash, range, round-robin or pass-through partitioning. Any of
+ *                     these is SinglePartition when its partition count is one.
  * @param sharedSubplan The logical plan of the CTE definition. NOT a child node.
  */
 case class CTEReuseRelation(

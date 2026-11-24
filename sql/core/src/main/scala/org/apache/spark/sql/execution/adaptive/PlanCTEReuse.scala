@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.CTE_REUSE_EXCHANGE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE_EXCHANGE, PLAN_EXPRESSION}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.CTEReuseExchange
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, ShuffleExchangeLike}
 
 /**
  * Builds the shared inner [[AdaptiveSparkPlanExec]] for each [[CTEReuseExchange]] and registers it
@@ -34,6 +34,12 @@ import org.apache.spark.sql.execution.exchange.CTEReuseExchange
  * replans -- avoiding duplicate replanning / plan divergence for the reused subplan.
  * `createNonResultQueryStages` resolves the inner AQE from the registry (robust even on re-plan
  * paths that drop this rule).
+ *
+ * The rule also replaces each reference's `subplan` with its own preprocessed form, whose
+ * subqueries are planned, when the subplan holds a subquery or a nested CTE reference. The query
+ * stage that replaces the reference keeps the reference's canonical form, which is the canonical
+ * form of its `subplan`, and a query stage's canonical form must not hold the logical plans of
+ * unplanned subqueries. The preprocessed subplan is metadata: the stage runs the shared inner AQE.
  */
 case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
   extends Rule[SparkPlan] {
@@ -45,24 +51,32 @@ case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
     // Only `children` are traversed here; `CTEReuseExchange` is a leaf whose `subplan` (holding any
     // nested CTE) lives in `innerChildren`, so nested references are handled by the recursive
     // `applyInternal` below rather than by this transform.
+    val registry = adaptiveExecutionContext.cteAQERegistry
     plan.transformWithPruning(_.containsPattern(CTE_REUSE_EXCHANGE)) {
+      case re: CTEReuseExchange
+          if registry.contains(re.cteId) &&
+            !re.subplan.containsAnyPattern(PLAN_EXPRESSION, CTE_REUSE_EXCHANGE) =>
+        // The shared inner AQE exists, and this reference's subplan has nothing to preprocess.
+        re
       case re: CTEReuseExchange =>
         // Build and register the shared inner AQE for this cteId so stage creation resolves it from
-        // cteAQERegistry; the node is returned unchanged. re.subplan is already physical, so
-        // applyInternal wraps it in an inner AQE and recursively preprocesses any nested CTE or
-        // subquery in the body.
-        adaptiveExecutionContext.cteAQERegistry.getOrElseUpdate(re.cteId, {
-          InsertAdaptiveSparkPlan(adaptiveExecutionContext).applyInternal(
-            re.subplan, isSubquery = true) match {
-            case aqe: AdaptiveSparkPlanExec => aqe
-            case _ =>
-              // AQE not applicable (should not happen: the subplan roots at a LOCAL_SHUFFLE_FOR_CTE
-              // shuffle and isSubquery bypasses shouldApplyAQE). Back the whole query off AQE via
-              // InsertAdaptiveSparkPlan's catch, which runs the non-AQE unwrap path.
-              throw CTEAdaptiveNotSupportedException(re.subplan.logicalLink.orNull)
-          }
-        })
-        re
+        // cteAQERegistry. re.subplan is already physical, so applyInternal wraps it in an inner AQE
+        // and recursively preprocesses any nested CTE or subquery in the body. When an inner AQE is
+        // already registered, the new one only provides this reference's preprocessed subplan.
+        val innerAQE = InsertAdaptiveSparkPlan(adaptiveExecutionContext).applyInternal(
+          re.subplan, isSubquery = true) match {
+          case aqe: AdaptiveSparkPlanExec => aqe
+          case _ =>
+            // AQE not applicable (should not happen: the subplan roots at a LOCAL_SHUFFLE_FOR_CTE
+            // shuffle and isSubquery bypasses shouldApplyAQE). Back the whole query off AQE via
+            // InsertAdaptiveSparkPlan's catch, which runs the non-AQE unwrap path.
+            throw CTEAdaptiveNotSupportedException(re.subplan.logicalLink.orNull)
+        }
+        registry.putIfAbsent(re.cteId, innerAQE)
+        innerAQE.inputPlan match {
+          case s: ShuffleExchangeLike => re.copy(subplan = s)
+          case _ => re
+        }
     }
   }
 }

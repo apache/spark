@@ -123,12 +123,14 @@ case class UnionLoopRef(
  * @param forcePartitioning If set, the CTE will be repartitioned with the given partitioning when
  *                          its references are replaced with a repartition, whether or not it is
  *                          sealed for guaranteed reuse. Only honored together with
- *                          `forceSkipInline`: a pin on a definition that is not `forceSkipInline`
- *                          is ignored, because such a definition may be inlined by [[InlineCTE]]
- *                          before the pin is applied, which would be inconsistent with the
- *                          inlining decision. Only HashPartitioning is supported today; any other
- *                          partitioning raises an UnsupportedOperationException when the CTE
- *                          reference is replaced with a repartition.
+ *                          `forceSkipInline` and while `spark.sql.cteReuse.enabled` is on: a pin
+ *                          on a definition that is not `forceSkipInline` is ignored, because such
+ *                          a definition may be inlined by [[InlineCTE]] before the pin is applied,
+ *                          which would be inconsistent with the inlining decision, and with the
+ *                          flag off every pin is ignored. Only HashPartitioning is supported
+ *                          today; under the same two conditions, any other partitioning raises an
+ *                          UnsupportedOperationException when the CTE reference is replaced with a
+ *                          repartition.
  */
 case class CTERelationDef(
     child: LogicalPlan,

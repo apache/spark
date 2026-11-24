@@ -196,8 +196,10 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 // change it.
 case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
 
-// Indicates that the shuffle operator facilitates CTE reuse. The `cteId` identifies
-// the CTE definition being reused across multiple references.
+// Indicates that the shuffle operator facilitates CTE reuse. The `cteId` is the plan-reuse id of
+// the shared body: every reference of one forced definition carries it, and forced definitions
+// whose deterministic bodies are canonically equal share it. It is not the CTERelationDef id that
+// plans print.
 case class LOCAL_SHUFFLE_FOR_CTE(cteId: Long) extends ShuffleOrigin
 
 /**

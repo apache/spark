@@ -41,7 +41,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *    `ReuseExchangeAndSubquery` then reuses the canonically-equal copies via
  *    [[ReusedExchangeExec]], and `VerifyCTEReuse` confirms it held.
  *
- * @param cteId    Unique identifier for the CTE definition to be reused.
+ * @param cteId    The plan-reuse id of the shared body: every reference of one forced definition
+ *                 carries it, and forced definitions whose deterministic bodies are canonically
+ *                 equal share it. It is not the CTERelationDef id that plans print.
  * @param subplan  The [[ShuffleExchangeLike]] over the shared subplan. Its logical link
  *                 points to the repartition in [[CTEReuseRelation.sharedSubplan]] so the
  *                 inner AQE can re-optimize correctly.
@@ -53,9 +55,13 @@ case class CTEReuseExchange(
 
   override def output: Seq[Attribute] = subplan.output
 
-  // Canonical identity is the CTE reference (`cteId` + `subplan`).
-  override protected def doCanonicalize(): SparkPlan =
-    copy(subplan = subplan.canonicalized.asInstanceOf[ShuffleExchangeLike])
+  // Canonical identity is the shared shuffle itself, whose `LOCAL_SHUFFLE_FOR_CTE(cteId)` origin
+  // carries the `cteId`: the AQE-off unwrap leaves that shuffle in the plan, and the AQE query stage
+  // that replaces this node keeps this canonical form, so a freshly planned reference to the same
+  // CTE, such as a dynamic-pruning build side, has the same result as the reference in the plan.
+  // With AQE on, `PlanCTEReuse` first replaces a `subplan` that holds subqueries with its
+  // preprocessed form, so the canonical form a query stage keeps holds no unplanned subquery.
+  override protected def doCanonicalize(): SparkPlan = subplan.canonicalized
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE_REUSE_EXCHANGE)
 

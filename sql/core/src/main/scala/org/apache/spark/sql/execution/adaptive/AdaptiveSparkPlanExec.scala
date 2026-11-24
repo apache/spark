@@ -963,8 +963,9 @@ case class AdaptiveSparkPlanExec(
         throw SparkException.internalError(
           s"No inner AQE registered for CTE cteId=${re.cteId}; PlanCTEReuse must run first."))
       // Pass this reference's `output` so the stage remaps the shared inner AQE's (primary
-      // reference's) attribute ids into this reference's id space, as aliased references need.
-      val stage = CTEReuseQueryStageExec(currentStageId, innerAQE, re.output)
+      // reference's) attribute ids into this reference's id space, as aliased references need,
+      // and the reference's canonical form so the stage keeps its identity.
+      val stage = CTEReuseQueryStageExec(currentStageId, innerAQE, re.output, re.canonicalized)
       currentStageId += 1
       setLogicalLinkForNewQueryStage(stage, re)
       val isMaterialized = stage.isMaterialized
@@ -1352,9 +1353,13 @@ object AdaptiveSparkPlanExec {
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 
   // A separate pool for CTE-reuse inner AQEs. Each inner AQE's `materialize()` blocks a pool
-  // thread waiting on its child stages; sharing the 16-thread `QueryStageCreator` pool would let
-  // deeply nested CTEs exhaust it and deadlock, so CTE inner AQEs get their own pool (sized by
-  // CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD).
+  // thread waiting on its child stages, so CTE inner AQEs get their own pool (sized by
+  // CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD) to keep those waits off the 16-thread
+  // `QueryStageCreator` pool. This pool is bounded too: a nested CTE's inner AQE also needs a
+  // thread from it while its parent's thread waits, so with a small threshold or many concurrent
+  // parents nested CTE materialization can still exhaust it and hang.
+  // TODO: give nested CTE materialization a progress guarantee, for example by running a nested
+  // inner AQE on its waiting parent's thread, instead of relying on the pool size.
   private[adaptive] val cteExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("CTEReuseInnerAQE",
       SQLConf.get.getConf(StaticSQLConf.CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD)))
