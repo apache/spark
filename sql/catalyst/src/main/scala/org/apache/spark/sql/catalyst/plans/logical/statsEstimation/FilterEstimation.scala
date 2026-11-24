@@ -162,10 +162,10 @@ case class FilterEstimation(
   /**
    * Returns a percentage of rows meeting a single condition in Filter node.
    * Currently we only support binary predicates where one side is a column,
-   * and the other is a literal. A side may also be the read-side CHAR padding of a column, which
-   * is what a predicate pushed below the padding Project compares. It is estimated as the column
-   * itself, as `EstimationUtils.getAliasStats` does above the padding Project. The read-side
-   * checks of standard CHAR/VARCHAR semantics are not handled yet, see the SPARK-60830 TODO there.
+   * and the other is a literal. A side may also be a column under the read-side padding or check
+   * that a scan wraps a CHAR or VARCHAR column in, which a predicate pushed below the read-side
+   * Project compares, or under a cast to STRING (see `unwrapCharVarcharRead`). It is estimated as
+   * the column itself, as `EstimationUtils.getAliasStats` does above the read-side Project.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -174,10 +174,7 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    val unpadded = condition.mapChildren {
-      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
-      case other => other
-    }
+    val unpadded = condition.mapChildren(unwrapCharVarcharRead)
     unpadded match {
       case l: Literal =>
         evaluateLiteral(l)
@@ -255,6 +252,20 @@ case class FilterEstimation(
         // | EndsWith(_, _) are not supported yet
         logDebug("[CBO] Unsupported filter condition: " + condition)
         None
+    }
+  }
+
+  /**
+   * Returns the column under the read-side padding or check that a scan wraps a CHAR or VARCHAR
+   * column in, and under the cast to STRING that a comparison adds when CHAR and VARCHAR are
+   * first-class types (see `CharVarcharUtils.stripCastToPlainString`). The column's distinct
+   * count is used as it is, as `EstimationUtils.getAliasStats` keeps it.
+   */
+  private def unwrapCharVarcharRead(e: Expression): Expression = {
+    CharVarcharUtils.stripCastToPlainString(e) match {
+      case CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, _, _) => attr
+      case attr: Attribute => attr
+      case _ => e
     }
   }
 
