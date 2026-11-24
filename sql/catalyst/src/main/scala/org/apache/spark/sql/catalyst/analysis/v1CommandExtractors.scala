@@ -20,15 +20,15 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogManager, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, V1Table, V1View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Extracts the V1 identifier of a resolved session-catalog persistent view or temporary view.
+ * Extracts the V1 identifier of a resolved V1 session-catalog view or a temporary view.
  *
- * Non-session-catalog persistent views produced for `DelegatingTable` are handled by dedicated
+ * Native ViewCatalog views are handled by dedicated
  * V2 cases in `DataSourceV2Strategy`. ALTER VIEW AS, SET/UNSET TBLPROPERTIES, ALTER VIEW WITH
  * SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS and DESCRIBE [COLUMN]
  * use `ResolvedPersistentView.info` directly.
@@ -39,7 +39,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 object ResolvedViewIdentifier {
   def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-    case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
+    case ResolvedPersistentView(catalog, ident, _: V1View) if isSessionCatalog(catalog) =>
       Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
     case ResolvedTempView(ident, _) =>
@@ -93,10 +93,15 @@ object ResolvedV1CommandIdentifier {
  *
  * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
  * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
+ * @param identifierPredicate whether the catalog and identifier use a V1 command
  */
-class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) {
+class ResolvedIdentifierInSessionCatalog(
+    statement: String,
+    objectType: String,
+    identifierPredicate: (CatalogPlugin, Identifier) => Boolean = (catalog, _) =>
+      isSessionCatalog(catalog)) {
   def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-    case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+    case ResolvedIdentifier(catalog, ident) if identifierPredicate(catalog, ident) =>
       if (ident.namespace().length != 1) {
         if (ident.namespace().length >= 1 &&
             ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {

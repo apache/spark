@@ -141,9 +141,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
-    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
-    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
-    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
+    // `DESCRIBE TABLE <view> PARTITION (...)` against a v2 view: the v1 rewrite above is gated
+    // on `ResolvedV1TableOrViewIdentifier`, so ViewCatalog-backed views fall through. Reject
+    // early with the same `FORBIDDEN_OPERATION` v1 raises at
     // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
     // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
     // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
@@ -157,7 +157,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // typically resolves the column to an `Attribute` here. We also accept the legacy
       // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
       // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
+      // The unwrap logic is shared with the v2 view path in `DataSourceV2Strategy`.
       val nameParts = DescribeColumn.extractColumnNameParts(column)
       DescribeColumnCommand(ident, nameParts, isExtended, output)
 
@@ -393,11 +393,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case createView: CreateView =>
       ViewCommandHelper.rewriteCreateView(createView)
 
-    // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
-    // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
-    // to `CreateV2MetricViewExec`.
+    // Session catalogs without ViewCatalog use the V1 runnable command. ViewCatalog
+    // implementations, including custom session catalogs, leave [[CreateMetricView]] in place
+    // for `DataSourceV2Strategy` to dispatch to `CreateV2MetricViewExec`.
     case cm @ CreateMetricView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _)
-        if isSessionCatalog(catalog) =>
+        if ViewCommandHelper.useV1ViewCommands(catalog) =>
       CreateMetricViewCommand(
         cm.child,
         cm.userSpecifiedColumns,
