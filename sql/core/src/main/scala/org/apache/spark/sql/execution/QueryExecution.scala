@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRe
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
-import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, InsertShuffleBeforeStatefulCartesianProduct, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
@@ -854,6 +854,9 @@ object QueryExecution {
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
+      // After EnsureRequirements, whose exchanges it must see. Not gated on streaming, since a
+      // batch plan can embed an already-planned stateful subtree.
+      InsertShuffleBeforeStatefulCartesianProduct,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
