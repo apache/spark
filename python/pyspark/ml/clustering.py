@@ -956,6 +956,7 @@ class _BisectingKMeansParams(
     HasPredictionCol,
     HasDistanceMeasure,
     HasWeightCol,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
@@ -1166,11 +1167,12 @@ class BisectingKMeans(
         minDivisibleClusterSize: float = 1.0,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
-                 weightCol=None)
+                 weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -1192,11 +1194,12 @@ class BisectingKMeans(
         minDivisibleClusterSize: float = 1.0,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "BisectingKMeans":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                   seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
-                  weightCol=None)
+                  weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for BisectingKMeans.
         """
         kwargs = self._input_kwargs
@@ -1257,6 +1260,13 @@ class BisectingKMeans(
         Sets the value of :py:attr:`weightCol`.
         """
         return self._set(weightCol=value)
+
+    @since("4.5.0")
+    def setIntermediateStorageLevel(self, value: str) -> "BisectingKMeans":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     def _create_model(self, java_model: "JavaObject") -> BisectingKMeansModel:
         return BisectingKMeansModel(java_model)
