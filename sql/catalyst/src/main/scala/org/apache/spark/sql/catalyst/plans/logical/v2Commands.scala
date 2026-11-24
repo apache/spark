@@ -1945,7 +1945,7 @@ case class AlterViewAs(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends Command with AnalysisOnlyCommand with CTEInChildren {
+  extends Command with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
@@ -2006,7 +2006,7 @@ case class CreateView(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends Command with AnalysisOnlyCommand with CTEInChildren {
+  extends Command with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
@@ -2106,7 +2106,7 @@ case class CacheTableAsSelect(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends AnalysisOnlyCommand with CTEInChildren {
+  extends AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   /**
    * Returns the temp view name string. Must only be called after analysis, when `tempViewName`

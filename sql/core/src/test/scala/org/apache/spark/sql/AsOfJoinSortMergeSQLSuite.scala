@@ -1317,6 +1317,54 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("SPARK-62137: WHERE on the left input that can fail is not pushed below an inner as-of " +
+    "join ahead of its throwable ON condition") {
+    // The CASE WHEN is false on the only pair, since 5 > 9 is false, so the join drops the only
+    // left row, the one where the division is by zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("asof_guard_l", "asof_guard_r") {
+        sql("CREATE TABLE asof_guard_l USING parquet AS " +
+          "SELECT * FROM VALUES (1, 10, 9, 5) AS l(k, t, v, f)")
+        sql("CREATE TABLE asof_guard_r USING parquet AS " +
+          "SELECT * FROM VALUES (1, 5, 9) AS r(k, t, g)")
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT a.k
+              |FROM asof_guard_l a ASOF JOIN asof_guard_r b
+              |  MATCH_CONDITION (a.t >= b.t)
+              |  ON a.k = b.k AND CASE WHEN a.f < 0 THEN raise_error('neg') ELSE a.f > b.g END
+              |WHERE 10 / (a.v - 9) < 100
+              |""".stripMargin),
+          Nil)
+      }
+    }
+  }
+
+  test("SPARK-62137: a condition that can fail is not pushed below an as-of join ahead of its " +
+    "throwable MATCH_CONDITION") {
+    // The MATCH_CONDITION is false on the only pair, since 10 < 5 is false, and the join
+    // evaluates its ON condition only on the pairs that it matches. So the inner join drops the
+    // only left row, the one where the divisions over the left side are by zero, and the left
+    // outer join keeps it without a match, never dividing by the right side's zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("asof_guard_l", "asof_guard_r") {
+        sql("CREATE TABLE asof_guard_l USING parquet AS " +
+          "SELECT * FROM VALUES (1, 10, 9) AS l(k, t, v)")
+        sql("CREATE TABLE asof_guard_r USING parquet AS " +
+          "SELECT * FROM VALUES (1, 5, 9) AS r(k, t, g)")
+        def query(joinType: String, rest: String): String =
+          s"SELECT a.k FROM asof_guard_l a $joinType JOIN asof_guard_r b " +
+            "MATCH_CONDITION (a.t < CASE WHEN b.t < 0 THEN raise_error('neg') ELSE b.t END) " +
+            rest
+        checkSortMergeAsOf(sql(query("ASOF", "ON a.k = b.k WHERE 10 / (a.v - 9) < 100")), Nil)
+        checkSortMergeAsOf(sql(query("ASOF", "ON a.k = b.k AND 10 / (a.v - 9) < 100")), Nil)
+        checkSortMergeAsOf(
+          sql(query("LEFT ASOF", "ON a.k = b.k AND 10 / (b.g - 9) < 100")), Seq(Row(1)))
+      }
+    }
+  }
+
   test("WHERE on the right input runs after the closest match, unlike the same ON predicate") {
     withTradeQuoteTables {
       // The 10:00:11 trade's closest quote is 180.20. WHERE drops the trade, while ON skips

@@ -3094,7 +3094,8 @@ class DataFrame:
             an asof tolerance within this range; must be compatible
             with the merge index.
         allowExactMatches : bool, optional
-            default ``True``.
+            default ``True``. If ``False``, a right row with an equal key is not matched.
+            The ``tolerance`` bound stays inclusive.
         direction : str, optional
             default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
 

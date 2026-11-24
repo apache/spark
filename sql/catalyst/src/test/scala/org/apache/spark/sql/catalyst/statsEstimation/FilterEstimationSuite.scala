@@ -21,6 +21,7 @@ import java.sql.Date
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
@@ -997,6 +998,51 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(Not(EqualTo(padded, Literal("A0"))), child),
       Seq(attrString -> colStatString.copy(distinctCount = Some(9))),
       expectedRowCount = 9)
+  }
+
+  test("SPARK-60830: predicates on a CHAR/VARCHAR column read as a first-class type") {
+    // colStatString has 10 distinct values and no nulls over 10 rows.
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
+    val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
+    val reads = for {
+      column <- Seq(charAttr("cstring", 2), varcharAttr("cstring", 2))
+      standardSemantics <- Seq(true, false)
+    } yield firstClassRead(column.withExprId(attrString.exprId), standardSemantics)
+    reads.foreach { read =>
+      assert(Seq(CharType(2), VarcharType(2)).contains(read.dataType) &&
+        read.references.toSeq.map(_.exprId) == Seq(attrString.exprId), read)
+      // A comparison with a STRING casts the column to it.
+      val cast = Cast(read, StringType)
+      Seq(
+        EqualTo(cast, Literal("A0")) -> 1,
+        EqualTo(Literal("A0"), cast) -> 1,
+        EqualNullSafe(cast, Literal("A0")) -> 1,
+        In(cast, Seq(Literal("A0"), Literal("A1"))) -> 2,
+        InSet(cast, Set(UTF8String.fromString("A0"), UTF8String.fromString("A1"))) -> 2,
+        IsNull(read) -> 0,
+        Not(EqualTo(cast, Literal("A0"))) -> 9,
+        // Casts to another collation or to a length-checked type can change what matches.
+        EqualTo(Cast(read, StringType("UTF8_LCASE")), Literal("A0")) -> 10,
+        EqualTo(Cast(read, VarcharType(1)), Literal("A")) -> 10).foreach {
+        case (condition, expectedRows) =>
+          assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)), condition)
+      }
+      // The update lands on the column's own stat, as for the read-side padding.
+      validateEstimatedStats(
+        Filter(IsNotNull(read), childWithNulls),
+        Seq(attrString -> colStatString.copy(distinctCount = Some(6), nullCount = Some(0))),
+        expectedRowCount = 6)
+    }
+    // A method of the same name on another class is not a read-side check.
+    val otherClass = StaticInvoke(classOf[String], StringType,
+      CharVarcharUtils.CHAR_TYPE_READ_SIDE_CHECK, attrString :: Literal(2) :: Nil)
+    assert(Filter(EqualTo(otherClass, Literal("A0")), child).stats.rowCount
+      .contains(BigInt(10)))
+    // A cast of a column of another type to STRING is not stripped, so all 10 rows are kept.
+    val intChild = childStatsTestPlan(Seq(attrInt), tableRowCount = 10L)
+    assert(Filter(EqualTo(Cast(attrInt, StringType), Literal("1")), intChild).stats.rowCount
+      .contains(BigInt(10)))
   }
 
   test("SPARK-60810: equality on a string or binary column with a reported histogram") {

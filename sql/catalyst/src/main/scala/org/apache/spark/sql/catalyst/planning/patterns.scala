@@ -191,13 +191,39 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression],
       Option[Expression], Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
-  def unapply(join: Join): Option[ReturnType] = join match {
+  def unapply(join: Join): Option[ReturnType] = extract(join, allEqualities = false)
+
+  /**
+   * Returns the keys of `join`. If `allEqualities` is false, a conjunct that may not be evaluated
+   * ahead of the rest of the condition is not a key (see below), otherwise every equality
+   * between the two sides is.
+   */
+  private[planning] def extract(
+      join: Join,
+      allEqualities: Boolean): Option[ReturnType] = join match {
     case Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
-      // as join keys.
+      // as join keys. A join computes its keys on every row of its inputs, ahead of the rest of
+      // its condition, so a conjunct that may not be evaluated ahead of the others (see
+      // `splitMovable`), e.g. one that can fail written after a throwable one, is not a key. It
+      // stays in the other condition, in its written order. The first conjunct is evaluated
+      // first on every pair anyway, so it may be a key unless it is non-deterministic, also when
+      // it is throwable. As `PushPredicateThroughJoin` puts the conjuncts that may move first, a
+      // throwable one is still first only when none after it may move, e.g. when it is the only
+      // equality, and then it is the only key. The columns of the inputs that can fail
+      // (`failableOutput`) do not count: a key over such a column reads the value that the
+      // projection below computes, while a filter pushed below the projection evaluates its
+      // expression again. This also keeps the keys the same when the inputs change, e.g. when
+      // AQE replaces them with query stages.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
-      val joinKeys = predicates.flatMap {
+      val notMovable = predicates match {
+        case _ if allEqualities => Nil
+        case first +: rest if first.deterministic =>
+          splitMovable(rest, Nil, afterBarrier = first.throwable)._2
+        case _ => splitMovable(predicates, Nil)._2
+      }
+      val joinKeys = predicates.filterNot(notMovable.contains).flatMap {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
@@ -216,6 +242,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case _ => None
       }
       val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {
+        case p if notMovable.contains(p) => false
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
@@ -235,6 +262,18 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
+ * [[ExtractEquiJoinKeys]] with every equality between the two sides of the join as a key,
+ * wherever it is in the condition. Every pair of rows that a join outputs satisfies each of them,
+ * so this is for the rules that only reason about the rows a join outputs, e.g. which of its
+ * columns are unique or how many rows it outputs. It is not for planning a join, or for a rule
+ * that evaluates the keys ahead of the join condition.
+ */
+object ExtractAllEquiJoinKeys {
+  def unapply(join: Join): Option[ExtractEquiJoinKeys.ReturnType] =
+    ExtractEquiJoinKeys.extract(join, allEqualities = true)
+}
+
+/**
  * A pattern that collects the filter and inner joins.
  *
  *          Filter
@@ -247,27 +286,53 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
  *      /    \
  *   plan0    plan1
  *
+ * A filter or inner join below the top one whose condition has a conjunct that may not move (see
+ * `PredicateHelper.splitMovable`) is not flattened, but is one of the plans, with its condition.
+ *
  * Note: This pattern currently only works for left-deep trees.
  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   /**
-   * Flatten all inner joins, which are next to each other.
+   * Flatten all inner joins, which are next to each other, but the ones below a filter or inner
+   * join that `flattenBelow` keeps as one plan.
    * Return a list of logical plans to be joined with a boolean for each plan indicating if it
-   * was involved in an explicit cross join. Also returns the entire list of join conditions for
-   * the left-deep tree.
+   * was involved in an explicit cross join. Also returns the list of join conditions for the
+   * flattened left-deep tree.
    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenJoin(left, joinType)
+      val (plans, conditions) = flattenBelow(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenJoin(j)
+      val (plans, conditions) = flattenBelow(j, Inner)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
+  }
+
+  /**
+   * [[flattenJoin]] below the top join or filter, where a filter or inner join with a condition
+   * that may not move (see `PredicateHelper.splitMovable`) is one of the plans, with its
+   * condition. It removes a row on which its condition is NULL, so no condition above it is
+   * evaluated on the row. It is the first plan, which `ReorderJoin` joins the others to, and it
+   * is an `Inner` plan also under a cross join, so that `StarSchemaDetection`, which only reorders
+   * `Inner` base tables, does not join it after them.
+   */
+  private def flattenBelow(plan: LogicalPlan, parentJoinType: InnerLike)
+      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = {
+    val condition = plan match {
+      case Join(_, _, _: InnerLike, cond, JoinHint.NONE) => cond
+      case Filter(cond, Join(_, _, _: InnerLike, _, JoinHint.NONE)) => Some(cond)
+      case _ => None
+    }
+    if (condition.exists(hasImmovableConjunct(_, plan.children))) {
+      (Seq((plan, Inner)), Seq.empty)
+    } else {
+      flattenJoin(plan, parentJoinType)
+    }
   }
 
   def unapply(plan: LogicalPlan)

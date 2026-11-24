@@ -203,6 +203,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  private def estimatedRows(query: String)(
+      pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
+    val plan = sql(query).queryExecution.optimizedPlan
+    plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
+      .stats.rowCount
+  }
+
   test("SPARK-60810: CBO keeps CHAR column statistics through read-side padding") {
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -213,12 +220,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
 
-        def estimatedRows(query: String)(
-            pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
-          val plan = sql(query).queryExecution.optimizedPlan
-          plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
-            .stats.rowCount
-        }
         // Above the padding Project, which carries the column's statistics.
         assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
           case a: Aggregate => a
@@ -283,6 +284,155 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
         }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
         assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
+      }
+    }
+  }
+
+  // Both make CHAR and VARCHAR first-class types, which a comparison with a STRING casts.
+  private val firstClassCharVarcharConfs = Seq(
+    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  // 1000 rows of 10 distinct 5-character values, which CHAR(5) stores without padding, so that
+  // the predicates below match the same rows for CHAR(5), VARCHAR(5) and STRING.
+  private val fiveCharValues = "CAST(10000 + id % 10 AS STRING) FROM range(1000)"
+
+  /** Asserts the estimated row count of the node `pick` selects and the query's row count. */
+  private def checkRows(query: String, expectedRows: Long, clue: String)(
+      pick: PartialFunction[LogicalPlan, LogicalPlan]): Unit = {
+    assert(estimatedRows(query)(pick).contains(BigInt(expectedRows)), s"$clue, $query")
+    assert(sql(query).count() == expectedRows, s"$clue, $query")
+  }
+
+  test("SPARK-60830: CBO keeps CHAR/VARCHAR column statistics as first-class types") {
+    for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
+        val tableName = "char_varchar_first_class_stats"
+        val stringTable = "char_varchar_first_class_strings"
+        withTable(tableName, stringTable) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+          sql(s"ANALYZE TABLE $stringTable COMPUTE STATISTICS FOR COLUMNS s")
+
+          val clue = s"${mode.key}, $colType"
+          checkRows(s"SELECT c, count(*) FROM $tableName GROUP BY c", 10, clue) {
+            case a: Aggregate => a
+          }
+          Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200, "c IS NULL" -> 0).foreach {
+            case (condition, expectedRows) =>
+              checkRows(s"SELECT * FROM $tableName WHERE $condition", expectedRows, clue) {
+                case f: Filter => f
+              }
+          }
+          // The join key of the CHAR/VARCHAR column is cast to STRING, on either side.
+          Seq(s"$tableName JOIN $stringTable ON c = s", s"$stringTable JOIN $tableName ON s = c")
+            .foreach { join =>
+              checkRows(s"SELECT * FROM $join", 100000, clue) { case j: Join => j }
+            }
+          // So is the column in a union with a STRING column.
+          checkRows(s"SELECT k, count(*) FROM (SELECT c AS k FROM $tableName UNION ALL " +
+              s"SELECT s FROM $stringTable) GROUP BY k", 10, clue) {
+            case a: Aggregate => a
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60830: CBO keeps CHAR/VARCHAR column statistics through an explicit cast") {
+    // Without first-class CHAR/VARCHAR types, SimplifyCasts keeps a cast to STRING of a VARCHAR
+    // column and of a CHAR join key. Other CHAR predicates are pushed below the padding Project.
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { colType =>
+      withSQLConf(
+          SQLConf.CBO_ENABLED.key -> "true",
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+        val tableName = "char_varchar_explicit_cast_stats"
+        val stringTable = "char_varchar_explicit_cast_strings"
+        withTable(tableName, stringTable) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+          sql(s"ANALYZE TABLE $stringTable COMPUTE STATISTICS FOR COLUMNS s")
+
+          checkRows(s"SELECT * FROM $tableName WHERE CAST(c AS STRING) = '10003'", 100,
+              colType) {
+            case f: Filter => f
+          }
+          checkRows(s"SELECT * FROM $tableName JOIN $stringTable ON CAST(c AS STRING) = s",
+              100000, colType) {
+            case j: Join => j
+          }
+          checkRows(s"SELECT k, count(*) FROM (SELECT CAST(c AS STRING) AS k FROM $tableName) " +
+              "GROUP BY k", 10, colType) {
+            case a: Aggregate => a
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60830: a join side unique on a CHAR/VARCHAR column stays unique through a cast") {
+    // The key is cast to STRING by the comparison under either conf, and explicitly otherwise.
+    val modes = firstClassCharVarcharConfs.map(c => Seq(c.key -> "true") -> "s = g.c") :+
+      (Seq.empty[(String, String)] -> "s = CAST(g.c AS STRING)")
+    for ((modeConfs, condition) <- modes; cbo <- Seq("true", "false");
+         colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> cbo) ++ modeConfs: _*) {
+        val tableName = "char_varchar_unique_join_key"
+        val stringTable = "char_varchar_unique_join_strings"
+        withTable(tableName, stringTable) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          val clue = s"$modeConfs, CBO $cbo, $colType"
+          val grouped = s"(SELECT c FROM $tableName GROUP BY c) g"
+          // The left outer join with the unique side adds no rows, so it is removed.
+          val leftJoin = sql(s"SELECT s FROM $stringTable LEFT JOIN $grouped ON $condition")
+          assert(leftJoin.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.isEmpty,
+            clue)
+          assert(leftJoin.count() == 1000, clue)
+          // The size-only estimate of the inner join is the sum of the sides, not their product.
+          val join = sql(s"SELECT * FROM $stringTable JOIN $grouped ON $condition")
+            .queryExecution.optimizedPlan.collectFirst { case j: Join => j }
+            .getOrElse(fail(s"no join, $clue"))
+          assert(join.stats.sizeInBytes ==
+            join.left.stats.sizeInBytes + join.right.stats.sizeInBytes, clue)
+          // A left join with a side that projects the cast is removed as well.
+          val projected = sql(s"SELECT s FROM $stringTable LEFT JOIN " +
+            s"(SELECT CAST(c AS STRING) AS k FROM $tableName GROUP BY c) g ON s = g.k")
+          assert(projected.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.isEmpty,
+            clue)
+          assert(projected.count() == 1000, clue)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60830: partition pruning estimates a filter on a first-class CHAR/VARCHAR column") {
+    for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
+        val tableName = "char_varchar_partition_pruning_stats"
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(v INT, p $colType) USING parquet PARTITIONED BY (p)")
+          sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), $fiveCharValues")
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+          val query = s"SELECT * FROM $tableName WHERE p = '10003'"
+          val plan = sql(query).queryExecution.optimizedPlan
+          val prunedStats = plan.collectFirst {
+            case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+          }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+          assert(prunedStats.rowCount.contains(BigInt(100)), s"${mode.key}, $colType")
+          assert(sql(query).count() == 100, s"${mode.key}, $colType")
+        }
       }
     }
   }
