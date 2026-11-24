@@ -17,12 +17,34 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, DeclarativeAggregate, ListAgg, Percentile, StddevSamp, V2Aggregator}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType}
+
+// A DeclarativeAggregate whose evaluate expression does not have its data type.
+private case class MistypedAggregate(child: Expression)
+  extends DeclarativeAggregate with UnaryLike[Expression] {
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  private lazy val buffer = AttributeReference("buffer", IntegerType)()
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = buffer :: Nil
+  override lazy val initialValues: Seq[Expression] = Seq(Literal(0))
+  override lazy val updateExpressions: Seq[Expression] = Seq(buffer)
+  override lazy val mergeExpressions: Seq[Expression] = Seq(buffer.left)
+  override lazy val evaluateExpression: Expression = buffer
+  override protected def withNewChildInternal(newChild: Expression): MistypedAggregate =
+    copy(child = newChild)
+}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -109,6 +131,306 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(lateralJoin)
     val doubleOptimized = Optimize.execute(optimized)
     comparePlans(optimized, doubleOptimized)
+  }
+
+  // Returns ScalarSubquery.mayHaveCountBug, and whether DecorrelateInnerQuery handled the count
+  // bug, which it does with a left outer domain join, for the aggregates `top` over `lower` (in
+  // a struct if there are several, since a scalar subquery returns one column), in a Project
+  // over `outer`.
+  private def countBugHandling(
+      lower: LogicalPlan,
+      top: Seq[Expression] = Seq(count(Literal(1))),
+      grouping: Seq[Expression] = Nil,
+      outer: LogicalPlan = testRelation): (Option[Boolean], Boolean) = {
+    val result = if (top.size == 1) top.head else CreateStruct(top)
+    val subPlan = lower.groupBy(grouping: _*)(result.as("r"))
+    countBugHandlingIn(outer.select(ScalarSubquery(subPlan).as("sq")))
+  }
+
+  // The correlated scalar subquery with the output `r` in `query` after the rule, which also
+  // checks that running the rule again does not change the plan.
+  private def subqueryWithOutputR(query: LogicalPlan): ScalarSubquery = {
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(Optimize.execute(optimized), optimized, false)
+    val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
+      case s: ScalarSubquery if s.children.nonEmpty && s.plan.output.head.name == "r" => s
+    })
+    assert(subqueries.size == 1)
+    subqueries.head
+  }
+
+  // countBugHandling of the correlated scalar subquery with the output `r` in `query`.
+  private def countBugHandlingIn(query: LogicalPlan): (Option[Boolean], Boolean) = {
+    val subquery = subqueryWithOutputR(query)
+    val countBugDomainJoin = subquery.plan.exists {
+      case d: DomainJoin => d.joinType == LeftOuter
+      case _ => false
+    }
+    (subquery.mayHaveCountBug, countBugDomainJoin)
+  }
+
+  // ScalarSubquery.countBugResult of the subquery of countBugHandling, as a string.
+  private def countBugResult(
+      lower: LogicalPlan,
+      top: Seq[Expression] = Seq(count(Literal(1))),
+      grouping: Seq[Expression] = Nil,
+      outer: LogicalPlan = testRelation,
+      above: LogicalPlan => LogicalPlan = identity): Option[String] = {
+    val result = if (top.size == 1) top.head else CreateStruct(top)
+    val subPlan = lower.groupBy(grouping: _*)(result.as("r"))
+    subqueryWithOutputR(above(outer.select(ScalarSubquery(subPlan).as("sq"))))
+      .countBugResult.map(_.toString)
+  }
+
+  private def correlated(agg: Expression): LogicalPlan =
+    testRelation2.where($"a" === $"c").groupBy()(agg.as("s"))
+
+  private def uncorrelated(agg: Expression): LogicalPlan =
+    testRelation2.groupBy()(agg.as("s")).where($"s" > $"b")
+
+  // Evaluates `f` with the handling of the count bug before SPARK-60501.
+  private def asBefore[T](f: => T): T =
+    withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
+      f
+    }
+
+  test("SPARK-60501: the result for an outer row without matching rows of a correlated nested " +
+      "ungrouped aggregate, and where it is not used") {
+    val inConstructLeftJoins = (Some(true), false)
+    // The lower aggregate returns one row on empty input whatever its function is. Without a
+    // function with a default result there, the result for an outer row without matching rows
+    // is computed before decorrelation, and constructLeftJoins uses it, without a domain join.
+    Seq(max($"d"), sum($"d"), coalesce(sum($"d"), Literal(10.0))).foreach { agg =>
+      assert(countBugHandling(correlated(agg)) == inConstructLeftJoins, agg)
+      assert(countBugResult(correlated(agg)) == Some("1"), agg)
+    }
+    // Also when the correlated predicate is not right below the lower aggregate.
+    val deeper = testRelation2.where($"a" === $"c").select($"d").groupBy()(max($"d").as("s"))
+    assert(countBugResult(deeper) == Some("1"))
+    // When the computed result is NULL, constructLeftJoins adds no count-bug branch (it maps a
+    // NULL countBugResult to the plan without the branch), which is correct and unlike before,
+    // where the result over no rows was not NULL. E.g. NULLIF(COUNT(*), 1) over a MAX is NULL for
+    // an outer row without matching rows (COUNT over the one row of the lower MAX is 1), where the
+    // result over no rows was NULLIF(0, 1) = 0. The golden file checks the result.
+    val nullif =
+      If(EqualTo(count(Literal(1)), Literal(1L)), Literal(null, LongType), count(Literal(1)))
+    assert(countBugResult(correlated(max($"d")), Seq(nullif)) == Some("null"))
+    // Where it cannot be computed, e.g. with a filter between the aggregates, the subquery keeps
+    // the handling of before, as does one over a lower COUNT, which DecorrelateInnerQuery
+    // handles, a grouped lower aggregate, which returns no row on empty input, and an
+    // uncorrelated one, which keeps its row.
+    val filtered = correlated(max($"d")).where($"s" > 0)
+    val grouped = testRelation2.where($"a" === $"c").groupBy($"c")(max($"d").as("s"))
+    Seq(filtered, deeper.where($"s" > 0), correlated(count($"d")), grouped,
+        uncorrelated(max($"d")), uncorrelated(count($"d"))).foreach { lower =>
+      assert(countBugResult(lower).isEmpty, lower)
+      assert(countBugHandling(lower) == asBefore(countBugHandling(lower)), lower)
+    }
+    assert(countBugHandling(correlated(count($"d"))) == (Some(false), true))
+    // The result needs no domain join for an equality correlation, so it applies whatever the
+    // outer input is and whatever is above the subquery.
+    val streamingOuter = testRelation.copy(isStreaming = true)
+    val nonDeterministicOuter = testRelation.where(Rand(0) > 0.5)
+    val cteOuter = CTERelationRef(0, _resolved = true, testRelation.output, isStreaming = false)
+    val mapOuter = LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))())
+    Seq(streamingOuter, nonDeterministicOuter, cteOuter, testRelation.limit(10),
+        Sample(0.0, 0.5, withReplacement = false, 1L, testRelation)).foreach { outer =>
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == inConstructLeftJoins,
+        outer)
+      assert(countBugResult(correlated(max($"d")), outer = outer) == Some("1"), outer)
+    }
+    assert(countBugResult(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) == Some("1"))
+    assert(countBugResult(correlated(max($"d")), above = _.limit(10)) == Some("1"))
+    val overMap = testRelation2.where($"c" === Size($"m")).groupBy()(max($"d").as("s"))
+    assert(countBugResult(overMap, outer = mapOuter) == Some("1"))
+    // For a non-equality correlation or one below a UNION ALL, decorrelation adds the domain
+    // join that it adds on master, also in a single aggregate. It computes the outer input
+    // again, and may miss outer rows with matching rows where that gives other rows, and it
+    // keeps one of the outer values that compare equal, e.g. 0.0 for -0.0 and 0.0. That does
+    // not matter for a result of every outer row, such as COUNT(*) over the row of the MAX, but
+    // other results are not used there.
+    def countOver(lower: LogicalPlan): LogicalPlan = lower.groupBy()(count(Literal(1)).as("r"))
+    val nonEquality = testRelation2.where($"a" > $"c").groupBy()(max($"d").as("s"))
+    val isNullCount = count(Literal(1), Some($"s".isNull))
+    val coalescedSum = coalesce(sum($"s"), Literal(5.0))
+    val belowUnion = testRelation2.where($"a" === $"c").select($"d")
+      .union(testRelation2.where($"a" === $"c").select($"d")).groupBy()(max($"d").as("s"))
+    val overDouble = testRelation2.where($"b" > $"d").groupBy()(max($"d").as("s"))
+    Seq(nonEquality, belowUnion, overDouble).foreach { lower =>
+      assert(countBugResult(lower) == Some("1"), lower)
+      assert(countBugResult(lower, outer = nonDeterministicOuter) == Some("1"), lower)
+      assert(countBugResult(lower, Seq(coalescedSum)).isEmpty, lower)
+      assert(countBugResult(lower, Seq(isNullCount)).isEmpty, lower)
+      assert(countBugHandling(lower, Seq(isNullCount)) ==
+        asBefore(countBugHandling(lower, Seq(isNullCount))), lower)
+    }
+    assert(subqueryWithOutputR(testRelation.select(ScalarSubquery(countOver(nonEquality))
+      .as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
+    // A user-defined aggregate function in a lower aggregate without GROUP BY can return a value
+    // other than NULL on empty input, so the subquery keeps the handling of before: a Python
+    // UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite. One in a grouped
+    // aggregate below returns no row on empty input, which does not matter.
+    val v2Sum = new V2AggregateFunction[java.lang.Long, java.lang.Long] {
+      override def newAggregationState(): java.lang.Long = 0L
+      override def update(state: java.lang.Long, input: InternalRow): java.lang.Long =
+        state + input.getLong(0)
+      override def merge(l: java.lang.Long, r: java.lang.Long): java.lang.Long = l + r
+      override def produceResult(state: java.lang.Long): java.lang.Long = state
+      override def name(): String = "v2_sum"
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = LongType
+    }
+    Seq(PythonUDAF("udaf", null, LongType, Seq($"c"), udfDeterministic = true),
+        V2Aggregator(v2Sum, Seq(Cast($"c", LongType)))).foreach { f =>
+      val udaf = f.toAggregateExpression()
+      assert(countBugResult(correlated(udaf)).isEmpty, f)
+      assert(countBugHandling(correlated(udaf)) == asBefore(countBugHandling(correlated(udaf))),
+        f)
+      val overGrouped = testRelation2.where($"a" === $"c").groupBy($"c")(udaf.as("u"))
+        .groupBy()(max($"u").as("s"))
+      assert(countBugResult(overGrouped) == Some("1"), f)
+    }
+    // Nor with the legacy conf, or where the count bug is not handled at all.
+    asBefore {
+      assert(countBugResult(correlated(max($"d"))).isEmpty)
+      assert(countBugHandling(correlated(max($"d"))) == inConstructLeftJoins)
+    }
+    Seq(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING.key -> "true",
+        SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false").foreach { kv =>
+      withSQLConf(kv) {
+        assert(countBugResult(correlated(max($"d"))).isEmpty, kv)
+      }
+    }
+  }
+
+  test("SPARK-60501: compute the result for an outer row without matching rows before " +
+      "decorrelation") {
+    val inConstructLeftJoins = (Some(true), false)
+    val lowerMax = correlated(max($"d"))
+    // The top aggregate over the row of NULLs that the lower MAX returns on empty input, which
+    // differs from its result over no rows for some functions, such as COUNT(*): with FILTER and
+    // DISTINCT, functions that collect the NULL, and expressions over the functions.
+    Seq(count(Literal(1)) -> "1", count($"s") -> "0", sum($"s") -> "null", max($"s") -> "null",
+        avg($"s") -> "null", first($"s") -> "null", countDistinct($"s") -> "0",
+        count(Literal(1), Some($"s".isNull)) -> "1", count(Literal(1), Some($"s" > 1)) -> "0",
+        sum($"s", Some($"s" > 1)) -> "null", collectList($"s") -> "[]",
+        CollectList($"s", ignoreNulls = false).toAggregateExpression() -> "[null]",
+        CollectSet($"s", ignoreNulls = false).toAggregateExpression() -> "[null]",
+        StddevSamp($"s").toAggregateExpression() -> "null",
+        coalesce(sum($"s"), Literal(10.0)) -> "10.0", sum($"s") + 1 -> "null",
+        Literal(1) -> "1").foreach { case (top, result) =>
+      assert(countBugHandling(lowerMax, Seq(top)) == inConstructLeftJoins, top)
+      assert(countBugResult(lowerMax, Seq(top)) == Some(result), top)
+    }
+    assert(countBugResult(lowerMax, Seq(count(Literal(1)), collectList($"s"))) == Some("[1,[]]"))
+    // Through Projects, over another function and a literal of the lower aggregate, over three
+    // levels and a grouped aggregate between, and for a grouped top aggregate, which returns a row
+    // for the group of the row of the lower aggregate.
+    assert(countBugResult(lowerMax.select(($"s" + 1).as("t")), Seq(count($"t"))) == Some("0"))
+    assert(countBugResult(lowerMax.select(coalesce($"s", Literal(2.0)).as("t")), Seq(sum($"t")))
+      == Some("2.0"))
+    val lowerMaxAndMin =
+      testRelation2.where($"a" === $"c").groupBy()(max($"d").as("s"), min($"d").as("n"))
+    assert(countBugResult(lowerMaxAndMin, Seq(sum($"s"), count($"n"))) == Some("[null,0]"))
+    val lowerWithLiteral =
+      testRelation2.where($"a" === $"c").groupBy()(Literal(10).as("s"), max($"d").as("m"))
+    assert(countBugResult(lowerWithLiteral, Seq(sum($"s"))) == Some("10"))
+    assert(countBugResult(lowerMax.groupBy()(max($"s").as("s"))) == Some("1"))
+    assert(countBugResult(lowerMax.groupBy($"s")($"s")) == Some("1"))
+    // A grouped aggregate below returns no row on empty input, so the MAX over it is NULL, not
+    // the MAX over a row with its COUNT of 0.
+    val groupedBelow = testRelation2.where($"a" === $"c").groupBy($"d")(count(Literal(1)).as("n"))
+      .groupBy()(max($"n").as("s"))
+    assert(countBugResult(groupedBelow, Seq(count($"s"))) == Some("0"))
+    assert(countBugHandling(lowerMax, grouping = Seq($"s")) == inConstructLeftJoins)
+    assert(countBugResult(lowerMax, grouping = Seq($"s")) == Some("1"))
+    // A NULL result of a grouped top aggregate is not used: master gives NULL too, as the
+    // subquery returns no row there.
+    assert(countBugResult(lowerMax, Seq(max($"s")), Seq($"s")).isEmpty)
+    assert(countBugHandling(lowerMax, Seq(max($"s")), Seq($"s")) ==
+      asBefore(countBugHandling(lowerMax, Seq(max($"s")), Seq($"s"))))
+    // COLLECT_LIST with RESPECT NULLS over the row of NULLs, with a FILTER that does not hold.
+    assert(countBugResult(lowerMax,
+      Seq(CollectList($"s", ignoreNulls = false).toAggregateExpression(false, Some($"s" > 1))))
+      == Some("[]"))
+    // And over arguments computed over the row, which skip the NULL or collect a struct of it.
+    assert(countBugResult(lowerMax, Seq(collectList($"s" + 1))) == Some("[]"))
+    assert(countBugResult(lowerMax, Seq(collectList(CreateStruct(Seq($"s"))))) ==
+      Some("[[null]]"))
+    // An outer reference between the aggregates, here in a Project, does not change the rows,
+    // only values, which are not computed (see below), so it does not matter for a COUNT(*).
+    assert(countBugResult(lowerMax.select(($"s" + $"a").as("s"))) == Some("1"))
+    // The string of the subquery shows the result.
+    assert(subqueryWithOutputR(testRelation.select(
+      ScalarSubquery(lowerMax.groupBy()(count(Literal(1)).as("r"))).as("sq")))
+      .toString.endsWith(" countBugResult=1"))
+    // An expression that fails on the row of the lower aggregate does not matter when the top
+    // aggregate does not use it.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val failing = lowerMax.select((Literal(10.0) / coalesce($"s", Literal(0.0))).as("t"))
+      assert(countBugResult(failing) == Some("1"))
+      // Otherwise the result is not computed, and the subquery keeps the handling of before,
+      // also for a grouping key.
+      assert(countBugResult(failing, Seq(sum($"t"))).isEmpty)
+      assert(countBugResult(failing, grouping = Seq($"t")).isEmpty)
+      assert(countBugResult(failing, Seq(collectList($"t"))).isEmpty)
+      assert(countBugHandling(failing, Seq(sum($"t"))) ==
+        asBefore(countBugHandling(failing, Seq(sum($"t")))))
+    }
+    // Neither is it for a value or a grouping key over an outer reference, a function that is not
+    // computed over one row, such as PERCENTILE, a FILTER with a subquery, a Python UDF in the
+    // result, and a function whose evaluate expression does not have its data type.
+    val subqueryRelation = LocalRelation($"e".double)
+    val uncorrelatedFilter = ScalarSubquery(subqueryRelation.groupBy()(max($"e").as("x"))) > 0
+    val correlatedFilter = ScalarSubquery(
+      subqueryRelation.where($"e" === $"s").groupBy()(max($"e").as("x"))).isNotNull
+    val pyUdf = PythonUDF("udf", null, LongType, Seq($"s"), PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    assert(countBugResult(lowerMax.select(pyUdf.as("g")), grouping = Seq($"g")).isEmpty)
+    assert(countBugResult(lowerMax.select(($"s" + $"a").as("s")), grouping = Seq($"s")).isEmpty)
+    Seq(lowerMax.select(($"s" + $"a").as("s")) -> sum($"s"),
+        lowerMax -> new Percentile($"s", Literal(0.5)).toAggregateExpression(),
+        lowerMax -> sum($"s", Some(uncorrelatedFilter)),
+        lowerMax -> sum($"s", Some(correlatedFilter)),
+        lowerMax -> sum(pyUdf),
+        lowerMax -> MistypedAggregate($"s").toAggregateExpression()).foreach { case (lower, top) =>
+      assert(countBugResult(lower, Seq(top)).isEmpty, (lower, top))
+      assert(countBugHandling(lower, Seq(top)) == asBefore(countBugHandling(lower, Seq(top))),
+        (lower, top))
+    }
+    // A Python UDF over the lower aggregate does not matter when the top aggregate does not use
+    // its result.
+    val udfOverMax = PythonUDF("udf", null, LongType, Seq(max($"d")),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    assert(countBugResult(correlated(udfOverMax)) == Some("1"))
+    assert(countBugResult(correlated(udfOverMax), Seq(sum($"s"))).isEmpty)
+    // It is not tried for a lower aggregate with a function with a default result, which is
+    // handled in decorrelation as before, even when the top aggregate does not use it or its
+    // default result is NULL.
+    val lowerMaxAndCount =
+      testRelation2.where($"a" === $"c").groupBy()(max($"d").as("s"), count($"d").as("n"))
+    val lowerListAgg = correlated(ListAgg(Cast($"d", StringType)).toAggregateExpression())
+    val countBelowProject = correlated(count($"d")).select($"s").groupBy()(max($"s").as("s"))
+    Seq(lowerMaxAndCount -> sum($"s"), lowerMaxAndCount -> sum($"n"), lowerListAgg -> count($"s"),
+        countBelowProject -> sum($"s")).foreach { case (lower, top) =>
+      assert(countBugResult(lower, Seq(top)).isEmpty, (lower, top))
+      assert(countBugHandling(lower, Seq(top)) == (Some(false), true), (lower, top))
+    }
+  }
+
+  test("SPARK-60501: canonicalized keeps countBugResult so two subqueries with the same plan " +
+      "but a different result are not treated as equal") {
+    // Two subqueries with the same plan, one with a computed count-bug result and one without,
+    // must not be treated as semantically equal, which would let RewriteCorrelatedScalarSubquery
+    // replace one with the other. canonicalized keeps countBugResult for that.
+    val plan = testRelation2.groupBy()(max($"d").as("s"))
+      .groupBy()(count(Literal(1)).as("r")).analyze
+    val withResult = ScalarSubquery(plan, countBugResult = Some(Literal(1L)))
+    val withoutResult = ScalarSubquery(plan)
+    assert(withResult.plan.canonicalized == withoutResult.plan.canonicalized)
+    assert(!withResult.semanticEquals(withoutResult))
+    // Two with the same computed result are still equal.
+    assert(withResult.semanticEquals(ScalarSubquery(plan, countBugResult = Some(Literal(1L)))))
   }
 
   test("PullupCorrelatedPredicates should handle deletes") {
