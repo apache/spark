@@ -23,6 +23,16 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, the result of `kll_sketch_get_quantile_bigint`, `kll_sketch_get_quantile_float`
+  and `kll_sketch_get_quantile_double` is nullable, as they return NULL for an empty sketch.
+  Previously, it was non-nullable when their arguments were non-nullable. As a result, an existing
+  query started before Spark 4.3 that keeps such a result in its state, for example as a grouping
+  key of a streaming aggregation, fails to restart with `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`.
+  To recover, use a new checkpoint location, or set
+  `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
