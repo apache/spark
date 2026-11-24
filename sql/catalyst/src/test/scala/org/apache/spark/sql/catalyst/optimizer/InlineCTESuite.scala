@@ -21,10 +21,16 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, EqualTo, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, Rand}
+import org.apache.spark.sql.catalyst.expressions.{RowOrderIndepTestExpr, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 class InlineCTESuite extends PlanTest {
 
@@ -162,5 +168,100 @@ class InlineCTESuite extends PlanTest {
     assert(e.getCondition == "INTERNAL_ERROR")
     // The analysis path tolerates the out-of-scope reference (no throw).
     InlineCTE(isAnalysis = true).apply(plan)
+  }
+
+  test("InlineCTE does not inline multi-ref CTE with " +
+    "rowOrderIndependent nondet expr") {
+    val cteDef = CTERelationDef(
+      OneRowRelation().select(RowOrderIndepTestExpr(Literal(1))().as("v")))
+    val cteRef1 = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val cteRef2 = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(
+      cteRef1.join(cteRef2, condition = Some(cteRef1.output.head === cteRef2.output.head)),
+      Seq(cteDef)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.isInstanceOf[WithCTE])
+    comparePlans(optimized, plan)
+  }
+
+  test("multi-ref CTE with rowOrderIndependent projection stays un-inlined while " +
+    "PushdownPredicatesAndPruneColumnsForCTEDef pushes disjoint ref predicates through Project") {
+    object OptimizeWithCTEPushdown extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Inline CTE", Once, InlineCTE()) ::
+        Batch("Operator Optimization", FixedPoint(100),
+          PushPredicateThroughNonJoin,
+          PushdownPredicatesAndPruneColumnsForCTEDef) ::
+        Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :: Nil
+    }
+
+    val a = AttributeReference("a", IntegerType, nullable = true)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val relation = LocalRelation(a, b)
+
+    def buildPlan(projExpr: Alias, filterOnValueCol: Boolean = false): LogicalPlan = {
+      val cteDef = CTERelationDef(Project(Seq(a, projExpr), relation))
+      val ref1Out = cteDef.output.map(_.newInstance())
+      val ref2Out = cteDef.output.map(_.newInstance())
+      val idx = if (filterOnValueCol) 1 else 0
+      val ref1 = Project(ref1Out, Filter(EqualTo(ref1Out(idx), Literal(1)),
+        CTERelationRef(cteDef.id, true, ref1Out, false)))
+      val ref2 = Project(ref2Out, Filter(EqualTo(ref2Out(idx), Literal(2)),
+        CTERelationRef(cteDef.id, true, ref2Out, false)))
+      WithCTE(Union(Seq(ref1, ref2)), Seq(cteDef))
+    }
+
+    // 1. rowOrderIndependent nondeterministic projection: stays un-inlined (1x execution), and
+    //    outer disjoint predicates (a = 1 OR a = 2) push through Project onto the underlying scan.
+    val roiAlias = Alias(RowOrderIndepTestExpr(b)(), "v")()
+    val roiPlan = buildPlan(roiAlias)
+    val optimizedRoi = OptimizeWithCTEPushdown.execute(roiPlan)
+    assert(optimizedRoi.isInstanceOf[WithCTE])
+    val optimizedRoiDef = optimizedRoi.asInstanceOf[WithCTE].cteDefs.head
+    comparePlans(
+      optimizedRoiDef.child,
+      Project(
+        Seq(a, roiAlias),
+        Filter(Or(EqualTo(a, Literal(1)), EqualTo(a, Literal(2))), relation)),
+      checkAnalysis = false)
+
+    // 2. Kill-switch disabled: CTE stays un-inlined, and (a = 1 OR a = 2) stops above Project.
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+      val optimizedDisabled = OptimizeWithCTEPushdown.execute(roiPlan)
+      assert(optimizedDisabled.isInstanceOf[WithCTE])
+      val disabledDef = optimizedDisabled.asInstanceOf[WithCTE].cteDefs.head
+      comparePlans(
+        disabledDef.child,
+        Filter(
+          Or(EqualTo(a, Literal(1)), EqualTo(a, Literal(2))),
+          Project(Seq(a, roiAlias), relation)),
+        checkAnalysis = false)
+    }
+
+    // 3. Outer predicates referencing the ROI output column stay above Project (no duplication).
+    val roiValPredPlan = buildPlan(roiAlias, filterOnValueCol = true)
+    val optimizedRoiValPred = OptimizeWithCTEPushdown.execute(roiValPredPlan)
+    assert(optimizedRoiValPred.isInstanceOf[WithCTE])
+    val roiValPredDef = optimizedRoiValPred.asInstanceOf[WithCTE].cteDefs.head
+    comparePlans(
+      roiValPredDef.child,
+      Filter(
+        Or(EqualTo(roiAlias.toAttribute, Literal(1)), EqualTo(roiAlias.toAttribute, Literal(2))),
+        Project(Seq(a, roiAlias), relation)),
+      checkAnalysis = false)
+
+    // 4. Stateful nondeterministic projection (rand(0)): stays un-inlined, and outer disjoint
+    //    predicates (a = 1 OR a = 2) are blocked above Project.
+    val randAlias = Alias(Rand(0), "v")()
+    val randPlan = buildPlan(randAlias)
+    val optimizedRand = OptimizeWithCTEPushdown.execute(randPlan)
+    assert(optimizedRand.isInstanceOf[WithCTE])
+    val optimizedRandDef = optimizedRand.asInstanceOf[WithCTE].cteDefs.head
+    comparePlans(
+      optimizedRandDef.child,
+      Filter(
+        Or(EqualTo(a, Literal(1)), EqualTo(a, Literal(2))),
+        Project(Seq(a, randAlias), relation)),
+      checkAnalysis = false)
   }
 }

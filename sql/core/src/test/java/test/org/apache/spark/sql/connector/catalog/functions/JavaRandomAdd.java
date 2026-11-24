@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.connector.catalog.functions;
 
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.catalog.functions.BoundFunction;
@@ -106,5 +107,47 @@ public class JavaRandomAdd implements UnboundFunction {
       return input + rand.nextInt();
     }
   }
-}
 
+  public static class JavaRowOrderIndepDefault extends JavaRandomAddBase {
+    public static final AtomicInteger CALLS = new AtomicInteger(0);
+
+    @Override
+    public boolean isRowOrderIndependent() {
+      return true;
+    }
+
+    @Override
+    public Integer produceResult(InternalRow input) {
+      CALLS.incrementAndGet();
+      return input.getInt(0) + 100;
+    }
+  }
+
+  public static class JavaRowOrderIndepMagic extends JavaRandomAddBase {
+    public static final AtomicInteger CALLS = new AtomicInteger(0);
+
+    @Override
+    public boolean isRowOrderIndependent() {
+      return true;
+    }
+
+    public int invoke(int input) {
+      CALLS.incrementAndGet();
+      return input + 100;
+    }
+  }
+
+  public static class JavaRowOrderIndepStaticMagic extends JavaRandomAddBase {
+    public static final AtomicInteger STATIC_CALLS = new AtomicInteger(0);
+
+    @Override
+    public boolean isRowOrderIndependent() {
+      return true;
+    }
+
+    public static int invoke(int input) {
+      STATIC_CALLS.incrementAndGet();
+      return input + 100;
+    }
+  }
+}

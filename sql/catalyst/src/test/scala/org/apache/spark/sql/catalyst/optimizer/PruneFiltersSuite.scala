@@ -208,4 +208,14 @@ class PruneFiltersSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("PruneFilters never prunes duplicate " +
+    "rowOrderIndependent nondeterministic predicates") {
+    val roiFilter1 = RowOrderIndepTestExpr($"a".attr)() > 5
+    val roiFilter2 = RowOrderIndepTestExpr($"a".attr)() > 5
+    val originalQuery = testRelation.where(roiFilter1).select($"a").where(roiFilter2).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val filterCount = optimized.collect { case f: Filter => f }.size
+    assert(filterCount == 2)
+  }
 }

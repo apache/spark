@@ -441,6 +441,31 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
       }
     }
     assert(result == expected)
+
+    // Sparse encoding of row_order_independent on CommonInlineUserDefinedFunction.
+    val rowIndepUdf = udf.withName("row_indep").asRowOrderIndependentNondeterministic()
+    val rowIndepProto = ColumnNodeToProtoConverter(
+      InvokeInlineUserDefinedFunction(
+        rowIndepUdf,
+        Seq(UnresolvedAttribute("a")))).getCommonInlineUserDefinedFunction
+    assert(!rowIndepProto.getDeterministic)
+    assert(rowIndepProto.hasRowOrderIndependent)
+    assert(rowIndepProto.getRowOrderIndependent)
+
+    val resetProto = ColumnNodeToProtoConverter(
+      InvokeInlineUserDefinedFunction(
+        rowIndepUdf.asNondeterministic(),
+        Seq(UnresolvedAttribute("a")))).getCommonInlineUserDefinedFunction
+    assert(!resetProto.getDeterministic)
+    assert(!resetProto.hasRowOrderIndependent)
+    assert(!resetProto.getRowOrderIndependent)
+
+    val detProto = ColumnNodeToProtoConverter(
+      InvokeInlineUserDefinedFunction(
+        udf.withName("det"),
+        Seq(UnresolvedAttribute("a")))).getCommonInlineUserDefinedFunction
+    assert(detProto.getDeterministic)
+    assert(!detProto.hasRowOrderIndependent)
   }
 
   test("extension") {

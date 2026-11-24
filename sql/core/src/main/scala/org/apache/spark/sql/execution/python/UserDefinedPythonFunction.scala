@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -61,7 +62,23 @@ case class UserDefinedPythonFunction(
     // Schema of the intermediate aggregation buffer, set only for the incremental Python
     // aggregator eval types (see [[PythonAggregate]]); `null` otherwise. Nullable rather than
     // `Option` so it can be passed positionally from Python over Py4J.
-    bufferType: DataType = null) {
+    bufferType: DataType = null,
+    udfRowOrderIndependent: Boolean = false) {
+
+  if (udfRowOrderIndependent &&
+    (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF
+      || pythonEvalType == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF)) {
+    throw new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_FEATURE.ROW_ORDER_INDEPENDENT_AGGREGATOR",
+      messageParameters = Map("functionName" -> name))
+  }
 
   def builder(e: Seq[Expression]): Expression = {
     if (CharVarcharUtils.hasCharVarcharIncludingUDT(dataType)) {
@@ -117,7 +134,14 @@ case class UserDefinedPythonFunction(
       }
       PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+      PythonUDF(
+        name,
+        func,
+        dataType,
+        e,
+        pythonEvalType,
+        udfDeterministic,
+        udfRowOrderIndependent = udfRowOrderIndependent)
     }
     // The ``_udf_param_N`` substitution below is positional, so a UDF
     // call site that supplied named arguments (e.g. SQL ``name => val``

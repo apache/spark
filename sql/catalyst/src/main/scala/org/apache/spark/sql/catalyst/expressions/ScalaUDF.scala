@@ -45,6 +45,8 @@ import org.apache.spark.util.Utils
  *                     the input of a primitive parameter can be null.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
+ * @param udfRowOrderIndependent  True if the UDF evaluation per row is independent of row
+ *                                ordering, prior rows, partition index, and split context.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -54,10 +56,14 @@ case class ScalaUDF(
     outputEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
     udfNullable: Boolean = true,
-    udfDeterministic: Boolean = true)
+    udfDeterministic: Boolean = true,
+    udfRowOrderIndependent: Boolean = false)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  override lazy val rowOrderIndependent: Boolean =
+    (udfDeterministic || udfRowOrderIndependent) && children.forall(_.rowOrderIndependent)
 
   // The analyzer casts the inputs to the parameter types (see `ImplicitTypeCasts`) and makes the
   // UDF return null for a null input of a primitive parameter (see `HandleNullInputsForUDF`) only

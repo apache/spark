@@ -21,7 +21,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Collate, CreateArray, Expression, GetArrayItem, Literal, PythonUDF, Rand, ResolvedCollation, Substring, UpdateFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, BindReferences, Collate,
+  CreateArray, CustomNondetUnaryTestExpr, Expression, GetArrayItem, LambdaFunction, Literal,
+  PythonUDF, Rand, ResolvedCollation, RowOrderIndepTestExpr, Substring,
+  UnresolvedNamedLambdaVariable, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -376,5 +379,129 @@ class CollapseProjectSuite extends PlanTest {
     val nonCheap = Substring(col, Literal(1), Literal(5))
     assert(!CollapseProject.isCheap(nonCheap))
     assert(!CollapseProject.isCheap(Collate(nonCheap, ResolvedCollation("UTF8_LCASE"))))
+  }
+
+  test("collapse single-ref rowOrderIndependent nondeterministic project " +
+    "and prune unused") {
+    val attrA = testRelation.output(0)
+    val attrB = testRelation.output(1)
+    val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+    val roiExpr = RowOrderIndepTestExpr(attrA)(counter)
+    val singleRefQuery = testRelation
+      .select(roiExpr.as("c"))
+      .select(($"c" + 1).as("d"))
+      .analyze
+    val optimizedSingleRef = Optimize.execute(singleRefQuery)
+    val expectedSingleRef = testRelation
+      .select((roiExpr + 1).as("d"))
+      .analyze
+    comparePlans(optimizedSingleRef, expectedSingleRef)
+
+    // Verify evaluation count is 1 per row after collapse.
+    val bound = BindReferences.bindReference(
+      optimizedSingleRef.asInstanceOf[Project].projectList.head, testRelation.output)
+    bound.eval(org.apache.spark.sql.catalyst.InternalRow(42, 0))
+    assert(counter.get() == 1)
+
+    // count == 0 unreferenced column is pruned.
+    val unusedQuery = testRelation
+      .select($"a", RowOrderIndepTestExpr(attrB)().as("c"))
+      .select($"a")
+      .analyze
+    val optimizedUnused = Optimize.execute(unusedQuery)
+    val expectedUnused = testRelation.select($"a").analyze
+    comparePlans(optimizedUnused, expectedUnused)
+  }
+
+  test("do not collapse multi-ref rowOrderIndependent expr " +
+    "even with alwaysInline = true") {
+    val attrA = testRelation.output(0)
+    val roiExpr = RowOrderIndepTestExpr(attrA)()
+    val multiConsumerQuery = testRelation
+      .select(roiExpr.as("c"))
+      .select(($"c" + 1).as("d"), ($"c" + 2).as("e"))
+      .analyze
+    val sameConsumerMultiRefQuery = testRelation
+      .select(roiExpr.as("c"))
+      .select(($"c" + $"c").as("d"))
+      .analyze
+
+    withSQLConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE.key -> "true") {
+      comparePlans(Optimize.execute(multiConsumerQuery), multiConsumerQuery)
+      comparePlans(Optimize.execute(sameConsumerMultiRefQuery), sameConsumerMultiRefQuery)
+    }
+
+    // Legacy !rowOrderIndependent nondeterministic expression is never collapsed even for count==1.
+    val legacyNondetQuery = testRelation
+      .select(CustomNondetUnaryTestExpr(attrA).as("c"))
+      .select(($"c" + 1).as("d"))
+      .analyze
+    comparePlans(Optimize.execute(legacyNondetQuery), legacyNondetQuery)
+
+    // Mixed lower Project containing both rowOrderIndependent and stateful Rand(0) stays blocked.
+    val mixedLowerQuery = testRelation
+      .select(roiExpr.as("c"), Rand(0).as("r"))
+      .select(($"c" + 1).as("d"), ($"r" + 1).as("r2"))
+      .analyze
+    comparePlans(Optimize.execute(mixedLowerQuery), mixedLowerQuery)
+
+    // Kill-switch disables single-ref rowOrderIndependent project collapse.
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+      val singleRefQuery = testRelation
+        .select(RowOrderIndepTestExpr(attrA)().as("c"))
+        .select(($"c" + 1).as("d"))
+        .analyze
+      comparePlans(Optimize.execute(singleRefQuery), singleRefQuery)
+    }
+  }
+
+  test("do not collapse rowOrderIndependent expr referenced inside lambda") {
+    val arrRelation = LocalRelation($"arr".array(IntegerType), $"b".int)
+    val attrArr = arrRelation.output(0)
+    val attrB = arrRelation.output(1)
+    val x = UnresolvedNamedLambdaVariable("x" :: Nil)
+
+    val insideLambdaQuery = arrRelation
+      .select(attrArr, RowOrderIndepTestExpr(attrB)().as("c"))
+      .select(ArrayTransform(attrArr, LambdaFunction(x + $"c", Seq(x))).as("res"))
+      .analyze
+    comparePlans(Optimize.execute(insideLambdaQuery), insideLambdaQuery)
+
+    // Positive control: single reference as the HigherOrderFunction input argument (not inside
+    // the lambda body) evaluates once per row and can be collapsed.
+    val roiArrExpr = RowOrderIndepTestExpr(attrArr)()
+    val hofArgQuery = arrRelation
+      .select(roiArrExpr.as("c_arr"))
+      .select(ArrayTransform($"c_arr", LambdaFunction(x + 1, Seq(x))).as("res"))
+      .analyze
+    val expectedHofArg = arrRelation
+      .select(ArrayTransform(roiArrExpr, LambdaFunction(x + 1, Seq(x))).as("res"))
+      .analyze
+    comparePlans(Optimize.execute(hofArgQuery), expectedHofArg)
+  }
+
+  test("Project over Aggregate and canCollapseExpressions keep deterministic-only behavior") {
+    val attrA = testRelation.output(0)
+    val roiExpr = RowOrderIndepTestExpr(attrA)()
+    val singleRefAgg = testRelation
+      .groupBy(attrA)(attrA, roiExpr.as("c"))
+      .select(attrA, ($"c" + 1).as("d"))
+      .analyze
+    comparePlans(Optimize.execute(singleRefAgg), singleRefAgg)
+
+    val multiRefAgg = testRelation
+      .groupBy(attrA)(attrA, roiExpr.as("c"))
+      .select(($"c" + 1).as("d"), ($"c" + 2).as("e"))
+      .analyze
+    comparePlans(Optimize.execute(multiRefAgg), multiRefAgg)
+
+    // canCollapseExpressions stays deterministic-only (even with alwaysInline = true),
+    // isolating CombineUnions, patterns.scala, and V2 pushdown gates.
+    val lowerProj = testRelation.select(roiExpr.as("c")).analyze.asInstanceOf[Project]
+    val upperProj = lowerProj.select(($"c" + 1).as("d")).analyze.asInstanceOf[Project]
+    assert(!CollapseProject.canCollapseExpressions(
+      upperProj.projectList, lowerProj.projectList, alwaysInline = false))
+    assert(!CollapseProject.canCollapseExpressions(
+      upperProj.projectList, lowerProj.projectList, alwaysInline = true))
   }
 }

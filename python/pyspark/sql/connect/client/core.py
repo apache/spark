@@ -1110,6 +1110,7 @@ class SparkConnectClient(object):
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
         buffer_type: Optional["DataType"] = None,
+        row_order_independent: bool = False,
     ) -> str:
         """
         Create a temporary UDF in the session catalog on the other side. We generate a
@@ -1135,6 +1136,7 @@ class SparkConnectClient(object):
             arguments=[],
             function=py_udf,
             deterministic=deterministic,
+            row_order_independent=row_order_independent,
         ).to_plan_udf(self)
 
         # construct the request
