@@ -31,7 +31,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ColumnConversions._
 import org.apache.spark.sql.connect.PythonTestDepsChecker
@@ -138,6 +138,16 @@ class PythonPipelineSuite
   }
 
   private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
+  /** Runs the pipeline for `unresolvedGraph` and asserts that every flow completed. */
+  private def runPipelineToCompletion(unresolvedGraph: DataflowGraph): Unit = {
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+    val notCompleted =
+      latestFlowStatuses(updateContext.eventBuffer).filter(_._2 != FlowStatus.COMPLETED)
+    assert(notCompleted.isEmpty, s"Flows did not complete: $notCompleted")
+  }
 
   test("basic") {
     val graph = buildGraph("""
@@ -828,6 +838,372 @@ class PythonPipelineSuite
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier)
         .toSet == Set(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  // Spark Connect transformations that analyze their input, applied to a read of the dataset
+  // `src`, keyed by test name suffix, with the rows `downstream` must hold after the second run,
+  // when `src` holds (3, 'east') and (4, NULL).
+  private val readsOfSrc = Map(
+    "(select, does not analyze its input)" ->
+      ("""spark.read.table("src").select("id", "name")""", Set(Row(3, "east"), Row(4, null))),
+    "(withColumn)" -> (
+      """spark.read.table("src").withColumn("upper", F.upper("name"))""",
+      Set(Row(3, "east", "EAST"), Row(4, null, null))),
+    "(withColumnRenamed)" -> (
+      """spark.read.table("src").withColumnRenamed("name", "label")""",
+      Set(Row(3, "east"), Row(4, null))),
+    "(na.fill)" ->
+      ("""spark.read.table("src").na.fill("unknown")""", Set(Row(3, "east"), Row(4, "unknown"))),
+    "(na.drop)" -> ("""spark.read.table("src").na.drop()""", Set(Row(3, "east"))),
+    "(na.replace)" ->
+      (
+        """spark.read.table("src").na.replace("east", "EAST")""",
+        Set(Row(3, "EAST"), Row(4, null))),
+    "(to)" -> (
+      """spark.read.table("src").to(StructType([StructField('id', IntegerType()), """ +
+        """StructField('name', StringType())]))""",
+      Set(Row(3, "east"), Row(4, null))),
+    "(withColumn over spark.sql)" -> (
+      """spark.sql("SELECT * FROM src").withColumn("upper", F.upper("name"))""",
+      Set(Row(3, "east", "EAST"), Row(4, null, null))))
+
+  namedGridTest("read of an in-graph dataset depends on it on every run")(readsOfSrc) {
+    case (query, expectedRows) =>
+      sql(
+        "CREATE TABLE spark_catalog.default.ext AS " +
+          "SELECT * FROM VALUES (1, 'north'), (2, 'south') AS t(id, name)")
+      val pythonText = s"""
+        |from pyspark.sql import functions as F
+        |from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+        |
+        |@dp.materialized_view
+        |def src():
+        |  return spark.read.table("ext")
+        |
+        |@dp.materialized_view
+        |def downstream():
+        |  return $query
+        |""".stripMargin
+      // The first run defines the graph on a clean catalog.
+      runPipelineToCompletion(buildGraph(pythonText))
+
+      // Change the upstream data, so that `downstream` only sees the new rows if it runs after
+      // `src` is refreshed.
+      sql("INSERT OVERWRITE TABLE spark_catalog.default.ext VALUES (3, 'east'), (4, NULL)")
+
+      // The second run defines the graph with `src` already materialized in the catalog.
+      val graph = buildGraph(pythonText)
+      assert(
+        graph
+          .resolve(sessionCaseSensitive)
+          .resolvedFlow(graphIdentifier("downstream"))
+          .inputs == Set(graphIdentifier("src")))
+      runPipelineToCompletion(graph)
+      assert(spark.table("spark_catalog.default.downstream").collect().toSet == expectedRows)
+  }
+
+  test("streaming read of an in-graph dataset through withWatermark depends on it on every run") {
+    val pythonText = """
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(3).withColumn("ts", F.current_timestamp())
+      |
+      |@dp.table
+      |def downstream():
+      |  return spark.readStream.table("src").withWatermark("ts", "1 minute")
+      |""".stripMargin
+    runPipelineToCompletion(buildGraph(pythonText))
+
+    val graph = buildGraph(pythonText).resolve(sessionCaseSensitive)
+    val downstream = graph.resolvedFlow(graphIdentifier("downstream"))
+    assert(downstream.inputs == Set(graphIdentifier("src")))
+    assert(downstream.df.isStreaming)
+  }
+
+  test("read of an in-graph dataset whose nested nullability differs from its table") {
+    // `src` is inferred with `items` as array<int> without nulls, while its table reports
+    // array<int> with nulls.
+    val pythonText = """
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(2).withColumn("items", F.array(F.lit(1)))
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.table("src").withColumn("n", F.size("items"))
+      |""".stripMargin
+    runPipelineToCompletion(buildGraph(pythonText))
+
+    val graph = buildGraph(pythonText)
+    assert(
+      graph
+        .resolve(sessionCaseSensitive)
+        .resolvedFlow(graphIdentifier("downstream"))
+        .inputs == Set(graphIdentifier("src")))
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").select("id", "n").collect().toSet ==
+        Set(Row(0L, 1), Row(1L, 1)))
+  }
+
+  test("external dataset read through withColumn stays external and is read when the flow runs") {
+    sql(
+      "CREATE TABLE spark_catalog.default.ext AS " +
+        "SELECT * FROM VALUES (1, 'north') AS t(id, name)")
+    val pythonText = """
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.table("ext").withColumn("upper", F.upper("name"))
+      |""".stripMargin
+    runPipelineToCompletion(buildGraph(pythonText))
+
+    // Define the graph, then change the external table before the run.
+    val graph = buildGraph(pythonText)
+    sql("INSERT OVERWRITE TABLE spark_catalog.default.ext VALUES (2, 'south')")
+    val downstream =
+      graph.resolve(sessionCaseSensitive).resolvedFlow(graphIdentifier("downstream"))
+    assert(downstream.inputs.isEmpty)
+    assert(downstream.funcResult.usedExternalInputs == Set(graphIdentifier("ext")))
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").collect().toSet ==
+        Set(Row(2, "south", "SOUTH")))
+  }
+
+  namedGridTest(
+    "column added to an in-graph dataset is read by a downstream flow on the same run")(
+    Map(
+      "(select, does not analyze its input)" -> """.select("*")""",
+      "(withColumn)" -> """.withColumn("upper", F.upper("name"))""",
+      "(na.fill)" -> """.na.fill("unknown")""")) { operator =>
+    sql(
+      "CREATE TABLE spark_catalog.default.ext AS " +
+        "SELECT * FROM VALUES (1, 'north') AS t(id, name)")
+    def pipeline(srcQuery: String): String =
+      s"""
+        |from pyspark.sql import functions as F
+        |
+        |@dp.materialized_view
+        |def src():
+        |  return $srcQuery
+        |
+        |@dp.materialized_view
+        |def downstream():
+        |  return spark.read.table("src")$operator
+        |""".stripMargin
+    runPipelineToCompletion(buildGraph(pipeline("""spark.read.table("ext")""")))
+
+    // The second run adds a column to `src`, while `downstream` is unchanged.
+    runPipelineToCompletion(
+      buildGraph(pipeline("""spark.read.table("ext").withColumn("extra", F.lit(42))""")))
+    assert(
+      spark.table("spark_catalog.default.downstream").select("extra").collect().toSeq ==
+        Seq(Row(42)))
+  }
+
+  // Transformations that run a query over their input when they are transformed, applied to a
+  // read of the table `<table>`, keyed by test name suffix, with the sub-condition of the error
+  // they fail with when `<table>` is a dataset of the pipeline, and the rows they produce when it
+  // is an external table holding (1, 'north', '{"a": 1}') and (2, 'south', '{"a": 2}').
+  private val queriesOfInput = Map(
+    "(pivot without values)" -> (
+      """spark.read.table("<table>").groupBy("id").pivot("name").count()""",
+      "PIVOT_WITHOUT_VALUES",
+      Set(Row(1, 1L, null), Row(2, null, 1L))),
+    "(crosstab)" -> (
+      """spark.read.table("<table>").crosstab("id", "name")""",
+      "QUERY",
+      Set(Row("1", 1L, 0L), Row("2", 0L, 1L))),
+    "(json without schema)" -> (
+      """spark.read.json(spark.read.table("<table>").select("payload"))""",
+      "PARSE_WITHOUT_SCHEMA",
+      Set(Row(1L), Row(2L))))
+
+  private val inputValues =
+    """VALUES (1, 'north', '{"a": 1}'), (2, 'south', '{"a": 2}') AS t(id, name, payload)"""
+
+  namedGridTest("transformation that queries a dataset of the pipeline fails the flow")(
+    queriesOfInput) { case (query, subCondition, _) =>
+    val graph = buildGraph(s"""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.sql(\"\"\"SELECT * FROM $inputValues\"\"\")
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return ${query.replace("<table>", "src")}
+      |""".stripMargin).resolve(sessionCaseSensitive)
+
+    assert(graph.resolutionFailedFlows.map(_.identifier) == Seq(graphIdentifier("downstream")))
+    val message = graph.resolutionFailedFlows.head.failure.head.getMessage
+    assert(
+      message.contains(s"[PIPELINE_DATASET_QUERIED_DURING_FLOW_ANALYSIS.$subCondition]"),
+      message)
+    assert(message.contains("`spark_catalog`.`default`.`src`"), message)
+  }
+
+  namedGridTest("transformation that queries an external table reads the table")(queriesOfInput) {
+    case (query, _, expectedRows) =>
+      sql(s"CREATE TABLE spark_catalog.default.ext AS SELECT * FROM $inputValues")
+      val graph = buildGraph(s"""
+      |@dp.materialized_view
+      |def downstream():
+      |  return ${query.replace("<table>", "ext")}
+      |""".stripMargin)
+      assert(
+        graph
+          .resolve(sessionCaseSensitive)
+          .resolvedFlow(graphIdentifier("downstream"))
+          .inputs
+          .isEmpty)
+
+      runPipelineToCompletion(graph)
+      assert(spark.table("spark_catalog.default.downstream").collect().toSet == expectedRows)
+  }
+
+  // A query function returning the single split of a randomSplit of the table `<table>`, which
+  // holds all of its rows, and whose only column, a map, is not orderable.
+  private val splitOfMapColumn =
+    """spark.read.table("<table>")""" +
+      """.select(F.create_map(F.lit("k"), F.col("name")).alias("m")).randomSplit([1.0], 1)[0]"""
+
+  test("deterministic sample of a dataset of the pipeline without orderable column fails") {
+    val graph = buildGraph(s"""
+      |from pyspark.sql import functions as F
+      |
+      |@dp.materialized_view
+      |def src():
+      |  return spark.sql(\"\"\"SELECT * FROM $inputValues\"\"\")
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return ${splitOfMapColumn.replace("<table>", "src")}
+      |""".stripMargin).resolve(sessionCaseSensitive)
+
+    assert(graph.resolutionFailedFlows.map(_.identifier) == Seq(graphIdentifier("downstream")))
+    val message = graph.resolutionFailedFlows.head.failure.head.getMessage
+    assert(
+      message.contains(
+        "[PIPELINE_DATASET_QUERIED_DURING_FLOW_ANALYSIS.SAMPLE_WITHOUT_ORDERABLE_COLUMN]"),
+      message)
+  }
+
+  namedGridTest("deterministic sample reads its input")(
+    Map(
+      "(dataset of the pipeline with an orderable column)" -> (
+        """spark.read.table("src").select("id").randomSplit([1.0], 1)[0]""",
+        Set(graphIdentifier("src")),
+        Set(Row(1), Row(2))),
+      "(external table without an orderable column)" -> (
+        splitOfMapColumn.replace("<table>", "ext"),
+        Set.empty[TableIdentifier],
+        Set(Row(Map("k" -> "north")), Row(Map("k" -> "south")))))) {
+    case (query, expectedInputs, expectedRows) =>
+      sql(s"CREATE TABLE spark_catalog.default.ext AS SELECT * FROM $inputValues")
+      val graph = buildGraph(s"""
+        |from pyspark.sql import functions as F
+        |
+        |@dp.materialized_view
+        |def src():
+        |  return spark.sql(\"\"\"SELECT * FROM $inputValues\"\"\")
+        |
+        |@dp.materialized_view
+        |def downstream():
+        |  return $query
+        |""".stripMargin)
+      assert(
+        graph
+          .resolve(sessionCaseSensitive)
+          .resolvedFlow(graphIdentifier("downstream"))
+          .inputs == expectedInputs)
+
+      runPipelineToCompletion(graph)
+      assert(spark.table("spark_catalog.default.downstream").collect().toSet == expectedRows)
+  }
+
+  test("parsing a dataset of the pipeline with a schema reads it") {
+    val graph = buildGraph(s"""
+      |from pyspark.sql.types import LongType, StructField, StructType
+      |
+      |@dp.materialized_view
+      |def src():
+      |  return spark.sql(\"\"\"SELECT * FROM $inputValues\"\"\")
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.json(
+      |    spark.read.table("src").select("payload"),
+      |    schema=StructType([StructField("a", LongType())]))
+      |""".stripMargin)
+    assert(
+      graph
+        .resolve(sessionCaseSensitive)
+        .resolvedFlow(graphIdentifier("downstream"))
+        .inputs == Set(graphIdentifier("src")))
+
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").collect().toSet == Set(Row(1L), Row(2L)))
+  }
+
+  test("pivot with values reads an in-graph dataset") {
+    val graph = buildGraph("""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.sql("SELECT * FROM VALUES (1, 'north'), (2, 'south') AS t(id, name)")
+      |
+      |@dp.materialized_view
+      |def downstream():
+      |  return spark.read.table("src").groupBy("id").pivot("name", ["north", "south"]).count()
+      |""".stripMargin)
+    assert(
+      graph
+        .resolve(sessionCaseSensitive)
+        .resolvedFlow(graphIdentifier("downstream"))
+        .inputs == Set(graphIdentifier("src")))
+
+    runPipelineToCompletion(graph)
+    assert(
+      spark.table("spark_catalog.default.downstream").collect().toSet ==
+        Set(Row(1, 1L, null), Row(2, null, 1L)))
+  }
+
+  test("analysis error of a transformation that analyzes its input is reported for the flow") {
+    // `na.fill` analyzes its input when it is transformed, so this error was raised when the flow
+    // was defined. It is now raised when the flow is analyzed.
+    val unresolvedGraph = buildGraph(pythonText = """
+        |@dp.materialized_view()
+        |def table1():
+        |    df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
+        |    return df.na.fill(0, subset=["missing"])
+        |""".stripMargin)
+
+    val failedFlows = unresolvedGraph.resolve(sessionCaseSensitive).resolutionFailedFlows
+    assert(failedFlows.map(_.identifier) == Seq(graphIdentifier("table1")))
+    assert(failedFlows.head.failure.head.getMessage.contains("`missing`"))
+
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    assertFlowProgressEvent(
+      updateContext.eventBuffer,
+      identifier = graphIdentifier("table1"),
+      expectedFlowStatus = FlowStatus.FAILED,
+      cond = flowProgressEvent =>
+        flowProgressEvent.origin.sourceCodeLocation == Option(
+          QueryOrigin(
+            language = Option(Python()),
+            filePath = Option("<string>"),
+            line = Option(36),
+            objectName = Option("spark_catalog.default.table1"),
+            objectType = Option(QueryOriginType.Flow.toString))),
+      errorChecker = _.getMessage.contains("`missing`"),
+      expectedEventLevel = EventLevel.WARN)
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {

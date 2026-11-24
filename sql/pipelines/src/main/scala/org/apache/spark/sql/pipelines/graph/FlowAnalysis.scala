@@ -23,6 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.{DataFrame, DataFrameReader, Dataset, DataStreamReader, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
@@ -39,7 +40,23 @@ object FlowAnalysis {
      * @param plan The user-supplied LogicalPlan defining a flow.
      * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
      */
-  def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
+  def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction =
+    createFlowFunctionFromPlanBuilder(_ => plan)
+
+  /**
+   * Creates a [[FlowFunction]] like [[createFlowFunctionFromLogicalPlan]], but that builds the
+   * LogicalPlan defining the flow each time it analyzes the flow, using `buildPlan`. `buildPlan` is
+   * passed a function that resolves the reads of datasets in a plan, like the analysis of the flow
+   * does, so that it can resolve them while it builds the plan, before it analyzes any part of the
+   * plan. A read of a dataset in the pipeline is then resolved to the dataset's current
+   * definition rather than to its table in the catalog, if one exists.
+   *
+   * @param buildPlan Builds the LogicalPlan defining a flow, given a function that resolves the
+   *                  reads of datasets in a plan.
+   * @return A FlowFunction that attempts to analyze the LogicalPlan built by `buildPlan`.
+   */
+  def createFlowFunctionFromPlanBuilder(
+      buildPlan: (LogicalPlan => LogicalPlan) => LogicalPlan): FlowFunction = {
     (allInputs: Set[TableIdentifier],
       availableInputs: Seq[Input],
       confs: Map[String, String],
@@ -61,7 +78,7 @@ object FlowAnalysis {
       )
       val df = SQLConf.withExistingConf(ctx.flowConf) {
         confs.foreach { case (k, v) => ctx.setConf(k, v) }
-        Try(FlowAnalysis.analyze(ctx, plan))
+        Try(FlowAnalysis.analyze(ctx, buildPlan(resolveReads(ctx, _))))
       }
       FlowFunctionResult(
         requestedInputs = ctx.requestedInputs.toSet,
@@ -75,6 +92,23 @@ object FlowAnalysis {
   }
 
   /**
+   * Tags the plan that the analysis of a flow substitutes for a read of a table of the pipeline,
+   * with the table's identifier. While the flow is analyzed, the table is a placeholder without
+   * data, so a query over a tagged plan would compute its result from no data.
+   */
+  private val PIPELINE_TABLE_READ_TAG = TreeNodeTag[TableIdentifier]("pipelineTableRead")
+
+  /**
+   * Returns the identifier of a table of the pipeline that `plan` reads while a flow is analyzed,
+   * if any. See [[PIPELINE_TABLE_READ_TAG]].
+   */
+  private[sql] def pipelineTableRead(plan: LogicalPlan): Option[TableIdentifier] =
+    plan.collectWithSubqueries {
+      case p if p.getTagValue(PIPELINE_TABLE_READ_TAG).isDefined =>
+        p.getTagValue(PIPELINE_TABLE_READ_TAG).get
+    }.headOption
+
+  /**
    * Constructs an analyzed [[DataFrame]] from a [[LogicalPlan]] by resolving Pipelines specific
    * TVFs and datasets that cannot be resolved directly by Catalyst.
    *
@@ -82,7 +116,7 @@ object FlowAnalysis {
    * the flow (e.g. in a Python REPL), so it must not depend on ambient singletons or thread-locals
    * carried over from that defining thread. The one piece of per-flow state it relies on - the
    * flow's SQL confs - is installed on the analyzing thread by
-   * [[createFlowFunctionFromLogicalPlan]] via `SQLConf.withExistingConf`, so the Catalyst analysis
+   * [[createFlowFunctionFromPlanBuilder]] via `SQLConf.withExistingConf`, so the Catalyst analysis
    * this triggers reads them through `SQLConf.get`.
    *
    * @param plan     The [[LogicalPlan]] defining a flow.
@@ -92,6 +126,15 @@ object FlowAnalysis {
       context: FlowAnalysisContext,
       plan: LogicalPlan
   ): DataFrame = {
+    Dataset.ofRows(context.spark, resolveReads(context, plan))
+  }
+
+  /**
+   * Resolves the reads of datasets in `plan`, and other Pipelines specific nodes that cannot be
+   * resolved directly by Catalyst, without analyzing the rest of the plan. Reads that were
+   * already resolved are left unchanged.
+   */
+  private def resolveReads(context: FlowAnalysisContext, plan: LogicalPlan): LogicalPlan = {
     // Users can define CTEs within their CREATE statements. For example,
     //
     // CREATE STREAMING TABLE a
@@ -137,7 +180,7 @@ object FlowAnalysis {
           resolved.mergeTagsFrom(u)
           resolved
       }
-    Dataset.ofRows(spark, resolvedPlan)
+    resolvedPlan
   }
 
   /**
@@ -276,10 +319,13 @@ object FlowAnalysis {
     } else {
       ctx.batchInputs += ResolvedInput(input, aliasIdentifier)
     }
-    Dataset.ofRows(
-      ctx.spark,
-      SubqueryAlias(identifier = aliasIdentifier, child = inputDF.queryExecution.logical)
-    )
+    val read = SubqueryAlias(identifier = aliasIdentifier, child = inputDF.queryExecution.logical)
+    // A table's input is a placeholder without data while the flow is analyzed. The read of a
+    // view is not tagged: the view's plan holds the tagged reads of the tables it reads.
+    if (!input.isInstanceOf[Flow]) {
+      read.setTagValue(PIPELINE_TABLE_READ_TAG, datasetIdentifier)
+    }
+    Dataset.ofRows(ctx.spark, read)
   }
 
   /**

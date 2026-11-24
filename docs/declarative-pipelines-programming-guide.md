@@ -1132,6 +1132,20 @@ When working with sinks, keep the following considerations in mind:
 - The function used to define a dataset must return a `pyspark.sql.DataFrame`.
 - Never use methods that save or write to files or tables as part of your SDP dataset code.
 - When using the `for` loop pattern to define datasets in Python, ensure that the list of values passed to the `for` loop is always additive.
+- A DataFrame returned by `checkpoint()` or `localCheckpoint()` refers to data that the Spark Connect server holds until the Python object is garbage collected. SDP resolves a dataset's DataFrame when it analyzes the pipeline, which can be after the dataset's function returned it, so if a dataset uses such a DataFrame, keep a reference to it for as long as the pipeline runs, for example in a module-level variable:
+
+```python
+from pyspark import pipelines as dp
+
+# Checkpointing runs a query, so it must happen outside of the dataset's function.
+# Keeping the result in a module-level variable keeps it on the server while the pipeline runs.
+regions = spark.read.table("samples.tpch.region").localCheckpoint()
+
+@dp.materialized_view
+def nation_regions():
+    nation = spark.read.table("samples.tpch.nation")
+    return nation.join(regions, nation.n_regionkey == regions.r_regionkey)
+```
 
 Examples of Spark SQL operations that should never be used in SDP code:
 
