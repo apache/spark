@@ -3276,8 +3276,8 @@ class Analyzer(
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
-      case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
-        resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
+      case having @ UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+        val resolved = resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           val newCond = newExprs.head
           if (newCond.resolved) {
             Filter(newCond, newChild)
@@ -3289,20 +3289,14 @@ class Analyzer(
             // resolution order.
             UnresolvedHaving(newCond, newChild)
           }
-        }) match {
-          // The Project hides the aggregate expressions that HAVING added, see
-          // `HavingHiddenAggregates`. It is not marked over GROUPING SETS, CUBE and ROLLUP, as an
-          // aggregate function of ORDER BY over them can resolve a grouping column to the output
-          // of Expand, which is null in the rolled up rows (SPARK-57346).
-          case project @ Project(_, _: Filter) if !agg.child.isInstanceOf[Expand] =>
-            HavingHiddenAggregates.mark(project)
-          case other => other
-        }
+        })
+        markHavingHiddenAggregates(resolved, having, agg)
 
-      case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
-        resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
+      case filter @ Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+        val resolved = resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           Filter(newExprs.head, newChild)
         })
+        markHavingHiddenAggregates(resolved, filter, agg)
 
       case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
         resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
@@ -3328,12 +3322,35 @@ class Analyzer(
     }
 
     /**
+     * Marks the [[Project]] that `resolveOperatorWithAggregate` puts on top of `replaced`, a
+     * HAVING clause or a filter on an aggregation, to hide the aggregate expressions that it adds
+     * to `agg` for the condition, see [[HavingHiddenAggregates]]. The child of the Project is a
+     * [[Filter]], or an [[UnresolvedHaving]] that a later iteration resolves to one, e.g. when the
+     * condition also references an alias of the SELECT list.
+     *
+     * The Project is not marked over an [[Expand]], i.e. for GROUPING SETS, CUBE and ROLLUP with
+     * grouping columns: an aggregate function of ORDER BY can resolve a grouping column to the
+     * output of the Expand, which is null in the rolled up rows (SPARK-57346). A grand total, e.g.
+     * `GROUP BY GROUPING SETS (())`, has no grouping columns, and is by default an Aggregate
+     * without an Expand.
+     */
+    private def markHavingHiddenAggregates(
+        plan: LogicalPlan,
+        replaced: LogicalPlan,
+        agg: Aggregate): LogicalPlan = plan match {
+      case project @ Project(_, _: Filter | _: UnresolvedHaving)
+          if !agg.child.isInstanceOf[Expand] =>
+        HavingHiddenAggregates.mark(project, replaced)
+      case other => other
+    }
+
+    /**
      * Resolves the grouping expressions and aggregate functions of a [[Sort]] on top of the
-     * [[Project]] that hides the aggregate expressions added for HAVING, see
-     * [[HavingHiddenAggregates]]. Like the single-pass analyzer, it resolves them with the
-     * aggregate expressions of the SELECT list, adds the ones that the [[Aggregate]] does not
-     * compute for the SELECT list to it, and passes them through the Project. Another Project on
-     * top of the Sort keeps the output of the SELECT list.
+     * [[Project]] that hides the aggregate expressions added for a HAVING clause or a filter on
+     * an aggregation, see [[HavingHiddenAggregates]]. Like the single-pass analyzer, it resolves
+     * them with the aggregate expressions that the Project outputs, i.e. the SELECT list, adds the
+     * ones that the [[Aggregate]] does not compute for the SELECT list to it, and passes them
+     * through the Project. Another Project on top of the Sort keeps the output of the SELECT list.
      */
     private def resolveSortOnHavingHiddenAggregates(
         sort: Sort,
@@ -3370,7 +3387,11 @@ class Analyzer(
         // A grouping column that HAVING already added is only passed through the Project.
         val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++
           extraAggExprs.filterNot(e => agg.outputSet.contains(e.toAttribute)))
-        val newProject = Project(project.projectList ++ passedThrough, filter.copy(child = newAgg))
+        // The rebuilt operators keep their tags, e.g. the mark and a Spark Connect plan id or a
+        // Dataset id of the Project, and the grand total tag of the Aggregate.
+        newAgg.copyTagsFrom(agg)
+        val newProject = ColumnResolutionHelper.rebuildProject(
+          project, project.projectList ++ passedThrough, filter.withNewChildren(Seq(newAgg)))
         Project(project.output, sort.copy(order = newSortOrder, child = newProject))
       }
     }
@@ -4482,7 +4503,8 @@ class Analyzer(
         val (newCond, newChild) = resolveQualifyCondition(
           subqueryResolved, candidateAttrs, p.child)
         val missingAttrs = (newCond.references -- p.outputSet).intersect(newChild.outputSet)
-        val newProject = p.copy(projectList = p.projectList ++ missingAttrs, child = newChild)
+        val newProject = ColumnResolutionHelper.rebuildProject(
+          p, p.projectList ++ missingAttrs, newChild)
         (newCond, newProject)
 
       case w: Window =>

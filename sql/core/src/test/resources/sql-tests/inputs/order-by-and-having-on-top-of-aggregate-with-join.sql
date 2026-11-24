@@ -191,7 +191,7 @@ SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVIN
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v2.col1 > 5 ORDER BY 1 + v2.col1, 2 + v1.col2;
 
 -- Referencing any attribute under aggregate expression.
--- These mostly fail because Spark does not support referencing any attributes under aggregate expressions in ORDER BY on top of HAVING
+-- ORDER BY on top of HAVING can reference attributes under aggregate expressions, also when HAVING uses aggregate expressions that the SELECT list does not compute
 
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1);
 SELECT SUM(col2) FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2);
@@ -226,7 +226,7 @@ SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY v1.col1 + 1, v2.col2 + 2 HAVING 1 + v2.col1 > 5 ORDER BY 1 + v2.col1, 2 + v1.col2;
 
 -- Referencing any attribute under aggregate expression.
--- These mostly fail because Spark does not support referencing any attributes under aggregate expressions in ORDER BY on top of HAVING
+-- ORDER BY on top of HAVING can reference attributes under aggregate expressions, also when HAVING uses aggregate expressions that the SELECT list does not compute
 
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col1) > 5 ORDER BY MAX(col1);
 SELECT SUM(col2) AS a, a + 1 AS b, b + 1 AS c FROM v1 NATURAL JOIN v2 GROUP BY col1 HAVING MAX(col2) > 5 ORDER BY MAX(col2);

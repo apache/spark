@@ -68,9 +68,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             (AttributeSet(newExprs) -- u.outputSet).intersect(newChild.outputSet)
           u match {
             case p: Project =>
-              val newProject = Project(p.projectList ++ missingAttrs, newChild)
-              newProject.copyTagsFrom(p)
-              (newExprs, newProject)
+              (newExprs, ColumnResolutionHelper.rebuildProject(
+                p, p.projectList ++ missingAttrs, newChild))
 
             case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
@@ -844,6 +843,20 @@ object ColumnResolutionHelper {
     case _: Distinct | _: SubqueryAlias | _: PipeOperator => false
     case _: UnaryNode => true
     case _ => false
+  }
+
+  /**
+   * Returns the [[Project]] with `projectList` and `child` that replaces `project` during the
+   * analysis. It keeps the tags of `project`, which `Project.copy` drops, e.g. the mark of
+   * [[HavingHiddenAggregates]] that a later rule reads.
+   */
+  def rebuildProject(
+      project: Project,
+      projectList: Seq[NamedExpression],
+      child: LogicalPlan): Project = {
+    val newProject = Project(projectList, child)
+    newProject.copyTagsFrom(project)
+    newProject
   }
 
   /**

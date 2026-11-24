@@ -518,6 +518,53 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Map("objectName" -> "`c`", "proposal" -> "`a`"))
   }
 
+  test("SPARK-39022: keep the tags of HAVING when a Project hides its aggregates") {
+    // The Project that hides `sum(c)` replaces the HAVING clause and keeps its tags, e.g. the plan
+    // id with which a DataFrame column of Spark Connect refers to the HAVING clause.
+    val having = testRelation2.having($"a")($"a")(sum($"c") > 1.0)
+    having.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    assert(getAnalyzer.execute(having).getTagValue(LogicalPlan.PLAN_ID_TAG).contains(1L))
+    val column = UnresolvedAttribute("a")
+    column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    assertAnalysisSuccess(Project(Seq(column), having))
+    // ORDER BY rebuilds that Project, which keeps its tags as well.
+    assertAnalysisSuccess(Project(Seq(column), having.orderBy(max($"c").desc)))
+  }
+
+  test("SPARK-39022: resolve sort references - aggregate hidden by a filter on an aggregation") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+    val maxC = max(c).as("max(c)")
+    val sumC = sum(c).as("sum(c)")
+
+    // Like HAVING, a filter on an aggregation, e.g. a DataFrame `where` after `agg`, adds `sum(c)`
+    // to the Aggregate and hides it with a Project.
+    val plan = testRelation2
+      .groupBy($"a")($"a", max($"c"))
+      .where(sum($"c") > 1.0)
+      .orderBy(sum($"c").asc)
+    val sumCForSort = sum(c).as("sum(c)")
+    val sumCInProject = sumCForSort.toAttribute.as("sum(c)")
+    val expected = testRelation2
+      .groupBy(a)(a, maxC, sumC, sumCForSort)
+      .where(sumC.toAttribute > 1.0)
+      .select(a, maxC.toAttribute, sumCInProject)
+      .orderBy(sumCInProject.toAttribute.asc)
+      .select(a, maxC.toAttribute)
+    checkAnalysis(plan, expected)
+
+    // A Project that the query specifies itself, e.g. a DataFrame `select`, still defines the only
+    // columns that ORDER BY can use.
+    assertAnalysisErrorCondition(
+      testRelation2
+        .groupBy($"a")($"a", max($"c").as("m"))
+        .where($"m" > 1.0)
+        .select($"m")
+        .orderBy(sum($"c").asc),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`", "proposal" -> "`m`"))
+  }
+
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
     checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)

@@ -36,10 +36,10 @@ import org.apache.spark.sql.internal.SQLConf
  *    includes metadata columns as well.
  * 3. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
- * 4. If the child plan is Aggregate or Filter(_, Aggregate), or the Project that hides the
- *    aggregate expressions added for HAVING on top of Filter(_, Aggregate) (see
- *    [[HavingHiddenAggregates]]), resolves the column to [[TempResolvedColumn]] with the output of
- *    Aggregate's child plan.
+ * 4. If the child plan is Aggregate or Filter(_, Aggregate), or the Project on top of
+ *    Filter(_, Aggregate) that hides the aggregate expressions added for the condition of the
+ *    Filter (see [[HavingHiddenAggregates]]), resolves the column to [[TempResolvedColumn]] with
+ *    the output of Aggregate's child plan.
  *    This is to allow Sort to host grouping expressions and aggregate functions, which can
  *    be pushed down to the Aggregate later. For example,
  *    `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)` and
@@ -121,22 +121,30 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
 }
 
 /**
- * The [[Project]] that the analyzer puts on top of the [[Filter]] of a HAVING clause whose
- * condition uses aggregate expressions that the SELECT list does not compute, e.g. `sum(a)` in
- * `SELECT b FROM t GROUP BY b HAVING sum(a) > 1`. `ResolveAggregateFunctions` adds them to the
- * [[Aggregate]] below the Filter, and the Project keeps the output of the SELECT list. A [[Sort]]
- * on top of the Project can still host grouping expressions and aggregate functions, as on top of
- * the Filter, see [[ResolveReferencesInSort]] and `ResolveAggregateFunctions`.
+ * The [[Project]] that the analyzer puts on top of the [[Filter]] of a HAVING clause, or of a
+ * filter on an aggregation, whose condition uses aggregate expressions that the [[Aggregate]] does
+ * not compute, e.g. `sum(a)` in `SELECT b FROM t GROUP BY b HAVING sum(a) > 1`.
+ * `ResolveAggregateFunctions` adds them to the Aggregate below the Filter, and the Project keeps
+ * the original output of the Aggregate, e.g. the SELECT list. A [[Sort]] on top of the Project can
+ * still host grouping expressions and aggregate functions, as on top of the Filter, see
+ * [[ResolveReferencesInSort]] and `ResolveAggregateFunctions`.
  *
  * The Project is marked with a tag, so that a Project of the same shape that the query specifies
  * itself, e.g. a DataFrame `select` after `filter` on an aggregation, still defines the columns
- * that a Sort on top of it can reference.
+ * that a Sort on top of it can reference. The rules that rebuild a Project before the Sort is
+ * resolved must keep the tag, see `ColumnResolutionHelper.rebuildProject`.
  */
 object HavingHiddenAggregates {
   private val TAG = TreeNodeTag[Unit]("havingHiddenAggregates")
 
-  /** Marks `project` as the Project that hides the aggregate expressions added for HAVING. */
-  def mark(project: Project): Project = {
+  /**
+   * Marks `project` as the Project that hides the aggregate expressions added for `replaced`, the
+   * HAVING clause or the filter that the Project replaces. It keeps the tags of `replaced` as
+   * well, e.g. the plan id of Spark Connect: the analyzer copies them to the Project only if the
+   * Project has no tags.
+   */
+  def mark(project: Project, replaced: LogicalPlan): Project = {
+    project.copyTagsFrom(replaced)
     project.setTagValue(TAG, ())
     project
   }

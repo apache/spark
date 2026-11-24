@@ -373,6 +373,38 @@ Project [k#x]
 
 
 -- !query
+SELECT k, sum(v) AS v FROM hav GROUP BY k HAVING v > 2 AND max(v) > 1 ORDER BY count(*)
+-- !query analysis
+Project [k#x, v#xL]
++- Sort [count(1)#xL ASC NULLS FIRST], true
+   +- Project [k#x, v#xL, count(1)#xL AS count(1)#xL]
+      +- Filter ((v#xL > cast(2 as bigint)) AND (max(v)#x > 1))
+         +- Aggregate [k#x], [k#x, sum(v#x) AS v#xL, max(v#x) AS max(v)#x, count(1) AS count(1)#xL]
+            +- SubqueryAlias hav
+               +- View (`hav`, [k#x, v#x])
+                  +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [k#x, v#x]
+                        +- SubqueryAlias hav
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT count(*) FROM hav GROUP BY GROUPING SETS (()) HAVING sum(v) > 2 ORDER BY max(v)
+-- !query analysis
+Project [count(1)#xL]
++- Sort [max(v)#x ASC NULLS FIRST], true
+   +- Project [count(1)#xL, max(v)#x AS max(v)#x]
+      +- Filter (sum(v)#xL > cast(2 as bigint))
+         +- Aggregate [count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL, max(v#x) AS max(v)#x]
+            +- SubqueryAlias hav
+               +- View (`hav`, [k#x, v#x])
+                  +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [k#x, v#x]
+                        +- SubqueryAlias hav
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
 SELECT k FROM hav GROUP BY GROUPING SETS ((k), ()) HAVING sum(v) > 2 ORDER BY sum(v)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -388,6 +420,48 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "",
     "startIndex" : 83,
     "stopIndex" : 83,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY CUBE(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 67,
+    "stopIndex" : 67,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY ROLLUP(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 69,
     "fragment" : "v"
   } ]
 }

@@ -244,6 +244,23 @@ one
 
 
 -- !query
+SELECT k, sum(v) AS v FROM hav GROUP BY k HAVING v > 2 AND max(v) > 1 ORDER BY count(*)
+-- !query schema
+struct<k:string,v:bigint>
+-- !query output
+three	3
+one	6
+
+
+-- !query
+SELECT count(*) FROM hav GROUP BY GROUPING SETS (()) HAVING sum(v) > 2 ORDER BY max(v)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+4
+
+
+-- !query
 SELECT k FROM hav GROUP BY GROUPING SETS ((k), ()) HAVING sum(v) > 2 ORDER BY sum(v)
 -- !query schema
 struct<>
@@ -261,6 +278,52 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "",
     "startIndex" : 83,
     "stopIndex" : 83,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY CUBE(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 67,
+    "stopIndex" : 67,
+    "fragment" : "v"
+  } ]
+}
+
+
+-- !query
+SELECT k FROM hav GROUP BY ROLLUP(k) HAVING sum(v) > 2 ORDER BY sum(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "proposal" : "`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 69,
     "fragment" : "v"
   } ]
 }

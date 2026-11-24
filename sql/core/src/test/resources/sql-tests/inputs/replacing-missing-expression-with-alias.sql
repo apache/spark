@@ -30,11 +30,10 @@ SELECT col2 AS b, col2 FROM VALUES(1,2) GROUP BY 1,2 HAVING col2 > 0 ORDER BY AL
 SELECT col2 AS b, col2, b as c FROM VALUES(1,2) GROUP BY 1,2 ORDER BY ALL;
 SELECT col2 AS b, col2, b as c FROM VALUES(1,2) GROUP BY 1,2 HAVING col2 > 0 ORDER BY ALL;
 
--- We run the following tests in fixed-point and single-pass modes separately because there is a difference
--- in results. Difference is order in inner Project nodes which is usually normalized when we compare results between
--- those two modes but in golden files we have to run them one after another.
-
--- Fixed point doesn't know to correctly replace `col1` with `a` because HAVING adds an artificial Project node
+-- We run the following tests in fixed-point and single-pass modes separately because their plans differ, and in golden
+-- files we have to run them one after another. Fixed point sorts by the alias `a` of `col1` in the SELECT list. With
+-- `preventUsingAliasesFromNonDirectChildren`, single pass does not use that alias below the Project that HAVING adds: it
+-- sorts by `col1`, which it adds to the Aggregate and passes through that Project.
 
 -- Fixed-point mode
 SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false;
