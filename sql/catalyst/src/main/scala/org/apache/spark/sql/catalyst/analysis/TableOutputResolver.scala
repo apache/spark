@@ -119,10 +119,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         AnsiStoreAssignmentCastCheck.DEFAULT): LogicalPlan = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
-      ansiStoreAssignmentCastCheck)._1
+      ansiStoreAssignmentCastCheck, readGenerationExpression)._1
   }
 
   /**
+   * @param readGenerationExpr returns a deferred reader for a target column's generation expression
+   *                           if present, so presence checks do not parse or convert the expression
    * @return a tuple of:
    *   - the resolved write plan (same as [[resolveOutputColumns]]); and
    *   - the names of the generated columns that were auto-filled, i.e. computed from their
@@ -135,11 +137,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: Attribute => Option[() => Expression]
   ): (LogicalPlan, Set[String]) = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
-      ansiStoreAssignmentCastCheck)
+      ansiStoreAssignmentCastCheck, readGenerationExpr)
   }
 
   private def resolveOutputColumnsInternal(
@@ -149,7 +152,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: Attribute => Option[() => Expression]
   ): (LogicalPlan, Set[String]) = {
 
     if (expected.size < query.output.size) {
@@ -176,7 +180,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         Nil,
         defaultValueFillMode,
         enforceFullOutput = true,
-        ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck,
+        readGenerationExpr)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -185,7 +190,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(
         tableName, query.output, expected, conf, errors += _,
         fillDefaultValue = fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck,
+        readGenerationExpr = readGenerationExpr)
     }
 
     if (errors.nonEmpty) {
@@ -415,7 +421,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       colPath: Seq[String] = Nil,
       defaultValueFillMode: DefaultValueFillMode.Value,
       enforceFullOutput: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: Attribute => Option[() => Expression] = readGenerationExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
@@ -427,16 +434,16 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       if (matched.isEmpty) {
         // Check for generated column expression first, before falling back to defaults,
         // since getDefaultValueExprOrNullLit may return null for nullable columns.
-        GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
-          case Some(genExprSql) =>
+        readGenerationExpr(expectedCol) match {
+          case Some(readExpr) =>
             autoFilledGenCols += expectedCol.name
             // The references are left unresolved here. `resolveOutputColumnsInternal` resolves them
             // against the stored columns, so the generated value is computed from the values as
             // they will be written. References to other generated columns are not allowed.
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
-            Some(applyColumnMetadata(genExpr, expectedCol))
+            Some(applyColumnMetadata(readExpr(), expectedCol))
           case None =>
-            val useNullAsDefault = useNullAsDefaultForMissingColumn(expectedCols, conf)
+            val useNullAsDefault =
+              useNullAsDefaultForMissingColumn(expectedCols, conf, readGenerationExpr)
             val defaultExpr = if (Set(FILL, RECURSE).contains(defaultValueFillMode)) {
               getDefaultValueExprOrNullLit(expectedCol, useNullAsDefault)
             } else {
@@ -518,7 +525,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String] = Nil,
       fillDefaultValue: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: Attribute => Option[() => Expression] = readGenerationExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
@@ -579,7 +587,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val trailingCols = actualExpectedCols.drop(inputCols.size)
     if (colPath.isEmpty &&
-        trailingCols.exists(col => GeneratedColumn.isGeneratedColumn(col.metadata))) {
+        trailingCols.exists(col => readGenerationExpr(col).isDefined)) {
       throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
         tableName, actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
     }
@@ -587,15 +595,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val defaults = if (fillDefaultValue || trailingCols.nonEmpty) {
       trailingCols.map { expectedCol =>
         // Check for generated column expression first, before falling back to defaults.
-        GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
-          case Some(genExprSql) =>
+        readGenerationExpr(expectedCol) match {
+          case Some(readExpr) =>
             autoFilledGenCols += expectedCol.name
             // The references are resolved as in the by-name path. The stored columns have the
             // names of the table columns, even when the query uses different names.
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
-            applyColumnMetadata(genExpr, expectedCol)
+            applyColumnMetadata(readExpr(), expectedCol)
           case None =>
-            val useNullAsDefault = useNullAsDefaultForMissingColumn(actualExpectedCols, conf)
+            val useNullAsDefault =
+              useNullAsDefaultForMissingColumn(actualExpectedCols, conf, readGenerationExpr)
             val defaultExpr = if (fillDefaultValue) {
               getDefaultValueExprOrNullLit(
                 expectedCol, useNullAsDefault)
@@ -809,10 +817,16 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   private def useNullAsDefaultForMissingColumn(
       expectedCols: Seq[Attribute],
-      conf: SQLConf): Boolean = {
+      conf: SQLConf,
+      readGenerationExpr: Attribute => Option[() => Expression]): Boolean = {
     conf.useNullsForMissingDefaultColumnValues &&
       (conf.generatedColumnAllowNullableIngest ||
-        !expectedCols.exists(c => GeneratedColumn.isGeneratedColumn(c.metadata)))
+        !expectedCols.exists(c => readGenerationExpr(c).isDefined))
+  }
+
+  private def readGenerationExpression(attr: Attribute): Option[() => Expression] = {
+    GeneratedColumn.getGenerationExpression(attr.metadata)
+      .map(sql => () => CatalystSqlParser.parseExpression(sql))
   }
 
   // For table insertions, capture the overflow errors and show proper message.

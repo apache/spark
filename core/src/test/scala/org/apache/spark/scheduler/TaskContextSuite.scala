@@ -1988,6 +1988,92 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(!completionInvoked) // completion listener should NOT be triggered
   }
 
+  test("SPARK-60992: a failing post-status-update listener does not mark the task failed") {
+    val context = TaskContext.empty()
+    val failureListener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener(failureListener)
+    context.markTaskCompleted(None)
+
+    var isFailedInLastListener = true
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit =
+        isFailedInLastListener = context.isFailed()
+    })
+    val error = new RuntimeException("post-status-update failure")
+    val anotherError = new RuntimeException("another post-status-update failure")
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw error
+    })
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw anotherError
+    })
+
+    // The caller, the executor, still gets all failures to log them, in invocation order.
+    val e = intercept[TaskCompletionListenerException] {
+      context.invokePostStatusUpdateListeners()
+    }
+    assert(e.getMessage.contains("post-status-update failure"))
+    assert(e.getSuppressed.toSeq === Seq(anotherError, error))
+
+    // The executor has already reported the task's success and released its resources.
+    verify(failureListener, never()).onTaskFailure(any(), any())
+    assert(!isFailedInLastListener)
+    assert(!context.isFailed())
+    assert(context.getTaskFailure.isEmpty)
+
+    // The task is still not failed for a failure listener added later.
+    val lateFailureListener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener(lateFailureListener)
+    verify(lateFailureListener, never()).onTaskFailure(any(), any())
+  }
+
+  test("SPARK-60992: each failing post-status-update listener is logged with its exception") {
+    val context = TaskContext.empty()
+    val first = new RuntimeException("first failure")
+    val second = new RuntimeException("second failure")
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw first
+    })
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw second
+    })
+
+    val appender = new LogAppender("post-status-update listener failures")
+    withLogAppender(appender, Seq(classOf[TaskContextImpl].getName), Some(Level.ERROR)) {
+      intercept[TaskCompletionListenerException] {
+        context.invokePostStatusUpdateListeners()
+      }
+    }
+    val logged = appender.loggingEvents.filter(_.getMessage.getFormattedMessage
+      .contains("Error in PostStatusUpdateListener"))
+    assert(logged.map(_.getThrown).toSeq === Seq(second, first))
+  }
+
+  test("SPARK-60992: a failure to log a post-status-update listener's failure does not mark " +
+      "the task failed") {
+    val context = TaskContext.empty()
+    val failureListener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener(failureListener)
+    val error = new RuntimeException("post-status-update failure")
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw error
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    val failingAppender = new FailingAppender("Error in PostStatusUpdateListener", logFailure)
+    withLogAppender(failingAppender, Seq(classOf[TaskContextImpl].getName), Some(Level.ERROR)) {
+      val e = intercept[TaskCompletionListenerException] {
+        context.invokePostStatusUpdateListeners()
+      }
+      assert(e.getSuppressed.toSeq === Seq(error))
+      // The failure to log is reported with the failure it was logging.
+      val causes = Iterator.iterate[Throwable](error.getSuppressed.head)(_.getCause)
+      assert(causes.takeWhile(_ != null).contains(logFailure))
+    }
+    verify(failureListener, never()).onTaskFailure(any(), any())
+    assert(!context.isFailed())
+  }
+
   test("SPARK-46947: ensure the correct block manager is used to unroll memory for task") {
     import BlockManagerValidationPlugin._
     BlockManagerValidationPlugin.resetState()

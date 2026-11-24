@@ -649,6 +649,18 @@ SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + rand(0) * 0) > 1;
 SELECT * FROM t1 JOIN t2 ON foo3_1c(t1.c1) = 2;
 -- expect error: correlated scalar subquery cannot be used in Join
 SELECT * FROM t1 JOIN t2 ON foo3_1g(t1.c1) = 2;
+-- in join: temporary SQL UDF
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1;
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2;
+DROP TEMPORARY FUNCTION foo3_1h;
+-- in left outer join
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2;
+-- in left semi join
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2;
+-- in join with a parameter default
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y;
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2;
+DROP FUNCTION foo3_1i;
 
 -- in sort: unsupported
 SELECT * FROM t1 ORDER BY foo3_1b(c1);
@@ -748,6 +760,15 @@ SELECT foo3_2e1(
     ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
     '2022-01-01');
 
+-- Correlated scalar function whose body aggregates in a CTE
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t;
+
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false;
+SELECT c1, foo3_2e2(c1) FROM t1;
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin;
+
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x;
@@ -817,6 +838,45 @@ CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT foo3_5a(x);
 -- Expect error: permanent function cannot reference temporary view
 CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t);
 CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t;
+-- Expect error: permanent function cannot reference a temporary variable
+DECLARE OR REPLACE VARIABLE foo3_5_col STRING DEFAULT 'a';
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN x + length(foo3_5_col);
+-- Expect error: the same holds for a variable read only inside an IDENTIFIER clause. The analyzed
+-- body no longer mentions it (the clause is replaced by the expression built from the evaluated
+-- name), so it has to be recorded during analysis to be rejected here.
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a));
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS a FROM VALUES (1) AS T(a);
+-- A temporary function may read the variable through an IDENTIFIER clause.
+CREATE TEMPORARY FUNCTION foo3_5e(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a));
+SELECT foo3_5e(0);
+DROP TEMPORARY FUNCTION foo3_5e;
+-- Expect error: the variable may also name a relation, or be qualified, or be one of several.
+DECLARE OR REPLACE VARIABLE foo3_5_tbl STRING DEFAULT 't1';
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c1 INT)
+RETURN SELECT c1 FROM IDENTIFIER(foo3_5_tbl);
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(session.foo3_5_col) FROM VALUES (1) AS T(a));
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS c FROM IDENTIFIER(foo3_5_tbl) AS T(a, b);
+-- With `spark.sql.legacy.allowSessionVariableInPersistedView` set, a persistent function may read
+-- the variable through an IDENTIFIER clause, as a persisted view may. The dependency is not
+-- persisted, so the function only resolves while the variable exists in the session.
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true;
+CREATE FUNCTION foo3_5f(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a));
+SELECT foo3_5f(0);
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false;
+-- A function that calls foo3_5f does not inherit its IDENTIFIER-clause variable: the variable is
+-- foo3_5f's own dependency, so creating the caller succeeds without the legacy flag.
+CREATE FUNCTION foo3_5g(x INT) RETURNS INT RETURN foo3_5f(x) + 1;
+SELECT foo3_5g(0);
+DROP FUNCTION foo3_5g;
+DROP FUNCTION foo3_5f;
+DROP TEMPORARY VARIABLE foo3_5_tbl;
+DROP TEMPORARY VARIABLE foo3_5_col;
 
 -- 3.12 SQL data access routine
 -- Scalar functions
@@ -997,6 +1057,7 @@ DROP FUNCTION IF EXISTS foo3_2c2;
 DROP FUNCTION IF EXISTS foo3_2d1;
 DROP FUNCTION IF EXISTS foo3_2d2;
 DROP FUNCTION IF EXISTS foo3_2e1;
+DROP FUNCTION IF EXISTS foo3_2e2;
 DROP FUNCTION IF EXISTS foo3_3a;
 DROP FUNCTION IF EXISTS foo3_3at;
 DROP FUNCTION IF EXISTS foo3_14a;

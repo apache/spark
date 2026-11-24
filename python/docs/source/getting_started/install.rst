@@ -239,8 +239,8 @@ Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect
 `pyarrow`                  >=18.0.0          Required for Spark Connect
-`grpcio`                   >=1.76.0          Required for Spark Connect
-`grpcio-status`            >=1.76.0          Required for Spark Connect
+`grpcio`                   >=1.84.1          Required for Spark Connect
+`grpcio-status`            >=1.84.1          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect
 `zstandard`                >=0.25.0          Required for Spark Connect
 `graphviz`                 >=0.20            Optional for Spark Connect
@@ -324,8 +324,8 @@ Package                    Supported version Note
 ========================== ================= ===================================================
 `pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect and Spark SQL
 `pyarrow`                  >=18.0.0          Required for Spark Connect and Spark SQL
-`grpcio`                   >=1.76.0          Required for Spark Connect
-`grpcio-status`            >=1.76.0          Required for Spark Connect
+`grpcio`                   >=1.84.1          Required for Spark Connect
+`grpcio-status`            >=1.84.1          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect
 `zstandard`                >=0.25.0          Required for Spark Connect
 `pyyaml`                   >=3.11            Required for spark-pipelines command line interface

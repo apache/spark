@@ -599,10 +599,23 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Cleans up the resources used by the physical operator (if any). In general, all the resources
    * should be cleaned up when the task finishes but operators like SortMergeJoinExec and LimitExec
    * may want eager cleanup to free up tight resources (e.g., memory).
+   *
+   * In a task, operators that release the resources of their children early (sort merge joins)
+   * do not call this, as it would need the child plans in the task: they use the
+   * [[taskResourceCleaner]]s of their children instead. An operator that holds resources in a task
+   * and wants them released early must provide a [[taskResourceCleaner]]; otherwise they are
+   * released when the task completes.
    */
   protected[sql] def cleanupResources(): Unit = {
     children.foreach(_.cleanupResources())
   }
+
+  /**
+   * Releases the resources this operator holds in a task, without referencing the operator, for
+   * an operator above it that releases them early in the task (see [[TaskResourceCleaner]]).
+   * None if the operator holds no such resources.
+   */
+  protected[sql] def taskResourceCleaner: Option[TaskResourceCleaner] = None
 }
 
 trait LeafExecNode extends SparkPlan with LeafLike[SparkPlan] {

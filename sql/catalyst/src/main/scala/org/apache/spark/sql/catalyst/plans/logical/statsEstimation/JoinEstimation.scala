@@ -22,10 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 case class JoinEstimation(join: Join) extends Logging {
@@ -56,11 +57,16 @@ case class JoinEstimation(join: Join) extends Logging {
     case _ if !rowCountsExist(join.left, join.right) =>
       None
 
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
+    case ExtractAllEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
-      val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
-      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
+      // A key cast to a STRING of its own collation is estimated as the key itself.
+      val strippedLeftKeys = leftKeys.map(CharVarcharUtils.stripCastToPlainString)
+      val strippedRightKeys = rightKeys.map(CharVarcharUtils.stripCastToPlainString)
+      val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)
+      val leftSideUniqueness =
+        left.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedLeftKeys)))
+      val rightSideUniqueness =
+        right.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedRightKeys)))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
         computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
@@ -196,31 +202,55 @@ case class JoinEstimation(join: Join) extends Logging {
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
       val rightKeyStat = rightStats.attributeStats(rightKey)
-      val lInterval = ValueInterval(leftKeyStat.min, leftKeyStat.max, leftKey.dataType)
-      val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
+      val lInterval = keyInterval(leftKey, leftKeyStat)
+      val rInterval = keyInterval(rightKey, rightKeyStat)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
+        val lRangeKnown = lInterval.isInstanceOf[NumericValueInterval]
+        val rRangeKnown = rInterval.isInstanceOf[NumericValueInterval]
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
-          case (Some(l: Histogram), Some(r: Histogram)) =>
+          // Histograms are trimmed to the intersected range, so both keys need a known range.
+          case (Some(l: Histogram), Some(r: Histogram))
+              if canEstimateWithHistogram(leftKey.dataType) && lRangeKnown && rRangeKnown =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
         keyStatsAfterJoin +=
-          // Histograms are propagated as unchanged. During future estimation, they should be
-          // truncated by the updated max/min. In this way, only pointers of the histograms are
-          // propagated and thus reduce memory consumption.
-          (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
-            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
+          // A histogram is propagated as unchanged, so that only a pointer to it is kept. Later
+          // estimates bound it by the min/max of the joined keys, and do not use it without them.
+          // If only one key has a known range, the joined keys take it, and the histogram of the
+          // other key, which may not cover that range, is neither used above nor propagated.
+          (leftKey -> joinStat.copy(
+            histogram = leftKeyStat.histogram.filter(_ => lRangeKnown || !rRangeKnown))) +=
+            (rightKey -> joinStat.copy(
+              histogram = rightKeyStat.histogram.filter(_ => rRangeKnown || !lRangeKnown)))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
-        // One of the join key pairs is disjoint, thus the two sides of join is disjoint.
+        // One of the join key pairs is disjoint or has no non-null values, thus the two sides
+        // of join is disjoint.
         joinCard = 0
       }
       i += 1
     }
     (joinCard, AttributeMap(keyStatsAfterJoin))
+  }
+
+  /**
+   * Returns the value range of a join key. A key with a distinct count of 0 holds only nulls and
+   * overlaps no key, whatever its type. A key with distinct values but no min/max (a data source
+   * may not report them, and a union drops them for some types) has an unknown range, as a string
+   * or binary key does, and overlaps any key that has values.
+   */
+  private def keyInterval(key: AttributeReference, keyStat: ColumnStat): ValueInterval = {
+    if (keyStat.distinctCount.contains(BigInt(0))) {
+      new NullValueInterval()
+    } else if (!keyStat.hasMinMaxStats) {
+      new DefaultValueInterval()
+    } else {
+      ValueInterval(keyStat.min, keyStat.max, key.dataType)
+    }
   }
 
   /** Returns join cardinality and the column stat for this pair of join keys. */
@@ -263,9 +293,8 @@ case class JoinEstimation(join: Join) extends Logging {
     val overlappedRanges = getOverlappedRanges(
       leftHistogram = leftHistogram,
       rightHistogram = rightHistogram,
-      // Only numeric values have equi-height histograms.
-      lowerBound = newMin.get.toString.toDouble,
-      upperBound = newMax.get.toString.toDouble)
+      lowerBound = toDouble(newMin.get, leftKey.dataType),
+      upperBound = toDouble(newMax.get, leftKey.dataType))
 
     var card: BigDecimal = 0
     var totalNdv: Double = 0
@@ -333,6 +362,8 @@ case class JoinEstimation(join: Join) extends Logging {
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
     leftKeys.zip(rightKeys).collect {
       // Currently we don't deal with equal joins like key1 = key2 + 5.
+      // TODO(SPARK-61871): nor with keys of CHAR or VARCHAR columns of different types, which are
+      // wrapped in a cast to a CHAR or VARCHAR type, or in rpad for CHAR keys of different lengths.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)

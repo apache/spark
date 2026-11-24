@@ -43,7 +43,7 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
     mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
 
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 \
+ARG CONNECT_PIP_PKGS="grpcio==1.84.1 grpcio-status==1.84.1 protobuf==6.33.5 \
     googleapis-common-protos==1.71.0 graphviz==0.20.3"
 
 # Install Python 3.11 packages
@@ -61,7 +61,7 @@ RUN python3.11 -m pip install 'sphinx==8.2.3' mkdocs 'pydata_sphinx_theme>=0.13'
     ipython sphinx_plotly_directive 'numpy>=1.23.2' pyarrow pandas \
     'plotly>=4.8' 'docutils' 'mypy==1.19.1' 'pytest==7.1.3' \
     'pytest-mypy-plugins==1.9.3' 'ruff==0.14.8' 'pandas-stubs==1.2.0.53' \
-    'grpcio==1.76.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
+    'grpcio==1.84.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
 
 # Set Python 3.11 as the default
 RUN ln -sf "$(which python3.11)" "/usr/local/bin/python" && \

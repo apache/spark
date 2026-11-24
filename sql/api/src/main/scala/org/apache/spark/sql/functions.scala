@@ -4727,6 +4727,20 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the absolute value of `e` and the result is null on overflow or when a string
+   * argument cannot be cast to a number. The acceptable input types are the same as for `abs`.
+   *
+   * @param e
+   *   a column that evaluates to a numeric or interval.
+   * @group math_funcs
+   * @since 4.5.0
+   * @return
+   *   Returns a column of the same type as `abs` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
+   */
+  def try_abs(e: Column): Column = Column.fn("try_abs", e)
+
+  /**
    * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
    * input types are the same with the `+` operator.
    *
@@ -4796,6 +4810,20 @@ object functions {
    *   Returns a column of the same type as the input.
    */
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
+
+  /**
+   * Returns the negated value of `e` and the result is null on overflow or when a string argument
+   * cannot be cast to a number. The acceptable input types are the same as for `negative`.
+   *
+   * @param e
+   *   a column that evaluates to a numeric or interval.
+   * @group math_funcs
+   * @since 4.5.0
+   * @return
+   *   Returns a column of the same type as `negative` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
+   */
+  def try_negative(e: Column): Column = Column.fn("try_negative", e)
 
   /**
    * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
@@ -6787,6 +6815,20 @@ object functions {
    *   Returns a column that evaluates to a string.
    */
   def xxh3_128(col: Column): Column = Column.fn("xxh3_128", col)
+
+  /**
+   * Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+   * algorithm. The result matches `FARM_FINGERPRINT` in BigQuery / GoogleSQL and does not change
+   * across Spark versions. String input is hashed as its UTF-8 bytes.
+   *
+   * @param col
+   *   the column to fingerprint, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def farm_fingerprint(col: Column): Column = Column.fn("farm_fingerprint", col)
 
   /**
    * Returns null if the condition is true, and throws an exception otherwise.
@@ -11579,6 +11621,11 @@ object functions {
    * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
+   *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11596,6 +11643,11 @@ object functions {
    * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
+   *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11612,6 +11664,11 @@ object functions {
   /**
    * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
    * a single value or an array.
+   *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
@@ -11631,6 +11688,11 @@ object functions {
    * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
    * can be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type BIGINT, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3L, NULL)` is accepted, but `array(3, NULL)` fails.
+   *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
    * @param quantile
@@ -11648,6 +11710,11 @@ object functions {
    * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
    * be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type FLOAT, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3.0F, NULL)` is accepted, but `array(3.0, NULL)` fails.
+   *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
    * @param quantile
@@ -11664,6 +11731,11 @@ object functions {
   /**
    * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
    * can be a single value or an array.
+   *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type DOUBLE, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3.0D, NULL)` is accepted, but `array(3.0, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.

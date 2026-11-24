@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -308,6 +309,9 @@ private object RowToColumnConverter {
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
       case dt: DecimalType => new DecimalConverter(dt)
+      case NullType => NullConverter
+      // Rows and column vectors both hold a UDT in the form of its SQL type.
+      case udt: UserDefinedType[_] => getConverterForType(udt.sqlType, nullable)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
       case unknown => throw ExecutionErrors.unsupportedDataTypeError(unknown)
@@ -315,6 +319,10 @@ private object RowToColumnConverter {
 
     if (nullable) {
       dataType match {
+        // The converter of its SQL type handles the nulls.
+        case _: UserDefinedType[_] => core
+        // A NullType vector is all null by its type, so appending nulls to it is not needed.
+        case NullType => core
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case _: AnyTimestampNanoType =>
           new StructNullableTypeConverter(core)
@@ -324,6 +332,11 @@ private object RowToColumnConverter {
     } else {
       core
     }
+  }
+
+  // A column vector of NullType is all null and stores nothing.
+  private object NullConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {}
   }
 
   private object BinaryConverter extends TypeConverter {
@@ -589,6 +602,11 @@ case class ApplyColumnarRulesAndInsertTransitions(
         case write: DataWritingCommandExec
             if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
           write.child.supportsColumnar
+        // A V2 write whose data writers take columnar batches writes those of a query that only
+        // supports columnar output, unless an extension has columnar rules: they may replace the
+        // transitions to rows with their own, which may be the only way to read their batches, so
+        // the write then gets rows through such a transition, as other writes do.
+        case write: V2TableWriteExec if write.writesColumnar && columnarRules.isEmpty => true
         // If it is not required to output columnar (`outputsColumnar` is false), and the plan
         // supports row-based and columnar, we don't need to output row-based data on its children
         // nodes. So we set `outputsColumnar` to true.

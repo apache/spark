@@ -185,7 +185,8 @@ public interface Changelog {
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when any of {@link #containsCarryoverRows()},
    * {@link #representsUpdateAsDeleteAndInsert()}, or {@link #containsIntermediateChanges()}
-   * returns {@code true}. Each referenced column must be non-nullable.
+   * returns {@code true}. References may name columns returned by {@link #metadataColumns()}.
+   * Each referenced column must be non-nullable, including metadata columns.
    */
   default NamedReference[] rowId() {
     throw new UnsupportedOperationException("rowId is not supported.");
@@ -212,10 +213,28 @@ public interface Changelog {
    * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when {@link #containsCarryoverRows()} or
-   * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The referenced
-   * column must be non-nullable.
+   * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The reference may name
+   * a column returned by {@link #metadataColumns()}. The referenced column must be non-nullable,
+   * including when it is a metadata column.
    */
   default NamedReference rowVersion() {
     throw new UnsupportedOperationException("rowVersion is not supported.");
+  }
+
+  /**
+   * Returns metadata columns exposed when scanning this Changelog.
+   * <p>
+   * These are additional columns in the sense of {@link SupportsMetadataColumns}, separate
+   * from the required {@code _change_type}, {@code _commit_version} and
+   * {@code _commit_timestamp} columns, which {@link #columns()} must return. See
+   * {@link SupportsMetadataColumns} for how they are requested from the scan and how name
+   * conflicts with data columns are handled.
+   * <p>
+   * The default implementation returns an empty array.
+   *
+   * @since 4.4.0
+   */
+  default MetadataColumn[] metadataColumns() {
+    return new MetadataColumn[0];
   }
 }
