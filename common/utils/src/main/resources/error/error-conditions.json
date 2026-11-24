@@ -2410,12 +2410,17 @@
       },
       "DUPLICATE_SELECTED_PREDICATE" : {
         "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+          "`selectLookupPredicates()` returned the position <position>, of the predicate <predicate>, more than once."
         ]
       },
       "INVALID_INPUT_ORDINAL" : {
         "message" : [
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "INVALID_SELECTED_PREDICATE_POSITION" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the position <position>, but the valid positions are from 0 to <maxPosition>."
         ]
       },
       "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
@@ -2426,6 +2431,11 @@
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "MODIFIED_CANDIDATES" : {
+        "message" : [
+          "`selectLookupPredicates()` modified its input array of candidates at the position <position>, which Spark offered as <predicate>. It must leave the array as Spark offered it, because the returned positions refer to the offered order."
         ]
       },
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
@@ -2446,11 +2456,6 @@
       "UNKNOWN_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field>, which matches no table column by name and data type."
-        ]
-      },
-      "UNOFFERED_SELECTED_PREDICATE" : {
-        "message" : [
-          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
         ]
       }
     },
@@ -2731,6 +2736,12 @@
       "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
     ],
     "sqlState" : "42732"
+  },
+  "DUPLICATE_TABLE_PATH" : {
+    "message" : [
+      "The table path is specified more than once: '<pathOne>' and '<pathTwo>'. Specify the path only once, with either LOCATION or the case-insensitive 'path' key in OPTIONS."
+    ],
+    "sqlState" : "42613"
   },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
@@ -3347,6 +3358,58 @@
     ],
     "sqlState" : "KD000"
   },
+  "GRAPH_ID_TYPE_MISMATCH" : {
+    "message" : [
+      "The vertex ID column <idColumn> and the edge columns <srcColumn> and <dstColumn> must have the same data type, but their types are <idType>, <srcType> and <dstType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_INVALID" : {
+    "message" : [
+      "The graph is invalid."
+    ],
+    "subClass" : {
+      "DUPLICATE_VERTICES" : {
+        "message" : [
+          "The vertices DataFrame contains <count> duplicate vertex IDs in the column <idColumn>."
+        ]
+      },
+      "EDGE_VERTEX_NOT_IN_VERTICES" : {
+        "message" : [
+          "The edges DataFrame references <count> vertex IDs in the columns <srcColumn> or <dstColumn> that are not present in the vertices DataFrame."
+        ]
+      },
+      "EDGE_VERTICES_COUNT_MISMATCH" : {
+        "message" : [
+          "The edges DataFrame references <edgeVertexCount> distinct vertex IDs, but the vertices DataFrame contains only <vertexCount>."
+        ]
+      },
+      "NULL_IDS" : {
+        "message" : [
+          "The <dataFrameKind> DataFrame contains NULL values in the columns: <columns>."
+        ]
+      }
+    },
+    "sqlState" : "23000"
+  },
+  "GRAPH_NULL_DATAFRAME" : {
+    "message" : [
+      "The <dataFrameKind> DataFrame must not be null."
+    ],
+    "sqlState" : "22004"
+  },
+  "GRAPH_PROPERTIES_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "The key column <columnName> of the <dataFrameKind> DataFrame has the type <actualType>, but the graph uses the type <expectedType> for this column."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GRAPH_UNSUPPORTED_ID_TYPE" : {
+    "message" : [
+      "The column <columnName> of the <dataFrameKind> DataFrame has the unsupported type <columnType>. Vertex IDs must have one of the types: <supportedTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
       "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>."
@@ -3787,6 +3850,24 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "INSERT_OVERWRITE_DIRECTORY_PATH" : {
+    "message" : [
+      "Invalid directory path in INSERT OVERWRITE DIRECTORY:"
+    ],
+    "subClass" : {
+      "BOTH_SPECIFIED" : {
+        "message" : [
+          "The path is given both after DIRECTORY and as the 'path' key in OPTIONS. Specify it only once."
+        ]
+      },
+      "MISSING" : {
+        "message" : [
+          "No path is given. Specify it after DIRECTORY or as the 'path' key in OPTIONS."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
     "message" : [
@@ -4832,6 +4913,11 @@
           "Error parsing interval day-time string: <msg>."
         ]
       },
+      "FROM_TO_VALUE_NOT_STRING" : {
+        "message" : [
+          "The value of an interval with a from-to unit range must be a string literal, for example INTERVAL '1-2' YEAR TO MONTH."
+        ]
+      },
       "INPUT_IS_EMPTY" : {
         "message" : [
           "Interval string cannot be empty."
@@ -4880,6 +4966,16 @@
       "MISSING_UNIT" : {
         "message" : [
           "Expect a unit name after <word> but hit EOL."
+        ]
+      },
+      "MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS" : {
+        "message" : [
+          "An interval literal cannot mix year-month and day-time fields."
+        ]
+      },
+      "NON_NUMERIC_MULTI_UNIT_VALUE" : {
+        "message" : [
+          "Each value of a multi-unit interval literal must be a number, for example INTERVAL '1' DAY '2' HOUR."
         ]
       },
       "SECOND_NANO_FORMAT" : {
@@ -5726,6 +5822,16 @@
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
         ]
       },
+      "CREATE_TEMP_TABLE_WITHOUT_PROVIDER" : {
+        "message" : [
+          "CREATE TEMPORARY TABLE without a USING clause is not supported. Use CREATE TEMPORARY VIEW ... USING ... instead."
+        ]
+      },
+      "CREATE_TEMP_VIEW_WITH_IF_NOT_EXISTS" : {
+        "message" : [
+          "CREATE TEMPORARY VIEW with IF NOT EXISTS is not allowed."
+        ]
+      },
       "DUPLICATE_JSON_TABLE_COLUMN" : {
         "message" : [
           "JSON_TABLE has duplicate column name <columnName>. Column names in the COLUMNS clause must be unique."
@@ -5751,6 +5857,16 @@
           "Resource paths cannot be empty in REFRESH statements. Use / to match everything."
         ]
       },
+      "EMPTY_TABLESAMPLE" : {
+        "message" : [
+          "TABLESAMPLE requires a sampling method, for example TABLESAMPLE (10 PERCENT)."
+        ]
+      },
+      "FROM_TO_INTERVAL_WITH_OTHER_UNITS" : {
+        "message" : [
+          "A from-to unit range, such as '1-2' YEAR TO MONTH, must be the only unit specification in an interval literal. Write the interval either as one from-to unit range or in multi-unit syntax, for example INTERVAL 1 YEAR 2 MONTHS."
+        ]
+      },
       "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
         "message" : [
           "The function <prettyName> does not support <syntax>."
@@ -5764,6 +5880,11 @@
       "INVALID_REFRESH_RESOURCE_PATH" : {
         "message" : [
           "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths."
+        ]
+      },
+      "INVALID_TABLESAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE (<sampleMethod>) is not a valid sampling method. Use TABLESAMPLE (x PERCENT), TABLESAMPLE (x ROWS) or TABLESAMPLE (BUCKET x OUT OF y)."
         ]
       },
       "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES" : {
@@ -5809,6 +5930,16 @@
       "REPETITIVE_WINDOW_DEFINITION" : {
         "message" : [
           "The definition of window <windowName> is repetitive."
+        ]
+      },
+      "ROW_FORMAT_SERDE_WITHOUT_STORED_AS" : {
+        "message" : [
+          "CREATE TABLE ... LIKE with ROW FORMAT SERDE must also specify STORED AS."
+        ]
+      },
+      "SET_TIME_ZONE_INVALID_VALUE" : {
+        "message" : [
+          "SET TIME ZONE requires LOCAL, a time zone string such as 'America/Los_Angeles', or an interval such as INTERVAL 1 HOUR."
         ]
       },
       "SHOW_FUNCTIONS_INVALID_PATTERN" : {
@@ -5944,6 +6075,11 @@
       "The time travel timestamp expression <expr> is invalid."
     ],
     "subClass" : {
+      "COLUMN_REFERENCE" : {
+        "message" : [
+          "Must not reference columns."
+        ]
+      },
       "INPUT" : {
         "message" : [
           "Cannot be casted to the \"TIMESTAMP\" type."
@@ -7108,6 +7244,29 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTIONAL_REFERENCE_NOT_SUPPORTED" : {
+    "message" : [
+      "The `?` optional-reference operator is not supported in <context>."
+    ],
+    "subClass" : {
+      "IN_DDL" : {
+        "message" : [
+          "Column and parameter defaults, generation expressions, CHECK constraints, table options, and metric view definitions must not contain optional references."
+        ]
+      },
+      "IN_DML" : {
+        "message" : [
+          "Statements that modify existing rows, and conditions that select the rows to replace, must not contain optional references."
+        ]
+      },
+      "IN_PARTITION_SPEC" : {
+        "message" : [
+          "Partition specifications must not contain optional references."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
     "message" : [
       "The value of <paramName> cannot be more than one character, but got <actualValue>."
@@ -7311,6 +7470,14 @@
   "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
     "message" : [
       "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED" : {
+    "message" : [
+      "Changing the comment of a struct field nested under consecutive arrays or maps is not supported.",
+      "The comments on <columnPath> in the pipeline's declared or inferred schema differ from the comments on the table.",
+      "Declare the table's full schema with the comments the table currently has to keep them, or drop the table and full refresh it so that it is re-created with the new comments."
     ],
     "sqlState" : "0A000"
   },
@@ -8677,6 +8844,13 @@
     },
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED" : {
+    "message" : [
+      "Cannot restart the stream-stream join because the state store <storeName> would read the stored timestamp column <storedColumn> as <newColumn>.",
+      "Revert the changes to the join or start the query with a new checkpoint."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
@@ -8733,6 +8907,12 @@
       }
     },
     "sqlState" : "42601"
+  },
+  "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE" : {
+    "message" : [
+      "Retrieving tables or views from more than one database is not supported. Requested: <qualifiedTableNames>."
+    ],
+    "sqlState" : "0AKD0"
   },
   "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
     "message" : [
@@ -9364,6 +9544,24 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CHANGE_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ... CHANGE COLUMN does not support"
+    ],
+    "subClass" : {
+      "NOT_NULL" : {
+        "message" : [
+          "NOT NULL in the column definition. Use ALTER TABLE ... ALTER COLUMN ... SET NOT NULL instead."
+        ]
+      },
+      "RENAME" : {
+        "message" : [
+          "renaming a column. Use ALTER TABLE ... RENAME COLUMN instead."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
     "message" : [
       "The char/varchar type can't be used in the table schema.",
@@ -9670,6 +9868,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "EMPTY_GROUPING_SET_IN_CUBE_OR_ROLLUP" : {
+        "message" : [
+          "Empty grouping set () in <element>."
         ]
       },
       "EXTERNAL_UDF" : {
@@ -9996,6 +10199,11 @@
           "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
+      "TABLESAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE with <sampleMethod> sampling."
+        ]
+      },
       "TABLESAMPLE_SYSTEM" : {
         "message" : [
           "TABLESAMPLE SYSTEM is only supported by data sources that implement block-level sampling."
@@ -10059,6 +10267,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRANSFORM_RECORD_READER_WRITER" : {
+        "message" : [
+          "TRANSFORM with RECORDREADER or RECORDWRITER."
         ]
       },
       "TRANSFORM_WITHOUT_SERDE_TYPE" : {
@@ -10267,6 +10480,29 @@
     "message" : [
       "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_REPLACE_COLUMNS" : {
+    "message" : [
+      "ALTER TABLE ... REPLACE COLUMNS does not support"
+    ],
+    "subClass" : {
+      "COLUMN_POSITION" : {
+        "message" : [
+          "column positions (FIRST or AFTER)."
+        ]
+      },
+      "NESTED_COLUMN" : {
+        "message" : [
+          "the nested column <columnName>."
+        ]
+      },
+      "NOT_NULL" : {
+        "message" : [
+          "NOT NULL constraints."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION" : {
@@ -10516,6 +10752,12 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ],
     "sqlState" : "42K0E"
+  },
+  "UNUSED_SQL_PARAMETER_VALUES" : {
+    "message" : [
+      "The statement has <numMarkers> positional parameter marker(s) but <numValues> value(s) were supplied. In a statement with optional references, a `?` that follows an identifier or a non-reserved keyword where the syntax allows a reference is an optional reference, not a parameter marker."
+    ],
+    "sqlState" : "07001"
   },
   "USER_DEFINED_FUNCTIONS" : {
     "message" : [
@@ -10795,119 +11037,14 @@
     ],
     "sqlState" : "42K03"
   },
-  "_LEGACY_ERROR_TEMP_0001" : {
-    "message" : [
-      "Invalid InsertIntoContext."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0004" : {
-    "message" : [
-      "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0014" : {
-    "message" : [
-      "TABLESAMPLE does not accept empty inputs."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0015" : {
-    "message" : [
-      "TABLESAMPLE(<msg>) is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0016" : {
-    "message" : [
-      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0018" : {
-    "message" : [
-      "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0024" : {
-    "message" : [
-      "Can only have a single from-to unit in the interval literal syntax."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0026" : {
-    "message" : [
-      "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0027" : {
-    "message" : [
-      "The value of from-to unit must be a string."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0029" : {
-    "message" : [
-      "Cannot mix year-month and day-time fields: <literal>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0031" : {
     "message" : [
       "Invalid number of buckets: <describe>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0032" : {
-    "message" : [
-      "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0034" : {
-    "message" : [
-      "<operation> is not supported in Hive-style <command><msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0035" : {
     "message" : [
       "Operation not allowed: <message>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0037" : {
-    "message" : [
-      "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0045" : {
-    "message" : [
-      "Invalid time zone displacement value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0046" : {
-    "message" : [
-      "CREATE TEMPORARY TABLE without a provider is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0047" : {
-    "message" : [
-      "'ROW FORMAT' must be used with 'STORED AS'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0048" : {
-    "message" : [
-      "Unsupported operation: Used defined record reader/writer classes."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0049" : {
-    "message" : [
-      "Directory path and 'path' in OPTIONS should be specified one, but not both."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0051" : {
-    "message" : [
-      "Empty set in <element> grouping sets is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0053" : {
-    "message" : [
-      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0056" : {
-    "message" : [
-      "Invalid time travel spec: <reason>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0060" : {
@@ -11040,11 +11177,6 @@
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
       "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1072" : {
-    "message" : [
-      "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {

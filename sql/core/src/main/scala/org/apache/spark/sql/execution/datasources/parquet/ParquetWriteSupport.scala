@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeO
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.Variant
+import org.apache.spark.unsafe.Platform
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -243,8 +244,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case _: StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(
-            Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
+          val value = row.getUTF8String(ordinal)
+          recordConsumer.addBinary(value.getBaseObject match {
+            case bytes: Array[Byte] =>
+              // Mark the bytes as reused so Parquet copies values that it retains.
+              if (value.getBaseOffset == Platform.BYTE_ARRAY_OFFSET &&
+                  value.numBytes() == bytes.length) {
+                Binary.fromReusedByteArray(bytes)
+              } else {
+                Binary.fromReusedByteArray(bytes,
+                  (value.getBaseOffset - Platform.BYTE_ARRAY_OFFSET).toInt, value.numBytes())
+              }
+            case _ => Binary.fromConstantByteArray(value.getBytes)
+          })
 
       case TimestampType =>
         if (inShredded) {

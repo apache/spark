@@ -688,6 +688,17 @@ mllib = Module(
     ],
 )
 
+graph = Module(
+    name="graph",
+    dependencies=[sql, graphx],
+    source_file_regexes=[
+        "graph/",
+    ],
+    sbt_test_goals=[
+        "graph/test",
+    ],
+)
+
 pipelines = Module(
     name="pipelines",
     dependencies=[sql],
