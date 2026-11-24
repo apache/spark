@@ -358,7 +358,7 @@ def run(
     """Run the pipeline defined with the given spec.
 
     A run needs a Spark Connect server; without one it fails before a session is created, so
-    nothing is started or written.
+    no local Spark Connect server is started and no pipeline storage is written.
 
     :param spec_path: Path to the pipeline specification file.
     :param full_refresh: List of datasets to reset and recompute.

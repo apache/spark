@@ -497,7 +497,11 @@ class CLIUtilityTests(ReusedConnectTestCase):
             self.assertIn("requires a Spark Connect server", result.stdout)
             self.assertIn("--remote sc://host:port", result.stdout)
             self.assertFalse(storage.exists())
-            self.assertEqual(sorted(project.rglob("*")), files)
+            # Under SPARK_TESTING the JVM that spark-pipelines starts logs to target/unit-tests.log
+            # in the current directory, so that one file is left out.
+            test_log = {project / "target", project / "target" / "unit-tests.log"}
+            written = [path for path in sorted(project.rglob("*")) if path not in test_log]
+            self.assertEqual(written, files)
 
     def test_spark_connect_server_is_required_before_a_session_is_created(self):
         # SPARK-61826: the refusal comes before the session, since creating a session without a
