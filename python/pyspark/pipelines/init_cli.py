@@ -78,4 +78,4 @@ def init(name: str) -> None:
 
     print(f"Pipeline project '{name}' created successfully. To run your pipeline:")
     print(f"cd '{name}'")
-    print("spark-pipelines run")
+    print("spark-pipelines run --remote sc://host:port")

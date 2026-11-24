@@ -107,7 +107,9 @@ The `spark-pipelines init` command, described below, makes it easy to generate a
 
 The `spark-pipelines` command line interface (CLI) is the primary way to manage a pipeline.
 
-`spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+`spark-pipelines` is built on top of `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+
+`spark-pipelines run` and `spark-pipelines dry-run` require a Spark Connect server. Start one, for example with `sbin/start-connect-server.sh`, and pass its address with `--remote sc://host:port`; a server started on the same machine listens on `sc://localhost:15002` by default. Without a server address, the two commands exit with the error `PIPELINE_SPARK_CONNECT_SERVER_REQUIRED` before they start a session or write anything. `spark-pipelines init` only writes the project files and needs no server.
 
 ### `spark-pipelines init`
 
@@ -141,21 +143,21 @@ If no refresh options are specified, a default incremental update is performed. 
 
 ```bash
 # Basic run with default incremental update
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 
 # Run with specific spec file
-spark-pipelines run --spec /path/to/my-pipeline.yaml
+spark-pipelines run --remote sc://localhost:15002 --spec /path/to/my-pipeline.yaml
 
 # Full refresh of specific datasets
-spark-pipelines run --full-refresh orders,customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh orders,customers
 
 # Full refresh of entire pipeline
-spark-pipelines run --full-refresh-all
+spark-pipelines run --remote sc://localhost:15002 --full-refresh-all
 
 # Run with custom Spark configuration
-spark-pipelines run --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
+spark-pipelines run --remote sc://localhost:15002 --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
 
-# Run on remote Spark Connect server
+# Run on a Spark Connect server on another host
 spark-pipelines run --remote sc://my-cluster:15002
 ```
 
@@ -965,7 +967,7 @@ With the default tracking, the same events produce three versions.
 Like the key set (see [Changing the Key Set](#changing-the-key-set)), the SCD type and the set of tracked columns are part of the flow's persisted state. Changing the SCD type across incremental runs fails with `AUTOCDC_INVALID_STATE.SCD_TYPE_DRIFT`, and changing the tracked columns fails with `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT`. With the default tracking or `track_history_except_column_list`, the tracked columns follow the columns written to the target, so adding or removing a column there also changes them. To make either change, fully refresh the target table:
 
 ```bash
-spark-pipelines run --full-refresh customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh customers
 ```
 
 When columns were added to the target under the default tracking or `track_history_except_column_list`, the target keeps its history without a full refresh. The `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT` error lists the recorded tracked columns; passing exactly those columns in `track_history_column_list` (or `TRACK HISTORY ON (...)`) matches the recorded state, and the added columns are not tracked.
@@ -1069,7 +1071,7 @@ dp.create_auto_cdc_flow(
 The set and types of `keys` are part of the flow's persisted state. Changing keys across incremental runs - renaming, swapping, adding, removing, or changing the type of a key column - is not supported: the run fails with `AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT`. To change the key set, [fully refresh](#spark-pipelines-run) the target table so it is recomputed from scratch:
 
 ```bash
-spark-pipelines run --full-refresh customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh customers
 ```
 
 ### Auto CDC Considerations
