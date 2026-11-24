@@ -107,8 +107,8 @@ private class PerPartitionStorageFilterRDD(
       context.addTaskCompletionListener[Unit](ctx => taskRequests.remove(ctx.taskAttemptId()))
     }
     // A task reads the splits of a key one after another, so it keeps only the request of the key
-    // it reads now. Kept for every key, the requests would hold the bloom filters of the whole
-    // creation side at once.
+    // it reads now. So the requests a task keeps hold the bloom filters of one key, not those of
+    // the whole creation side.
     val bloomKey = partition.bloomPartitions.map(_.index).toImmutableArraySeq
     if (!requests.contains(bloomKey)) requests.clear()
     requests.getOrElseUpdate(bloomKey, {

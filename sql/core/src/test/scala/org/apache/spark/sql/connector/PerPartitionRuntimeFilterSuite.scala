@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity, sort}
 import org.apache.spark.sql.connector.read.{Scan, SupportsStorageFilters}
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable}
-import org.apache.spark.sql.execution.{FormattedMode, ProjectExec, ScalarSubquery => ExecScalarSubquery, SparkPlan}
+import org.apache.spark.sql.execution.{FormattedMode, ProjectExec, RowToColumnarExec, ScalarSubquery => ExecScalarSubquery, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -343,7 +343,7 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             assert(executedShuffles(plan).isEmpty, plan)
             val scans = storageFilterScans(plan)
             assert(scans.map(tableOf) == Seq("fact"), plan)
-            // A columnar scan reads the aggregate in batches too.
+            // The aggregate below a columnar scan gets a transition to columnar.
             assert(scans.forall(s => s.supportsColumnar == columnar &&
               s.bloomFilterAggregate.forall(_.supportsColumnar == columnar)), s"test setup:\n$plan")
             // The scan reads its columns, which its child does not give it.
@@ -361,6 +361,13 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             val skipped = storageFilterScans(measured.queryExecution.executedPlan)
               .map(_.metrics("numSkippedSplits").value)
             assert(skipped == Seq(4L), s"the 4 splits of bucket 2 are skipped: $skipped")
+            // The scan reads its aggregate around that transition, which makes no batch.
+            val transitions = collect(measured.queryExecution.executedPlan) {
+              case t: RowToColumnarExec => t
+            }
+            assert(transitions.nonEmpty == columnar &&
+              transitions.forall(_.metrics("numOutputBatches").value == 0),
+              measured.queryExecution.executedPlan)
           }
         }
       }

@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan}
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, RowToColumnarTransition, SparkPlan}
 import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
@@ -204,11 +204,15 @@ case class BatchScanExec(
           val partitionsByKey = bloomKeys.zipWithIndex.groupMap(_._1)(_._2)
           val bloomPartitions =
             splitKeys.map(k => partitionsByKey.getOrElse(k, Nil).toArray).toArray
-          val blooms = if (aggregate.supportsColumnar) {
-            // The RDD reads each row's bloom filter bytes before it moves to the next row.
-            aggregate.executeColumnar().mapPartitionsInternal(_.flatMap(_.rowIterator().asScala))
-          } else {
-            aggregate.execute()
+          // The child of a columnar scan gets a transition to columnar, which this reads around.
+          // The aggregate has a row for each group, and each run of the transition would keep a
+          // batch of vectors until the task ends.
+          val blooms = aggregate match {
+            case t: RowToColumnarTransition => t.child.execute()
+            case a if a.supportsColumnar =>
+              // The RDD reads each row's bloom filter bytes before it moves to the next row.
+              a.executeColumnar().mapPartitionsInternal(_.flatMap(_.rowIterator().asScala))
+            case a => a.execute()
           }
           val condition = (storageFilters.map(StorageFilterPlanning.withSubqueryResults) :+
             filter.check).reduce(And)
