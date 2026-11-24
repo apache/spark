@@ -224,7 +224,8 @@ class JoinOptimizationSuite extends PlanTest {
     // The lower filter removes a row on which `b > d` is NULL, but in the join condition that the
     // filter is put in, `NULL AND x` evaluates `x`. So a condition above it over two of its plans
     // that can fail in ANSI mode, by itself or by reading `q`, is evaluated only where `b > d` is
-    // TRUE, with IS NOT NULL checks of its columns, also an equality whose sides both read `x`.
+    // TRUE, with IS NOT NULL checks of its columns but `q`, which a check pushed below the
+    // projection would compute on every row, also an equality whose sides both read `x`.
     // One that can not fail once its cast of a literal is folded, an equality of `x` and `y`,
     // which can be a join key, one that also reads `z`, and the ones above a filter whose condition
     // can not be NULL or of a streaming plan go into a join as before. Only ReorderJoin runs.
@@ -243,7 +244,7 @@ class JoinOptimizationSuite extends PlanTest {
           .where(ansiDivide($"c", $"f") > 1)
         val moved = if (guarded) {
           failable.map(If(cond, _, Literal(false))) ++
-            Seq($"c", $"d", $"q", $"b").map(IsNotNull(_))
+            Seq($"c", $"d", $"b").map(IsNotNull(_))
         } else {
           failable
         }

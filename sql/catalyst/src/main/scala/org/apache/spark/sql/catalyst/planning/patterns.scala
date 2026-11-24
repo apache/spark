@@ -340,9 +340,11 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * returned as `If(<filter condition>, <condition>, false)` for each lower filter whose condition
    * can be NULL, the lowest one outermost, which evaluates it only where they are TRUE, wherever it
    * is put. `IS NOT NULL` checks of the columns that make it NULL follow it, as `If` hides them
-   * from `InferFiltersFromConstraints`. Only the filter conjuncts that can go into a join
-   * condition (see `canEvaluateWithinJoin`) count, as one that can not, e.g. an IN subquery, never
-   * precedes the condition in one, and a copy of its subquery would be computed again.
+   * from `InferFiltersFromConstraints`, but not of a column that can fail (see `failableOutput`),
+   * as a check pushed below the projection that computes it would compute it on every row. Only
+   * the filter conjuncts that can go into a join condition (see `canEvaluateWithinJoin`) count,
+   * as one that can not, e.g. an IN subquery, never precedes the condition in one, and a copy of
+   * its subquery would be computed again.
    *  - A condition that only reads one of `plans` is pushed down to it, with the conjuncts of the
    *    filters that only read that plan, so only those that can be NULL guard it.
    *  - Any other condition that only reads columns of a filter whose condition can be NULL, or no
@@ -384,6 +386,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
           left.nonEmpty && right.nonEmpty && !left.exists(p => right.exists(_ eq p))
         case _ => false
       }
+      lazy val failable = failableOutput(plan)
       var afterBarrier = before.exists(isBarrier)
       val checked = mutable.Set.empty[ExprId]
       conditions.flatMap { cond =>
@@ -404,7 +407,9 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
         if (guards.isEmpty) {
           Seq(cond)
         } else {
-          val notNull = nullIntolerantColumns(cond).filter(a => a.nullable && checked.add(a.exprId))
+          val notNull = nullIntolerantColumns(cond).filter { a =>
+            a.nullable && !failable.contains(a) && checked.add(a.exprId)
+          }
           guards.foldRight(cond)(If(_, _, Literal.FalseLiteral)) +: notNull.map(IsNotNull)
         }
       }
