@@ -634,15 +634,10 @@ case class Add(
   override lazy val canonicalized: Expression = {
     // SPARK-60178: Floating-point and maximum-precision decimal addition is commutative but not
     // associative, so only the two direct children can be reordered.
-    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
-      None
-    } else {
-      orderBinaryCommutative {
-        case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a.dataType) =>
-          Add(_, _, a.evalContext)
-      }
-    }
-    binaryOrdered.getOrElse {
+    orderBinaryCommutative {
+      case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a.dataType) =>
+        Add(_, _, a.evalContext)
+    }.getOrElse {
       val reorderResult = buildCanonicalizedPlan(
         { case Add(l, r, em) if em == evalContext => Seq(l, r) },
         { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
@@ -839,15 +834,10 @@ case class Multiply(
   override lazy val canonicalized: Expression = {
     // SPARK-60178: Floating-point and maximum-precision decimal multiplication is commutative but
     // not associative, so only the two direct children can be reordered.
-    val binaryOrdered = if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
-      None
-    } else {
-      orderBinaryCommutative {
-        case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m.dataType) =>
-          Multiply(_, _, m.evalContext)
-      }
-    }
-    binaryOrdered.getOrElse {
+    orderBinaryCommutative {
+      case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m.dataType) =>
+        Multiply(_, _, m.evalContext)
+    }.getOrElse {
       buildCanonicalizedPlan(
         { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
         { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },

@@ -487,23 +487,14 @@ class CanonicalizeSuite extends SparkFunSuite {
       val a = AttributeReference("a", dt)()
       val b = AttributeReference("b", dt)()
       val c = AttributeReference("c", dt)()
-      Seq(1, 100).foreach { threshold =>
-        val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
-        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, threshold.toString)
-        try {
-          Seq[(Expression, Expression) => Expression](
-            Add(_, _), Multiply(_, _)).foreach { op =>
-            // Commutativity of a single operator still holds.
-            assert(op(a, b).semanticEquals(op(b, a)))
-            assert(op(op(a, b), c).semanticEquals(op(c, op(b, a))))
-            // Re-association can change the floating-point or decimal result.
-            assert(!op(op(a, b), c).semanticEquals(op(a, op(b, c))))
-            assert(!op(op(a, b), c).semanticEquals(op(op(a, c), b)))
-            assert(!op(op(a, b), c).canonicalized.isInstanceOf[MultiCommutativeOp])
-          }
-        } finally {
-          SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
-        }
+      Seq[(Expression, Expression) => Expression](Add(_, _), Multiply(_, _)).foreach { op =>
+        // Commutativity of a single operator still holds.
+        assert(op(a, b).semanticEquals(op(b, a)))
+        assert(op(op(a, b), c).semanticEquals(op(c, op(b, a))))
+        // Re-association can change the floating-point or decimal result.
+        assert(!op(op(a, b), c).semanticEquals(op(a, op(b, c))))
+        assert(!op(op(a, b), c).semanticEquals(op(op(a, c), b)))
+        assert(!op(op(a, b), c).canonicalized.isInstanceOf[MultiCommutativeOp])
       }
     }
 

@@ -1502,31 +1502,35 @@ trait CommutativeExpression extends Expression {
    * and builds such an operator from its reordered children. This operator and the nested
    * operators of the same class are checked and canonicalized bottom-up without recursion, so a
    * deep chain of them does not overflow the stack. Returns None if `buildBinaryOp` is not
-   * defined for this operator.
+   * defined for this operator, or if `LEGACY_REASSOCIATE_INEXACT_ARITHMETIC` is enabled.
    */
   protected def orderBinaryCommutative(
       buildBinaryOp: PartialFunction[Expression, (Expression, Expression) => Expression])
     : Option[Expression] = {
-    val nested = scala.collection.mutable.ArrayBuffer[Expression]()
-    val stack = scala.collection.mutable.Stack[Expression](this)
-    while (stack.nonEmpty) {
-      val current = stack.pop()
-      if (current.getClass == getClass) {
-        nested += current
-        current.children.foreach(stack.push)
+    if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+      None
+    } else {
+      val nested = scala.collection.mutable.ArrayBuffer[Expression]()
+      val stack = scala.collection.mutable.Stack[Expression](this)
+      while (stack.nonEmpty) {
+        val current = stack.pop()
+        if (current.getClass == getClass) {
+          nested += current
+          current.children.foreach(stack.push)
+        }
       }
-    }
-    // Pre-order reversed: every operator comes after the operators nested in it.
-    val canonical = new java.util.IdentityHashMap[Expression, Expression]()
-    nested.reverseIterator.foreach { e =>
-      buildBinaryOp.lift(e).foreach { build =>
-        val Seq(l, r) = e.children
-          .map(c => Option(canonical.get(c)).getOrElse(c.canonicalized))
-          .sortBy(_.hashCode())
-        canonical.put(e, build(l, r))
+      // Pre-order reversed: every operator comes after the operators nested in it.
+      val canonical = new java.util.IdentityHashMap[Expression, Expression]()
+      nested.reverseIterator.foreach { e =>
+        buildBinaryOp.lift(e).foreach { build =>
+          val Seq(l, r) = e.children
+            .map(c => Option(canonical.get(c)).getOrElse(c.canonicalized))
+            .sortBy(_.hashCode())
+          canonical.put(e, build(l, r))
+        }
       }
+      Option(canonical.get(this))
     }
-    Option(canonical.get(this))
   }
 
   /**
