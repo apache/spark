@@ -4441,6 +4441,24 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_STATE_V4_INDEX_VERSION =
+    buildConf("spark.sql.streaming.join.stateFormatV4.indexVersion")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
+        "it evicts by a range condition. 0: by the event time of the input, as in 4.4 and " +
+        "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by " +
+        "the TIMESTAMP column that the default mode evicts the input by, and by the event time " +
+        "for an input bounded only through a column cast to TIMESTAMP. 2: also by a column cast " +
+        "to TIMESTAMP that the condition bounds. A streaming query keeps the version recorded in " +
+        "its checkpoint, and one restarted from a checkpoint without it uses 0. With 0, the " +
+        "default mode fails to run a join that evicts such an input by a TIMESTAMP column other " +
+        "than its event time, and with 0 or 1, one that evicts it by a cast.")
+      .version("4.5.0")
+      .intConf
+      .checkValue(v => v >= 0 && v <= 2, "Valid versions are 0, 1 and 2")
+      .createWithDefault(2)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
@@ -4493,6 +4511,20 @@ object SQLConf {
         "When this config is disabled, Spark will just print warning message for users. " +
         "Prior to Spark 3.1.0, the behavior is disabling this config.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK =
+    buildConf("spark.sql.streaming.statefulOperator.checkJoinOutputWatermark")
+      .internal()
+      .doc("When true, the correctness check of chained stateful operators also covers, in " +
+        "append mode, an operator that drops late rows after a stream-stream join, when its " +
+        "event time can come from an input of the join whose state has no cutoff on its event " +
+        "time. When false, such a query only logs a warning, and the join evicts by the event " +
+        "time an input that it would otherwise evict by another column. A streaming query " +
+        "restarted from a checkpoint written without this config uses false.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 

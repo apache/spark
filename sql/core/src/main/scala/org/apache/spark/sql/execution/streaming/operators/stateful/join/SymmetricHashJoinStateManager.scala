@@ -178,8 +178,9 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 
 /**
  * This trait is for state manager implementations that support eviction by timestamp. This is for
- * the state manager implementations which maintain the state with event time and can efficiently
- * scan the keys with event time smaller than the given timestamp for eviction.
+ * the state manager implementations which maintain the state with a timestamp, the column that the
+ * value predicate of the side tests, and can efficiently scan the keys with a timestamp smaller
+ * than the given one for eviction.
  */
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
@@ -213,7 +214,9 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
 /**
  * The version 4 of stream-stream join state manager implementation, which is designed to optimize
  * the eviction with watermark. Previous versions require full scan to find the keys to evict,
- * while this version only scans the keys with event time smaller than the watermark.
+ * while this version only scans the keys with a timestamp smaller than the cutoff. The timestamp
+ * is the column that the value predicate of the side tests: the event time, or another TIMESTAMP
+ * column that the join condition bounds.
  *
  * In this implementation, we no longer build a logical array of values; instead, we store the
  * (key, timestamp) -> values in the primary store, and maintain a secondary index of
@@ -242,7 +245,9 @@ class SymmetricHashJoinStateManagerV4(
     snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator,
     joinKeyOrdinalForWatermark: Option[Int] = None,
-    readOnly: Boolean = false)
+    readOnly: Boolean = false,
+    stateValueWatermarkColumnOrdinal: Option[Int] = None,
+    stateValueWatermarkCast: Option[Expression] = None)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
   // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
@@ -253,12 +258,17 @@ class SymmetricHashJoinStateManagerV4(
   protected val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   protected val keyAttributes = toAttributes(keySchema)
-  private val eventTimeColIdxOpt = WatermarkSupport.findEventTimeColumnIndex(
-    inputValueAttributes,
-    // NOTE: This does not accept multiple event time columns. This is not the same with the
-    // operator which we offer the backward compatibility, but it involves too many layers to
-    // pass the information. The information is in SQLConf.
-    allowMultipleEventTimeColumns = false)
+  // The value column that orders the state: the column that the value predicate of this side
+  // tests, or the event time.
+  private val timestampColIdxOpt = {
+    val eventTimeColIdxOpt = WatermarkSupport.findEventTimeColumnIndex(
+      inputValueAttributes,
+      // NOTE: This does not accept multiple event time columns. This is not the same with the
+      // operator which we offer the backward compatibility, but it involves too many layers to
+      // pass the information. The information is in SQLConf.
+      allowMultipleEventTimeColumns = false)
+    stateValueWatermarkColumnOrdinal.orElse(eventTimeColIdxOpt)
+  }
 
   // When there is no event time column in the value and no watermark ordinal in the key,
   // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
@@ -268,12 +278,18 @@ class SymmetricHashJoinStateManagerV4(
   //   is unused if eviction is not possible (e.g., only one side defines a watermark in a time
   //   interval join). That would require propagating the predicate information here.
   private val hasEventTime: Boolean =
-    eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
+    timestampColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
 
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountForNoEventTime = 1024
+  // A column cast to TIMESTAMP, such as a DATE column, orders the state by the value of the cast.
+  private val castTimestampProjection =
+    stateValueWatermarkCast.map(c => UnsafeProjection.create(Seq(c), inputValueAttributes))
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
-    eventTimeColIdxOpt match {
+    timestampColIdxOpt match {
+      case Some(_) if castTimestampProjection.isDefined =>
+        castTimestampProjection.get(row).getLong(0)
+
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
@@ -673,9 +689,9 @@ class SymmetricHashJoinStateManagerV4(
    * The primary store to store the key-value pairs.
    *
    * The state format of the primary store is following:
-   * [key][timestamp (event time)] -> [(value, matched), (value, matched), ...]
+   * [key][timestamp] -> [(value, matched), (value, matched), ...]
    *
-   * The values are bucketed by event time to facilitate efficient eviction by watermark; the
+   * The values are bucketed by that timestamp to facilitate efficient eviction by watermark; the
    * secondary index will provide the way to scan the key + timestamp pairs for the eviction, and
    * it will be easy to perform retrieval/removal of the values based on key + timestamp pairs.
    * There is no case where we evict only part of the values for the same key + timestamp.
@@ -2183,13 +2199,16 @@ object SymmetricHashJoinStateManager {
       snapshotOptions: Option[SnapshotOptions] = None,
       joinStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int] = None,
-      readOnly: Boolean = false): SymmetricHashJoinStateManager = {
+      readOnly: Boolean = false,
+      stateValueWatermarkColumnOrdinal: Option[Int] = None,
+      stateValueWatermarkCast: Option[Expression] = None): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly
+        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly, stateValueWatermarkColumnOrdinal,
+        stateValueWatermarkCast
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(

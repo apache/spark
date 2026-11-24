@@ -23,6 +23,46 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, a stream-stream join evicts the state of an input with its own watermark by
+  another TIMESTAMP column of that input, or by another column of it cast to TIMESTAMP, when the
+  join condition limits how long a row of that input can match only through that column or cast,
+  for example through `expiry` in `rightTime BETWEEN leftTime AND expiry`, or through
+  `CAST(leftDate AS TIMESTAMP)`. Earlier versions evicted by the event time, and could emit outer
+  join rows too early and lose matches. A cast that can fail, from STRING, FLOAT or DOUBLE in
+  ANSI mode or from VARIANT unless in TRY mode, and a cast of an expression over a column, such as
+  `CAST(expirySec + 3600 AS TIMESTAMP)`, keep the earlier eviction by the event time. Such a join
+  can emit rows below its output watermark,
+  which still assumes eviction by the event time, so in append mode a new query fails when an
+  operator that drops late rows by an event time that can come from that input follows it, as
+  described below for an input whose state is never evicted, unless the condition also bounds the
+  event time of that input by the other input's watermark. In such a join, and in a
+  time-interval join such as
+  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES`, a row whose eviction column is
+  NULL can never match: an outer join now emits it when it arrives, and no join keeps it in state.
+  With state format versions 1 to 3, such rows that a checkpoint of an earlier version holds are
+  evicted, and emitted by an outer join, after the upgrade. A query restarted from a checkpoint
+  of an earlier version keeps evicting an input that the new rule would evict by another column
+  by its event time, with the earlier handling of NULL values; start it with a new checkpoint to
+  use the new rule. With state format version 4, a join evicted by another column cannot restart
+  after a change of `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new
+  checkpoint. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
+  the earlier behavior.
+
+- Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is
+  planned if an operator that drops late rows, such as a window aggregation, follows a
+  stream-stream join and its event time can come from an input of the join whose state is never
+  evicted, for example an input of a join on a key without a watermark and without a time range
+  on that input. Such a query could drop joined rows as late. The check follows the event time
+  down to the join through projections, unions and the operators that pass their input's columns
+  through, and also fails a query whose path to the join passes another stateful operator or an
+  operator none of whose inputs outputs all the columns it follows. Add a watermark in the join
+  keys, or a range condition that bounds that input by the other input's watermark. Setting
+  `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
+  a warning, and also turns the existing check of chained stateful operators into a warning.
+  Queries restarted from checkpoints written before Spark 4.5 only log a warning.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
