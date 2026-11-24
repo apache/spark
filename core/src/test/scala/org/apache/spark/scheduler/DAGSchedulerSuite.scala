@@ -3917,6 +3917,43 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeAndCheckAnswer(taskSets(8), Seq((Success, 11), (Success, 12)), Map(0 -> 11, 1 -> 12))
   }
 
+  test("SPARK-60548: abort stage if a late task of a failed attempt 0 replaces the map " +
+    "output with a different checksum") {
+    val parentRdd = new MyRDD(sc, 2, Nil)
+    val parentDep = new ShuffleDependency(parentRdd, new HashPartitioner(2))
+    val producerRdd = new MyRDD(sc, 2, List(parentDep), tracker = mapOutputTracker)
+    val producerDep = new ShuffleDependency(
+      producerRdd,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true)
+    val resultRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+    submit(resultRdd, Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+
+    // Attempt 0 of the producer stage fails while its task for partition 1 keeps running.
+    val producerAttempt0 = taskSets.find(ts => ts.stageId == 1 && ts.stageAttemptId == 0).get
+    assert(producerAttempt0.shuffleId.contains(producerDep.shuffleId))
+    runEvent(makeCompletionEvent(
+      producerAttempt0.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), parentDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+    scheduler.resubmitFailedStages()
+    completeShuffleMapStageSuccessfully(0, 1, 2, Seq("hostC"))
+    val producerAttempt1 = taskSets.find(ts => ts.stageId == 1 && ts.stageAttemptId == 1).get
+    assert(producerAttempt1.tasks.map(_.partitionId).toSeq === Seq(0, 1))
+    completeShuffleMapStageSuccessfully(1, 1, 2, Seq("hostC", "hostD"), checksumVal = 100)
+    val resultAttempt = taskSets.find(ts => ts.stageId == 2 && ts.stageAttemptId == 0).get
+    runEvent(makeCompletionEvent(resultAttempt.tasks(0), Success, 42))
+
+    // The late task finishes after attempt 1 recomputed partition 1 and the result stage
+    // finished partition 0, replacing the output of partition 1 with different data.
+    runEvent(makeCompletionEvent(
+      producerAttempt0.tasks(1), Success, makeMapStatus("hostB", 2, checksumVal = 101)))
+
+    assert(failure != null && failure.getMessage.contains("cannot rollback the ResultStage"))
+    assertDataStructuresEmpty()
+  }
+
   test("SPARK-54556: abort stage if result task from old attempt with indeterminate " +
     "result succeeded") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
