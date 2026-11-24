@@ -2327,6 +2327,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("ToCharacter: zero value with no digits after the decimal point") {
+    def toChar(decimal: Decimal, format: String): Expression = {
+      val expr = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      expr
+    }
+    // (input, format, result, result with the legacy config)
+    Seq(
+      (Decimal(0), "9", "0", " "),
+      (Decimal(0), "999", "  0", "   "),
+      (Decimal("0.00"), "999", "  0", "   "),
+      (Decimal(0), "9G999", "    0", "     "),
+      (Decimal(0), "$999", "$  0", "$   "),
+      (Decimal(0), "999S", "  0+", "+   "),
+      (Decimal(0), "S999", "  +0", "   +"),
+      (Decimal(0), "999MI", "  0 ", "    "),
+      (Decimal(0), "999PR", "  0  ", "     "),
+      // These formats already rendered the zero, so the legacy config does not change them.
+      (Decimal(0), "099", "000", "000"),
+      (Decimal(0), "999.", "  0 ", "  0 "),
+      (Decimal(0), "999.9", "  0.0", "  0.0")
+    ).foreach { case (decimal, format, expected, expectedLegacy) =>
+      checkEvaluation(toChar(decimal, format), expected)
+      withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+        checkEvaluation(toChar(decimal, format), expectedLegacy)
+      }
+    }
+    val legacyExpr = withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+      toChar(Decimal(0), "999")
+    }
+    // The config value is captured when the expression is built, not when it is evaluated.
+    checkEvaluation(legacyExpr, "   ")
+    val rebuilt = legacyExpr.withNewChildren(
+      Seq(Literal(Decimal(0), DecimalType(20, 0)), legacyExpr.children(1)))
+    assert(rebuilt ne legacyExpr)
+    checkEvaluation(rebuilt, "   ")
+    val defaultExpr = toChar(Decimal(0), "999")
+    assert(!defaultExpr.semanticEquals(legacyExpr))
+    assert(defaultExpr.toString == legacyExpr.toString)
+  }
+
   test("find in set") {
     checkEvaluation(
       FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)

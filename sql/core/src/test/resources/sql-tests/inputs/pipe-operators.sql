@@ -50,6 +50,10 @@ create temporary view lateral_test_t3(c1, c2)
 create temporary view lateral_test_t4(c1, c2)
   as values (0, 1), (0, 2), (1, 1), (1, 3);
 
+create temporary view outer_gen_test(id, author, tags)
+  as values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null);
+
 create temporary view natural_join_test_t1 as select * from values
   ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1);
 
@@ -368,6 +372,17 @@ values (0), (1) lhs(a)
 table t
 |> set z = 1;
 
+-- SET with a column name that matches two copies of the same column.
+select x, x from t
+|> set x = 1;
+
+select x, * from t
+|> set x = 1;
+
+-- SET with a column name that matches two copies of a column from a UNION branch.
+select * from (select x, x from t union all select x, x from t)
+|> set x = 1;
+
 -- SET with an alias.
 table t
 |> set x = 1 as z;
@@ -501,6 +516,16 @@ select x, x from t
 |> eval x = 1;
 
 select x, * from t
+|> eval x = 1;
+
+-- EVAL with a column name that matches two copies of a column from a UNION branch.
+select * from (select x, x from t union all select x, x from t)
+|> eval x = 1;
+
+-- After DROP, only the copies that the UNION tagged as duplicates are left, and name resolution
+-- finds neither of them.
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
 |> eval x = 1;
 
 -- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
@@ -2156,6 +2181,188 @@ from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
 from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
 |> as x
 |> select x.h.a;
+
+-- Outer generators: positive tests.
+--------------------------------------
+
+-- Outer generators are allowed as top-level items in the pipe SELECT list, as in a plain SELECT.
+table outer_gen_test
+|> select id, explode_outer(tags) as tag;
+
+table outer_gen_test
+|> select id, posexplode_outer(tags);
+
+table outer_gen_test
+|> select id, inline_outer(transform(tags, t -> named_struct('tag', t)));
+
+table outer_gen_test
+|> select id, explode_outer(map_from_arrays(tags, tags));
+
+-- Outer generators in the pipe EXTEND list.
+table outer_gen_test
+|> extend explode_outer(tags) as tag
+|> select id, tag;
+
+-- Outer generators in the pipe SET list.
+table outer_gen_test
+|> set tags = explode_outer(tags)
+|> select id, tags;
+
+-- Outer generators over aggregate functions in the pipe AGGREGATE list.
+table outer_gen_test
+|> aggregate explode_outer(collect_list(id)) as id group by author;
+
+-- Outer generators over the result of a global aggregation with no input rows.
+table outer_gen_test
+|> where id > 10
+|> aggregate collect_list(id) as ids
+|> select explode_outer(ids);
+
+-- Generators with a parenthesized alias list in the pipe EXTEND and AGGREGATE lists.
+table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag;
+
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v;
+
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len;
+
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag;
+
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author;
+
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author;
+
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author;
+
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author;
+
+-- Generators that only resolve after type coercion of their arguments, such as stack with an
+-- untyped NULL, with a parenthesized alias list, a single-name alias, or no alias.
+table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a;
+
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author;
+
+table outer_gen_test
+|> select id, stack(2, id, null) as a;
+
+table outer_gen_test
+|> select id, stack(2, id, null);
+
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a;
+
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0;
+
+-- Outer generators over an empty aggregated array return one NULL row per group, while the
+-- non-outer generator returns no rows.
+table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author;
+
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author;
+
+-- A generator that needs type coercion in the pipe SET list.
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author;
+
+-- A generator item whose arguments resolve before the input plan below it does.
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v;
+
+-- A parenthesized alias list keeps its names when another generator in the same list is planned
+-- first, after the input plan resolves.
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(array('x', 'y')) as (pos, b)
+|> select id, a, pos, b;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, e, p, v;
+
+-- The same, with alias list items whose generator arguments are columns, which resolve only
+-- after the input plan does.
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(arr) as (pos, b)
+|> select id, a, pos, b;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(tags) as (p, v)
+|> select id, t, e, p, v;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> aggregate posexplode_outer(collect_list(t)) as (p, v) group by author;
+
+-- Outer generators: negative tests.
+--------------------------------------
+
+-- Outer generators nested inside other expressions are not allowed, as in a plain SELECT.
+table outer_gen_test
+|> select upper(explode_outer(tags));
+
+select upper(explode_outer(tags)) from outer_gen_test;
+
+-- The pipe AGGREGATE list requires an aggregate function.
+table outer_gen_test
+|> aggregate explode_outer(tags);
+
+-- The pipe EXTEND list does not allow aggregate functions.
+table outer_gen_test
+|> extend explode_outer(collect_list(tags));
+
+-- A parenthesized alias list over an outer generator follows the same pipe rules.
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag);
+
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag);
+
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b);
+
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test;
+
+-- A generator with a wrongly typed argument reports the same error as the plain SQL query.
+table outer_gen_test
+|> select id, explode_outer(id);
+
+select id, explode_outer(id) from outer_gen_test;
+
+table outer_gen_test
+|> extend posexplode(id) as (pos, v);
+
+select *, posexplode(id) as (pos, v) from outer_gen_test;
+
+-- In the pipe AGGREGATE list, the aggregate checks run before a generator's own type check.
+table outer_gen_test
+|> aggregate explode_outer(id);
+
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author;
 
 -- Cleanup.
 -----------
