@@ -88,9 +88,11 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
    * are the columns the scan declared, when storage filters are on and every operation pushed into
    * the scan works on each row by itself. Unlike the strategy's other storage filters, a
    * per-partition bloom filter is offered also when the scan reads only the filter's columns, since
-   * no filter above the scan drops the rows it rejects. It is not offered to the read of a
-   * group-based DELETE. `ReplaceDataExec` counts the deleted rows from the rows that read returns.
-   * So the count would leave out the rows the readers reject.
+   * no filter above the scan drops the rows it rejects. No group-based read of a row-level
+   * operation gets one today, since `GroupBasedRowLevelOperationScanPlanning` does not set
+   * `onlyRowWisePushdowns`. The read of a group-based DELETE is left out also for when it does.
+   * `ReplaceDataExec` counts the deleted rows from the rows that read returns. So the count would
+   * leave out the rows the readers reject.
    */
   def storageFilterColumnsOf(scan: DataSourceV2ScanRelation): AttributeSet =
     if (SQLConf.get.v2StorageFilterPushdownEnabled && scan.onlyRowWisePushdowns &&

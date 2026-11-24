@@ -1452,15 +1452,27 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
   test("no per-partition bloom filter for a scan that took a pushed limit, or for the read of a " +
       "group-based DELETE") {
     // Nothing above the scan checks a per-partition bloom filter. So readers that drop rows ahead
-    // of a pushed limit would change the rows the scan returns. A group-based DELETE counts the
-    // deleted rows from the rows its read returns, so that read is offered no per-partition bloom
-    // filter either. An UPDATE counts nothing from the rows its read returns, so its read is
-    // offered one. No test table takes both row-level operations and storage filters, so this
+    // of a pushed limit would change the rows the scan returns. No group-based read reports only
+    // row-wise pushdowns today, so none is offered one. The relations below are those the planner
+    // would build if one did. A group-based DELETE counts the deleted rows from the rows its read
+    // returns, so that read is still offered none. An UPDATE counts nothing from them, so its read
+    // is offered one. No test table takes both row-level operations and storage filters, so this
     // checks the columns offered to such scans.
     withSQLConf(
         "spark.sql.catalog.rlcat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
       withTable("rlcat.ns.t") {
         sql("CREATE TABLE rlcat.ns.t (id BIGINT) USING foo")
+        sql("INSERT INTO rlcat.ns.t VALUES (1), (2)")
+        val deletes = withQueryExecutionsCaptured(spark) {
+          // A subquery keeps the DELETE from deleting by metadata only.
+          sql("DELETE FROM rlcat.ns.t WHERE id IN (SELECT 1)")
+        }
+        val groupBasedReads = deletes.flatMap(_.optimizedPlan.collect {
+          case r: DataSourceV2ScanRelation if r.isGroupBasedRead => r
+        })
+        assert(groupBasedReads.nonEmpty && groupBasedReads.forall(!_.onlyRowWisePushdowns),
+          s"no group-based read reports only row-wise pushdowns today: " +
+            deletes.map(_.optimizedPlan))
         val ident = Identifier.of(Array("ns"), "t")
         val rowLevelCatalog = spark.sessionState.catalogManager.catalog("rlcat")
           .asInstanceOf[InMemoryRowLevelOperationTableCatalog]

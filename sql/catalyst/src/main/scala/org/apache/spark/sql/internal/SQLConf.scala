@@ -1031,7 +1031,8 @@ object SQLConf {
         "is sized for an even share of the creation side over its partition keys. A " +
         "per-partition bloom filter is also dropped when that share is over " +
         "spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
-        "The read of a DELETE that rewrites whole groups of rows, such as files, gets none. " +
+        "The read of a DELETE, UPDATE or MERGE that rewrites whole groups of rows, such as " +
+        "files, gets none. " +
         "The number of per-partition bloom filters has a limit of its own, the value of " +
         s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
         "limit, no per-partition one is added either.")
