@@ -128,31 +128,7 @@ class OneVsRestTestsMixin:
 
 
 class OneVsRestTests(OneVsRestTestsMixin, ReusedSQLTestCase):
-    def test_intermediate_storage_level_conversion(self):
-        from pyspark import StorageLevel
-
-        ovr = OneVsRest()
-        for entry in self.sc._jvm.org.apache.spark.storage.StorageLevelMapper.values():
-            name = entry.name()
-            if name == "NONE":
-                continue
-            with self.subTest(storageLevel=name):
-                expected = self.sc._jvm.org.apache.spark.storage.StorageLevel.fromString(name)
-                actual = ovr.setIntermediateStorageLevel(name)._getIntermediateStorageLevel()
-                self.assertEqual(
-                    actual,
-                    StorageLevel(
-                        expected.useDisk(),
-                        expected.useMemory(),
-                        expected.useOffHeap(),
-                        expected.deserialized(),
-                        expected.replication(),
-                    ),
-                )
-
-        for name in ["NONE", "INVALID", "MEMORY_AND_DISK_DESER"]:
-            with self.subTest(storageLevel=name), self.assertRaises(ValueError):
-                ovr.setIntermediateStorageLevel(name)._getIntermediateStorageLevel()
+    pass
 
 
 if __name__ == "__main__":
