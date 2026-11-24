@@ -97,7 +97,7 @@ from pyspark.ml.wrapper import JavaParams, JavaPredictionModel, JavaPredictor, J
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import is_remote, to_storage_level
 from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
@@ -3486,27 +3486,6 @@ class _OneVsRestParams(_ClassifierParams, HasWeightCol, HasIntermediateStorageLe
         """
         return self.getOrDefault(self.classifier)
 
-    def _getIntermediateStorageLevel(self) -> StorageLevel:
-        # Match the storage level names accepted by the Scala parameter validator.
-        levels = {
-            "DISK_ONLY": StorageLevel.DISK_ONLY,
-            "DISK_ONLY_2": StorageLevel.DISK_ONLY_2,
-            "DISK_ONLY_3": StorageLevel.DISK_ONLY_3,
-            "MEMORY_ONLY": StorageLevel(False, True, False, True),
-            "MEMORY_ONLY_2": StorageLevel(False, True, False, True, 2),
-            "MEMORY_ONLY_SER": StorageLevel.MEMORY_ONLY,
-            "MEMORY_ONLY_SER_2": StorageLevel.MEMORY_ONLY_2,
-            "MEMORY_AND_DISK": StorageLevel.MEMORY_AND_DISK_DESER,
-            "MEMORY_AND_DISK_2": StorageLevel(True, True, False, True, 2),
-            "MEMORY_AND_DISK_SER": StorageLevel.MEMORY_AND_DISK,
-            "MEMORY_AND_DISK_SER_2": StorageLevel.MEMORY_AND_DISK_2,
-            "OFF_HEAP": StorageLevel.OFF_HEAP,
-        }
-        name = self.getIntermediateStorageLevel()
-        if name not in levels:
-            raise ValueError(f"Invalid intermediate storage level: {name}")
-        return levels[name]
-
 
 @inherit_doc
 class OneVsRest(
@@ -3694,7 +3673,7 @@ class OneVsRest(
 
         with _cache_spark_dataset(
             multiclassLabeled,
-            storageLevel=self._getIntermediateStorageLevel(),
+            storageLevel=to_storage_level(self.getIntermediateStorageLevel()),
             enable=handlePersistence,
         ) as multiclassLabeled:
 
@@ -3965,7 +3944,7 @@ class OneVsRestModel(
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         with _cache_spark_dataset(
             newDataset,
-            storageLevel=self._getIntermediateStorageLevel(),
+            storageLevel=to_storage_level(self.getIntermediateStorageLevel()),
             enable=handlePersistence,
         ) as newDataset:
             # update the accumulator column with the result of prediction of models
