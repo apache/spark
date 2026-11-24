@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Explode, GeneratedRowMarker, If, IsNotNull, Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Explode, GeneratedRowMarker, If, IsNotNull, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -228,9 +228,10 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   }
 
   test("SPARK-60564: a computed projection over Generate in a left outer lateral subquery") {
-    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT col + 1 AS v, a AS w FROM EXPLODE(arr))
+    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(col, 0) AS v, a AS w FROM EXPLODE(arr))
     val query = t3.lateralJoin(
-      t0.generate(Explode($"arr")).select(($"col" + 1).as("v"), $"a".as("w")), LeftOuter, None)
+      t0.generate(Explode($"arr")).select(Coalesce(Seq($"col", 0)).as("v"), $"a".as("w")),
+      LeftOuter, None)
     val optimized = Optimize.execute(query.analyze)
     assert(optimized.collectWithSubqueries { case d: DomainJoin => d }.isEmpty)
     val generate = optimized.collectFirst { case g: Generate => g }.get
@@ -247,6 +248,19 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
       case o => fail(s"Unexpected expression: $o")
     }
     assert(!project.output.exists(_.exprId == marker.exprId))
+  }
+
+  test("SPARK-60564: a null-intolerant projection over Generate needs no marker") {
+    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT col + 1 AS v, col + a AS w FROM EXPLODE(arr)):
+    // both are NULL on the row that the outer Generate adds, so the Generate is not wrapped and
+    // rules that match the generator, such as nested column pruning, still apply.
+    val query = t3.lateralJoin(
+      t0.generate(Explode($"arr")).select(($"col" + 1).as("v"), ($"col" + $"a").as("w")),
+      LeftOuter, None)
+    val optimized = Optimize.execute(query.analyze)
+    val generate = optimized.collectFirst { case g: Generate => g }.get
+    assert(generate.outer)
+    assert(generate.generator.isInstanceOf[Explode])
   }
 
   test("SPARK-60564: generator columns are nullable over a left outer lateral Generate") {

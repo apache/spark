@@ -1164,9 +1164,11 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
     // becomes a Generate over the left side, which evaluates the generator once per left row. A
     // left outer lateral join keeps a left row for which the generator returns no rows once, with
     // NULLs for the columns of the subquery, so its Generate becomes outer, which adds that row.
-    // A Project that computes values over a Generate that is not outer must not compute them on
-    // that row, as the subquery has no row there: the Generate then marks the rows the generator
-    // returns, see `GeneratedRowMarker`, and the Project gives NULL on the row it does not mark.
+    // A Project over a Generate that is not outer must not compute values that are not NULL on
+    // that row, as the subquery has no row there. A column of the generator, and a null-intolerant
+    // expression over one, are NULL there already. For other expressions, such as coalesce, a
+    // literal or an outer column, the Generate marks the rows the generator returns, see
+    // `GeneratedRowMarker`, and the Project gives NULL on the row it does not mark.
     case LateralJoin(
       left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), joinType, None)
         if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
@@ -1196,22 +1198,35 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
           } else {
             stripOuterReferences(projectList)
           }
-          // A column of the generator, renamed or not, is NULL on the row that an outer Generate
-          // adds. On an outer Generate in the subquery, that row is a row of the subquery.
-          def passesThrough(e: NamedExpression): Boolean = e match {
+          // A column of the generator is NULL on the row that an outer Generate adds, and so is a
+          // null-intolerant expression over one, such as a field of a struct column, whose other
+          // inputs can not fail. On an outer Generate in the subquery, that row is a row of the
+          // subquery.
+          def nullOnAddedRow(e: Expression): Boolean = e match {
             case a: Attribute => generatorOutput.contains(a)
-            case Alias(a: Attribute, _) => generatorOutput.contains(a)
+            case _ if e.nullIntolerant && e.deterministic =>
+              val onAddedRow = e.children.map(nullOnAddedRow)
+              onAddedRow.contains(true) && e.children.zip(onAddedRow).forall {
+                case (c, n) => n || ExprUtils.canEvaluateUnconditionally(c)
+              }
             case _ => false
           }
-          if (!keepLeftRows || g.outer || newPList.forall(passesThrough)) {
+          // Whether a column of the Project is NULL on the added row without the marker.
+          def needsNoMarker(e: NamedExpression): Boolean = e match {
+            case a: Attribute => generatorOutput.contains(a)
+            case Alias(child, _) => nullOnAddedRow(child)
+            case _ => false
+          }
+          if (!keepLeftRows || g.outer || newPList.forall(needsNoMarker)) {
             val newGenerate =
               g.copy(generator = newGenerator, outer = g.outer || keepLeftRows, child = left)
             Project(left.output ++ newPList, newGenerate)
           } else {
             val marker = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
-            // A Python or external UDF is lifted out of the If and evaluated on every row, so mark
-            // it to be evaluated only on the rows the generator returns. The If and the marker
-            // share one condition, so SimplifyConditionals drops the marker once no UDF is left.
+            // A Python or external UDF is lifted out of the If and evaluated on every row, so an
+            // expression with one is wrapped in EvalOnlyWhen, which evaluates it only on the rows
+            // the generator returns. The If and the EvalOnlyWhen use one condition, so
+            // SimplifyConditionals removes the EvalOnlyWhen once no UDF is left under it.
             def nullIfNotGenerated(e: Expression): Expression = {
               val generated = IsNotNull(marker)
               If(generated,
@@ -1220,7 +1235,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
             }
             // Keep the expression IDs and the metadata, as the parent operators bind to them.
             val markedPList = newPList.map {
-              case e if passesThrough(e) => e
+              case e if needsNoMarker(e) => e
               case a: Alias =>
                 Alias(nullIfNotGenerated(a.child), a.name)(
                   a.exprId, a.qualifier, Some(a.metadata), a.nonInheritableMetadataKeys)

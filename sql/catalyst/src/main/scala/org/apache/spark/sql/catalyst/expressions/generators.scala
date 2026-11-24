@@ -353,7 +353,8 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
  * returns, including the rows of `terminate()`. In an outer `Generate`, the NULL-padded row of an
  * input row for which the generator returns no rows has NULL in that column, which tells it apart
  * from a generated row whose values are NULL. `OptimizeOneRowRelationSubquery` uses it to inline a
- * left outer lateral join over a generator whose projection computes values.
+ * left outer lateral join over a generator whose projection computes values that are not NULL
+ * on that row, such as `coalesce`, a literal or an outer column.
  */
 case class GeneratedRowMarker(child: Generator)
   extends UnaryExpression with Generator with CodegenFallback {

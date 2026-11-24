@@ -1462,8 +1462,8 @@ class StreamSuite extends StreamTest {
     withTempView("v") {
       input.toDF().selectExpr("value AS id", "slice(array(10, 20), 1, value) AS arr")
         .createOrReplaceTempView("v")
-      val df = spark.sql(
-        "SELECT id, c FROM v LEFT JOIN LATERAL (SELECT col + 1 AS c FROM explode(arr))")
+      val df = spark.sql("SELECT id, c FROM v " +
+        "LEFT JOIN LATERAL (SELECT coalesce(col, 0) + 1 AS c FROM explode(arr))")
       testStream(df, OutputMode.Append())(
         AddData(input, 0, 1, 2),
         CheckAnswerRows(
