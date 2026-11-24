@@ -1230,6 +1230,28 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("KeyLayout: the key list is asked in order, the layout state beside it") {
+    val a = $"a".long
+    def layout(keys: Long*): KeyLayout =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_))).layout
+    val ascending = layout(1L, 2L)
+    val descending = layout(2L, 1L)
+    assert(!ascending.describesSameKeys(descending), "the lists differ in order")
+    assert(ascending.describesSameLayoutState(descending))
+    // Repeats change the layout state: a repeated key means the layout is ungrouped.
+    assert(!ascending.describesSameLayoutState(layout(1L, 1L, 2L)),
+      "a repeated key means the layout is not grouped")
+    val collapsed = ascending.copy(isCollapsed = true)
+    assert(!ascending.describesSameLayoutState(collapsed))
+    // The key types are part of the comparison: two empty key lists compare equal whatever they
+    // describe, so the type clause is the only thing that separates these.
+    val otherKey = $"b".int
+    def otherLayout(keys: Int*): KeyLayout =
+      KeyedPartitioning(Seq(otherKey), keys.map(InternalRow(_))).layout
+    assert(!ascending.describesSameKeys(otherLayout(1, 2)))
+    assert(!layout().describesSameKeys(otherLayout()))
+  }
+
   test("SPARK-59887: a spec over a transform of an expression pairs only with the same shape") {
     // A join pairs its two sides up by the column each partition expression references. Over
     // `a = b` it would pair `bucket(4, a + 1)` with `bucket(4, b)`, and over `s = t` it would pair
