@@ -232,7 +232,7 @@ public interface Changelog {
    * <p>
    * The default implementation returns an empty array.
    *
-   * @since 4.5.0
+   * @since 4.4.0
    */
   default MetadataColumn[] metadataColumns() {
     return new MetadataColumn[0];
