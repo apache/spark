@@ -579,6 +579,15 @@ case class KeyLayout(
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
+
+  /**
+   * Whether `other` carries the same layout state: whether the keys are unique, whether they were
+   * collapsed, and why they repeat. The unknown-keys state is not asked, since it records where
+   * rows of an undeclared key were placed rather than how the layout describes its keys.
+   */
+  def describesSameLayoutState(other: KeyLayout): Boolean =
+    isGrouped == other.isGrouped && isCollapsed == other.isCollapsed &&
+      ungroupingOrigin == other.ungroupingOrigin
 }
 
 /**

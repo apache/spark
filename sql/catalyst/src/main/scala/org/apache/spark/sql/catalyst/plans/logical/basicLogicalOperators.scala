@@ -2670,9 +2670,10 @@ case class LateralJoin(
    */
   override def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
   }
 
   override def childrenResolved: Boolean = left.resolved && right.resolved
@@ -3148,18 +3149,18 @@ object AsOfJoin extends PredicateHelper {
           case (true, Backward) =>
             And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (false, Backward) =>
-            And(base, GreaterThan(rightAsOf, lowerBound))
+            And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (true, Forward) =>
             And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (false, Forward) =>
-            And(base, LessThan(rightAsOf, upperBound))
+            And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (true, Nearest) =>
             And(GreaterThanOrEqual(rightAsOf, lowerBound),
               LessThanOrEqual(rightAsOf, upperBound))
           case (false, Nearest) =>
             And(base,
-              And(GreaterThan(rightAsOf, lowerBound),
-                LessThan(rightAsOf, upperBound)))
+              And(GreaterThanOrEqual(rightAsOf, lowerBound),
+                LessThanOrEqual(rightAsOf, upperBound)))
         }
       case None => base
     }

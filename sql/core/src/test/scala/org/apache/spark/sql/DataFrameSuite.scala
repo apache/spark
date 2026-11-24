@@ -300,6 +300,32 @@ class DataFrameSuite extends SharedSparkSession
       Row("1", 1) :: Nil)
   }
 
+  test("selectExpr, expr, and filter with optional references") {
+    val df = Seq((1, "a"), (2, "b")).toDF("id", "name")
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      val selected = df.selectExpr("id?", "missing?", "coalesce(bonus?, 0) AS bonus")
+      assert(selected.columns === Array("id", "missing", "bonus"))
+      checkAnswer(selected, Row(1, null, 0) :: Row(2, null, 0) :: Nil)
+      checkAnswer(
+        df.where("deleted? IS NULL").orderBy(expr("rank?"), expr("id?").desc).select(expr("id?")),
+        Row(2) :: Row(1) :: Nil)
+      // A filter resolves names against the columns below its child too. An optional reference
+      // to such a column, which the filter cannot use through the aggregate, fails like without
+      // `?` instead of being NULL.
+      val aggregated = df.groupBy("id").count().select("id")
+      Seq("name? IS NULL", "name IS NULL").foreach { condition =>
+        val e = intercept[AnalysisException](aggregated.filter(condition))
+        assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", e.getMessage)
+        assert(e.getMessageParameters.get("objectName") == "`name`", e.getMessage)
+      }
+    }
+    // Optional references are disabled by default.
+    checkError(
+      exception = intercept[AnalysisException](df.selectExpr("id?")),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'?'", "hint" -> ": extra input '?'"))
+  }
+
   test("filterExpr") {
     val res = testData.collect().filter(_.getInt(0) > 90).toSeq
     checkAnswer(testData.filter("key > 90"), res)

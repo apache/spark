@@ -86,6 +86,47 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
+  test("SPARK-61982: Wrap external engine permission error") {
+    withRestrictedUser { restrictedUrl =>
+      val ex = intercept[SparkException] {
+        spark.read.format("jdbc")
+          .option("url", restrictedUrl)
+          .option("dbtable", "tbl_shared").load()
+      }
+      checkError(
+        exception = ex,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = Some("42501"),
+        parameters = Map(
+          "jdbcQuery" -> "SELECT \\* FROM tbl_shared WHERE 1=0",
+          "externalEngineError" -> "[\\s\\S]+",
+          "externalEngineSqlState" -> ".+"),
+        matchPVals = true)
+      assert(ex.getCause.isInstanceOf[SQLException])
+    }
+  }
+
+  test("SPARK-61982: Wrap external engine permission error during query execution") {
+    db.restrictedUserSessionInitStatement.foreach { switchToRestrictedUser =>
+      withRestrictedUser { _ =>
+        // Schema resolution skips sessionInitStatement, so only the data query is denied.
+        val df = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "tbl_shared")
+          .option("sessionInitStatement", switchToRestrictedUser).load()
+        checkError(
+          exception = intercept[SparkException](df.collect()),
+          condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_QUERY_EXECUTION",
+          sqlState = Some("42501"),
+          parameters = Map(
+            "jdbcQuery" -> ".*tbl_shared.*",
+            "externalEngineError" -> "[\\s\\S]+",
+            "externalEngineSqlState" -> ".+"),
+          matchPVals = true)
+      }
+    }
+  }
+
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
