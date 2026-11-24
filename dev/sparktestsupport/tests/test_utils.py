@@ -61,6 +61,7 @@ class DetermineModulesForFilesTests(unittest.TestCase):
         cases = {
             "R/pkg/R/DataFrame.R": {modules.sparkr, modules.lint_r},
             "R/pkg/.lintr": {modules.sparkr, modules.lint_r},
+            "dev/lint-r": {modules.lint_r},
             "dev/lint-r.R": {modules.lint_r},
             "examples/src/main/r/dataframe.R": {modules.examples},
         }
