@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Infer predicates and column pruning for [[CTERelationDef]] from its reference points, and push
@@ -70,9 +71,13 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
           gatherPredicatesAndAttributes(cteDef.child, cteMap)
           // Seed retained attributes with the forced-partitioning keys (if any) so column pruning
           // never drops a partition key the pinned repartition depends on, even when no reference
-          // projects it.
+          // projects it. Only a pin that `ReplaceCTERefWithRepartition` honors, on a
+          // `forceSkipInline` definition with CTE reuse enabled, keeps its keys: an ignored pin
+          // must leave the plan as it is without the pin.
           val forcedAttrs = cteDef.forcePartitioning match {
-            case Some(h: HashPartitioning) => AttributeSet(h.expressions.flatMap(_.references))
+            case Some(h: HashPartitioning) if cteDef.forceSkipInline &&
+                conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) =>
+              AttributeSet(h.expressions.flatMap(_.references))
             case _ => AttributeSet.empty
           }
           cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, forcedAttrs))

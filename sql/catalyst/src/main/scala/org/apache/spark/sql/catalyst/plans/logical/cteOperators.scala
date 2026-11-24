@@ -142,7 +142,9 @@ case class CTERelationDef(
     forceSkipInline: Boolean = false,
     forcePartitioning: Option[Partitioning] = None) extends UnaryNode {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+  // FORCE_SKIP_INLINE_CTE_DEF lets the CTE reuse rules skip a plan with no forced definition.
+  final override val nodePatterns: Seq[TreePattern] =
+    if (forceSkipInline) Seq(CTE, FORCE_SKIP_INLINE_CTE_DEF) else Seq(CTE)
 
   // Keep the default string representation stable when `forceSkipInline` and `forcePartitioning`
   // are not set, so existing plan comparisons and golden files are unaffected by the new fields.

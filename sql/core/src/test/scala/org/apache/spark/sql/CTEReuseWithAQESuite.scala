@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 import org.apache.spark.{SparkContext, SparkThrowable}
 import org.apache.spark.rdd.RDD
@@ -32,9 +36,11 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, Adapti
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, CTEReuseQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.joins.BaseJoinExec
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ThreadUtils
 
 /**
  * End-to-end tests for CTE reuse through AQE: verifies that CTEReuseQueryStageExec instances
@@ -783,30 +789,37 @@ class CTEReuseWithAQESuite
       withTable("rebalance_src") {
         sql("CREATE TABLE rebalance_src (k INT, v INT) USING parquet")
         sql("INSERT INTO rebalance_src VALUES (1, 10), (2, 20), (3, 30)")
-        val df = sqlWithForcedCTEReuse(
-          """WITH cte AS (SELECT /*+ REBALANCE(k) */ k, v, rand() AS r FROM rebalance_src)
-            |SELECT c1.k, c2.v FROM cte c1 JOIN cte c2 ON c1.k = c2.k
-            |""".stripMargin)
-        val reference = withSQLConf(cteReuseConf -> "false") {
-          sqlWithForcedCTEReuse(
-            """WITH cte AS (SELECT /*+ REBALANCE(k) */ k, v, rand() AS r FROM rebalance_src)
-              |SELECT c1.k, c2.v FROM cte c1 JOIN cte c2 ON c1.k = c2.k
-              |""".stripMargin).collect()
-        }
-        checkAnswer(df, reference.toSeq)
-        assertInnerAQEShared(df)
-        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
-          case s: CTEReuseQueryStageExec => s
-        }
-        stages.foreach { s =>
-          val inner = s.innerAQE.executedPlan
-          val shuffles = collectWithSubqueries(inner) { case q: ShuffleQueryStageExec => q }
-          assert(shuffles.size == 1, s"Expected one shuffle stage in the inner plan:\n$inner")
-          shuffles.head.shuffle.outputPartitioning match {
-            case h: HashPartitioning =>
-              assert(h.expressions.map(_.references.head.name) == Seq("k"))
-            case other => fail(s"Expected the rebalance's hash partitioning, got $other")
-          }
+        // REBALANCE(4, k) also sets the partition count, which the CTE shuffle keeps; the session
+        // default (5 in tests) differs from it.
+        Seq("REBALANCE(k)" -> None, "REBALANCE(4, k)" -> Some(4)).foreach {
+          case (hint, numPartitions) =>
+            val query =
+              s"""WITH cte AS (SELECT /*+ $hint */ k, v, rand() AS r FROM rebalance_src)
+                 |SELECT c1.k, c2.v FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+                 |""".stripMargin
+            val df = sqlWithForcedCTEReuse(query)
+            val reference = withSQLConf(cteReuseConf -> "false") {
+              sqlWithForcedCTEReuse(query).collect()
+            }
+            checkAnswer(df, reference.toSeq)
+            assertInnerAQEShared(df)
+            val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+              case s: CTEReuseQueryStageExec => s
+            }
+            stages.foreach { s =>
+              val inner = s.innerAQE.executedPlan
+              val shuffles = collectWithSubqueries(inner) { case q: ShuffleQueryStageExec => q }
+              assert(shuffles.size == 1,
+                s"$hint: expected one shuffle stage in the inner plan:\n$inner")
+              shuffles.head.shuffle.outputPartitioning match {
+                case h: HashPartitioning =>
+                  assert(h.expressions.map(_.references.head.name) == Seq("k"), s"$hint: $h")
+                  numPartitions.foreach { n =>
+                    assert(h.numPartitions == n, s"$hint: expected $n partitions, got $h")
+                  }
+                case other => fail(s"$hint: expected the rebalance's hash partitioning, got $other")
+              }
+            }
         }
       }
     }
@@ -937,6 +950,8 @@ class CTEReuseWithAQESuite
                 assert(factPartitionsRead(df) == 2,
                   s"$bodyName: expected the scan to read only the two NL partitions:\n" +
                     df.queryExecution.executedPlan.treeString)
+                // The dynamic-pruning build side and the SQL references read one inner plan.
+                assertInnerAQEShared(df)
             }
           }
         }
@@ -1081,6 +1096,79 @@ class CTEReuseWithAQESuite
     }
   }
 
+  // The replan that drops every reference to the CTE has to be adopted before the CTE body fails,
+  // and the outer plan has to see that failure while another branch is still running. Latches
+  // order these events: the empty join sides wait until the test has seen the CTE stages, the CTE
+  // body fails only once the adopted plan no longer holds them, and the other branch finishes only
+  // once the outer plan has recorded the failure.
+  test("a CTE stage that a replan dropped does not fail the query when its body fails later") {
+    withCTEReuseEnabled {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation") {
+        DroppedCTEStageSync.reset()
+        spark.udf.register("dropped_cte_wait_for_stages", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesSeen, "the CTE stages")
+          id
+        }.asNondeterministic())
+        spark.udf.register("dropped_cte_fail_after_drop", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesDropped, "the replan")
+          if (id >= 0) throw new IllegalStateException("dropped CTE body failed")
+          true
+        }.asNondeterministic())
+        spark.udf.register("dropped_cte_wait_for_failure", udf { (k: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.failureSeen, "the CTE failure")
+          k
+        }.asNondeterministic())
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT id FROM range(0, 4, 1, 1) WHERE dropped_cte_fail_after_drop(id)
+            |)
+            |SELECT c1.id, 0L AS n FROM c c1 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE dropped_cte_wait_for_stages(id) > 100
+            |) e1 ON c1.id = e1.id
+            |UNION ALL
+            |SELECT c2.id, 0L AS n FROM c c2 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE dropped_cte_wait_for_stages(id) > 100
+            |) e2 ON c2.id = e2.id
+            |UNION ALL
+            |SELECT k2, count(*) AS n FROM (
+            |  SELECT dropped_cte_wait_for_failure(k) AS k2 FROM (
+            |    SELECT id % 3 AS k FROM range(0, 4, 1, 1) GROUP BY id % 3
+            |  )
+            |) GROUP BY k2
+            |""".stripMargin)
+        val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        def cteStages: Seq[CTEReuseQueryStageExec] =
+          aqe.executedPlan.collect { case s: CTEReuseQueryStageExec => s }
+        val result = Future(df.collect())(ExecutionContext.global)
+        try {
+          DroppedCTEStageSync.waitUntil("the outer plan creates the CTE stages") {
+            cteStages.nonEmpty
+          }
+          val dropped = cteStages
+          DroppedCTEStageSync.stagesSeen.countDown()
+          DroppedCTEStageSync.waitUntil("a replan drops every CTE stage") {
+            cteStages.isEmpty
+          }
+          DroppedCTEStageSync.stagesDropped.countDown()
+          // The outer plan records the error on the stage right before it decides whether the
+          // failure fails the query; without the fix, that decision fails it at once.
+          DroppedCTEStageSync.waitUntil("the outer plan records the CTE failure") {
+            dropped.exists(_.hasFailed) || result.isCompleted
+          }
+          DroppedCTEStageSync.failureSeen.countDown()
+          val rows = ThreadUtils.awaitResult(result, 2.minutes)
+          assert(rows.toSeq.map(r => (r.getLong(0), r.getLong(1))).sorted ==
+            Seq((0L, 1L), (1L, 1L), (2L, 1L)))
+        } finally {
+          DroppedCTEStageSync.releaseAll()
+        }
+      }
+    }
+  }
+
   test("forced CTE bodies with subqueries share one inner AQE") {
     withCTEReuseEnabled {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
@@ -1139,6 +1227,14 @@ class CTEReuseWithAQESuite
           assert(collectCTEReuseRelations(dpp).size == 2,
             s"Expected the CTE to be sealed:\n${dpp.queryExecution.optimizedPlan}")
           assertInnerAQEShared(dpp)
+          // The dynamic-pruning filter stays in the shared inner plan, so the fact scan reads only
+          // the two NL partitions. Both references reach the same scan through the inner plan.
+          val factScans = collectWithSubqueries(dpp.queryExecution.executedPlan) {
+            case s: FileSourceScanExec if s.tableIdentifier.exists(_.table == "body_sub_fact") => s
+          }.distinct
+          assert(factScans.size == 1 && factScans.head.metrics("numPartitions").value == 2,
+            s"Expected one fact scan that reads only the two NL partitions:\n" +
+              dpp.queryExecution.executedPlan.treeString)
         }
       }
     }
@@ -1158,6 +1254,42 @@ class CTEReuseWithAQESuite
     val withTransitions =
       ApplyColumnarRulesAndInsertTransitions(Nil, outputsColumnar = false).apply(stage)
     assert(withTransitions.isInstanceOf[ColumnarToRowExec], withTransitions.treeString)
+  }
+}
+
+/** Orders the events of the dropped-CTE-stage test across its query and task threads. */
+object DroppedCTEStageSync {
+  private val timeoutSeconds = 60L
+  @volatile var stagesSeen = new CountDownLatch(1)
+  @volatile var stagesDropped = new CountDownLatch(1)
+  @volatile var failureSeen = new CountDownLatch(1)
+
+  def reset(): Unit = {
+    stagesSeen = new CountDownLatch(1)
+    stagesDropped = new CountDownLatch(1)
+    failureSeen = new CountDownLatch(1)
+  }
+
+  def releaseAll(): Unit = {
+    stagesSeen.countDown()
+    stagesDropped.countDown()
+    failureSeen.countDown()
+  }
+
+  def await(latch: CountDownLatch, what: String): Unit = {
+    if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
+      throw new IllegalStateException(s"Timed out waiting for $what")
+    }
+  }
+
+  def waitUntil(what: String)(condition: => Boolean): Unit = {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+    while (!condition) {
+      if (System.nanoTime() > deadline) {
+        throw new IllegalStateException(s"Timed out waiting until $what")
+      }
+      Thread.sleep(10)
+    }
   }
 }
 

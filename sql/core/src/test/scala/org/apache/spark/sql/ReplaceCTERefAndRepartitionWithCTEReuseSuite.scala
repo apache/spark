@@ -289,9 +289,9 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("a plan-reuse id with one copy is not sealed and is reset, two copies are sealed") {
     // Build plans directly: ReplaceCTERefWithRepartition assigns plan-reuse ids only to forced
-    // definitions with two or more references, so an id with a single copy (for example one whose
-    // references sit only inside a definition that is never consumed) is hard to construct via
-    // SQL. Exercise ReplaceRepartitionWithCTEReuse on plan-reuse repartitions carrying an id.
+    // definitions whose body the plan holds two or more copies of, so SQL cannot produce an id
+    // with a single copy, and resetting such an id is a defensive fallback. Exercise
+    // ReplaceRepartitionWithCTEReuse on plan-reuse repartitions carrying an id.
     val rel = LocalRelation(AttributeReference("a", IntegerType)())
 
     // Case A: two plan-reuse repartitions sharing one repartitionId -> two CTEReuseRelation
@@ -328,6 +328,25 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     val plan = Union(Seq(
       planReuseRepartition(rel, id = 7L),
       Project(Seq(other.output.head), planReuseRepartition(other, id = 7L))))
+    val result = runReuseRules(plan)
+    assert(collectCTEReuseRelationsDeep(result).isEmpty,
+      s"Expected no CTEReuseRelation after a validation failure:\n${result.treeString}")
+    assert(planReuseRepartitions(result).isEmpty,
+      s"Expected every plan-reuse id to be reset after a validation failure:\n" +
+        result.treeString)
+  }
+
+  test("validation of nested same-id relations under different outer ids seals nothing") {
+    // Each outer id is consistent on its own, but the nested id 9 has a different body under each
+    // of them. Only the validation's descent into shared subplans sees that, because the two outer
+    // ids' relations are compared only with relations of the same outer id.
+    val other = LocalRelation(AttributeReference("b", IntegerType)(), AttributeReference(
+      "c", IntegerType)())
+    val innerA = planReuseRepartition(rel, id = 9L)
+    val innerB = Project(Seq(other.output.head), planReuseRepartition(other, id = 9L))
+    val outerA = planReuseRepartition(Union(Seq(innerA, innerA)), id = 10L)
+    val outerB = planReuseRepartition(Union(Seq(innerB, innerB)), id = 11L)
+    val plan = Union(Seq(outerA, outerA, outerB, outerB))
     val result = runReuseRules(plan)
     assert(collectCTEReuseRelationsDeep(result).isEmpty,
       s"Expected no CTEReuseRelation after a validation failure:\n${result.treeString}")
@@ -391,8 +410,14 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     val remainingRefs = result.collectWithSubqueries { case r: CTERelationRef => r }
     assert(remainingRefs.isEmpty,
       s"Expected all CTERelationRef resolved, got ${remainingRefs.size}:\n${result.treeString}")
-    assert(collectCTEReuseRelationsDeep(result).nonEmpty,
-      s"Expected CTEReuseRelations for the nested CTEs:\n${result.treeString}")
+    // The outer definition is sealed, and so is the inner one, with its own id, inside the
+    // outer definition's shared body.
+    val outerReuses = collectCTEReuseRelations(result)
+    assertAllRefsShareOneNonzeroId(outerReuses, refCount = 2)
+    val innerReuses = collectCTEReuseRelationsDeep(outerReuses.head.sharedSubplan)
+    assertAllRefsShareOneNonzeroId(innerReuses, refCount = 2)
+    assert(innerReuses.head.cteId != outerReuses.head.cteId,
+      s"Expected the inner CTE to be sealed with its own id:\n${result.treeString}")
   }
 
   // ---------------------------------------------------------------------------
@@ -581,6 +606,52 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       s"Expected no CTEReuseRelation when forceSkipInline=false:\n${result.treeString}")
   }
 
+  test("an ignored forcePartitioning pin leaves column pruning and the plan unchanged") {
+    // The CTE outputs (a, b), every reference projects only `a`, and the pin is on `b`. A pin that
+    // the lowering ignores, on a definition that is not forceSkipInline or with the reuse flag
+    // off, must give the plan of the same definition without the pin, which prunes `b`.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val cteBody = LocalRelation(a, b)
+    val pin = Some(HashPartitioning(Seq(b), 7))
+    // The references share the definition's attributes, so the lowering keeps the body's exprIds
+    // and the plans compare exactly.
+    def plan(cteDef: CTERelationDef): LogicalPlan = WithCTE(Union(Seq.fill(2) {
+      Project(Seq(a), CTERelationRef(cteDef.id, _resolved = true, cteBody.output,
+        isStreaming = false))
+    }), Seq(cteDef))
+    def optimize(cteDef: CTERelationDef, enabled: Boolean): LogicalPlan =
+      withSQLConf(cteReuseConfKey -> enabled.toString) {
+        runReuseRules(PushdownPredicatesAndPruneColumnsForCTEDef(plan(cteDef)), enabled)
+      }
+    // Whether CTE column pruning projected the body down to `a`.
+    def prunedToA(p: LogicalPlan): Boolean = p.collectWithSubqueries {
+      case Project(list, `cteBody`) => list.map(_.toAttribute)
+    }.exists(_ == Seq(a))
+
+    Seq(
+      "not forceSkipInline" -> (CTERelationDef(cteBody), true),
+      "reuse flag off" -> (CTERelationDef(cteBody, forceSkipInline = true), false)).foreach {
+      case (name, (unpinned, enabled)) =>
+        val withoutPin = optimize(unpinned, enabled)
+        val withPin = optimize(unpinned.copy(forcePartitioning = pin), enabled)
+        assert(prunedToA(withoutPin), s"$name: expected `b` to be pruned:\n$withoutPin")
+        assert(withPin == withoutPin,
+          s"$name: expected an ignored pin to leave the plan unchanged:\n$withPin")
+    }
+
+    // An honored pin keeps `b` through pruning and repartitions the shared body on it.
+    val honored = optimize(CTERelationDef(cteBody, forceSkipInline = true, forcePartitioning = pin),
+      enabled = true)
+    val reuses = collectCTEReuseRelations(honored)
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+    reuses.foreach { r =>
+      val root = sharedRoot(r)
+      assert(root.partitionExpressions == Seq(b) && root.numPartitions == 7 &&
+        root.child.output.contains(b), s"Expected the pinned shuffle on `b`:\n${r.sharedSubplan}")
+    }
+  }
+
   test("forcePartitioning keys survive CTE column pruning") {
     // The CTE outputs (a, b) and is pinned on b, but no reference projects b. Column pruning must
     // not drop b, otherwise the later forced repartition on b would dangle. `b` is retained even
@@ -631,9 +702,16 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   }
 
   test("forced CTE rooted at an existing repartition seals (stamped in place)") {
-    val body = RepartitionByExpression(Seq.empty, rel, optNumPartitions = Some(3))
+    val leaf = rel
+    val body = RepartitionByExpression(Seq.empty, leaf, optNumPartitions = Some(3))
     val reuses = collectCTEReuseRelations(runReuseRules(forcedCteRefs(body, refCount = 2)))
     assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+    // The repartition itself carries the plan-reuse id; no second shuffle sits above it.
+    reuses.foreach { r =>
+      val root = sharedRoot(r)
+      assert(root.child == leaf && root.numPartitions == 3,
+        s"Expected the repartition to be stamped in place:\n${r.sharedSubplan.treeString}")
+    }
   }
 
   // The shared subplan's root: the single plan-reuse repartition of a sealed definition.

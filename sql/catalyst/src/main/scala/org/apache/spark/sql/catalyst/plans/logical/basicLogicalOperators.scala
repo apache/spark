@@ -2342,7 +2342,12 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(REPARTITION_OPERATION) ++ nodePatternsInternal()
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
+
   def partitioning: Partitioning
 }
 
@@ -2486,6 +2491,10 @@ case class RepartitionByExpression(
 
   // Implement PlanReusableRepartition by delegating to `id`.
   override def repartitionId: Long = id
+
+  // PLAN_REUSE_REPARTITION lets the CTE reuse rules skip a plan with no plan-reuse repartition.
+  override def nodePatternsInternal(): Seq[TreePattern] =
+    if (id != 0L) Seq(PLAN_REUSE_REPARTITION) else Seq()
 
   override def withRepartitionId(newId: Long): RepartitionByExpression = this.copy(id = newId)
 

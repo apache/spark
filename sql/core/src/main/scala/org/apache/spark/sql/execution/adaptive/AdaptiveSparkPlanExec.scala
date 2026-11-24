@@ -570,6 +570,11 @@ case class AdaptiveSparkPlanExec(
    * plan, such as a subquery, are separately protected by the context's shared-result tracking.
    * A failed or unsafe cancellation leaves the stage cached until its eventual materialization
    * event proves whether the stage is still required.
+   *
+   * An unfinished [[CTEReuseQueryStageExec]] that the adopted plan dropped is not cancelled,
+   * because its shared inner plan has no cancellation yet (see the TODO on that class). It is
+   * recorded as an uncancelled obsolete stage instead, so its later failure is ignored while the
+   * current plan does not reference it.
    */
   private def cancelObsoleteStages(
       newPhysicalPlan: SparkPlan,
@@ -581,6 +586,14 @@ case class AdaptiveSparkPlanExec(
         retainedStageIds += stage.id
         retainedStageResults += stage.resultOption
       case _ =>
+    }
+    context.withStageLifecycleLock {
+      candidateStages.foreach {
+        case stage: CTEReuseQueryStageExec
+            if !retainedStageIds.contains(stage.id) && !stage.isMaterialized =>
+          uncancelledObsoleteStageIds += stage.id
+        case _ =>
+      }
     }
     val obsoleteStages = mutable.LinkedHashMap.empty[
       AtomicReference[Option[Any]], mutable.ArrayBuffer[ExchangeQueryStageExec]]
@@ -700,8 +713,19 @@ case class AdaptiveSparkPlanExec(
    * and absent from the current physical plan. This covers failed cancellation and stages whose
    * cancellation would be unsafe. Reused stages must still fail their consumers; otherwise, the
    * failed cache entry can now be safely discarded.
+   *
+   * A dropped [[CTEReuseQueryStageExec]] is keyed by its own stage id: every reference to the CTE
+   * that the current plan still reads is a stage of its own and reports the same failure through
+   * its own event, so a CTE the query still needs still fails it.
    */
   private def ignoreFailedObsoleteStageFailure(stage: QueryStageExec): Boolean = stage match {
+    case _: CTEReuseQueryStageExec =>
+      context.withStageLifecycleLock {
+        uncancelledObsoleteStageIds.remove(stage.id) && !currentPhysicalPlan.exists {
+          case retainedStage: QueryStageExec => retainedStage.id == stage.id
+          case _ => false
+        }
+      }
     case exchangeStage: ExchangeQueryStageExec =>
       context.withStageLifecycleLock {
         if (!uncancelledObsoleteStageIds.remove(stage.id)) {

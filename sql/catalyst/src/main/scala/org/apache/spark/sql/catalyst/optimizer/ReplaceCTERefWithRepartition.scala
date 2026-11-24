@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, FORCE_SKIP_INLINE_CTE_DEF,
+  PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -65,8 +66,9 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * random expressions, keep reaching every copy of a body.
    */
   private def sealedDefinitions(plan: LogicalPlan): Set[Long] = {
+    // A plan with no forced definition, inside subqueries included, has nothing to seal.
     if (plan.isStreaming || !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) ||
-        !plan.containsPattern(CTE)) {
+        !plan.containsPattern(FORCE_SKIP_INLINE_CTE_DEF)) {
       return Set.empty
     }
     // For each reference, the definition whose body holds it (None for the main query), counted

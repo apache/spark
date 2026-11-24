@@ -53,16 +53,26 @@ class CTEReuseWithoutAQESuite
 
   /**
    * Asserts guaranteed CTE shuffle reuse held (AQE off): the executed plan has at least one
-   * [[ReusedExchangeExec]] and no [[CTEReuseExchange]] left. (`withCTEReuseNoAQE` turns
+   * [[ReusedExchangeExec]], no [[CTEReuseExchange]] left, and live `LOCAL_SHUFFLE_FOR_CTE`
+   * shuffles for exactly `expectedDistinctCTEs` distinct plan-reuse ids, one per sealed forced
+   * CTE, so the check fails when any CTE the test expects to share is not sealed and only
+   * canonical exchange reuse deduplicates its copies. (`withCTEReuseNoAQE` turns
    * FAIL_ON_CTE_REUSE_WITHOUT_AQE on, so a reuse failure would already have thrown during
    * preparation; the flag itself defaults to false.)
    */
-  private def assertCTEReuseApplied(df: DataFrame): Unit = {
+  private def assertCTEReuseApplied(df: DataFrame, expectedDistinctCTEs: Int = 1): Unit = {
     val executedPlan = df.queryExecution.executedPlan
     assert(executedPlan.collectWithSubqueries { case c: CTEReuseExchange => c }.isEmpty,
       s"Expected no CTEReuseExchange in executedPlan:\n${executedPlan.treeString}")
     assert(executedPlan.collectWithSubqueries { case r: ReusedExchangeExec => r }.nonEmpty,
       s"Expected >= 1 ReusedExchangeExec for CTE reuse:\n${executedPlan.treeString}")
+    val cteIds = executedPlan.collectWithSubqueries {
+      case s: ShuffleExchangeExec if s.shuffleOrigin.isInstanceOf[LOCAL_SHUFFLE_FOR_CTE] =>
+        s.shuffleOrigin.asInstanceOf[LOCAL_SHUFFLE_FOR_CTE].cteId
+    }.distinct
+    assert(cteIds.size == expectedDistinctCTEs,
+      s"Expected live CTE reuse shuffles for $expectedDistinctCTEs sealed CTE(s), got " +
+        s"${cteIds.size} (cteIds ${cteIds.mkString(", ")}):\n${executedPlan.treeString}")
   }
 
   /**
@@ -181,7 +191,7 @@ class CTEReuseWithoutAQESuite
 
         // Both the inner and outer CTE shuffles must be reused (nested CTEs), and no
         // CTEReuseExchange may survive.
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
 
         val result = df.collect()
         assert(result.length == 3)
@@ -263,7 +273,7 @@ class CTEReuseWithoutAQESuite
             |""".stripMargin)
 
         // All CTEReuseExchange should be unwrapped and reuse should be applied.
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
 
         // Verify correctness: total = 2*v for self-join on same id
         // avg(total) = avg(20+40+60+80+100) = 60
@@ -366,7 +376,7 @@ class CTEReuseWithoutAQESuite
             |WHERE total > (SELECT avg(total) FROM cte_outer)
             |  AND total < (SELECT avg(total) FROM cte_outer) + 1000
             |""".stripMargin)
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
         assertNoDanglingReusedExchange(df)
         df.collect()
       }
@@ -686,7 +696,7 @@ class CTEReuseWithoutAQESuite
             |UNION ALL
             |SELECT b1.b FROM cte_b b1 JOIN cte_b b2 ON b1.id = b2.id
             |""".stripMargin)
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
         assertNoDanglingReusedExchange(df)
         // Two distinct materializations, each reused once -> >= 2 ReusedExchangeExec.
         val reused = df.queryExecution.executedPlan.collectWithSubqueries {
@@ -782,7 +792,7 @@ class CTEReuseWithoutAQESuite
             |  )
             |SELECT c1.id, c2.ov FROM cte_outer c1 JOIN cte_outer c2 ON c1.id = c2.id
             |""".stripMargin)
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 3)
         assertNoDanglingReusedExchange(df)
         // Three distinct CTE materializations -> at least 3 ReusedExchangeExec (one per level).
         val reused = df.queryExecution.executedPlan.collectWithSubqueries {
@@ -839,7 +849,7 @@ class CTEReuseWithoutAQESuite
             |  )
             |SELECT w1.id, w2.av FROM cte_wrap w1 JOIN cte_wrap w2 ON w1.id = w2.id
             |""".stripMargin)
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
         assertNoDanglingReusedExchange(df)
         df.collect()
       }
@@ -928,7 +938,7 @@ class CTEReuseWithoutAQESuite
             |UNION ALL
             |SELECT p.id, q.bo FROM b_outer p JOIN b_outer q ON p.id = q.id
             |""".stripMargin)
-        assertCTEReuseApplied(df)
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 4)
         assertNoDanglingReusedExchange(df)
         val reused = df.queryExecution.executedPlan.collectWithSubqueries {
           case r: ReusedExchangeExec => r

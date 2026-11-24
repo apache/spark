@@ -167,6 +167,7 @@ object TreePattern extends Enumeration  {
   val EXECUTE_IMMEDIATE: Value = Value
   val EXTERNAL_LOOKUP_HINT: Value = Value
   val EXTERNAL_LOOKUP_JOIN: Value = Value
+  val FORCE_SKIP_INLINE_CTE_DEF: Value = Value
   val INTERSECT: Value = Value
   val FILTER: Value = Value
   val GENERATE: Value = Value
@@ -190,6 +191,7 @@ object TreePattern extends Enumeration  {
   val PIPE_OPERATOR: Value = Value
   val PIPE_OPERATOR_SELECT: Value = Value
   val PIVOT: Value = Value
+  val PLAN_REUSE_REPARTITION: Value = Value
   val PROJECT: Value = Value
   val PYTHON_DATA_SOURCE: Value = Value
   val RELATION_CHANGES: Value = Value

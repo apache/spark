@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.REPARTITION_OPERATION
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_REUSE_REPARTITION
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -37,9 +37,10 @@ import org.apache.spark.sql.internal.SQLConf
  * with `spark.sql.exchange.reuse` off, is only detected by `VerifyCTEReuse`, which logs it or,
  * under [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]], throws.
  *
- * An id that ends up with a single copy, for example because its only references sit inside a
- * definition that is itself never consumed, is not sealed, and its id is reset to zero so the
- * repartition plans as an ordinary shuffle. If the sealed plan fails
+ * [[ReplaceCTERefWithRepartition]] assigns an id only to a definition whose body the plan holds two
+ * or more copies of, so every id is expected to have two or more copies here. As a defensive
+ * fallback, an id with a single copy is not sealed, and its id is reset to zero so the repartition
+ * plans as an ordinary shuffle. If the sealed plan fails
  * [[LogicalPlanIntegrity.validateCTEReuseRelations]], every id is reset instead and nothing is
  * sealed.
  *
@@ -57,7 +58,7 @@ object ReplaceRepartitionWithCTEReuse extends Rule[LogicalPlan] {
     // every reference of a shared repartitionId. See the class doc.
     if (plan.isInstanceOf[Subquery] ||
         !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) ||
-        !plan.containsPattern(REPARTITION_OPERATION)) {
+        !plan.containsPattern(PLAN_REUSE_REPARTITION)) {
       return plan
     }
 
@@ -67,7 +68,7 @@ object ReplaceRepartitionWithCTEReuse extends Rule[LogicalPlan] {
     // each reference's body, may have produced copies with fresh exprIds -- the id is preserved
     // across copies.
     val refCount = mutable.HashMap.empty[Long, Int]
-    plan.foreachWithSubqueriesAndPruning(_.containsPattern(REPARTITION_OPERATION)) {
+    plan.foreachWithSubqueriesAndPruning(_.containsPattern(PLAN_REUSE_REPARTITION)) {
       case r: PlanReusableRepartition if r.isForPlanReuse =>
         refCount(r.repartitionId) = refCount.getOrElse(r.repartitionId, 0) + 1
       case _ =>
@@ -93,7 +94,7 @@ object ReplaceRepartitionWithCTEReuse extends Rule[LogicalPlan] {
   }
 
   private def sealOrReset(plan: LogicalPlan, reusedIds: Set[Long]): LogicalPlan = {
-    plan.transformUpWithSubqueriesAndPruning(_.containsPattern(REPARTITION_OPERATION)) {
+    plan.transformUpWithSubqueriesAndPruning(_.containsPattern(PLAN_REUSE_REPARTITION)) {
       case r: PlanReusableRepartition if r.isForPlanReuse =>
         if (reusedIds.contains(r.repartitionId)) {
           CTEReuseRelation(

@@ -328,6 +328,12 @@ case class TableCacheQueryStageExec(
  * its stages to completion, and the shuffles it registers after the query's cleanup are not
  * removed with the query's other shuffles.
  *
+ * TODO: give each consumer its own adaptive read of the shared CTE shuffle. Every consumer reads
+ * the inner root shuffle stage through this stage, which the AQE shuffle-read rules
+ * (partition coalescing, local shuffle reads and skew splitting) do not wrap, so every consumer
+ * reads all of the shuffle's planned partitions. Each consumer could instead read the shared map
+ * output through its own AQE shuffle read, while a `forcePartitioning` pin keeps its exact layout.
+ *
  * @param id the query stage id.
  * @param innerAQE the shared inner adaptive plan of the CTE.
  * @param output this reference's attributes.
