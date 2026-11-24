@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, SupportsNamespaces}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, MetadataBuilder, StringType, StructType, VarcharType}
 
@@ -86,6 +89,64 @@ class CatalogSuite extends AnalysisTest {
       }
     }
     assert(resolution.columnsToOutput(Nil).isEmpty)
+  }
+
+  test("namespace resolution preserves current namespace and explicit catalog roots") {
+    withSQLConf("spark.sql.catalog.namespace_helpers" -> classOf[InMemoryTableCatalog].getName) {
+      val manager = getAnalyzer.catalogManager
+      val catalog = manager.catalog("namespace_helpers")
+      val namespace = Seq("MiXeD", "Inner")
+      catalog.asInstanceOf[SupportsNamespaces].createNamespace(namespace.toArray, Map.empty.asJava)
+      manager.setCurrentCatalog("namespace_helpers")
+      manager.setCurrentNamespace(namespace.toArray)
+      val resolution = new CatalogIdentifierResolution(manager)
+
+      assert(resolution.resolveCurrentNamespace() == ResolvedNamespace(catalog, namespace))
+      Seq(Seq.empty, Seq("namespace_helpers")).foreach { name =>
+        assert(resolution.resolveUnresolvedNamespace(UnresolvedNamespace(name)) ==
+          ResolvedNamespace(catalog, Nil))
+      }
+      Seq(namespace, "namespace_helpers" +: namespace).foreach { name =>
+        assert(resolution.resolveUnresolvedNamespace(UnresolvedNamespace(name)) ==
+          ResolvedNamespace(catalog, namespace))
+      }
+    }
+  }
+
+  test("namespace resolution fetches metadata on request and preserves origin and tags") {
+    withSQLConf("spark.sql.catalog.namespace_helpers" -> classOf[InMemoryTableCatalog].getName) {
+      val manager = getAnalyzer.catalogManager
+      val catalog = manager.catalog("namespace_helpers").asInstanceOf[SupportsNamespaces]
+      val namespace = Seq("MiXeD")
+      val metadata = Map("comment" -> "namespace metadata")
+      catalog.createNamespace(namespace.toArray, metadata.asJava)
+      val resolution = new CatalogIdentifierResolution(manager)
+      val name = "namespace_helpers" +: namespace
+      assert(resolution.resolveUnresolvedNamespace(UnresolvedNamespace(name)).metadata.isEmpty)
+      assert(resolution.resolveUnresolvedNamespace(
+        UnresolvedNamespace(name, fetchMetadata = true)).metadata == metadata)
+
+      val missing = Seq("namespace_helpers", "missing")
+      assert(resolution.resolveUnresolvedNamespace(UnresolvedNamespace(missing)).metadata.isEmpty)
+      intercept[NoSuchNamespaceException] {
+        resolution.resolveUnresolvedNamespace(UnresolvedNamespace(missing, fetchMetadata = true))
+      }
+
+      val origin = Origin(line = Some(5), startPosition = Some(9))
+      val tag = TreeNodeTag[String]("namespace")
+      val unresolved = CurrentOrigin.withOrigin(origin) { UnresolvedNamespace(name) }
+      unresolved.setTagValue(tag, "preserved")
+      val callerOrigin = Origin(line = Some(12), startPosition = Some(3))
+      CurrentOrigin.withOrigin(callerOrigin) {
+        val directResolved = resolution.resolveUnresolvedNamespace(unresolved)
+        assert(directResolved.origin == origin)
+        assert(directResolved.getTagValue(tag) == Some("preserved"))
+        assert(CurrentOrigin.get == callerOrigin)
+      }
+      val resolved = new ResolveCatalogs(manager).apply(unresolved)
+      assert(resolved.origin == origin)
+      assert(resolved.getTagValue(tag) == Some("preserved"))
+    }
   }
 
   test("desc table when owner is set to null") {
