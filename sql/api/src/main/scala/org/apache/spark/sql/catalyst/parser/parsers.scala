@@ -300,8 +300,9 @@ object ParseException {
 
   /**
    * Creates a [[ParseException]] whose `getMessage` returns `renderedMessage` unchanged. The
-   * Spark Connect client uses it for a server error that its own definitions cannot render: they
-   * lack the condition or subcondition, or the template uses a parameter the server did not send.
+   * Spark Connect client uses it for a server error that its own definitions cannot render, for
+   * example because they lack the condition or the template uses a parameter the server did not
+   * send.
    */
   private[sql] def withRenderedMessage(
       renderedMessage: String,

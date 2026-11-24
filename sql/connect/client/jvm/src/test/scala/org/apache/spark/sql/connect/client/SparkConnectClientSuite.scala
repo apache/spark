@@ -472,7 +472,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         "XXKCM"),
       // A condition the client defines, but whose template uses a parameter the server did not
       // send, as when the template gained a placeholder in the client's version.
-      ("DUPLICATE_KEY", Map("unrelated" -> "x"), Array.empty[QueryContext], None, "23505"))
+      ("DUPLICATE_KEY", Map("unrelated" -> "x"), Array.empty[QueryContext], None, "23505"),
+      // A condition the client defines, with a parameter its template does not use, as when the
+      // server's template gained a placeholder. Rendering rejects unused parameters in tests.
+      (
+        "DUPLICATE_KEY",
+        Map("keyColumn" -> "`abc`", "parameterNotDefinedByClient" -> "x"),
+        Array.empty[QueryContext],
+        None,
+        "23505"))
     for ((name, constructor) <- renderingErrorFactory) {
       cases.foreach {
         case (errorClass, messageParameters, queryContext, serverSqlState, expectedSqlState) =>

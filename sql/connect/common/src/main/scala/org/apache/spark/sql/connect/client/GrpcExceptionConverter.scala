@@ -295,15 +295,14 @@ private[client] object GrpcExceptionConverter {
   /**
    * Builds the exception with `render`, which renders the message from this client's error
    * definitions, when the client can render the server's error, and with `keepServerMessage`
-   * otherwise. The client cannot render it when it lacks the server's condition or subcondition,
-   * or when the condition's message template uses a parameter the server did not send, for
-   * example when the client and server versions differ.
+   * otherwise. When the client and server versions differ, the client may lack the server's
+   * condition or subcondition, or its template may use a parameter the server did not send.
    */
   private def renderOrKeepServerMessage[T <: Throwable](params: ErrorParams)(render: => T)(
       keepServerMessage: ServerRenderedError => T): T = {
     val errorClass = getErrorClassOrFallback(params)
     val messageParameters = errorParamsToMessageParameters(params)
-    if (errorClass == null || canRender(errorClass, messageParameters)) {
+    if (errorClass == null || SparkThrowableHelper.canRender(errorClass, messageParameters)) {
       render
     } else {
       keepServerMessage(
@@ -316,10 +315,6 @@ private[client] object GrpcExceptionConverter {
           getSqlStateOrFallback(params)))
     }
   }
-
-  private def canRender(errorClass: String, messageParameters: Map[String, String]): Boolean =
-    SparkThrowableHelper.isValidErrorClass(errorClass) &&
-      SparkThrowableHelper.getMessageParameters(errorClass).forall(messageParameters.contains)
 
   private[client] val errorFactory = Map(
     errorConstructor(params =>
