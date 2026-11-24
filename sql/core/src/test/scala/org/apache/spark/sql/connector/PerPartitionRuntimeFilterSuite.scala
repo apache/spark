@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, U
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern.PER_PARTITION_RUNTIME_FILTER_SUBQUERY
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundDecimalBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction}
 import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, LongType, StructType, TimestampType}
 import org.apache.spark.tags.DataSourceV2Test
 
 @DataSourceV2Test
@@ -1144,6 +1144,25 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
         .collect { case p: ProjectExec => p }
         .filter(_.projectList.exists(_.exists(_.isInstanceOf[TransformExpression])))
       assert(partitionKeys.size == 2, plan)
+    }
+  }
+
+  test("SPARK-61812: no per-partition bloom filter for a function declaring a narrower decimal") {
+    // Both sides of the semi join evaluate the transform, which Spark does not do for a function
+    // declaring a narrower decimal than the column. One declaring the column's own gets the filter.
+    Seq(DecimalType(12, 2) -> 1, DecimalType(10, 2) -> 0).foreach { case (declared, semiJoins) =>
+      catalog.clearFunctions()
+      catalog.createFunction(Identifier.of(Array.empty, "bucket"),
+        UnboundDecimalBucketFunction(declared))
+      createTables(idType = DecimalType(12, 2))
+      withoutGlobalBloomFilter("dim") {
+        val df = join()
+        assert(perPartitionSemiJoins(df).size == semiJoins, s"$declared: " +
+          df.queryExecution.optimizedPlan)
+        checkAnswer(df, expectedRows.map(r =>
+          Row(new java.math.BigDecimal(s"${r.getInt(0)}.00"), r.getInt(1))))
+      }
+      catalog.clearTables()
     }
   }
 

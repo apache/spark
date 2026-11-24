@@ -796,8 +796,13 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       (Seq(IntegerType, StringType), StringType("UTF8_LCASE"), false),
       (Seq(IntegerType, StringType("UTF8_LCASE")), VarcharType(10), false),
       // A decimal suits a declared decimal of its scale, so that its unscaled digits are what a
-      // function reads, at the top level at any precision. Not one of another scale.
+      // function reads, with no more precision than declared, whose cast keeps every value
+      // (SPARK-61812), at the top level in either storage. Not one of another scale.
       (Seq(IntegerType, DecimalType(38, 2)), DecimalType(10, 2), true),
+      (Seq(IntegerType, DecimalType(20, 2)), DecimalType(18, 2), true),
+      (Seq(IntegerType, DecimalType(10, 2)), DecimalType(12, 2), false),
+      (Seq(IntegerType, DecimalType(18, 2)), DecimalType(20, 2), false),
+      (Seq(IntegerType, DecimalType(20, 10)), DecimalType(38, 10), false),
       (Seq(IntegerType, DecimalType(38, 18)), DecimalType(10, 2), false),
       (Seq(IntegerType, DecimalType(10, 2)), DecimalType(5, 0), false),
       // A `DATE` and a `TIMESTAMP` are held as an `INT` and a `BIGINT`, so they suit those.

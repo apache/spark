@@ -2238,6 +2238,32 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-61812: a decimal column is evaluated only by a function declaring no less") {
+    // `DecimalBucketFunction` hashes the unscaled digits it reads, as the test catalog stores a
+    // decimal's bucket. Declaring the column's own `DECIMAL(12,2)`, the joins keep their plan.
+    // Declaring a narrower `DECIMAL(10,2)`, a value of more digits than that would reach it as it
+    // is, which the write path's cast turns into `NULL` or a failure, so Spark does not evaluate
+    // it. This catalog stores the bucket of the raw value, so the rows match either way. Neither
+    // path casts, so the ANSI mode does not matter here.
+    val values = Seq("12.34", "-7.50", "1234567890.12", "-9876543210.99")
+    Seq(DecimalType(12, 2) -> (0, 1), DecimalType(10, 2) -> (2, 2)).foreach {
+      case (declared, (reduceShuffles, oneSideShuffles)) =>
+        withFunction(UnboundDecimalBucketFunction(declared)) {
+          val column = Array(Column.create("c", DecimalType(12, 2)))
+          createTable("bucket4", column, Array(bucket(4, "c")))
+          createTable("ident", column, Array(identity("c")))
+          createTable("plain", column, Array.empty)
+          val rows = values.map(v => s"(CAST($v AS DECIMAL(12,2)))").mkString(", ")
+          Seq("bucket4", "ident", "plain").foreach { t =>
+            sql(s"INSERT INTO testcat.ns.$t VALUES $rows")
+          }
+          checkReduceAndOneSideShuffle(s"declared $declared", "bucket4", "c", "c",
+            values.map(v => Row(new java.math.BigDecimal(v))), reduceShuffles, oneSideShuffles)
+          catalog.clearTables()
+        }
+    }
+  }
+
   test("SPARK-60027: a DATE or TIMESTAMP column keeps its plan against the type it is held as") {
     // A `DATE` is held as an `INT` of days and a `TIMESTAMP` as a `BIGINT` of micros, so a
     // function that declares those reads them as it did before the input type check.
