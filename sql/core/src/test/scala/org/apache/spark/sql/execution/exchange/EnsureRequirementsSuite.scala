@@ -1959,18 +1959,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    // (the column's type, the key's, as the error names them, and whether the key is stored
-    //  otherwise than the column, which is refused before the call is resolved, so with nothing
-    //  logged. A key stored alike may log, once per JVM, that the function does not take it.)
+    // (the column's type, the key's, as the error names them)
     Seq(
-      (IntegerType, LongType, "\"INT\"", "\"BIGINT\"", true),
-      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\"",
-        true),
-      (LongType, IntegerType, "\"BIGINT\"", "\"INT\"", true),
-      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"", true),
+      (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
+      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\""),
+      (LongType, IntegerType, "\"BIGINT\"", "\"INT\""),
+      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\""),
       (ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(12, 2)),
-        "\"ARRAY<DECIMAL(10,2)>\"", "\"ARRAY<DECIMAL(12,2)>\"", false)
-    ).foreach { case (columnType, keyType, declared, key, storedOtherwise) =>
+        "\"ARRAY<DECIMAL(10,2)>\"", "\"ARRAY<DECIMAL(12,2)>\"")
+    ).foreach { case (columnType, keyType, declared, key) =>
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()
       val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
@@ -1994,10 +1991,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               "keyType" -> key))
         }
       }
-      if (storedOtherwise) {
-        assert(appender.loggingEvents.isEmpty,
-          appender.loggingEvents.map(_.getMessage.getFormattedMessage))
-      }
+      assert(appender.loggingEvents.isEmpty,
+        appender.loggingEvents.map(_.getMessage.getFormattedMessage))
     }
   }
 

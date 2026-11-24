@@ -2673,12 +2673,13 @@ case class KeyedShuffleSpec(
     // The storage check comes first, since it needs no call: a key it refuses is named, and the
     // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
     // not evaluated.
+    // The call over a key it takes is asked without logging, see `isEvaluableQuietly`.
     partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
       case ((te: TransformExpression, positionSet), t: TransformExpression) =>
         val columnType = te.references.head.dataType
         positionSet.iterator.map(clustering)
           .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
-          .orElse(Option.when(!canEvaluate(t))(t.children.head))
+          .orElse(Option.when(!t.isEvaluableQuietly)(t.children.head))
           .foreach { key =>
             // `name()` and `inputTypes()` are connector code, which must not replace this error.
             val functionClass = t.function.getClass.getName
