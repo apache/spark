@@ -515,21 +515,29 @@ EXECUTE IMMEDIATE 'SELECT NOT ?, CASE ? WHEN 1 THEN ? ELSE ? END' USING true, 1,
 EXECUTE IMMEDIATE
   'SELECT id FROM people WHERE id BETWEEN ? AND ? AND addr.city LIKE ? ORDER BY id'
   USING 1, 2, '%F';
--- A `?` directly after a keyword is a positional parameter marker where a reference to a column
--- with the name of the keyword cannot be.
-EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx';
-EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1';
+-- A `?` directly after a keyword is a positional parameter marker where no reference to a
+-- column with the name of the keyword can be.
 EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b';
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE addr.city LIKE? ORDER BY id' USING '%F';
--- It is also one after a keyword that a positional parameter marker can follow where such a
--- reference could also be, such as `distinct?` in `SELECT DISTINCT?`, so that a statement that
--- is valid without optional references keeps its meaning.
-EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5;
-EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a';
-EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a';
 EXECUTE IMMEDIATE
   'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
   USING 'A', 'Z', '%F';
+-- Where such a reference can be, as `distinct?` in `SELECT DISTINCT?`, the grammar mostly prefers
+-- the keyword.
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx';
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1';
+EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a';
+EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a';
+-- After the keywords for which it would prefer the reference, a `?` stays a positional parameter
+-- marker too, so that a statement that is valid without optional references keeps its meaning.
+-- The legacy mode binds the markers in the plan; a substituted value would be joined to the
+-- keyword (`DISTINCT5`), with or without optional references.
+SET spark.sql.legacy.parameterSubstitution.constantsOnly=true;
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT?) AS f FROM people' USING 5;
+EXECUTE IMMEDIATE
+  'SELECT count(*) AS c FROM VALUES (true) AS v(`not`) WHERE NOT HAVING?'
+  USING true;
+RESET spark.sql.legacy.parameterSubstitution.constantsOnly;
 -- A column with the name of such a keyword is quoted to be optional, and the name of a field is
 -- not such a keyword.
 SELECT `distinct`?, `select`?, addr.from? FROM people;

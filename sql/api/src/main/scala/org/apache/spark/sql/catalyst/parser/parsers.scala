@@ -540,17 +540,19 @@ object AbstractParser extends Logging {
   /**
    * If optional references (`x?`) are enabled, turns each `?` of the statement of `tokenStream`
    * that directly follows a name, without whitespace or a comment in between, into a
-   * QUESTION_WITH_OPTIONAL_REFERENCES token. Where a reference can appear, such a `?` marks the
-   * name before it as optional, as in `x?`, `s.f?`, `:p?` and `IDENTIFIER(e)?`. Elsewhere, as in
-   * `LIMIT?`, it is a positional parameter marker. Any other `?` stays a QUESTION token, which is
-   * a positional parameter marker as it is without optional references, so `x ?` is not an
-   * optional reference.
+   * QUESTION_WITH_OPTIONAL_REFERENCES token. Where the grammar reads a reference before it, such
+   * a `?` marks the name as optional, as in `x?`, `s.f?`, `:p?` and `IDENTIFIER(e)?`. Elsewhere,
+   * as in `CASE?`, it is a positional parameter marker. Any other `?` stays a QUESTION token,
+   * which is a positional parameter marker as it is without optional references, so `x ?` is not
+   * an optional reference.
    *
-   * A `?` after a keyword in [[KEYWORDS_BEFORE_PARAMETER_MARKERS]] stays a QUESTION token too,
-   * unless the keyword is the name of a field (`s.distinct?`) or of a named parameter marker
-   * (`:distinct?`), so that `count(DISTINCT?)` counts the values of a parameter, as it does
-   * without optional references. A column with the name of such a keyword can be quoted to be
-   * optional: `` `distinct`? ``.
+   * A `?` directly after a keyword can be read both ways where a positional parameter marker can
+   * follow the keyword and a column can have its name. Mostly the grammar prefers the keyword, so
+   * that `SELECT DISTINCT?` and `trim(BOTH? FROM s)` keep a positional parameter marker. For the
+   * keywords of [[KEYWORDS_BEFORE_PARAMETER_MARKERS]] it would prefer the reference, so a `?`
+   * after them stays a QUESTION token, unless the keyword is the name of a field (`s.distinct?`)
+   * or of a named parameter marker (`:distinct?`). Either way, a column with the name of a
+   * keyword is quoted to be optional: `` `distinct`? ``.
    */
   private[parser] def markOptionalReferenceMarkers(
       parser: SqlBaseParser,
@@ -613,17 +615,22 @@ object AbstractParser extends Logging {
   }
 
   /**
-   * The keywords that a positional parameter marker can follow where, with the `?` directly after
-   * the keyword, a reference to a column with the name of the keyword could also be, so that the
-   * statement would be valid both ways. See [[markOptionalReferenceMarkers]]. They are keywords
-   * that start a part of an expression: a set quantifier (`count(DISTINCT?)`), a subquery as in
-   * `c IN (SELECT?)` and `c IN (VALUES?)`, the source of EXTRACT, which a function call with a
-   * set quantifier also matches (`EXTRACT(ALL FROM?)`), a branch of CASE, whose value can be a
-   * column named `when` (`CASE WHEN WHEN? THEN? ELSE? END`), and the binary operators and the
-   * LIMIT and OFFSET clauses, which can follow a column named `not` (`NOT LIKE?`,
-   * `WHERE NOT LIMIT?`).
+   * The keywords after which a `?` stays a positional parameter marker, see
+   * [[markOptionalReferenceMarkers]]. A positional parameter marker can follow each of them, and
+   * a `?` directly after it could also mark an optional reference to a column with its name,
+   * which the grammar would prefer. They start a part of a statement that can follow a word that
+   * is also a column, or start one where a column can be:
+   *   - the set quantifiers: `first(DISTINCT?)`, `last(ALL?)`;
+   *   - a subquery: `c IN (SELECT?)`, `c IN (VALUES?)`;
+   *   - the source of EXTRACT, which a function call with a set quantifier also matches:
+   *     `EXTRACT(ALL FROM?)`;
+   *   - the branches of CASE, after a column named `when` or `not`: `CASE WHEN WHEN? THEN? END`,
+   *     `CASE WHEN WHEN THEN THEN? END`, `CASE WHEN a THEN NOT ELSE? END`;
+   *   - the binary operators and the clauses that can follow a column named `not`: `NOT AND?`,
+   *     `NOT LIKE?`, `WHERE NOT HAVING?`, `ON NOT WHERE?`, `EXECUTE IMMEDIATE NOT USING?`.
+   * `OptionalReferencesParserSuite` has a statement for each of them.
    */
-  private val KEYWORDS_BEFORE_PARAMETER_MARKERS: Set[Int] = Set(
+  private[parser] val KEYWORDS_BEFORE_PARAMETER_MARKERS: Set[Int] = Set(
     SqlBaseParser.ALL,
     SqlBaseParser.AND,
     SqlBaseParser.BETWEEN,
@@ -631,21 +638,26 @@ object AbstractParser extends Logging {
     SqlBaseParser.DIV,
     SqlBaseParser.ELSE,
     SqlBaseParser.FROM,
+    SqlBaseParser.HAVING,
     SqlBaseParser.ILIKE,
     SqlBaseParser.LIKE,
     SqlBaseParser.LIMIT,
     SqlBaseParser.OFFSET,
     SqlBaseParser.OR,
+    SqlBaseParser.QUALIFY,
     SqlBaseParser.RLIKE,
     SqlBaseParser.SELECT,
     SqlBaseParser.THEN,
+    SqlBaseParser.USING,
     SqlBaseParser.VALUES,
-    SqlBaseParser.WHEN)
+    SqlBaseParser.WHEN,
+    SqlBaseParser.WHERE)
 
   /**
    * Returns true if `tokens(index)` can end the name that an optional `?` follows: an identifier,
-   * a keyword, which can be a non-reserved identifier, a double-quoted identifier, or the closing
-   * parenthesis of an IDENTIFIER clause.
+   * a double-quoted identifier if they are enabled, a `)`, which can close an IDENTIFIER clause,
+   * or a keyword, which can be a non-reserved identifier. A keyword of
+   * [[KEYWORDS_BEFORE_PARAMETER_MARKERS]] is such a name only after a `.` or a `:`.
    */
   private def isNameBeforeOptionalMarker(
       parser: SqlBaseParser,

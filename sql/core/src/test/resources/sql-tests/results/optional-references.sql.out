@@ -2859,22 +2859,6 @@ struct<id:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
--- !query schema
-struct<TRIM(BOTH x FROM xabcx):string>
--- !query output
-abc
-
-
--- !query
-EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
--- !query schema
-struct<INTERVAL '1' DAY:interval day>
--- !query output
-1 00:00:00.000000000
-
-
--- !query
 EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b'
 -- !query schema
 struct<CASE WHEN (x = x) THEN a ELSE b END:string>
@@ -2891,11 +2875,29 @@ struct<id:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F'
 -- !query schema
-struct<f:int>
+struct<id:int>
 -- !query output
-5
+1
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
+-- !query schema
+struct<TRIM(BOTH x FROM xabcx):string>
+-- !query output
+abc
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
+-- !query schema
+struct<INTERVAL '1' DAY:interval day>
+-- !query output
+1 00:00:00.000000000
 
 
 -- !query
@@ -2915,13 +2917,37 @@ a
 
 
 -- !query
-EXECUTE IMMEDIATE
-  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
-  USING 'A', 'Z', '%F'
+SET spark.sql.legacy.parameterSubstitution.constantsOnly=true
 -- !query schema
-struct<id:int>
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.parameterSubstitution.constantsOnly	true
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT?) AS f FROM people' USING 5
+-- !query schema
+struct<f:int>
+-- !query output
+5
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT count(*) AS c FROM VALUES (true) AS v(`not`) WHERE NOT HAVING?'
+  USING true
+-- !query schema
+struct<c:bigint>
 -- !query output
 1
+
+
+-- !query
+RESET spark.sql.legacy.parameterSubstitution.constantsOnly
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

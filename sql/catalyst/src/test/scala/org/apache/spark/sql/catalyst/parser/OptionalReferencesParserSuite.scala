@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   ExpressionWithUnresolvedIdentifier,
@@ -311,8 +313,8 @@ class OptionalReferencesParserSuite extends PlanTest {
     checkUnexpectedMarker("SELECT a, b ? FROM t", position = 12)(CatalystSqlParser.parsePlan)
   }
 
-  test("the markers are found as the statement is lexed") {
-    // The parser changes the state of the lexer at `STRUCT<>`, so that the later `>>` is a shift.
+  test("a ? after STRUCT<> is marked as the statement is lexed") {
+    // See the `STRUCT<>` statements of the test that a valid statement keeps its meaning.
     val plan = parsePlan("SELECT CAST(NULL AS STRUCT<>), x? >> 1, ?", optionalReferences = true)
     assert(plan.expressions.exists(_.exists {
       case a: UnresolvedAttribute => OptionalReferences.optionalNamePartIndices(a) == Set(0)
@@ -368,22 +370,80 @@ class OptionalReferencesParserSuite extends PlanTest {
         "SELECT a? FROM t WHERE b? = ?" -> 1,
         "SELECT ?, a? FROM t" -> 1,
         "SELECT a FROM t WHERE b = ? AND c? IS NULL" -> 1,
-        // A `?` directly after a keyword is a positional parameter marker where a reference to a
-        // column with the name of the keyword cannot be.
+        // A `?` directly after a keyword is a positional parameter marker where no reference to a
+        // column with the name of the keyword can be.
         "SELECT a FROM t WHERE b=? AND c IN(?,?) LIMIT?" -> 4,
         "SELECT CASE? WHEN? THEN? ELSE? END" -> 4,
-        "SELECT trim(BOTH? FROM s) FROM t" -> 1,
-        // It is also one after a keyword that a positional parameter marker can follow where such
-        // a reference can be, see `AbstractParser.KEYWORDS_BEFORE_PARAMETER_MARKERS`.
+        "SELECT a? FROM t WHERE b BETWEEN? AND? OR c LIKE? LIMIT? OFFSET?" -> 5,
+        // Where such a reference can be, the grammar prefers the keyword: `SELECT `distinct`?`
+        // is an optional reference.
         "SELECT DISTINCT? FROM t" -> 1,
         "SELECT ALL? FROM t" -> 1,
         "SELECT NOT? FROM t" -> 1,
+        "SELECT trim(BOTH? FROM s) FROM t" -> 1,
+        "SELECT a?, count(DISTINCT?) FROM t" -> 1,
+        // Where the grammar would prefer the reference, the keyword is in
+        // `AbstractParser.KEYWORDS_BEFORE_PARAMETER_MARKERS`, see the next test.
         "SELECT a? FROM t WHERE b IN (SELECT?) AND c IN (VALUES?, ?)" -> 3,
-        "SELECT a?, count(DISTINCT?) FROM t WHERE b BETWEEN? AND? OR c LIKE? LIMIT? OFFSET?" -> 6
+        "SELECT a?, first(DISTINCT?) FROM t WHERE NOT HAVING?" -> 2
       ).foreach {
         case (sqlText, expectedPositionalParameters) =>
           val plan = parsePlan(sqlText, optionalReferences = true)
           assert(positionalParameters(plan).length == expectedPositionalParameters, sqlText)
+      }
+    }
+  }
+
+  test("each keyword that keeps a ? after it a positional parameter marker") {
+    // For each keyword of `AbstractParser.KEYWORDS_BEFORE_PARAMETER_MARKERS`, a statement that is
+    // valid without optional references, and whose `?` directly after the keyword would be an
+    // optional reference to a column with the name of the keyword if the keyword were not in it.
+    val statements = Map(
+      "ALL" -> "SELECT last(ALL ?) FROM t",
+      "AND" -> "SELECT NOT AND ? FROM t",
+      "BETWEEN" -> "SELECT NOT BETWEEN ? AND ? FROM t",
+      "DISTINCT" -> "SELECT first(DISTINCT ?) FROM t",
+      "DIV" -> "SELECT NOT DIV ? FROM t",
+      "ELSE" -> "SELECT CASE WHEN a THEN NOT ELSE ? END FROM t",
+      "FROM" -> "SELECT EXTRACT(ALL FROM ?) FROM t",
+      "HAVING" -> "SELECT count(*) FROM t WHERE NOT HAVING ?",
+      "ILIKE" -> "SELECT NOT ILIKE ? FROM t",
+      "LIKE" -> "SELECT NOT LIKE ? FROM t",
+      "LIMIT" -> "SELECT a FROM t WHERE NOT LIMIT ?",
+      "OFFSET" -> "SELECT a FROM t WHERE NOT OFFSET ?",
+      "OR" -> "SELECT NOT OR ? FROM t",
+      "QUALIFY" -> "SELECT a FROM t WHERE NOT QUALIFY ?",
+      "RLIKE" -> "SELECT NOT RLIKE ? FROM t",
+      "SELECT" -> "SELECT a FROM t WHERE a IN (SELECT ?)",
+      "THEN" -> "SELECT CASE WHEN WHEN THEN THEN ? END FROM t",
+      "USING" -> "EXECUTE IMMEDIATE NOT USING ?",
+      "VALUES" -> "SELECT a FROM t WHERE a IN (VALUES ?, ?)",
+      "WHEN" -> "SELECT CASE WHEN WHEN ? THEN ? END FROM t",
+      "WHERE" -> "SELECT * FROM t JOIN u ON NOT WHERE ?")
+    assert(
+      AbstractParser.KEYWORDS_BEFORE_PARAMETER_MARKERS.map(SqlBaseParser.VOCABULARY.getSymbolicName)
+        == statements.keySet)
+    statements.values.toSeq.sorted
+      .flatMap(sqlText => Seq(sqlText, withoutWhitespaceBeforeMarkers(sqlText)))
+      .foreach { sqlText =>
+        val plan = parsePlan(sqlText, optionalReferences = true)
+        comparePlans(plan, parsePlan(sqlText, optionalReferences = false), checkAnalysis = false)
+        assert(positionalParameters(plan).length == sqlText.count(_ == '?'), sqlText)
+      }
+
+    // A column with the name of such a keyword is quoted to be optional, and the name of a field
+    // or of a named parameter marker is not such a keyword.
+    withOptionalReferences(enabled = true) {
+      statements.keys.toSeq.sorted.map(_.toLowerCase(Locale.ROOT)).foreach { name =>
+        assertMultipartName(parseExpression(s"`$name`?"), Seq(name), Set(0))
+        assertMultipartName(parseExpression(s"s.$name?"), Seq("s", name), Set(1))
+        parseExpression(s":$name?") match {
+          case namedParameter: NamedParameter =>
+            assert(namedParameter.name == name)
+            assert(OptionalReferences.isOptional(namedParameter))
+          case other =>
+            fail(s"Expected a NamedParameter, but got $other")
+        }
       }
     }
   }
@@ -406,7 +466,19 @@ class OptionalReferencesParserSuite extends PlanTest {
       "SELECT EXTRACT(ALL FROM ?) FROM t",
       "SELECT NOT LIKE ? AND NOT DIV ? FROM t",
       "SELECT a FROM t WHERE NOT LIMIT ?",
-      "SELECT a FROM t WHERE NOT OFFSET ?"
+      "SELECT a FROM t WHERE NOT OFFSET ?",
+      "SELECT ALL WHERE ?",
+      "SELECT DISTINCT HAVING ?",
+      "SELECT a FROM t GROUP BY a HAVING NOT QUALIFY ?",
+      // The parser changes the state of the lexer at `STRUCT<>`, so that a later `>>` is a shift
+      // operator, and the tokens after it must not be lexed before the parse gets to them.
+      "SELECT CAST(null AS STRUCT<>), 2 >> 1",
+      "SELECT CAST(null AS STRUCT<>), CAST(null AS STRUCT<>), 4 >> 2",
+      "SELECT CAST(null AS STRUCT<>), 8 >>> 2",
+      "SELECT CAST(null AS STRUCT<>), CAST(null AS MAP<STRING, ARRAY<INT>>), 2 >> 1",
+      "SELECT CAST(null AS STRUCT<>), x >> ?",
+      "SELECT ARRAY(1 <> 2)",
+      "SELECT CAST(null AS MAP<STRING, ARRAY<INT>>)"
     ).flatMap(sqlText => Seq(sqlText, withoutWhitespaceBeforeMarkers(sqlText))).foreach {
       sqlText =>
         val plan = parsePlan(sqlText, optionalReferences = true)
@@ -418,18 +490,23 @@ class OptionalReferencesParserSuite extends PlanTest {
     Seq(
       "SELECT INTERVAL ? DAY",
       "SELECT 'a' ? 'b'",
-      "SELECT trim(FROM ?) FROM t WHERE a IN (SELECT ?)"
+      "SELECT 'a'?'b'",
+      "SELECT \"a\"?'b'",
+      "SELECT trim(FROM ?) FROM t WHERE a IN (SELECT ?)",
+      "SELECT CAST(null AS STRUCT<>) AS s, ? >> 1"
     ).flatMap(sqlText => Seq(sqlText, withoutWhitespaceBeforeMarkers(sqlText))).foreach {
       sqlText =>
         val parameters = List.fill(sqlText.count(_ == '?'))("'1'")
-        Seq(true, false).foreach { enabled =>
+        def substitute(enabled: Boolean): String = {
+          var substituted: String = null
           withOptionalReferences(enabled) {
-            val substituted = new SubstituteParamsParser()
+            substituted = new SubstituteParamsParser()
               .substitute(sqlText, positionalParams = parameters)
               .sqlText
-            assert(substituted == sqlText.replace("?", "'1'"), sqlText)
           }
+          substituted
         }
+        assert(substitute(enabled = true) == substitute(enabled = false), sqlText)
     }
   }
 
@@ -461,22 +538,11 @@ class OptionalReferencesParserSuite extends PlanTest {
     }
   }
 
-  test("a ? directly after a keyword that a parameter marker can follow is a parameter marker") {
+  test("a ? directly after a quoted keyword or a keyword that names a field is optional") {
     withOptionalReferences(enabled = true) {
-      // A column with the name of such a keyword is quoted to be optional.
-      assertMultipartName(parseExpression("`distinct`?"), Seq("distinct"), Set(0))
       val plan = parsePlan("SELECT count(`distinct`?), `limit`? FROM t", optionalReferences = true)
       assert(positionalParameters(plan).isEmpty)
-      // The name of a field or of a named parameter marker is not such a keyword.
-      assertMultipartName(parseExpression("s.distinct?"), Seq("s", "distinct"), Set(1))
       assertMultipartName(parseExpression("s . limit?"), Seq("s", "limit"), Set(1))
-      parseExpression(":select?") match {
-        case namedParameter: NamedParameter =>
-          assert(namedParameter.name == "select")
-          assert(OptionalReferences.isOptional(namedParameter))
-        case other =>
-          fail(s"Expected a NamedParameter, but got $other")
-      }
     }
   }
 

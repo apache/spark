@@ -18,10 +18,11 @@ lexer grammar SqlBaseLexer;
 
 tokens {
   // A `?` that directly follows a name, without whitespace or a comment in between, while
-  // optional references (`x?`) are enabled. It marks the name before it as optional where a
-  // reference can appear, and is a positional parameter marker elsewhere. The lexer does not
-  // produce this token: `AbstractParser.markOptionalReferenceMarkers` turns QUESTION tokens into
-  // it. Any other `?` is a positional parameter marker, as it is without optional references.
+  // optional references (`x?`) are enabled. It marks the name before it as optional where the
+  // grammar reads a reference there, and is a positional parameter marker elsewhere. The lexer
+  // does not produce this token: `AbstractParser.markOptionalReferenceMarkers` turns QUESTION
+  // tokens into it. Any other `?` is a positional parameter marker, as it is without optional
+  // references.
   QUESTION_WITH_OPTIONAL_REFERENCES
 }
 

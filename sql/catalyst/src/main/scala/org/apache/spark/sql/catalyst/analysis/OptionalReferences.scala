@@ -41,10 +41,10 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.{DataType, NullType, StringType}
 
 /**
- * Optional references: a `?` after an identifier of a column, field, or variable reference, or
- * after a named parameter marker, makes that identifier optional. When name resolution finds no
- * match for an optional identifier, the reference resolves to a static NULL of type VOID instead
- * of raising a not-found error. Ambiguity and type errors are still raised.
+ * Optional references: a `?` directly after an identifier of a column, field, or variable
+ * reference, or after a named parameter marker, makes that identifier optional. When name
+ * resolution finds no match for an optional identifier, the reference resolves to a static NULL
+ * of type VOID instead of raising a not-found error. Ambiguity and type errors are still raised.
  *
  * {{{
  *   -- `t` has a column `id` but no column `name`:

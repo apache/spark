@@ -8785,10 +8785,12 @@ object SQLConf {
       .doc("When true, a `?` directly after an identifier of a column, field, or variable " +
         "reference, or after a named parameter marker, makes that identifier optional: when no " +
         "name matches the identifier, the reference evaluates to a NULL of type VOID instead of " +
-        "raising a not-found error. A `?` after whitespace or a comment, and a `?` after a " +
-        "keyword such as DISTINCT that a positional parameter marker can follow, is a " +
-        "positional parameter marker; such a keyword is quoted with backticks to be the name " +
-        "of an optional reference. Ambiguous references and type errors are still raised. " +
+        "raising a not-found error. A `?` after whitespace or a comment is a positional " +
+        "parameter marker, and so is a `?` directly after ALL, AND, BETWEEN, DISTINCT, DIV, " +
+        "ELSE, FROM, HAVING, ILIKE, LIKE, LIMIT, OFFSET, OR, QUALIFY, RLIKE, SELECT, THEN, " +
+        "USING, VALUES, WHEN, or WHERE, which a positional parameter marker can follow; a " +
+        "column with the name of a keyword is quoted with backticks to be optional. " +
+        "Ambiguous references and type errors are still raised. " +
         "UPDATE, DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
         "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
         "and OPTIONS clauses of table and function definitions reject optional references.")

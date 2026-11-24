@@ -3301,20 +3301,6 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
--- !query analysis
-Project [trim(xabcx, Some(x)) AS TRIM(BOTH x FROM xabcx)#x]
-+- OneRowRelation
-
-
--- !query
-EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
--- !query analysis
-Project [INTERVAL '1' DAY AS INTERVAL '1' DAY#x]
-+- OneRowRelation
-
-
--- !query
 EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b'
 -- !query analysis
 Project [CASE WHEN (x = x) THEN a ELSE b END AS CASE WHEN (x = x) THEN a ELSE b END#x]
@@ -3336,15 +3322,33 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F'
 -- !query analysis
-Aggregate [first(distinct 5, false) AS f#x]
-+- SubqueryAlias people
-   +- View (`people`, [id#x, addr#x])
-      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
-         +- Project [id#x, addr#x]
-            +- SubqueryAlias t
-               +- LocalRelation [id#x, addr#x]
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter (between(addr#x.city, A, Z) AND addr#x.city LIKE %F)
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx'
+-- !query analysis
+Project [trim(xabcx, Some(x)) AS TRIM(BOTH x FROM xabcx)#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1'
+-- !query analysis
+Project [INTERVAL '1' DAY AS INTERVAL '1' DAY#x]
++- OneRowRelation
 
 
 -- !query
@@ -3375,19 +3379,39 @@ GlobalLimit 1
 
 
 -- !query
-EXECUTE IMMEDIATE
-  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
-  USING 'A', 'Z', '%F'
+SET spark.sql.legacy.parameterSubstitution.constantsOnly=true
 -- !query analysis
-Sort [id#x ASC NULLS FIRST], true
-+- Project [id#x]
-   +- Filter (between(addr#x.city, A, Z) AND addr#x.city LIKE %F)
-      +- SubqueryAlias people
-         +- View (`people`, [id#x, addr#x])
-            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
-               +- Project [id#x, addr#x]
-                  +- SubqueryAlias t
-                     +- LocalRelation [id#x, addr#x]
+SetCommand (spark.sql.legacy.parameterSubstitution.constantsOnly,Some(true))
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT?) AS f FROM people' USING 5
+-- !query analysis
+Aggregate [first(distinct 5, false) AS f#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT count(*) AS c FROM VALUES (true) AS v(`not`) WHERE NOT HAVING?'
+  USING true
+-- !query analysis
+Filter cast(true as boolean)
++- Aggregate [count(1) AS c#xL]
+   +- Filter NOT#x: boolean
+      +- SubqueryAlias v
+         +- LocalRelation [not#x]
+
+
+-- !query
+RESET spark.sql.legacy.parameterSubstitution.constantsOnly
+-- !query analysis
+ResetCommand spark.sql.legacy.parameterSubstitution.constantsOnly
 
 
 -- !query
