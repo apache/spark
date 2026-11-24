@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
+import org.apache.spark.sql.catalyst.analysis.{UnsupportedOperationChecker, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -158,6 +158,11 @@ class IncrementalExecution(
     // query started, which the plan must still apply to all the rows that it reads, see
     // StreamingV2ScanPushDown.
     StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized, pushedFilterRewrites)
+    // Unlike the other unsupported operation checks, which run when the query starts, this one
+    // runs once the confs of the checkpoint are restored, on the plan that eviction derives from.
+    if (isFirstBatch && sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(optimized, outputMode)
+    }
     WidenStatefulOperatorAttributeNullability(optimized)
   }
 
@@ -615,7 +620,9 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators, isFirstBatch,
+              sparkSession.sessionState.conf.getConf(
+                SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
         )
     }
   }
