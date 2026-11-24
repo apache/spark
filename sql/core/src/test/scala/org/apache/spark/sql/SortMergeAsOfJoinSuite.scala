@@ -1311,7 +1311,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
               result,
               Seq(
                 Row("inside", closest),
-                Row("boundary", if (allowExactMatches) closest else null),
+                Row("boundary", closest),
                 Row("outside", null),
                 Row("exact", if (allowExactMatches) "exact" else closest)
               )

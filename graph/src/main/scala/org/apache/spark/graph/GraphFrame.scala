@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteIdentifier
 import org.apache.spark.sql.functions.{array, col, countDistinct, explode, expr}
+import org.apache.spark.sql.graph.GraphConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, LongType, ShortType, StringType}
 import org.apache.spark.storage.StorageLevel
@@ -340,8 +341,9 @@ class GraphFrame private (
 
   /**
    * Checks that the graph is valid: vertex IDs are unique and not NULL, and the "src" and "dst"
-   * of every edge are not NULL and are existing vertex IDs. Equivalent to
-   * `validate(true, StorageLevel.MEMORY_AND_DISK)`.
+   * of every edge are not NULL and are existing vertex IDs. Equivalent to `validate(true, level)`,
+   * where `level` is the "spark.graph.storageLevel" configuration or, if it is not set, the
+   * "spark.sql.defaultCacheStorageLevel" configuration.
    *
    * This runs several Spark jobs over the vertices and the edges, so it can be expensive on large
    * graphs. See `validate(checkVertices, intermediateStorageLevel)` for the cost of each check.
@@ -353,7 +355,9 @@ class GraphFrame private (
    * @since 4.5.0
    */
   def validate(): Unit =
-    validate(checkVertices = true, intermediateStorageLevel = StorageLevel.MEMORY_AND_DISK)
+    validate(
+      checkVertices = true,
+      intermediateStorageLevel = GraphConf.storageLevel(vertices.sparkSession))
 
   /**
    * Checks that the graph is valid, with control over the cost.
