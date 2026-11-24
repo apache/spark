@@ -847,8 +847,7 @@ class QueryExecutionErrorsSuite
     val makeDT = "make_dt_interval(CAST(id AS INT) + 106751992)"
     val cases = Seq(
       (withSameTypeCast(ymDivide, "INTERVAL YEAR TO MONTH"),
-        "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION", "22015",
-        Map("functionName" -> "`try_divide`")),
+        ymDivideError._1, ymDivideError._2, ymDivideError._3),
       (withSameTypeCast(dtDivide, "INTERVAL DAY TO SECOND"),
         "INTERVAL_DIVIDED_BY_ZERO", "22012", Map.empty[String, String]),
       (withSameTypeCast(makeYM, "INTERVAL YEAR TO MONTH"),

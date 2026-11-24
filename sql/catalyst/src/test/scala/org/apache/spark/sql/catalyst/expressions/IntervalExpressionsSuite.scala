@@ -513,8 +513,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       withQuery("ym / -1")(DivideYMInterval(ymMin, Literal(-1))),
       withQuery("ym / 0")(DivideYMInterval(ymMin, Literal(0))),
+      withQuery("ym / 0BD")(DivideYMInterval(ymMin, Literal(Decimal(0)))),
+      withQuery("ym / 0.0D")(DivideYMInterval(ymMin, Literal(0.0d))),
       withQuery("dt / -1L")(DivideDTInterval(dtMin, Literal(-1L))),
       withQuery("dt / 0")(DivideDTInterval(dtMin, Literal(0))),
+      withQuery("dt / 0BD")(DivideDTInterval(dtMin, Literal(Decimal(0)))),
+      withQuery("dt / 0.0D")(DivideDTInterval(dtMin, Literal(0.0d))),
       withQuery("make_ym_interval(2147483647, 0)")(
         MakeYMInterval(Literal(Int.MaxValue), Literal(0))),
       withQuery("make_dt_interval(2147483647)")(
