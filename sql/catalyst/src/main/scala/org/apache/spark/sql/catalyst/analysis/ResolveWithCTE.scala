@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{GapFillGenerator, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -355,6 +355,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case Window(_, _, _, child, _) =>
         checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
       case Sort(_, _, child, _) =>
+        checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+      case Generate(_: GapFillGenerator, _, _, _, _, child) =>
         checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
       case r: UnionLoopRef if !allowRecursiveRef && r.loopId == cteId =>
         throw new AnalysisException(

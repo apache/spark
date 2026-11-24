@@ -53,6 +53,7 @@ object TreePattern extends Enumeration  {
   val EXTERNAL_UDF: Value = Value
   val EXTRACT_VALUE: Value = Value
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
+  val GAP_FILL_GENERATOR: Value = Value
   val GENERATOR: Value = Value
   val GROUPING_ANALYTICS: Value = Value
   val GET_JSON_OBJECT: Value = Value

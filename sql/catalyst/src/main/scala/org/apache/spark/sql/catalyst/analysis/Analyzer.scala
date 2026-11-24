@@ -168,10 +168,12 @@ case class AnalysisContext(
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // The temporary variables that the analyzed plan does not mention: those that an IDENTIFIER
     // clause reads, which `ResolveIdentifierClause` records only in fixed-point analysis, like
-    // `referredTempFunctionNames`, and those whose missing optional field (`v.missing?`) resolved
-    // to NULL, which `VariableResolution` records. A temporary view, temporary ALTER VIEW, or
-    // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
-    // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
+    // `referredTempFunctionNames`, those that a GAP FILL clause value reads, which
+    // `GapFillResolution` records because it folds the value to a literal, and those whose missing
+    // optional field (`v.missing?`) resolved to NULL, which `VariableResolution` records. A
+    // temporary view, temporary ALTER VIEW, or CACHE TABLE AS SELECT stores the names in its
+    // metadata so they resolve when the stored view text is analyzed again. A persisted
+    // CREATE/ALTER VIEW instead rejects them -- usually in
     // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
     // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
     // the v1 runnable commands call while executing and the v2 commands reach during analysis via
@@ -2029,6 +2031,11 @@ class Analyzer(
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
+
+      // A GAP FILL clause column must name a column, not a session variable or a function.
+      case g: UnresolvedGapFill =>
+        GapFillResolution.resolveExpressions(
+          g, resolveExpressionByPlanChildren(_, g, includeLastResort = true))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")

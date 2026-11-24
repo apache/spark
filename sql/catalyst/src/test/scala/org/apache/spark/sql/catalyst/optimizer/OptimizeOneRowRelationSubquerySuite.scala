@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Explode, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Explode, GapFillGenerator, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, TimestampNTZType}
 
 class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
@@ -176,6 +177,28 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     val query2 = t3.lateralJoin(t0.generate(Explode($"arr")).where($"col" > 0))
     val optimized = Optimize.execute(query2.analyze)
     assertHasDomainJoin(optimized)
+  }
+
+  test("Should not optimize lateral subquery with a GAP FILL Generate") {
+    // SELECT * FROM t3 JOIN LATERAL (SELECT * FROM (SELECT TIMESTAMP_NTZ '1970-01-01' AS ts)
+    //   GAP FILL (ORDER BY ts BIN WIDTH INTERVAL 1 HOUR
+    //   RANGE BETWEEN TIMESTAMP_NTZ '1970-01-01' AND TIMESTAMP_NTZ '1970-01-02'))
+    // GAP FILL reads all of its input rows together, so it cannot run on the rows of t3.
+    val gapFill = GapFillGenerator(
+      partitionColumns = Nil,
+      timeColumn = Literal(0L, TimestampNTZType),
+      valueColumns = Nil,
+      fillMethods = Nil,
+      binWidth = Literal(MICROS_PER_HOUR, DayTimeIntervalType()),
+      alignTo = Literal(0L, TimestampNTZType),
+      rangeStart = Some(Literal(0L, TimestampNTZType)),
+      rangeEnd = Some(Literal(MICROS_PER_DAY, TimestampNTZType)),
+      maxGap = None,
+      outputBinStart = false,
+      outputIsGenerated = false,
+      timeZoneId = None)
+    val query = t3.lateralJoin(t0.generate(gapFill)).analyze
+    comparePlans(Optimize.execute(query), query)
   }
 
   test("SPARK-41961: optimize lateral subquery with table-valued functions") {

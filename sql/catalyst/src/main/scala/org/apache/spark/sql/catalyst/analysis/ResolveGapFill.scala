@@ -24,13 +24,12 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Rejects [[UnresolvedGapFill]] until the operator is implemented.
+ * Resolves [[UnresolvedGapFill]] with [[GapFillResolution]], into a Generate with a
+ * GapFillGenerator and a Project above it.
  *
  * When `spark.sql.gapFillRelationOperator.enabled` is off, it fails without waiting for the
- * child, so a missing table also gets this error. When it is on, it waits for the child to
- * resolve, so errors that leave the child unresolved (such as a missing table or column) are
- * reported first. If the child resolves in the Resolution batch, errors that the final analysis
- * check raises on it come after this error. If it resolves only in a later batch, the final
+ * child, so a missing table also gets this error. When it is on, it waits until the child and
+ * the clause expressions are resolved. If the child resolves only in a later batch, the final
  * analysis check rejects this node after it checks the child, so the child's own errors come
  * first.
  */
@@ -38,7 +37,11 @@ object ResolveGapFill extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_GAP_FILL), ruleId) {
-    case g: UnresolvedGapFill if !conf.getConf(SQLConf.GAP_FILL_ENABLED) || g.childrenResolved =>
+    case _: UnresolvedGapFill if !conf.getConf(SQLConf.GAP_FILL_ENABLED) =>
       throw QueryCompilationErrors.gapFillNotSupportedError()
+    case g: UnresolvedGapFill if g.childrenResolved && g.expressions.forall(_.resolved) =>
+      withPosition(g) {
+        GapFillResolution.resolve(g)
+      }
   }
 }

@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, GapFillMethod, InputParameter}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GAP_FILL_GENERATOR, GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -327,6 +327,87 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
+}
+
+/**
+ * The generator of the GAP FILL relation operator. Its children are, in this order, the partition
+ * columns, the time column, the value columns (the other input columns), the clause values from
+ * `binWidth` to `maxGap`, and the CONSTANT values of `fillMethods`, which has one method per value
+ * column. When the input sets a partition, time or value column to a constant, FoldablePropagation
+ * can replace that column here with the constant, so these children are not always attributes.
+ * Each row it makes has the time column, the value columns, and then BIN_START and
+ * IS_GENERATED when they are asked for. The clause values and the CONSTANT values are literals
+ * once the Finish Analysis batch of the optimizer has run. `alignTo`, `rangeStart` and `rangeEnd`
+ * have the type of the time column. `timeZoneId` is the session time zone for a TIMESTAMP time
+ * column, so that bins of a day or more get the same grid as TIME_BUCKET. Its Generate is never
+ * planned as a GenerateExec, so it is never evaluated row by row.
+ */
+case class GapFillGenerator(
+    partitionColumns: Seq[Expression],
+    timeColumn: Expression,
+    valueColumns: Seq[Expression],
+    fillMethods: Seq[GapFillMethod],
+    binWidth: Expression,
+    alignTo: Expression,
+    rangeStart: Option[Expression],
+    rangeEnd: Option[Expression],
+    maxGap: Option[Expression],
+    outputBinStart: Boolean,
+    outputIsGenerated: Boolean,
+    timeZoneId: Option[String]) extends Generator {
+
+  protected override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR, GAP_FILL_GENERATOR)
+
+  override def children: Seq[Expression] =
+    partitionColumns ++ (timeColumn +: valueColumns) ++
+      (binWidth +: alignTo +: (rangeStart ++ rangeEnd ++ maxGap).toSeq) ++
+      fillMethods.collect { case GapFillMethod.Constant(value) => value }
+
+  override def elementSchema: StructType = {
+    // A CONSTANT column has the type of its value, which can allow a NULL inside an ARRAY, MAP
+    // or STRUCT where the input column allows none.
+    val types = timeColumn.dataType +: valueColumns.zip(fillMethods).map {
+      case (_, GapFillMethod.Constant(value)) => value.dataType
+      case (column, _) => column.dataType
+    }
+    val columns = types.zipWithIndex.map {
+      case (dataType, index) => StructField(s"col$index", dataType)
+    }
+    StructType(columns ++
+      Option.when(outputBinStart)(StructField("bin_start", timeColumn.dataType)) ++
+      Option.when(outputIsGenerated)(StructField("is_generated", BooleanType, nullable = false)))
+  }
+
+  final override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GapFillGenerator = {
+    val (newPartitionColumns, rest) = newChildren.splitAt(partitionColumns.length)
+    val (newColumns, newValues) = rest.splitAt(valueColumns.length + 1)
+    val values = newValues.iterator
+    val newBinWidth = values.next()
+    val newAlignTo = values.next()
+    val newRangeStart = rangeStart.map(_ => values.next())
+    val newRangeEnd = rangeEnd.map(_ => values.next())
+    val newMaxGap = maxGap.map(_ => values.next())
+    copy(
+      partitionColumns = newPartitionColumns,
+      timeColumn = newColumns.head,
+      valueColumns = newColumns.tail,
+      binWidth = newBinWidth,
+      alignTo = newAlignTo,
+      rangeStart = newRangeStart,
+      rangeEnd = newRangeEnd,
+      maxGap = newMaxGap,
+      fillMethods = fillMethods.map {
+        case GapFillMethod.Constant(_) => GapFillMethod.Constant(values.next())
+        case method => method
+      })
+  }
 }
 
 /**
