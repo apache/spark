@@ -163,11 +163,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
   // over the partition transform `creation` of the creation side. The aggregate of its semi join
-  // reads the creation side again, apart from the join. So a creation side gives none when:
-  //  - it has a Python or external UDF, or is not deterministic, as for the bloom filter of the
-  //    whole creation side;
-  //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
-  //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
+  // reads the creation side again, apart from the join. So a creation side gives none when it
+  // has a Python or external UDF, or is not deterministic, as for the bloom filter of the whole
+  // creation side. As `extract` requires, it reads a V2 scan only if the scan `isRepeatableRead`,
+  // so it reads no scan with a pushed limit, which can return other rows when read again.
   // A creation side also gives none when it needs more partition keys than a `bucket` transform
   // gives (its buckets and null). `ChoosePerPartitionRuntimeFilters` would drop the semi join, and
   // its placeholder would keep another join on the key from getting one.
@@ -180,11 +179,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     lazy val creationSide = ConstantFolding(ColumnPruning(
       Project(Seq(Alias(filterCreationSide.key, "key")()), filterCreationSide.plan)))
     if (creation.numBucketsOpt.exists(sizing.minPartitionKeys > _ + 1L) ||
-        creationSide.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || !creationSide.deterministic ||
-        creationSide.exists {
-          case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
-          case _ => false
-        }) {
+        creationSide.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || !creationSide.deterministic) {
       None
     } else {
       Some(Filter(
@@ -628,14 +623,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
   // row by itself. That is stricter than `extract`, which also takes a scan with a pushed aggregate
   // or join, or the target read of a copy-on-write operation, when it `isRepeatableRead`. Such a
-  // scan records no pushed filters for `cannotFail` below to check, so it gives no bloom filter for
-  // a key whose DPP filters are all dropped. The plan must not read a file metadata column either,
-  // such as `_metadata.file_block_start`, which depends on how the scan splits its files. The
-  // subquery can split them differently. Its filters, including those pushed into a V2 scan, and
-  // the projections that the key and the filters need, must pass `cannotFail`, which takes only
-  // expressions that are deterministic in the subquery and do not fail there. A part of the join
-  // side outside that plan can only drop rows from the join, so the bloom filter still holds every
-  // key that the join sees.
+  // scan records no pushed filters for `cannotFail` below to check, so this asks for
+  // `onlyRowWisePushdowns`, and such a scan gives no bloom filter for a key whose DPP filters are
+  // all dropped. The plan must not read a file metadata column either, such as
+  // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
+  // split them differently. Its filters, including those that a V2 scan records as fully pushed,
+  // and the projections that the key and the filters need, must pass `cannotFail`, which takes
+  // only expressions that are deterministic in the subquery and do not fail there. A part of the
+  // join side outside that plan can only drop rows from the join, so the bloom filter still holds
+  // every key that the join sees.
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
