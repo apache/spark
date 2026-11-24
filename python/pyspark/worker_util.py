@@ -533,6 +533,10 @@ class RunnerConf(Conf):
         return int(self.get("spark.sql.pyspark.udf.profiler.samplingInterval", 100))
 
     @property
+    def udf_profiler_sampling_aggregation(self) -> str:
+        return self.get("spark.sql.pyspark.udf.profiler.samplingAggregation", "stage")
+
+    @property
     def data_source_profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.dataSource.profiler", None)
 
