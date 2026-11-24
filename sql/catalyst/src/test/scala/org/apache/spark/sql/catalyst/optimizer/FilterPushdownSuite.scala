@@ -292,18 +292,23 @@ class FilterPushdownSuite extends PlanTest {
         checkAnalysis = false)
     }
     // Over a join, an equality between columns of the two sides is a join key only outside an
-    // `If`, while another condition that can fail is still combined under it, and so is the
-    // equality over one relation.
+    // `If`, also through an alias, while another condition that can fail is still combined under
+    // it, and so is an equality over one side, which that side evaluates before the join.
     val divide = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
     val joined = testRelation.join(testRelation1)
     val key = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"d"
     comparePlans(
       CombineFilters(joined.where($"c" > $"d").where(key && divide).analyze),
       joined.where($"c" > $"d" && key && If($"c" > $"d", divide, false)).analyze)
-    val equality = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"b"
+    val aliased = joined.select($"a".as("x"), $"c", $"d")
+    val aliasKey = Add($"x", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"d"
     comparePlans(
-      CombineFilters(testRelation.where($"c" > $"b").where(equality).analyze),
-      testRelation.where($"c" > $"b" && If($"c" > $"b", equality, false)).analyze)
+      CombineFilters(aliased.where($"c" > $"d").where(aliasKey).analyze),
+      aliased.where($"c" > $"d" && aliasKey).analyze)
+    val oneSide = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"b"
+    comparePlans(
+      CombineFilters(joined.where($"c" > $"d").where(oneSide).analyze),
+      joined.where($"c" > $"d" && If($"c" > $"d", oneSide, false)).analyze)
     // An `If` would evaluate a Python UDF of the filter below again.
     val pythonUDF = PythonUDF("pythonUDF", null, BooleanType, Seq(attrC),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
@@ -332,10 +337,12 @@ class FilterPushdownSuite extends PlanTest {
         testRelation.where($"c" === 1).where(f2).where(f3).where(f4).analyze),
       testRelation.where(nested).analyze)
     // Not when another conjunct below, `b = 2`, can be NULL where `c = 1` is TRUE.
-    val below = $"c" === 1 && $"b" === 2 && If($"c" === 1, f2, false)
+    val below = CombineFilters(testRelation.where($"c" === 1).where(f2 && $"b" === 2).analyze)
+    val belowCondition = $"c" === 1 && $"b" === 2 && If($"c" === 1, f2, false)
+    comparePlans(below, testRelation.where(belowCondition).analyze)
     comparePlans(
-      CombineFilters(testRelation.where(below).where(f3).analyze),
-      testRelation.where(below && If(below, f3, false)).analyze)
+      CombineFilters(below.where(f3).analyze),
+      testRelation.where(belowCondition && If(belowCondition, f3, false)).analyze)
     // With `IS NOT NULL` checks before them, all the `If`s are removed, but not the one of `f2`,
     // which can be NULL, when `a` and `b` are not checked.
     val notNull = $"a".isNotNull && $"b".isNotNull && $"c".isNotNull

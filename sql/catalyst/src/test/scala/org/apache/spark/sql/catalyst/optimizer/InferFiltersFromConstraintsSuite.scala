@@ -465,6 +465,24 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       projected.where(IsNotNull($"k") && $"k" > 1).where(IsNotNull($"r") && condition).analyze)
   }
 
+  test("SPARK-62187: a condition that a filter evaluates only where the condition of a filter " +
+    "below is TRUE gives constraints, but is not a new filter") {
+    // `CombineFilters` combines the division under an `If` of `c = 1 OR b = 2`, which can be
+    // NULL. `a` and `b` are not NULL where the `If` is TRUE, while the division can fail, so it
+    // stays under the `If`, also when filters that can fail are inferred.
+    val divide = Divide($"a", $"b", NumericEvalContext(EvalMode.ANSI)) > 1
+    val lower = $"c" === 1 || $"b" === 2
+    val combined = CombineFilters(testRelation.where(lower).where(divide).analyze)
+    Seq("false", "true").foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> legacy) {
+        comparePlans(
+          Optimize.execute(combined),
+          testRelation.where(
+            IsNotNull($"a") && IsNotNull($"b") && lower && If(lower, divide, false)).analyze)
+      }
+    }
+  }
+
   test("SPARK-61921: a constraint over a column that can fail through a sort, a limit, an " +
     "offset, a join or an aggregate is not inferred as a filter") {
     // `i` can fail as the cast does, also through the sort, the limits, the offset and the join,

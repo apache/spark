@@ -2375,13 +2375,16 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     // The new filters go ahead of the condition, so one over a column that can fail (see
-    // `failableOutput`) would compute that column on rows a conjunct of the condition drops.
+    // `failableOutput`) would compute that column on rows a conjunct of the condition drops. Nor
+    // is a conjunct that the condition evaluates only where the condition of a filter below is
+    // TRUE (see `CombineFilters`) a new filter.
     case filter @ Filter(condition, child) =>
       val canAdd: Expression => Boolean =
         if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
       lazy val failable = failableOutput(child)
       val newFilters = (filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter { c =>
+        (child.constraints ++ splitFilterGuards(splitConjunctivePredicates(condition)))).toSeq
+        .filter { c =>
           canAdd(c) && !c.references.exists(failable.contains)
         }
       if (newFilters.nonEmpty) {
@@ -2629,14 +2632,16 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     // is NULL, but `NULL AND x` evaluates `x`. So when the inner condition can be NULL (see
     // `canBeNull`), the conjuncts that can fail (see `canFail`) are combined as
     // `If(<inner condition>, <them>, false)`, which evaluates them only where it is TRUE, also
-    // after a later rule moves them, e.g. into a join condition (see `guard`). These are combined
-    // as before instead:
+    // after a later rule moves them, e.g. into a join condition (see `guard`). The scans still
+    // take its parts as partition filters and filters to push to a data source, and the
+    // constraints of the filter have them (see `splitFilterGuards`). These are combined as before
+    // instead:
     //  - All of them, when the inner condition has a subquery or a Python or external UDF, which
     //    the `If` would evaluate again.
     //  - A conjunct with a subquery: `RewritePredicateSubquery` plans an IN subquery as a join,
     //    and a filter that `PartitionPruning` or `InjectRuntimeFilter` adds prunes the scan,
     //    only outside the `If`.
-    //  - An equality between expressions over different columns when there is a join below,
+    //  - An equality whose sides read the two inputs of a join below (see `isPossibleJoinKey`),
     //    which is a join key only outside the `If`.
     // With a throwable inner condition, e.g. one that `ReorderJoin` keeps in a filter in place of
     // the top join, the ones of these that can fail stay above it instead.
@@ -2646,9 +2651,8 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild),
         afterBarrier = evaluatedAgain && nc.throwable)
       lazy val failable = failableOutput(grandChild)
-      lazy val belowJoin = grandChild.containsPattern(JOIN)
       def notUnderIf(cond: Expression): Boolean =
-        SubqueryExpression.hasSubquery(cond) || (belowJoin && isPossibleJoinKey(cond))
+        SubqueryExpression.hasSubquery(cond) || isPossibleJoinKey(cond, grandChild)
       val canGuard = !evaluatedAgain && canBeNull(nc)
       val (stayUp, combined) = if (canGuard && nc.throwable) {
         movable.partition(cond => canFail(cond, failable) && notUnderIf(cond))
@@ -2726,29 +2730,48 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       nc: Seq[Expression],
       plain: Seq[Expression],
       x: Expression): Seq[Expression] = nc.last match {
-    case last @ If(p, _, Literal.FalseLiteral)
-        if !nc.init.filterNot(ExpressionSet(splitConjunctivePredicates(p)).contains)
+    case last @ If(p, _, Literal.FalseLiteral) if isFilterGuard(last) &&
+        !nc.init.filterNot(ExpressionSet(splitConjunctivePredicates(p)).contains)
           .reduceOption(And).exists(canBeNull(_)) =>
       nc.init ++ plain :+ nest(last, x)
     case _ =>
-      nc ++ plain :+ If(nc.reduce(And), x, Literal.FalseLiteral)
+      nc ++ plain :+ filterGuard(nc.reduce(And), x)
   }
 
-  // `If(y, x, false)`, with `x` put in the innermost `If(_, _, false)` of `y` instead, if any.
+  // `If(y, x, false)`, with `x` put in the innermost such `If` of `y` instead, if any.
   private def nest(y: Expression, x: Expression): Expression = y match {
-    case If(p, y2, Literal.FalseLiteral) => If(p, nest(y2, x), Literal.FalseLiteral)
-    case _ => If(y, x, Literal.FalseLiteral)
+    case g @ If(p, y2, Literal.FalseLiteral) if isFilterGuard(g) => filterGuard(p, nest(y2, x))
+    case _ => filterGuard(y, x)
   }
 
-  // An equality between expressions over different columns, as a join key is.
-  private def isPossibleJoinKey(cond: Expression): Boolean = cond match {
-    case EqualTo(l, r) => overDifferentColumns(l, r)
-    case EqualNullSafe(l, r) => overDifferentColumns(l, r)
+  // `If(p, x, false)`, marked so that the scans and the constraints see `p` and `x` in it (see
+  // `splitFilterGuards`), while a user's `IF` is left as it is.
+  private def filterGuard(p: Expression, x: Expression): Expression = {
+    val g = If(p, x, Literal.FalseLiteral)
+    g.setTagValue(PredicateHelper.FILTER_GUARD, ())
+    g
+  }
+
+  // An equality whose sides read the two inputs of a join that `plan` has below projections and
+  // filters, or below the input that both sides read, as a join key does.
+  private def isPossibleJoinKey(cond: Expression, plan: LogicalPlan): Boolean = cond match {
+    case EqualTo(l, r) => betweenJoinInputs(l, r, plan)
+    case EqualNullSafe(l, r) => betweenJoinInputs(l, r, plan)
     case _ => false
   }
 
-  private def overDifferentColumns(l: Expression, r: Expression): Boolean =
-    l.references.nonEmpty && r.references.nonEmpty && l.references.intersect(r.references).isEmpty
+  private def betweenJoinInputs(l: Expression, r: Expression, plan: LogicalPlan): Boolean =
+    plan match {
+      case Project(projectList, child) =>
+        val aliases = getAliasMap(projectList)
+        betweenJoinInputs(replaceAlias(l, aliases), replaceAlias(r, aliases), child)
+      case Filter(_, child) => betweenJoinInputs(l, r, child)
+      case Join(left, right, _, _, _) if l.references.nonEmpty && r.references.nonEmpty =>
+        def within(e: Expression, p: LogicalPlan) = e.references.subsetOf(p.outputSet)
+        (within(l, left) && within(r, right)) || (within(l, right) && within(r, left)) ||
+          Seq(left, right).exists(c => within(l, c) && within(r, c) && betweenJoinInputs(l, r, c))
+      case _ => false
+    }
 
   private object GuardsRemoved {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {

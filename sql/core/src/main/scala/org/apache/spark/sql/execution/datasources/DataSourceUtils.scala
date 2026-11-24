@@ -384,7 +384,7 @@ object DataSourceUtils extends PredicateHelper {
       f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )
     val extraPartitionFilter =
-      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+      splitFilterGuards(dataFilters).flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
 

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -102,6 +103,15 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
+object PredicateHelper {
+  /**
+   * Marks an `If(p, x, false)` that `CombineFilters` makes of a conjunct `x` of a filter over
+   * another one whose condition `p` can be NULL, so that `x` is evaluated only where `p` is TRUE
+   * (see `splitFilterGuards`).
+   */
+  val FILTER_GUARD = TreeNodeTag[Unit]("filterGuard")
+}
+
 trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
@@ -110,6 +120,31 @@ trait PredicateHelper extends AliasHelper with Logging {
       case other => other :: Nil
     }
   }
+
+  /**
+   * Returns `conjuncts` with each `If(p, x, false)` that `CombineFilters` makes (see
+   * [[PredicateHelper.FILTER_GUARD]]) replaced by the conjuncts of `p` and `x`, also of such an
+   * `If` in `x`, that are not among the others. They keep the same rows, so they are the same
+   * constraints, partition filters and filters to push to a data source as the `If`. Like the
+   * conjuncts of one filter, they are evaluated there on all the partitions or rows, while the
+   * `If` evaluates `x` only where `p` is TRUE, so it is still the filter that Spark evaluates.
+   */
+  protected def splitFilterGuards(conjuncts: Seq[Expression]): Seq[Expression] = {
+    def parts(e: Expression): Seq[Expression] = e match {
+      case If(p, x, Literal.FalseLiteral) if isFilterGuard(e) =>
+        (splitConjunctivePredicates(p) ++ splitConjunctivePredicates(x)).flatMap(parts)
+      case _ => Seq(e)
+    }
+    if (conjuncts.exists(isFilterGuard)) {
+      val (guards, others) = conjuncts.partition(isFilterGuard)
+      others ++ (ExpressionSet(guards.flatMap(parts)) -- others).toSeq
+    } else {
+      conjuncts
+    }
+  }
+
+  protected def isFilterGuard(e: Expression): Boolean =
+    e.getTagValue(PredicateHelper.FILTER_GUARD).isDefined
 
   /**
    * Find the origin of where the input references of expression exp were scanned in the tree of
