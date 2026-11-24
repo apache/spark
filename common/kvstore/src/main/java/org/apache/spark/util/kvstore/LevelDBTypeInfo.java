@@ -311,8 +311,12 @@ class LevelDBTypeInfo {
       return entityKey;
     }
 
-    private void updateCount(WriteBatch batch, byte[] key, long delta) {
-      long updated = getCount(key) + delta;
+    private void updateCount(WriteBatch batch, byte[] key, long delta, KVStoreBatch pending) {
+      Long previous = pending == null ? null : pending.count(key);
+      long updated = (previous == null ? getCount(key) : previous) + delta;
+      if (pending != null) {
+        pending.count(key, updated);
+      }
       if (updated > 0) {
         batch.put(key, db.serializer.serialize(updated));
       } else {
@@ -326,7 +330,8 @@ class LevelDBTypeInfo {
         Object existing,
         byte[] data,
         byte[] naturalKey,
-        byte[] prefix) throws Exception {
+        byte[] prefix,
+        KVStoreBatch pending) throws Exception {
       Object indexValue = getValue(entity);
       Objects.requireNonNull(indexValue, () ->
         String.format(
@@ -374,7 +379,7 @@ class LevelDBTypeInfo {
           // end markers for the indexed value.
           if (!isChild()) {
             byte[] oldCountKey = end(null, oldIndexedValue);
-            updateCount(batch, oldCountKey, -1L);
+            updateCount(batch, oldCountKey, -1L, pending);
             needCountUpdate = true;
           }
         }
@@ -390,7 +395,7 @@ class LevelDBTypeInfo {
       if (needCountUpdate && !isChild()) {
         long delta = data != null ? 1L : -1L;
         byte[] countKey = isNatural ? end(prefix) : end(prefix, indexValue);
-        updateCount(batch, countKey, delta);
+        updateCount(batch, countKey, delta, pending);
       }
     }
 
@@ -403,6 +408,7 @@ class LevelDBTypeInfo {
      * @param data Serialized entity to store (when storing the entity, not a reference).
      * @param naturalKey The value's natural key (to avoid re-computing it for every index).
      * @param prefix The parent index prefix, if this is a child index.
+     * @param pending Earlier writes in this batch, or null for a single-entity operation.
      */
     void add(
         WriteBatch batch,
@@ -410,8 +416,9 @@ class LevelDBTypeInfo {
         Object existing,
         byte[] data,
         byte[] naturalKey,
-        byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, existing, data, naturalKey, prefix);
+        byte[] prefix,
+        KVStoreBatch pending) throws Exception {
+      addOrRemove(batch, entity, existing, data, naturalKey, prefix, pending);
     }
 
     /**
@@ -427,7 +434,7 @@ class LevelDBTypeInfo {
         Object entity,
         byte[] naturalKey,
         byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, null, null, naturalKey, prefix);
+      addOrRemove(batch, entity, null, null, naturalKey, prefix, null);
     }
 
     long getCount(byte[] key) {

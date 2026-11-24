@@ -21,7 +21,7 @@ import java.io.File
 import java.io.IOException
 import java.util.{List => JList}
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
@@ -34,7 +34,7 @@ import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.KVStore
+import org.apache.spark.util.kvstore.{CompactInMemoryStore, KVStore, KVStoreView}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -77,6 +77,15 @@ private[spark] class AppStatusStore(
     } else {
       it
     }
+  }
+
+  def jobSummaries(): Seq[v1.JobData] = {
+    val view = store match {
+      case tracking: ElementTrackingStore => tracking.viewSummaries(classOf[JobDataWrapper])
+      case compact: CompactInMemoryStore => compact.viewSummaries(classOf[JobDataWrapper])
+      case _ => store.view(classOf[JobDataWrapper])
+    }
+    KVUtils.mapToSeq(view.reverse())(_.info)
   }
 
   def job(jobId: Int): v1.JobData = {
@@ -573,6 +582,48 @@ private[spark] class AppStatusStore(
       sortBy: Option[String],
       ascending: Boolean,
       statuses: JList[v1.TaskStatus] = List().asJava): Seq[v1.TaskData] = {
+    val ordered = taskView(stageId, stageAttemptId, sortBy, ascending)
+    val taskDataWrapperSeq = if (statuses != null && !statuses.isEmpty) {
+      val statusesStr = statuses.asScala.map(_.toString).toSet
+      KVUtils.viewToSeq(ordered, offset, offset + length)(s => statusesStr.contains(s.status))
+    } else {
+      KVUtils.viewToSeq(ordered.skip(offset).max(length))
+    }
+
+    constructTaskDataList(taskDataWrapperSeq)
+  }
+
+  /** Search all retained tasks while keeping only the requested page of matching records. */
+  def taskListWithFilter(
+      stageId: Int,
+      stageAttemptId: Int,
+      offset: Int,
+      length: Int,
+      sortBy: Option[String],
+      ascending: Boolean)(filter: v1.TaskData => Boolean): (Seq[v1.TaskData], Long) = {
+    require(offset >= 0 && length >= 0)
+    val page = new ArrayBuffer[TaskDataWrapper]()
+    var matches = 0L
+    Utils.tryWithResource(taskView(stageId, stageAttemptId, sortBy, ascending)
+        .closeableIterator()) { iter =>
+      while (iter.hasNext) {
+        val task = iter.next()
+        if (filter(constructTaskData(task, Map.empty))) {
+          if (matches >= offset && page.size < length) {
+            page += task
+          }
+          matches += 1
+        }
+      }
+    }
+    (constructTaskDataList(page.toSeq), matches)
+  }
+
+  private def taskView(
+      stageId: Int,
+      stageAttemptId: Int,
+      sortBy: Option[String],
+      ascending: Boolean): KVStoreView[TaskDataWrapper] = {
     val stageKey = Array(stageId, stageAttemptId)
     val base = store.view(classOf[TaskDataWrapper])
     val indexed = sortBy match {
@@ -584,15 +635,7 @@ private[spark] class AppStatusStore(
         base.index("stage").first(stageKey).last(stageKey)
     }
 
-    val ordered = if (ascending) indexed else indexed.reverse()
-    val taskDataWrapperSeq = if (statuses != null && !statuses.isEmpty) {
-      val statusesStr = statuses.asScala.map(_.toString).toSet
-      KVUtils.viewToSeq(ordered, offset, offset + length)(s => statusesStr.contains(s.status))
-    } else {
-      KVUtils.viewToSeq(ordered.skip(offset).max(length))
-    }
-
-    constructTaskDataList(taskDataWrapperSeq)
+    if (ascending) indexed else indexed.reverse()
   }
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
@@ -824,26 +867,32 @@ private[spark] class AppStatusStore(
   def constructTaskDataList(taskDataWrapperIter: Iterable[TaskDataWrapper]): Seq[v1.TaskData] = {
     val executorIdToLogs = new HashMap[String, Map[String, String]]()
     taskDataWrapperIter.map { taskDataWrapper =>
-      val taskDataOld: v1.TaskData = taskDataWrapper.toApi
-      val executorLogs = executorIdToLogs.getOrElseUpdate(taskDataOld.executorId, {
+      val executorLogs = executorIdToLogs.getOrElseUpdate(taskDataWrapper.executorId, {
         try {
-          executorSummary(taskDataOld.executorId).executorLogs
+          executorSummary(taskDataWrapper.executorId).executorLogs
         } catch {
           case e: NoSuchElementException =>
             Map.empty
         }
       })
 
-      new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
-        taskDataOld.attempt, taskDataOld.partitionId,
-        taskDataOld.launchTime, taskDataOld.resultFetchStart,
-        taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
-        taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
-        taskDataOld.errorMessage, taskDataOld.taskMetrics,
-        executorLogs,
-        AppStatusUtils.schedulerDelay(taskDataOld),
-        AppStatusUtils.gettingResultTime(taskDataOld))
+      constructTaskData(taskDataWrapper, executorLogs)
     }.toSeq
+  }
+
+  private def constructTaskData(
+      wrapper: TaskDataWrapper,
+      executorLogs: Map[String, String]): v1.TaskData = {
+    val taskDataOld = wrapper.toApi
+    new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+      taskDataOld.attempt, taskDataOld.partitionId,
+      taskDataOld.launchTime, taskDataOld.resultFetchStart,
+      taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+      taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+      taskDataOld.errorMessage, taskDataOld.taskMetrics,
+      executorLogs,
+      AppStatusUtils.schedulerDelay(taskDataOld),
+      AppStatusUtils.gettingResultTime(taskDataOld))
   }
 }
 
