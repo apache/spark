@@ -2704,10 +2704,11 @@ object SQLConf {
       "it, while sources such as JDBC, or connectors with a storage client of their own, " +
       "report none. Reading cached data counts the size of the cached blocks. Streaming " +
       "queries are not limited, nor are the jobs that run outside the execution of a query, " +
-      "such as the jobs that infer the schema of a file source while the query is analyzed, " +
-      "the jobs on the RDD that Dataset.rdd returns, and the jobs that " +
-      "Dataset.toLocalIterator runs as its iterator is consumed. -1 (the default) means no " +
-      "limit.")
+      "such as the RDD jobs that infer the schema of a file source while the query is " +
+      "analyzed, the jobs on the RDD that Dataset.rdd returns, and the jobs that " +
+      "Dataset.toLocalIterator runs as its iterator is consumed. A Dataset action that runs " +
+      "while a query is analyzed, such as the one that reads the first line of a CSV file, " +
+      "is a query of its own and is limited on its own. -1 (the default) means no limit.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .bytesConf(ByteUnit.BYTE)
