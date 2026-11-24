@@ -565,6 +565,58 @@ def sqrt(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def try_abs(col: "ColumnOrName") -> Column:
+    """
+    Returns the absolute value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`abs`.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A column that evaluates to a numeric or interval.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the type that :meth:`abs` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.abs`
+
+    Examples
+    --------
+    Example 1: try_abs of integers.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-1,), (2,), (None,)], "a INT")
+    >>> df.select("*", sf.try_abs("a")).show()
+    +----+----------+
+    |   a|try_abs(a)|
+    +----+----------+
+    |  -1|         1|
+    |   2|         2|
+    |NULL|      NULL|
+    +----+----------+
+
+    Example 2: Overflow results in NULL
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_abs(sf.lit(-sys.maxsize - 1))).show()
+    +-----------------------------+
+    |try_abs(-9223372036854775808)|
+    +-----------------------------+
+    |                         NULL|
+    +-----------------------------+
+    """
+    return _invoke_function_over_columns("try_abs", col)
+
+
+@_try_remote_functions
 def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns the sum of `left`and `right` and the result is null on overflow.
@@ -885,6 +937,58 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     +------------------------------------------------------+
     """
     return _invoke_function_over_columns("try_multiply", left, right)
+
+
+@_try_remote_functions
+def try_negative(col: "ColumnOrName") -> Column:
+    """
+    Returns the negated value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`negative`.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A column that evaluates to a numeric or interval.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the type that :meth:`negative` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.negative`
+
+    Examples
+    --------
+    Example 1: try_negative of integers.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-1,), (2,), (None,)], "a INT")
+    >>> df.select("*", sf.try_negative("a")).show()
+    +----+---------------+
+    |   a|try_negative(a)|
+    +----+---------------+
+    |  -1|              1|
+    |   2|             -2|
+    |NULL|           NULL|
+    +----+---------------+
+
+    Example 2: Overflow results in NULL
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_negative(sf.lit(-sys.maxsize - 1))).show()
+    +----------------------------------+
+    |try_negative(-9223372036854775808)|
+    +----------------------------------+
+    |                              NULL|
+    +----------------------------------+
+    """
+    return _invoke_function_over_columns("try_negative", col)
 
 
 @_try_remote_functions
