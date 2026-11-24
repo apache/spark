@@ -536,8 +536,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       // resolves in a later batch leaves the node here with unresolved PARTITION BY, ORDER BY or
       // FILL columns that the input has, and GAP FILL is not supported. Such a column that the
       // input does not have is then reported as unresolved. Over an input that resolved in time,
-      // every clause error goes on to the checks below, which report the first one in clause
-      // order.
+      // every clause error goes on to the checks below, which report the first one in the field
+      // order of UnresolvedGapFill: PARTITION BY, ORDER BY, BIN WIDTH, ALIGN TO, the range
+      // bounds, FILL, then MAX GAP, whatever order the query writes ALIGN TO, RANGE, FILL and
+      // MAX GAP in.
       case g: UnresolvedGapFill if g.childrenResolved && unresolvedClauseColumns(g).exists(
           a => g.child.resolve(a.nameParts, g.conf.resolver).isDefined) =>
         unresolvedClauseColumns(g).find { a =>
@@ -880,7 +882,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               column =>
                 g.failAnalysis(
                   errorClass = "GAP_FILL_METADATA_COLUMN_NOT_SUPPORTED",
-                  messageParameters = Map("columnName" -> toSQLId(column.name)))
+                  messageParameters = Map("columnName" -> toSQLId(Seq(column.name))))
             }
             // An added row copies its passed columns from an input row of its partition, so only
             // partition columns can pass through.

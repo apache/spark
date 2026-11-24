@@ -377,26 +377,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "GAP_FILL_TIME_TYPE_MISMATCH",
       messageParameters = Map(
-        "columnName" -> toSQLId(columnName),
+        "columnName" -> toSQLId(Seq(columnName)),
         "columnType" -> toSQLType(columnType)))
   }
 
   def gapFillInvalidPartitionColumnError(columnName: String): Throwable = {
     new AnalysisException(
       errorClass = "GAP_FILL_INVALID_PARTITION_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLId(Seq(columnName))))
   }
 
   def gapFillInvalidFillColumnError(columnName: String): Throwable = {
     new AnalysisException(
       errorClass = "GAP_FILL_INVALID_FILL_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLId(Seq(columnName))))
   }
 
   def gapFillDuplicateFillColumnError(columnName: String): Throwable = {
     new AnalysisException(
       errorClass = "GAP_FILL_DUPLICATE_FILL_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLId(Seq(columnName))))
   }
 
   def gapFillInvalidIntervalTypeError(clause: String, expr: Expression): Throwable = {
@@ -448,7 +448,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "valueType" -> toSQLType(valueType),
         "columnType" -> toSQLType(columnType),
-        "columnName" -> toSQLId(columnName)))
+        "columnName" -> toSQLId(Seq(columnName))))
   }
 
   def gapFillInvalidRangeError(rangeStart: Any, rangeEnd: Any, timeType: DataType): Throwable = {
@@ -463,7 +463,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "GAP_FILL_LINEAR_TYPE_MISMATCH",
       messageParameters = Map(
-        "columnName" -> toSQLId(columnName),
+        "columnName" -> toSQLId(Seq(columnName)),
         "columnType" -> toSQLType(columnType)))
   }
 
@@ -473,7 +473,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.GAP_FILL_PARTITION_KEY_TYPE",
       messageParameters = Map(
-        "columnName" -> toSQLId(columnName),
+        "columnName" -> toSQLId(Seq(columnName)),
         "columnType" -> toSQLType(columnType)))
   }
 
@@ -483,7 +483,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.GAP_FILL_TIMESTAMP_NANOS",
       messageParameters = Map(
-        "columnName" -> toSQLId(columnName),
+        "columnName" -> toSQLId(Seq(columnName)),
         "columnType" -> toSQLType(columnType)))
   }
 

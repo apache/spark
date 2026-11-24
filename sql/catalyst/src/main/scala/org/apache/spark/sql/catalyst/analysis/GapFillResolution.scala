@@ -89,7 +89,7 @@ object GapFillResolution extends SQLConfHelper with AliasHelper {
    * name of the input column, and the Project puts the columns back in input order.
    *
    * BIN WIDTH, ALIGN TO, the range bounds, MAX GAP and each CONSTANT are evaluated here, and the
-   * generator holds them as literals. A value that [[evaluatedByOptimizer]], such as
+   * generator holds them as literals. A value for which [[evaluatedByOptimizer]] holds, such as
    * current_date() or CAST('today' AS DATE), gets only its type checks here. The optimizer
    * evaluates and checks it with [[evalCurrentTimeValues]] after ComputeCurrentTime and
    * SpecialDatetimeValues, so that it sees the same time as the rest of the query, also when an
@@ -344,7 +344,8 @@ object GapFillResolution extends SQLConfHelper with AliasHelper {
 
   /**
    * Returns a BIN WIDTH, ALIGN TO, range bound or MAX GAP value after its type check, as the
-   * literal that `toLiteral` makes, or as it is when the optimizer evaluates it.
+   * literal that `toLiteral` makes, or with its replacements applied when the optimizer
+   * evaluates it.
    */
   private def clauseValue(
       clause: String,

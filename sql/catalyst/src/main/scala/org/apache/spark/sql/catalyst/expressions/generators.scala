@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, GapFillMethod, InputParameter}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GAP_FILL_GENERATOR, GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -355,6 +355,8 @@ case class GapFillGenerator(
     outputBinStart: Boolean,
     outputIsGenerated: Boolean,
     timeZoneId: Option[String]) extends Generator {
+
+  protected override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR, GAP_FILL_GENERATOR)
 
   override def children: Seq[Expression] =
     partitionColumns ++ (timeColumn +: valueColumns) ++

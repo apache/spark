@@ -123,7 +123,7 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
  */
 object EvalGapFillCurrentTimeValues extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformDownWithPruning(_.containsPattern(GENERATE)) {
+    plan.transformDownWithPruning(_.containsPattern(GAP_FILL_GENERATOR)) {
       case g @ Generate(gapFill: GapFillGenerator, _, _, _, _, _) => withPosition(g) {
         g.copy(generator = GapFillResolution.evalCurrentTimeValues(gapFill))
       }

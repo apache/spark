@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, GapFillGenerator, Literal}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{GapFillMethod, Generate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.trees.TreePattern.GAP_FILL_GENERATOR
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_MINUTE}
 import org.apache.spark.sql.internal.SQLConf
@@ -197,6 +198,19 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a GAP FILL error names a column with a backtick or a dot as one name") {
+    withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "true") {
+      val backtick = "GAP FILL (ORDER BY `a``b` BIN WIDTH INTERVAL 1 HOUR)"
+      checkAnalysisError(s"SELECT * FROM (SELECT 1 AS `a``b`) $backtick",
+        "GAP_FILL_TIME_TYPE_MISMATCH", Map("columnName" -> "`a``b`", "columnType" -> "\"INT\""),
+        backtick)
+      val dot = "GAP FILL (ORDER BY `x.y` BIN WIDTH INTERVAL 1 HOUR FILL (`x.y` NULL))"
+      checkAnalysisError(
+        s"SELECT * FROM (SELECT TIMESTAMP_NTZ '2026-01-01 00:00:00' AS `x.y`, 1 AS v) $dot",
+        "GAP_FILL_INVALID_FILL_COLUMN", Map("columnName" -> "`x.y`"), dot)
+    }
+  }
+
   test("a whole clause value can be a session variable or a function name") {
     withReadings {
       withSessionVariable("bw", "mg") {
@@ -359,6 +373,28 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
                   today * MICROS_PER_DAY + 5 * MICROS_PER_MINUTE, TimestampNTZType))))
           }
         }
+      }
+    }
+  }
+
+  test("only a plan that holds GAP FILL has the GAP FILL generator tree pattern") {
+    withReadings {
+      // EvalGapFillCurrentTimeValues prunes on this pattern, so other generators skip the rule.
+      Seq("SELECT explode(array(1, 2))",
+        "SELECT * FROM readings LATERAL VIEW explode(array(1)) e AS x").foreach { query =>
+        assert(!sql(query).queryExecution.analyzed.containsPattern(GAP_FILL_GENERATOR), query)
+      }
+      Seq(s"SELECT p FROM readings $gapFill",
+        s"SELECT * FROM (SELECT * FROM readings $gapFill) g JOIN readings r ON g.p = r.p")
+        .foreach { query =>
+          assert(sql(query).queryExecution.analyzed.containsPattern(GAP_FILL_GENERATOR), query)
+        }
+      // In a subquery, the pattern is at the root of the subquery plan that holds GAP FILL.
+      Seq(s"SELECT (SELECT count(*) FROM readings $gapFill) AS n",
+        s"SELECT 1 WHERE EXISTS (SELECT 1 FROM readings $gapFill)").foreach { query =>
+        val analyzed = sql(query).queryExecution.analyzed
+        assert(analyzed.collectWithSubqueries { case p => p.subqueries }.flatten
+          .exists(_.containsPattern(GAP_FILL_GENERATOR)), query)
       }
     }
   }
