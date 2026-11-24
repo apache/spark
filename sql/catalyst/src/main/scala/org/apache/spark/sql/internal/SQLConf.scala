@@ -1194,10 +1194,27 @@ object SQLConf {
       .doc("When true, use a dedicated sort-merge physical operator for DataFrame AS-OF joins " +
         "instead of rewriting to a correlated subquery. The strategy is selected during " +
         "analysis; later changes to this setting do not affect already analyzed joins. " +
-        "SQL AS-OF joins always use sort-merge. The sort-merge operator evaluates " +
+        "SQL AS-OF joins and DataFrame AS-OF joins with a streaming left side always use " +
+        "sort-merge, unless spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery is " +
+        "true. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_AS_OF_JOIN_REWRITE_STREAMING_LEFT_TO_SUBQUERY =
+    buildConf("spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery")
+      .internal()
+      .doc("When true, a DataFrame AS-OF join with a streaming left side is rewritten to a " +
+        "correlated subquery unless spark.sql.join.sortMergeAsOfJoin.enabled is true, which is " +
+        "the behavior in Spark 4.3 and earlier. Its decorrelation adds stateful operators: " +
+        "without a watermark the query fails at its first micro-batch, and with a watermark " +
+        "the query holds back and drops rows. Use it only to restart an existing query from " +
+        "a checkpoint written with that behavior. When false, such a join uses the sort-merge " +
+        "operator. The strategy is selected during analysis.")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
