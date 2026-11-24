@@ -45,7 +45,9 @@ public interface HasPartitionStatistics extends InputPartition {
   OptionalLong numRows();
 
   /**
-   * Returns the number of files this input reads, or an empty value if unknown.
+   * Returns the number of files this input reads, or an empty value if unknown. When V2 scan
+   * partition packing is enabled, Spark adds an opening cost to the input's size for each file, and
+   * at least one, so an unknown, zero or negative count adds one.
    */
   OptionalLong filesCount();
 }

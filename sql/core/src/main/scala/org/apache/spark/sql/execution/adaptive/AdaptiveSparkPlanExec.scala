@@ -198,9 +198,9 @@ case class AdaptiveSparkPlanExec(
       // local sort left dangling right below the extra shuffle that skew join optimization may
       // insert between two joins.
       RemoveRedundantSorts,
-      // Must run after `RemoveRedundantSorts`, which drops a local sort that is a shuffle's direct
-      // child, and before `AQEEnablePipelinedShuffle`, which then sees that a packed shuffle's
-      // input width is unknown and keeps the plan regular.
+      // Must run after `ReplaceHashWithSortAgg` and `RemoveRedundantSorts`, which decide which
+      // operators rely on a scan's ordering, and before `AQEEnablePipelinedShuffle`, which then
+      // sees that a packed shuffle's input width is unknown and keeps the plan regular.
       PackV2ScanPartitions,
       // Flips the final unmaterialized tail's exchanges to pipelined (SPARK-57399 pipelined
       // channel, opt-in). Runs last so skew handling and sort cleanup have settled

@@ -3681,7 +3681,7 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.scanPartitionPacking.enabled")
       .doc("When true, Spark packs adjacent input partitions of a batch DataSource V2 scan into " +
         "fewer tasks below a shuffle, by the size each input reports through " +
-        "HasPartitionStatistics.sizeInBytes() plus an opening cost. It applies when the " +
+        "HasPartitionStatistics.sizeInBytes() plus an opening cost per file. It applies when the " +
         "shuffle reads one scan through projections, filters, sorts, partial aggregates or the " +
         "streamed side of a broadcast hash join, with or without V2 bucketing. Scans of " +
         "file-based V2 sources are left to the spark.sql.files.* settings. If any input of a " +
@@ -3690,7 +3690,7 @@ object SQLConf {
         "filtering emptied always join a neighboring task. Off by default, " +
         "because packing can reduce useful parallelism and limit how finely AQE can split " +
         "skewed shuffle partitions.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -3701,7 +3701,7 @@ object SQLConf {
         s"${FILES_MAX_PARTITION_BYTES.key} does for files. Spark does not split connector " +
         "inputs, so a single input larger than this limit is never divided. Takes effect when " +
         s"${V2_SCAN_PARTITION_PACKING_ENABLED.key} is true.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "The maximum partition size must be positive.")
@@ -3710,10 +3710,11 @@ object SQLConf {
   val V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES =
     buildConf("spark.sql.sources.v2.scanPartitionPacking.openCostInBytes")
       .internal()
-      .doc("Estimated cost of opening one V2 input, expressed as equivalent scanned bytes. " +
-        "Added to each input's reported size when packing. Takes effect when " +
+      .doc("Estimated cost of opening a file, expressed as equivalent scanned bytes. Added to " +
+        "each input's reported size when packing, once for each file the input reports through " +
+        "HasPartitionStatistics.filesCount(), and at least once. Takes effect when " +
         s"${V2_SCAN_PARTITION_PACKING_ENABLED.key} is true.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The opening cost must be non-negative.")
@@ -3725,7 +3726,7 @@ object SQLConf {
         s"value is `${LEAF_NODE_DEFAULT_PARALLELISM.key}`. Input boundaries, size limits and " +
         "opening costs mean the resulting count is not guaranteed. Takes effect when " +
         s"${V2_SCAN_PARTITION_PACKING_ENABLED.key} is true.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "The minimum partition count must be positive.")
@@ -3743,7 +3744,7 @@ object SQLConf {
         "bound the bytes per task; when unset, such a scan's inputs are left as they are. " +
         "Scans of file-based V2 sources are left to the spark.sql.files.* settings. Takes " +
         s"effect when ${V2_SCAN_PARTITION_PACKING_ENABLED.key} is true.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "The maximum partition count must be positive.")

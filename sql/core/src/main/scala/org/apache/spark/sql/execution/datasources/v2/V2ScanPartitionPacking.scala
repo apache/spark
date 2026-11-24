@@ -39,7 +39,9 @@ case class V2ScanPartitionPacking(
 
   /**
    * Group adjacent inputs by estimated size as `FilePartition` groups files, but in the scan's
-   * order and never splitting an input. As with
+   * order and never splitting an input. Each input costs its size plus the opening cost for each
+   * file it reports through `filesCount`, and at least one, and it joins a group only if all of its
+   * files would fit there. As with
    * `spark.sql.files.maxPartitionNum`, when that gives more groups than `maxPartitionNum`, the
    * groups are sized by the cap instead. If any input lacks a valid size, the whole scan is grouped
    * by count into at most `maxPartitionNum` balanced ranges when that cap is set. Returns None when
@@ -54,6 +56,7 @@ case class V2ScanPartitionPacking(
       defaultMinPartitionNum: => Int): Option[Seq[Range]] = {
     // Unboxed, allocated at the first valid size and read only while every input reports one.
     var sizes: Array[Long] = null
+    var openCosts: Array[Long] = null
     var total = 0L
     var sized = true
     var index = 0
@@ -63,9 +66,13 @@ case class V2ScanPartitionPacking(
           val bytes = p.sizeInBytes()
           sized = bytes.isPresent && bytes.getAsLong >= 0
           if (sized) {
-            if (sizes == null) sizes = new Array[Long](numInputs)
+            if (sizes == null) {
+              sizes = new Array[Long](numInputs)
+              openCosts = new Array[Long](numInputs)
+            }
             sizes(index) = bytes.getAsLong
-            total = add(total, add(sizes(index), openCostInBytes))
+            openCosts(index) = openCost(p)
+            total = add(total, add(sizes(index), openCosts(index)))
           }
         case _ => sized = false
       }
@@ -79,13 +86,13 @@ case class V2ScanPartitionPacking(
     } else {
       val minGroups = minPartitionNum.getOrElse(defaultMinPartitionNum)
       // As FilePartition.maxSplitBytes.
-      val groups = bySize(sizes,
+      val groups = bySize(sizes, openCosts,
         math.min(maxPartitionBytes, math.max(openCostInBytes, total / minGroups)))
       // As spark.sql.files.maxPartitionNum: above the cap, size the groups by the cap instead.
       val numGroups = groups.fold(numInputs)(_.size)
       maxPartitionNum.filter(numGroups > _) match {
         case Some(cap) =>
-          val capped = bySize(sizes, ceilDiv(total, cap))
+          val capped = bySize(sizes, openCosts, ceilDiv(total, cap))
           logWarning(log"The number of partitions is ${MDC(NUM_PARTITIONS, numGroups)}, " +
             log"which exceeds the maximum number configured: ${MDC(MAX_NUM_PARTITIONS, cap)}. " +
             log"Spark rescales it to " +
@@ -149,20 +156,34 @@ case class V2ScanPartitionPacking(
 
   private def ceilDiv(total: Long, n: Int): Long = total / n + (if (total % n == 0) 0 else 1)
 
-  // Next fit, as FilePartition.getFilePartitions: an input starts a new group when its size would
-  // take the current group past the target, and then adds its size and opening cost to the group.
-  // Records where each group starts, and builds the groups only if some of them merge.
-  private def bySize(sizes: Array[Long], target: Long): Option[Seq[Range]] = {
+  // The opening cost for each file the input reports, and at least one, as FilePartition adds it
+  // for each file.
+  private def openCost(input: HasPartitionStatistics): Long = {
+    val files = input.filesCount()
+    val numFiles = if (files.isPresent) math.max(files.getAsLong, 1L) else 1L
+    if (openCostInBytes > Long.MaxValue / numFiles) Long.MaxValue else openCostInBytes * numFiles
+  }
+
+  // Next fit, as FilePartition.getFilePartitions: an input starts a new group when its files would
+  // take the current group past the target, that is its size and the opening costs of all of its
+  // files but the last, and then adds its size and opening costs to the group. Records where each
+  // group starts, and builds the groups only if some of them merge.
+  private def bySize(
+      sizes: Array[Long],
+      openCosts: Array[Long],
+      target: Long): Option[Seq[Range]] = {
     val starts = new mutable.ArrayBuilder.ofInt
     var start = 0
     var currentBytes = 0L
     sizes.indices.foreach { index =>
-      if (index > start && currentBytes > target - sizes(index)) {
+      // Never negative: an input's opening cost is at least openCostInBytes.
+      val fileBytes = add(sizes(index), openCosts(index) - openCostInBytes)
+      if (index > start && currentBytes > target - fileBytes) {
         starts.addOne(start)
         start = index
         currentBytes = 0L
       }
-      currentBytes = add(currentBytes, add(sizes(index), openCostInBytes))
+      currentBytes = add(currentBytes, add(sizes(index), openCosts(index)))
     }
     if (start < sizes.length) starts.addOne(start)
     val groupStarts = starts.result()

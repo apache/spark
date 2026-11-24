@@ -364,16 +364,17 @@ for data locality.
 
 Inputs can also implement
 [`HasPartitionStatistics`](api/java/org/apache/spark/sql/connector/read/HasPartitionStatistics.html)
-to report their estimated `sizeInBytes()`: the bytes the input reads from storage, such as a
-file's length, without any opening cost. With `spark.sql.sources.v2.scanPartitionPacking.enabled`,
-Spark can pack adjacent inputs by size into fewer tasks where a shuffle reads the scan. This applies
-to keyed and unkeyed batch scans and is disabled by default. Inputs are
-packed in the order the scan reads them, which for a keyed scan with V2 bucketing enabled is the
-order of their partition keys. Return `OptionalLong.empty()` when the size is unknown. If any input
-of a scan reports no size, Spark leaves the scan's inputs unchanged, unless
-`spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, in which case Spark groups them
-by count. When packing by size gives more tasks than that setting, Spark packs the inputs again to
-approach it, as `spark.sql.files.maxPartitionNum` does for files.
+to report their estimated `sizeInBytes()`: the bytes the input reads from storage, such as the
+length of its files, without any opening cost. With
+`spark.sql.sources.v2.scanPartitionPacking.enabled`, Spark can pack adjacent inputs by size into
+fewer tasks where a shuffle reads the scan, adding an opening cost for each file an input reports
+through `filesCount()`, and at least one. This applies to keyed and unkeyed batch scans and is
+disabled by default. Inputs are packed in the order the scan reads them, which for a keyed scan with
+V2 bucketing enabled is the order of their partition keys. Return `OptionalLong.empty()` when the
+size is unknown. If any input of a scan reports no size, Spark leaves the scan's inputs unchanged,
+unless `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, in which case Spark
+groups them by count. When packing by size gives more tasks than that setting, Spark packs the
+inputs again to approach it, as `spark.sql.files.maxPartitionNum` does for files.
 See [DataSource V2 Scan Partition Packing](sql-performance-tuning.html#datasource-v2-scan-partition-packing)
 for size limits, opening costs and parallelism settings. Packing uses the existing inputs and
 reader factory; the connector does not need to implement a separate packed scan.

@@ -880,8 +880,8 @@ object QueryExecution {
       // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
       // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
       RemoveRedundantSorts,
-      // Must run after `RemoveRedundantSorts`, which drops a local sort that is a shuffle's direct
-      // child, and before columnar transitions and codegen wrap the shuffles' children. A packed
+      // Must run after `ReplaceHashWithSortAgg` and `RemoveRedundantSorts`, which decide which
+      // operators rely on a scan's ordering, and before columnar transitions and codegen. A packed
       // shuffle's input width is unknown, so `EnablePipelinedShuffle` keeps such a plan regular.
       PackV2ScanPartitions,
       ApplyColumnarRulesAndInsertTransitions(

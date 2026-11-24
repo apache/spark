@@ -32,12 +32,12 @@ import org.apache.spark.sql.connector.expressions.Expressions.identity
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.HasPartitionStatistics
 import org.apache.spark.sql.execution.{SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PackScanPartitionsExec, PackV2ScanPartitions, V2ScanPartitionPacking}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, EnsureRequirements, ShuffleExchangeExec, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{broadcast, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -46,6 +46,7 @@ import org.apache.spark.tags.DataSourceV2Test
 @DataSourceV2Test
 class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
   import testImplicits._
+  import PackV2ScanPartitionsSuite.meetsRequirements
 
   private val enabled = SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key
   private val minPartitionNum = SQLConf.V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM.key
@@ -131,7 +132,7 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: a shuffle reads packed keyed and unkeyed scans, unchanged below the node") {
+  test("SPARK-60265: a shuffle reads keyed and unkeyed scans packed directly above the scan") {
     for (keyed <- Seq(false, true)) {
       createSplits(keyed = keyed)
       for (adaptive <- Seq(false, true); packing <- Seq(false, true);
@@ -146,22 +147,23 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
           assert(packNodes(plan).size === (if (packing) 1 else 0))
           // The shuffle's map stage runs one task per packed group.
           assert(exchange.child.execute().getNumPartitions === (if (packing) 2 else 48))
-          // The scan and the partial aggregate below the node run as without it: the aggregate
-          // emits its rows once per input.
+          // The scan runs as without the node, which sits directly above it. The partial
+          // aggregate above the node emits its rows once per packed group.
           val scan = collectScans(plan).head
           assert(scan.inputRDD.getNumPartitions === 48)
           assert(scan.outputPartitioning.isInstanceOf[KeyedPartitioning] === (keyed && bucketing))
+          assert(packNodes(plan).forall(_.child eq scan))
           val aggregate = collect(exchange.child) { case a: BaseAggregateExec => a }.head
-          assert(aggregate.execute().count() === 48L)
-          assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+          assert(aggregate.execute().count() === (if (packing) 2L else 48L))
+          assert(meetsRequirements(plan))
         }
       }
       catalog.clearTables()
     }
   }
 
-  test("SPARK-60265: the node wraps a shuffle's child that reads one scan through the listed " +
-      "operators") {
+  test("SPARK-60265: the node goes directly above a scan that a shuffle reads through the " +
+      "listed operators") {
     createSplits(splits = 3)
     createTable(purchases, purchasesColumns, Array(identity("item_id")))
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 42.0, NULL), (2, 10.0, NULL)")
@@ -176,7 +178,9 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
           val plan = df.queryExecution.executedPlan
           withClue(s"adaptive=$adaptive\n${plan.treeString}") {
             assert(packedTables(plan).sorted === expected.sorted)
-            assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+            // Nothing on these paths relies on the scan's ordering.
+            assert(packNodes(plan).forall(_.child.isInstanceOf[BatchScanExec]))
+            assert(meetsRequirements(plan))
           }
         }
         val itemsName = items
@@ -184,16 +188,22 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
         // Projects, filters and partial aggregates below a shuffle.
         check(itemsDf.where("price > 0").groupBy("name").count(), Seq(itemsName))
         // A sort that a partial sort aggregate needs, since max of a string has no hash aggregate.
+        // The sort goes above the node.
         val sorted = itemsDf.groupBy("price").agg(max("name"))
         check(sorted, Seq(itemsName))
-        assert(packNodes(sorted.queryExecution.executedPlan)
-          .exists(node => node.exists(_.isInstanceOf[SortExec])))
+        val sortedExchange = collect(sorted.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec => s
+        }.head
+        assert(collect(sortedExchange.child) { case s: SortExec => s }
+          .exists(_.exists(_.isInstanceOf[PackScanPartitionsExec])))
         // A broadcast hash join's streamed side, but not its build side.
         check(itemsDf.join(broadcast(purchasesDf), $"id" === $"item_id").groupBy("name").count(),
           Seq(itemsName))
         // Both sides of a sort-merge join that shuffles them.
         check(itemsDf.join(purchasesDf, itemsDf("price") === purchasesDf("price")),
           Seq(itemsName, purchasesName))
+        // A global sort's range shuffle.
+        check(itemsDf.orderBy("name"), Seq(itemsName))
         // An explicit repartition keeps its output count.
         val repartitioned = itemsDf.repartition(5)
         check(repartitioned, Seq(itemsName))
@@ -210,7 +220,7 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: packing runs after RemoveRedundantSorts drops a sort below a shuffle") {
+  test("SPARK-60265: a local sort that a shuffle reads directly is still removed with packing") {
     createSplits(splits = 3)
     for (adaptive <- Seq(false, true); packing <- Seq(false, true)) {
       withSQLConf(enabled -> packing.toString,
@@ -247,6 +257,19 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
         assert(packNodes(df.queryExecution.executedPlan).head.execute().getNumPartitions ===
           (if (parallelism == 1) 2 else 4))
       }
+    }
+  }
+
+  test("SPARK-60265: the opening cost is charged for each file an input reports") {
+    // In-memory splits report 100 bytes in 100 files each. A cost of 1 per file gives 12 splits of
+    // 200 bytes per task, where a cost of 1 per split would give 23 splits of 101 bytes.
+    createSplits()
+    withSQLConf(enabled -> "true", minPartitionNum -> "1",
+        SQLConf.V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES.key -> "1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(s"SELECT name, count(*) FROM testcat.ns.$items GROUP BY name")
+      checkAnswer(df, (1 to 24).map(i => Row(s"split$i", 2L)))
+      assert(packNodes(df.queryExecution.executedPlan).head.execute().getNumPartitions === 4)
     }
   }
 
@@ -298,6 +321,7 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
           val joins = collect(plan) { case j: BroadcastHashJoinExec => j }
           assert(joins.map(_.buildSide) === Seq(if (buildLeft) BuildLeft else BuildRight))
           assert(packedTables(plan) === Seq(items))
+          assert(packNodes(plan).forall(_.child.isInstanceOf[BatchScanExec]))
           // The 48 splits of 100 bytes run in two map tasks of 2,400 bytes.
           assert(packNodes(plan).map(_.execute().getNumPartitions) === Seq(2))
         }
@@ -305,10 +329,10 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: an AQE local read over a packed shuffle keeps every cross-split match") {
+  test("SPARK-60265: AQE reads the shuffle of a packed keyed scan in full where a join needs it") {
     // The query of "SPARK-59671: an AQE local read over a split scan does not lose matches",
     // which the packing re-run of KeyGroupedPartitioningSuite excludes: its setup expects the
-    // scan's keyed layout to reach the local read, and over a packed shuffle it does not. The
+    // scan's keyed layout to reach a local read, and over a packed shuffle it does not. The
     // matches across the splits of key 1 must still all be found.
     val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
     createTable("lrt", idCols, Array(identity("id")))
@@ -342,11 +366,17 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
       withClue(plan.treeString) {
         assert(packedTables(plan).contains("lrt"))
         assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size === 2)
-        // Both narrow sides broadcast at runtime, so AQE reads the wide side's packed shuffle
-        // locally, and those reads report no keyed layout.
-        val localReads = collect(plan) { case r: AQEShuffleReadExec if r.isLocalRead => r }
-        assert(localReads.nonEmpty)
-        assert(localReads.forall { r =>
+        // Both narrow sides broadcast at runtime, and their shuffles are read locally to build
+        // the broadcasts. A local read over the wide side's packed shuffle would report no
+        // partitioning, while the sort merge join above needs it hash partitioned, so AQE reads
+        // that shuffle in full: no read sits over it. The local reads, over the unkeyed narrow
+        // sides, report no keyed layout either.
+        assert(collect(plan) { case j: SortMergeJoinExec => j }.size === 1)
+        val reads = collect(plan) { case r: AQEShuffleReadExec => r }
+        assert(reads.forall(_.isLocalRead))
+        assert(reads.flatMap(collectScans).map(_.table.name().split('.').last).sorted ===
+          Seq("lrs1", "lrs2"))
+        assert(reads.forall { r =>
           PartitioningCollection.flatten(r.outputPartitioning)
             .forall(!_.isInstanceOf[KeyedPartitioning])
         })
@@ -366,7 +396,15 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
   }
 }
 
-object PackV2ScanPartitionsSuite {
+object PackV2ScanPartitionsSuite extends AdaptiveSparkPlanHelper {
+  /**
+   * Whether `plan` meets every operator's requirements, also inside the query stages of an AQE
+   * plan, which `stripAQEPlan` leaves as leaves.
+   */
+  def meetsRequirements(plan: SparkPlan): Boolean =
+    ValidateRequirements.validate(stripAQEPlan(plan)) &&
+      collect(plan) { case s: QueryStageExec => s.plan }.forall(ValidateRequirements.validate)
+
   /**
    * Scan packing for the re-run suites below. In-memory splits report 100 bytes each, so a packed
    * shuffle input reads three of them per task.
@@ -383,10 +421,14 @@ object PackV2ScanPartitionsSuite {
 class KeyGroupedPartitioningPackScanPartitionsSuite extends KeyGroupedPartitioningSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 
-  // With packing, the wide side's shuffle reads the packing node, which reports no keyed layout,
-  // so the split keyed layout that this test sets up never reaches a local read.
+  // With packing, the node sits directly above a scan that a shuffle reads, and the node reports
+  // no keyed layout. So the split keyed layout that the first test sets up never reaches a local
+  // read. The second test fails only its setup check where a side is shuffled: the project it
+  // inspects for the collapsed layout reads the node. What it checks there, no grouping and the
+  // shuffle counts, is decided before packing, and its plans without a shuffle are not packed.
   override protected def excluded: Seq[String] = super.excluded ++ Seq(
-    "SPARK-59671: an AQE local read over a split scan does not lose matches")
+    "SPARK-59671: an AQE local read over a split scan does not lose matches",
+    "SPARK-58974: the collapse skew guard applies regardless of requireAllClusterKeys")
 }
 
 @DataSourceV2Test
@@ -457,6 +499,8 @@ class DynamicPartitionPruningV2CatalystFilterPackScanPartitionsSuiteAEOn
 }
 
 trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuiteBase {
+  import PackV2ScanPartitionsSuite.meetsRequirements
+
   test("SPARK-60265: inputs emptied by runtime filtering stay in the packed groups") {
     createTable(items, itemsColumns, Array(identity("id")))
     createTable(purchases, purchasesColumns, Array.empty)
@@ -506,7 +550,7 @@ trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuite
         checkAnswer(sql(s"SELECT count(*) FROM testcat.ns.$items i " +
           s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE p.price $predicate"),
           Seq(Row(expected.size.toLong)))
-        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+        assert(meetsRequirements(plan))
       }
     }
   }

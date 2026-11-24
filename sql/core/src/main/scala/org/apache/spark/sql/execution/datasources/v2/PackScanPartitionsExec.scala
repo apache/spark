@@ -34,9 +34,11 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * The groups are decided when the node executes, from the input partitions that runtime filtering
  * left and the sizes they report, and its child's partitions are coalesced with
- * [[GroupedPartitionCoalescer]]. The operators below the node run as without it, with the scan's
- * partitioning and ordering. Besides the shuffle, only an AQE local read with one mapper per task
- * reads this node's layout, so it claims none.
+ * [[GroupedPartitionCoalescer]]. The operators below the node, if any, run as they would without
+ * it, and those above it run once per packed partition. The node claims no partitioning or
+ * ordering. The operators between it and the shuffle need none, and over a packed shuffle an AQE
+ * local read with one mapper per task, which passes up the layout from before the shuffle, reports
+ * none.
  */
 case class PackScanPartitionsExec(child: SparkPlan, packing: V2ScanPartitionPacking)
   extends UnaryExecNode {
@@ -58,9 +60,10 @@ case class PackScanPartitionsExec(child: SparkPlan, packing: V2ScanPartitionPack
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = pack(child.executeColumnar())
 
   private def pack[T: ClassTag](rdd: RDD[T]): RDD[T] = {
-    // The operators that PackV2ScanPartitions allows map each partition of their child, so these
-    // are the scan's own partitions, which hold the inputs that runtime filtering left. Any other
-    // RDD, such as one that a plugin's replacement for the scan returns, stays as it is.
+    // The node sits directly above the scan, or above operators that PackV2ScanPartitions allows
+    // and that map each partition of their child one to one. So these are the scan's own
+    // partitions, which hold the inputs that runtime filtering left. Any other RDD, such as one
+    // that a plugin's replacement for the scan returns, stays as it is.
     val partitions = rdd.partitions
     val slots = partitions.collect { case p: DataSourceRDDPartition => p.inputPartition }
     val groups = if (slots.length == partitions.length) {

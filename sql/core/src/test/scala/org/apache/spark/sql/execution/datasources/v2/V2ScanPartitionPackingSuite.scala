@@ -60,6 +60,37 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(V2ScanPartitionPacking(128, 4, Some(5), None).pack(inputs(12, 0, 4, 7), 1).isEmpty)
   }
 
+  test("an input adds the opening cost once for each file it reports") {
+    case class Files(bytes: Long, files: OptionalLong) extends HasPartitionStatistics {
+      override def sizeInBytes(): OptionalLong = OptionalLong.of(bytes)
+      override def numRows(): OptionalLong = OptionalLong.empty()
+      override def filesCount(): OptionalLong = files
+    }
+    def files(count: Long): OptionalLong = OptionalLong.of(count)
+    val policy = V2ScanPartitionPacking(40, 5, Some(1), None)
+    // Three files cost 10 + 3 * 5, and the inputs with no file count 10 + 5.
+    assert(policy.pack(Seq(Files(10, files(3))) ++ inputs(10, 10, 10), 1) ===
+      Some(Seq(Seq(0, 1), Seq(2, 3))))
+    assert(policy.pack(inputs(10, 10, 10, 10), 1) === Some(Seq(Seq(0, 1, 2), Seq(3))))
+    // An unknown, zero or negative count costs one opening cost.
+    Seq(OptionalLong.empty(), files(0), files(-1)).foreach { count =>
+      assert(policy.pack(Seq.fill(4)(Files(10, count)), 1) === Some(Seq(Seq(0, 1, 2), Seq(3))))
+    }
+    // An input joins a group only if all of its files would fit there, as FilePartition checks
+    // each file: after the first input's 30 + 5, the second input's four files need 5 + 3 * 5.
+    assert(policy.pack(Seq(Files(30, files(1)), Files(5, files(4))), 1).isEmpty)
+    // The total for the minimum count includes every file's cost: 30 / 2 = 15, where one cost for
+    // each input would give 20 / 2 = 10.
+    val minTwo = V2ScanPartitionPacking(1000, 5, Some(2), None)
+    assert(minTwo.pack(Seq(3L, 1L, 1L, 1L).map(n => Files(0, files(n))), 1) ===
+      Some(Seq(Seq(0, 1), Seq(2, 3))))
+    assert(minTwo.pack(inputs(0, 0, 0, 0), 1) === Some(Seq(Seq(0, 1, 2), Seq(3))))
+    // A cost too large to represent saturates, so the next input starts a new group. Unchecked,
+    // 4 * 2^62 would wrap to 0 and the three inputs would share one.
+    assert(V2ScanPartitionPacking(40, 4, Some(1), None)
+      .pack(Seq(Files(10, files(1L << 62))) ++ inputs(10, 10), 1) === Some(Seq(Seq(0), Seq(1, 2))))
+  }
+
   test("an unset minimum count uses the default given at packing time") {
     val unset = V2ScanPartitionPacking(1000, 0, None, None)
     val parts = inputs(100, 100, 100, 100)
@@ -137,9 +168,9 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     val oversized = Vector.fill(n)(Reported(OptionalLong.of(1000L)))
     val unsized = Vector.fill(n)(Reported(OptionalLong.empty()))
     val noCap = V2ScanPartitionPacking(100, 0, Some(1), None)
-    // Sizes and group starts take about 20 bytes per input; a group for each input would take
-    // about 60 more.
-    assert(allocated(noCap.pack(oversized, 1)) < 32L * n)
+    // Sizes, opening costs and group starts take about 30 bytes per input; a group for each input
+    // would take about 60 more.
+    assert(allocated(noCap.pack(oversized, 1)) < 40L * n)
     // Without valid sizes nothing is kept per input, also under a cap that leaves each input on
     // its own.
     assert(allocated(noCap.pack(unsized, 1)) < n)
@@ -147,7 +178,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     // The same through packSlots, as the packing node calls it, when no partition is empty.
     val oversizedSlots = oversized.map(Some(_))
     val unsizedSlots = unsized.map(Some(_))
-    assert(allocated(noCap.packSlots(oversizedSlots, 1)) < 32L * n)
+    assert(allocated(noCap.packSlots(oversizedSlots, 1)) < 40L * n)
     assert(allocated(noCap.packSlots(unsizedSlots, 1)) < n)
   }
 

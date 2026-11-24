@@ -36,11 +36,11 @@ import org.apache.spark.sql.connector.expressions.Expressions.{identity, sort}
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, HasPartitionStatistics, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, FormattedMode, InputAdapter, PartialReducerPartitionSpec, ProjectedBroadcastValueSubqueryExec, SimpleMode, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FormattedMode, InputAdapter, PartialReducerPartitionSpec, ProjectedBroadcastValueSubqueryExec, SimpleMode, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan, PackScanPartitionsExec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, PipelinedShuffleTestSession, ReusedExchangeExec, ShuffleExchangeExec, ValidateRequirements}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, PipelinedShuffleTestSession, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{broadcast, expr, udf}
@@ -53,6 +53,7 @@ import org.apache.spark.tags.DataSourceV2Test
 @DataSourceV2Test
 class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
   import testImplicits._
+  import PackV2ScanPartitionsSuite.meetsRequirements
 
   private val enabled = SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key
 
@@ -76,11 +77,17 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
   private def packNodes(plan: SparkPlan): Seq[PackScanPartitionsExec] =
     collect(plan) { case p: PackScanPartitionsExec => p }
 
-  // The number of rows in each partition of the only packing node of `df`.
+  // The number of rows in each partition of the only packing node of `df`. Over a columnar scan,
+  // the node packs batches.
   private def rowsPerPackedTask(df: DataFrame): Seq[Int] = {
     val nodes = packNodes(df.queryExecution.executedPlan)
     assert(nodes.size === 1)
-    nodes.head.execute().mapPartitions(rows => Iterator.single(rows.size)).collect().toSeq
+    if (nodes.head.supportsColumnar) {
+      nodes.head.executeColumnar()
+        .mapPartitions(batches => Iterator.single(batches.map(_.numRows).sum)).collect().toSeq
+    } else {
+      nodes.head.execute().mapPartitions(rows => Iterator.single(rows.size)).collect().toSeq
+    }
   }
 
   private def sized(sizes: String): DataFrame =
@@ -110,12 +117,14 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
             val scan = collectScans(plan).find(_.storageFilters.nonEmpty).get
             val node = packNodes(plan).find(n => collectScans(n).contains(scan)).get
             assert(scan.inputPartitions.size === 10)
-            assert(node.execute().getNumPartitions === 2)
+            assert(node.supportsColumnar === columnar)
+            val packed = if (columnar) node.executeColumnar() else node.execute()
+            assert(packed.getNumPartitions === 2)
             assert(scan.appendsCheckedColumn)
             assert(scan.supportsColumnar === columnar)
             assert(StorageFilterTestSource.filteredReaders.get() === 10)
             assert(StorageFilterTestSource.checkedColumnRequests.get() === 10)
-            assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+            assert(meetsRequirements(plan))
           }
         }
       }
@@ -142,9 +151,9 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
           checkAnswer(df, answers)
           checkAnswer(df, answers)
           assert(rowsPerPackedTask(df).size === 2)
-          assert(ValidateRequirements.validate(stripAQEPlan(df.queryExecution.executedPlan)))
-          // Directly below the shuffle, the node packs the scan's batches, and the rows are
-          // converted above it.
+          assert(meetsRequirements(df.queryExecution.executedPlan))
+          // Directly above the scan, the node packs its batches, and the rows are converted above
+          // the node.
           val repartitioned = spark.table("columnar").repartition(3)
           checkAnswer(repartitioned,
             expected.map(row => Row(row.getInt(2), row.getInt(0), row.getInt(3))))
@@ -239,7 +248,7 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
         assert(df.collect().toSeq === Seq(Row(1, "aa"), Row(2, "aa"), Row(1, "bb"),
           Row(2, "bb"), Row(1, "cc"), Row(2, "cc")))
         assert(rowsPerPackedTask(df).size === 2)
-        assert(ValidateRequirements.validate(stripAQEPlan(df.queryExecution.executedPlan)))
+        assert(meetsRequirements(df.queryExecution.executedPlan))
       }
     }
   }
@@ -260,7 +269,7 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
         assert(packNodes(plan).isEmpty)
         assert(collect(plan) { case s: ShuffleExchangeExec => s }.size === 1)
         assert(collectGroupPartitions(plan).nonEmpty)
-        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+        assert(meetsRequirements(plan))
       }
     }
   }
@@ -303,27 +312,66 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: a sort aggregate below the node keeps the scan ordering it uses") {
+  test("SPARK-60265: the node goes above a sort aggregate that uses the scan's ordering") {
     createTable(items, itemsColumns, Array.empty, Array(
       sort(FieldReference("name"), SortDirection.ASCENDING)))
     (1 to 6).foreach { i =>
       sql(s"INSERT INTO testcat.ns.$items VALUES ($i, 'n${i % 2}', 1.0, NULL)")
     }
-    // Hash and object-hash aggregates, which ReplaceHashWithSortAgg both replaces.
+    // Hash and object-hash aggregates, which ReplaceHashWithSortAgg both replaces, and max of a
+    // string, which plans a sort aggregate directly.
+    val aggregates = Seq(
+      "count(*)" -> Seq(Row("n0", 3L), Row("n1", 3L)),
+      "size(collect_list(id))" -> Seq(Row("n0", 3), Row("n1", 3)),
+      "max(cast(id AS STRING))" -> Seq(Row("n0", "6"), Row("n1", "5")))
     for (adaptive <- Seq(false, true); packing <- Seq(false, true);
-        (aggregate, count) <- Seq("count(*)" -> 3L, "size(collect_list(id))" -> 3)) {
+        (aggregate, expected) <- aggregates) {
       withSQLConf(enabled -> packing.toString,
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
         val df = sql(s"SELECT name, $aggregate FROM testcat.ns.$items GROUP BY name")
-        checkAnswer(df, Seq(Row("n0", count), Row("n1", count)))
+        checkAnswer(df, expected)
         val plan = df.queryExecution.executedPlan
         withClue(plan.treeString) {
           assert(packNodes(plan).size === (if (packing) 1 else 0))
           val exchange = collect(plan) { case s: ShuffleExchangeExec => s }.head
           assert(collect(exchange.child) { case a: BaseAggregateExec => a.getClass } ===
             Seq(classOf[SortAggregateExec]))
-          // The partial sort aggregate still reads the scan's ordering.
-          assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+          // No sort is added: the partial sort aggregate reads the scan's ordering directly, and
+          // the node goes between it and the shuffle. It still packs there: two tasks, each with
+          // the aggregate's rows for three one-row inputs.
+          assert(collect(exchange.child) { case s: SortExec => s }.isEmpty)
+          if (packing) {
+            assert(exchange.child.isInstanceOf[PackScanPartitionsExec])
+            assert(exchange.child.children.head.exists(_.isInstanceOf[SortAggregateExec]))
+            assert(rowsPerPackedTask(df) === Seq(3, 3))
+          }
+          assert(meetsRequirements(plan))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60265: packing runs after RemoveRedundantSorts drops a sort the scan's ordering " +
+      "makes redundant") {
+    createTable(items, itemsColumns, Array.empty, Array(
+      sort(FieldReference("name"), SortDirection.ASCENDING)))
+    (1 to 6).foreach { i =>
+      sql(s"INSERT INTO testcat.ns.$items VALUES ($i, 'n${i % 2}', 1.0, NULL)")
+    }
+    for (adaptive <- Seq(false, true)) {
+      withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // The project keeps the sort from being the shuffle's direct child, so only the scan's
+        // ordering makes it redundant. Packed first, the node would go below the sort, which
+        // would then stay.
+        val df = spark.table(s"testcat.ns.$items").sortWithinPartitions("name")
+          .selectExpr("name", "price * 2 AS p").repartition(3, $"p")
+        // checkAnswer would compare the rows in order, because of the sort.
+        assert(df.collect().map(_.getString(0)).sorted.toSeq ===
+          Seq.fill(3)("n0") ++ Seq.fill(3)("n1"))
+        val plan = df.queryExecution.executedPlan
+        withClue(plan.treeString) {
+          assert(collect(plan) { case s: SortExec => s }.isEmpty)
+          assert(packNodes(plan).map(_.child.isInstanceOf[BatchScanExec]) === Seq(true))
         }
       }
     }
@@ -366,26 +414,25 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: partition-dependent expressions below the node keep their values") {
+  test("SPARK-60265: partition-dependent expressions above the node see the packed task") {
     populate()
-    val query = s"SELECT pid, count(*) FROM (SELECT spark_partition_id() AS pid " +
-      s"FROM testcat.ns.$items) GROUP BY pid"
-    val expected = withSQLConf(enabled -> "false") { sql(query).collect().toSeq }
-    assert(expected.size === 6, "test setup: one partition per split")
-    withSQLConf(enabled -> "true") {
-      val df = sql(query)
-      checkAnswer(df, expected)
-      assert(packNodes(df.queryExecution.executedPlan).size === 1)
-      // Code that reads the task's partition id instead, such as this UDF, sees the packed task.
-      val taskPartition = udf(() => TaskContext.getPartitionId()).asNondeterministic()
-      val ids = spark.table(s"testcat.ns.$items")
-        .select(expr("spark_partition_id()").as("pid"), taskPartition().as("tid"))
-        .groupBy("pid", "tid").count()
-      val rows = ids.collect()
-      assert(packNodes(ids.queryExecution.executedPlan).map(_.execute().getNumPartitions) ===
-        Seq(2))
-      assert(rows.map(_.getInt(0)).toSet === (0 until 6).toSet)
-      assert(rows.map(_.getInt(1)).toSet === Set(0, 1))
+    // The node goes directly above the scan, so the built-in expression and code that reads the
+    // task's partition id, such as this UDF, both see the packed task.
+    val taskPartition = udf(() => TaskContext.getPartitionId()).asNondeterministic()
+    for (packing <- Seq(false, true)) {
+      withSQLConf(enabled -> packing.toString) {
+        val ids = spark.table(s"testcat.ns.$items")
+          .select(expr("spark_partition_id()").as("pid"), taskPartition().as("tid"))
+          .groupBy("pid", "tid").count()
+        val rows = ids.collect()
+        val nodes = packNodes(ids.queryExecution.executedPlan)
+        assert(nodes.map(_.execute().getNumPartitions) === (if (packing) Seq(2) else Nil))
+        assert(nodes.forall(_.child.isInstanceOf[BatchScanExec]))
+        val tasks = if (packing) 2 else 6
+        assert(rows.map(row => (row.getInt(0), row.getInt(1))).toSet ===
+          (0 until tasks).map(task => (task, task)).toSet)
+        assert(rows.map(_.getLong(2)).sum === 6L)
+      }
     }
   }
 
