@@ -3626,7 +3626,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       transform: String,
       columnType: DataType,
       inputTypes: Seq[DataType],
-      key: Expression): Throwable = {
+      key: Expression,
+      cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
       messageParameters = Map(
@@ -3635,7 +3636,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "inputTypes" -> inputTypes.map(toSQLType).mkString("(", ", ", ")"),
         "key" -> toSQLExpr(key),
         "keyType" -> toSQLType(key.dataType)),
-      cause = null)
+      cause = cause)
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(

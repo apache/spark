@@ -1944,9 +1944,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)` column, stored as a `long`. The
     // cogroup compares the key rows, and falling back to a hash shuffle would pair such groups
     // wrongly too, so it fails, while planning, with an error that names the key and its type. The
-    // storage check needs no call, so nothing is logged about the transform first. A key stored as
-    // the column is but that the function cannot take even by storage fails too: a nested decimal
-    // of more precision than declared.
+    // storage check needs no call, and the call over a key it takes is asked quietly, so nothing is
+    // logged about the transform first. A key stored as the column is but that the function cannot
+    // take even by storage fails too: a nested decimal of more precision than declared.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType

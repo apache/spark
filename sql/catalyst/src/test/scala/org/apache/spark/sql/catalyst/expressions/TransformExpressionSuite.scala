@@ -625,12 +625,12 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     val appender = new LogAppender("transforms asked quietly")
     withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.DEBUG)) {
-      assert(bucket(ProduceResultBucketFunction, Literal(7)).isEvaluableQuietly)
-      assert(!bucket(new QuietBucket, Literal(7L)).isEvaluableQuietly)
+      assert(bucket(ProduceResultBucketFunction, Literal(7)).isEvaluableQuietly.get)
+      assert(!bucket(new QuietBucket, Literal(7L)).isEvaluableQuietly.get)
       val udt = BoundReference(0, new QuietUDT, nullable = true)
-      assert(!bucket(new QuietInvokeBucket, udt).isEvaluableQuietly)
-      assert(!bucket(new QuietNotScalar, Literal(7)).isEvaluableQuietly)
-      assert(!bucket(new QuietFailing, Literal(7)).isEvaluableQuietly)
+      assert(!bucket(new QuietInvokeBucket, udt).isEvaluableQuietly.get)
+      assert(!bucket(new QuietNotScalar, Literal(7)).isEvaluableQuietly.get)
+      assert(bucket(new QuietFailing, Literal(7)).isEvaluableQuietly.isFailure)
     }
     assert(appender.loggingEvents.isEmpty,
       appender.loggingEvents.map(_.getMessage.getFormattedMessage))

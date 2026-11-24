@@ -245,13 +245,14 @@ case class TransformExpression(
     }
 
   /**
-   * Whether [[evaluableFunction]] is defined, without logging why not. For
-   * `KeyedShuffleSpec.createPartitioning`, which fails on a transform it cannot evaluate rather
-   * than shuffle otherwise, so that no line claims a join does not evaluate it.
+   * Whether [[evaluableFunction]] is defined, without logging why not, or what resolving its call
+   * threw. For `KeyedShuffleSpec.createPartitioning`, which fails on a transform it cannot
+   * evaluate rather than shuffle otherwise, so that no line claims a join does not evaluate it,
+   * and which makes what was thrown the cause of its error.
    */
-  private[sql] def isEvaluableQuietly: Boolean =
-    try resolveEvaluableFunction(quiet = true).isDefined catch {
-      case NonFatal(_) | _: LinkageError => false
+  private[sql] def isEvaluableQuietly: Try[Boolean] =
+    try Success(resolveEvaluableFunction(quiet = true).isDefined) catch {
+      case e @ (NonFatal(_) | _: LinkageError) => Failure(e)
     }
 
   private def resolveEvaluableFunction(quiet: Boolean): Option[Expression] = scalarFunction match {
