@@ -298,18 +298,33 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType)(f: Long => T): T = {
-    val integralVal = if (decimalVal.eq(null)) {
+    // Truncate exactly. Going through a Double would round a value whose fraction is close
+    // enough to 1 up to the next integer, returning a value one too high or, at a bound,
+    // overflowing.
+    val integralVal = truncatedLong(integralType)
+    val numericVal = f(integralVal)
+    if (integralVal == numericVal) numericVal else throw overflowError(integralType)
+  }
+
+  /**
+   * Truncates toward zero exactly, or throws the overflow error if the result does not fit in a
+   * Long.
+   */
+  private def truncatedLong(integralType: IntegralType): Long = {
+    if (decimalVal.eq(null)) {
       actualLongVal
     } else {
-      // Truncate exactly, as `roundToLong` does. Going through a Double would round a value
-      // whose fraction is close enough to 1 up to the next integer, returning a value one too
-      // high or, at a bound, overflowing.
-      val truncated = decimalVal.bigDecimal.toBigInteger
+      val bd = decimalVal.bigDecimal
+      // A non-zero value has precision - scale integral digits when that is positive (none
+      // otherwise), and Long.MaxValue has MAX_LONG_DIGITS + 1. Reject longer ones before
+      // toBigInteger expands them; compute in Long, since a negative scale can overflow Int.
+      if (bd.signum != 0 && bd.precision.toLong - bd.scale > MAX_LONG_DIGITS + 1) {
+        throw overflowError(integralType)
+      }
+      val truncated = bd.toBigInteger
       // longValue() keeps only the low 64 bits, so it is exact only when bitLength() < 64.
       if (truncated.bitLength() < 64) truncated.longValue() else throw overflowError(integralType)
     }
-    val numericVal = f(integralVal)
-    if (integralVal == numericVal) numericVal else throw overflowError(integralType)
   }
 
   private def overflowError(integralType: IntegralType): ArithmeticException =
@@ -324,24 +339,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @throws ArithmeticException
    *   if the decimal too big to fit in Long type.
    */
-  private[sql] def roundToLong(): Long = {
-    if (decimalVal.eq(null)) {
-      actualLongVal
-    } else {
-      try {
-        // We cannot store Long.MAX_VALUE as a Double without losing precision.
-        // Here we simply convert the decimal to `BigInteger` and use the method
-        // `longValueExact` to make sure the range check is accurate.
-        decimalVal.bigDecimal.toBigInteger.longValueExact()
-      } catch {
-        case _: ArithmeticException =>
-          throw DataTypeErrors.castingCauseOverflowError(
-            toSqlValue,
-            DecimalType(this.precision, this.scale),
-            LongType)
-      }
-    }
-  }
+  private[sql] def roundToLong(): Long = truncatedLong(LongType)
 
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.

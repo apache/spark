@@ -166,7 +166,6 @@ private object FakeStateStoreProviderTracksCloseThread {
   var closeThreadNames: List[String] = Nil
 }
 
-@ExtendedSQLTest
 abstract class StateStoreDecoupledMaintenanceSuiteBase[
     ProviderClass <: StateStoreProvider]
     extends SparkFunSuite

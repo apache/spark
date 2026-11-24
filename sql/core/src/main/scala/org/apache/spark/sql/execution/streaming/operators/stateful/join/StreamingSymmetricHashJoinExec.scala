@@ -21,13 +21,14 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -39,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -327,6 +328,10 @@ case class StreamingSymmetricHashJoinExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val valueSchemaValidator = Option.when(
+      session.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS)) {
+      validateJoinValueSchema _
+    }
     if (useVirtualColumnFamilies) {
       val info = getStateInfo
       val stateSchemaDir = stateSchemaDirPath()
@@ -336,7 +341,8 @@ case class StreamingSymmetricHashJoinExec(
       // so we hardcode 3 here for the VCF path.
       val effectiveSchemaVersion = 3
       validateAndWriteStateSchema(
-        hadoopConf, batchId, effectiveSchemaVersion, info, stateSchemaDir, session
+        hadoopConf, batchId, effectiveSchemaVersion, info, stateSchemaDir, session,
+        valueSchemaValidator = valueSchemaValidator
       )
     } else {
       var result: Map[String, (StructType, StructType)] = Map.empty
@@ -356,8 +362,31 @@ case class StreamingSymmetricHashJoinExec(
           WidenStatefulOpNullability.widenStateSchema(keySchema), 0,
           WidenStatefulOpNullability.widenStateSchema(valueSchema)))
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
+          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName,
+          valueSchemaValidator = valueSchemaValidator)
       }.toList
+    }
+  }
+
+  private def validateJoinValueSchema(
+      storeId: StateStoreId,
+      storedSchema: StateStoreColFamilySchema,
+      newSchema: StateStoreColFamilySchema): Unit = {
+    // Changing join eligibility can swap a retained timestamp with another timestamp. The
+    // ordinary compatibility check accepts this because it compares fields by position and type.
+    // A rename that preserves the watermark is compatible. Detecting a swap between two
+    // watermarked columns would require persisting column identity.
+    storedSchema.valueSchema.fields.zip(newSchema.valueSchema.fields).find {
+      case (stored, current) =>
+        stored.dataType == TimestampType && stored.name != current.name &&
+          stored.metadata.contains(EventTimeWatermark.delayKey) !=
+            current.metadata.contains(EventTimeWatermark.delayKey)
+    }.foreach { case (stored, current) =>
+      val storeName = if (useVirtualColumnFamilies) newSchema.colFamilyName else storeId.storeName
+      throw new SparkUnsupportedOperationException(
+        errorClass = "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED",
+        messageParameters = Map(
+          "storeName" -> storeName, "storedColumn" -> stored.name, "newColumn" -> current.name))
     }
   }
 

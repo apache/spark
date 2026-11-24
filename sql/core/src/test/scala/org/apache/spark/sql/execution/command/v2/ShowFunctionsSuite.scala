@@ -23,11 +23,13 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrL
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase {
   override protected def funCatalog: String = s"fun_$catalog"
 

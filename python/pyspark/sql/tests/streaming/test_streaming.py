@@ -334,11 +334,24 @@ class StreamingTestsMixin:
         )
         try:
             self.assertTrue(q.isActive)
-            try:
+            with self.assertRaises(PySparkTypeError) as pe:
                 q.awaitTermination("hello")
-                self.fail("Expected a value exception")
-            except ValueError:
-                pass
+            self.check_error(
+                pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "timeout",
+                    "expected_type": "float or int",
+                    "arg_type": "str",
+                },
+            )
+            with self.assertRaises(PySparkValueError) as pe:
+                q.awaitTermination(-1)
+            self.check_error(
+                pe.exception,
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "timeout", "arg_value": "int"},
+            )
             now = time.time()
             # test should take at least 2 seconds
             res = q.awaitTermination(2.6)
@@ -421,11 +434,24 @@ class StreamingTestsMixin:
         )
         try:
             self.assertTrue(q.isActive)
-            try:
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.streams.awaitAnyTermination("hello")
-                self.fail("Expected a value exception")
-            except ValueError:
-                pass
+            self.check_error(
+                pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "timeout",
+                    "expected_type": "float or int",
+                    "arg_type": "str",
+                },
+            )
+            with self.assertRaises(PySparkValueError) as pe:
+                self.spark.streams.awaitAnyTermination(-1)
+            self.check_error(
+                pe.exception,
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "timeout", "arg_value": "int"},
+            )
             now = time.time()
             # test should take at least 2 seconds
             res = self.spark.streams.awaitAnyTermination(2.6)

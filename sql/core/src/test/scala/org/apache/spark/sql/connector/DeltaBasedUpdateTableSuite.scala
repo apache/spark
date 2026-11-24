@@ -21,7 +21,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
 
   import testImplicits._
@@ -107,6 +109,38 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       s"""UPDATE $tableNameAsString
          |SET id = -1
          |WHERE id IN (1, 100) AND _partition = 'hr' AND id > 0.5
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = StructType(table.schema.map {
+        case attr if attr.name == "id" => attr.copy(nullable = false) // input is a constant
+        case attr => attr
+      }),
+      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(
+      updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(1, -1, "hr")))
+  }
+
+  test("SPARK-61683: update of a table accepting any schema handles metadata columns correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString SET TBLPROPERTIES ('accept-any-schema' = 'true')")
+
+    // Spark does not align the assignments for such a table, so this SET clause lists every column
+    // of the target table, including the metadata columns that AddMetadataColumns adds to it
+    sql(
+      s"""UPDATE $tableNameAsString
+         |SET pk = pk, id = -1, dep = dep, index = index, _partition = _partition
+         |WHERE id IN (1, 100)
          |""".stripMargin)
 
     checkAnswer(

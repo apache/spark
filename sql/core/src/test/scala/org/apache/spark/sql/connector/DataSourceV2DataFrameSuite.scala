@@ -28,7 +28,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, Sessio
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, Filter, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
@@ -41,11 +43,13 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DateType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with SessionQueryTest
@@ -1136,6 +1140,74 @@ class DataSourceV2DataFrameSuite
           "defaultValue" -> "c1"
         )
       )
+    }
+  }
+
+  test("SPARK-60451: default values and generated columns on a special datetime value") {
+    // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
+    // with `current_date()`, columns on one that reads the current date have no V2 expression, so
+    // writes read their SQL text. 'epoch' has a fixed value.
+    val t = "testcat.ns.t"
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        withTable(t) {
+          sql(s"""CREATE TABLE $t (
+                 |  id INT,
+                 |  d DATE DEFAULT CAST('today' AS DATE),
+                 |  e DATE DEFAULT CAST('epoch' AS DATE),
+                 |  g DATE GENERATED ALWAYS AS (CAST('today' AS DATE)),
+                 |  f DATE DEFAULT CAST('epoch' AS DATE) + 1
+                 |) USING foo""".stripMargin)
+          val cols = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
+          assert(cols(1).defaultValue().getExpression == null, ansi)
+          assert(cols(2).defaultValue().getExpression == LiteralValue(0, DateType), ansi)
+          assert(cols(3).columnGenerationExpression().getExpression == null, ansi)
+          assert(cols(4).defaultValue().getExpression == LiteralValue(1, DateType), ansi)
+          sql(s"INSERT INTO $t (id) VALUES (1)")
+          // The date can change between the INSERT and the SELECT.
+          checkAnswer(
+            sql(s"SELECT datediff(current_date(), d) IN (0, 1), e, " +
+              s"datediff(current_date(), g) IN (0, 1), f FROM $t"),
+            Row(true, java.sql.Date.valueOf("1970-01-01"), true,
+              java.sql.Date.valueOf("1970-01-02")))
+          // ALTER TABLE builds the V2 expression of a new default value the same way. The test
+          // catalog drops it when it rebuilds an altered column, so check the changes it receives.
+          val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+            sql(s"ALTER TABLE $t ALTER COLUMN e SET DEFAULT CAST('tomorrow' AS DATE)")
+          }
+          checkDefaultValues(
+            alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+            Array(new DefaultValue("CAST('tomorrow' AS DATE)", null)))
+          val addExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+            sql(s"ALTER TABLE $t ADD COLUMN h DATE DEFAULT CAST('today' AS DATE)")
+          }
+          assert(addExec.changes.map(_.asInstanceOf[AddColumn].defaultValue().getExpression) ==
+            Seq(null), ansi)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60451: a pushed filter does not give a value to a cast of 'epoch' that fails") {
+    // The string is constant only after the optimizer substitutes `s`, so `SpecialDatetimeValues`
+    // keeps the cast, and Spark fails to evaluate it under ANSI mode. The filter is not pushed.
+    val t = "testcat.ns.t"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, d DATE) USING foo")
+        Seq(
+          "d >= CASE WHEN id > 0 THEN CAST(s AS DATE) ELSE DATE'2000-01-01' END",
+          "CASE WHEN id > 0 THEN upper(CAST(CAST(s AS DATE) AS STRING)) ELSE 'x' END = 'X'"
+        ).foreach { cond =>
+          val plan = sql(s"SELECT * FROM (SELECT id, d, 'epoch' AS s FROM $t) WHERE $cond")
+            .queryExecution.optimizedPlan
+          val conditions = plan.collect { case f: Filter => f.condition }
+          assert(conditions.exists(_.exists(_.isInstanceOf[Cast])), cond)
+          conditions.foreach { c =>
+            assert(new V2ExpressionBuilder(c, true).buildPredicate().isEmpty, cond)
+          }
+        }
+      }
     }
   }
 
@@ -3459,13 +3531,8 @@ class DataSourceV2DataFrameSuite
   }
 
   // Column ID tests: Write operations
-  //
-  // [[writeTo().append()]] eagerly executes the command during the
-  // [[commandExecuted]] phase, before the refresh phase runs. As a result,
-  // column ID validation does not apply to the source DataFrame in a
-  // [[writeTo]] path. The append succeeds without throwing a
-  // COLUMNS_MISMATCH error.
-  test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
+
+  test("writeTo().append() rejects stale source after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3475,9 +3542,13 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // Command is eagerly executed before the refresh phase validates
-      // column IDs. No COLUMNS_MISMATCH exception is thrown.
-      source.writeTo(t).append()
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(t).append()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
 

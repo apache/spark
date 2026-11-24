@@ -24,10 +24,12 @@ import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldRefe
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `CREATE STREAMING TABLE ...` command (without a subquery).
  */
+@DataSourceV2Test
 class CreateStreamingTableParserSuite extends CommandSuiteBase {
   protected lazy val parser = new SparkSqlParser()
 

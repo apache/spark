@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
@@ -38,10 +39,12 @@ import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.functions._
@@ -297,6 +300,54 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(spark.table(t), Seq(Row(3L, "software"), Row(4L, "hr      ")))
   }
 
+  test("Overwrite: fail if the condition has an optional reference") {
+    spark.sql(
+      "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
+    spark.table("source").writeTo("testcat.table_name").append()
+
+    // A column that the table does not have must not turn the condition into NULL IS NULL.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table("source2").writeTo("testcat.table_name").overwrite(expr("deleted? IS NULL"))
+        },
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+        sqlState = "0A000",
+        parameters = Map("context" -> "INSERT ... REPLACE"),
+        context = ExpectedContext(fragment = "deleted?", start = 0, stop = 7))
+      // Also in a subquery built from a Dataset, which is analyzed when it is built, also where
+      // the rest of that analysis folded the NULL away.
+      checkError(
+        exception = intercept[AnalysisException] {
+          val deleted = spark.table("source").where("tags?[0] IS NULL").select("id")
+          spark.table("source2").writeTo("testcat.table_name").overwrite(col("id").isin(deleted))
+        },
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+        sqlState = "0A000",
+        parameters = Map("context" -> "INSERT ... REPLACE"),
+        context = ExpectedContext(fragment = "tags?", start = 0, stop = 4))
+    }
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+  }
+
+  test("Overwrite: the source can have an optional reference") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("source").writeTo("testcat.table_name").append()
+
+    // Like the query of INSERT ... REPLACE, the source produces the rows to write.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      spark.table("source").selectExpr("id", "CAST(missing? AS STRING) AS data")
+        .writeTo("testcat.table_name").overwrite(lit(true))
+    }
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, null), Row(2L, null), Row(3L, null)))
+  }
+
   test("Overwrite: write to a temp view of v2 relation") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("source").writeTo("testcat.table_name").append()
@@ -477,6 +528,26 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     }
     assert(exc.getMessage.contains(
       s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+  }
+
+  test("SPARK-62100: Append and overwrite check a NOT NULL column against a value " +
+    "made nullable by an outer join") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data bigint NOT NULL) USING foo")
+    val left = Seq(1L, 2L).toDF("id")
+    val right = Seq(2L).toDF("data")
+    // right("data") is non-nullable in `right`, but NULL for id 1 after the left outer join
+    val df = left.join(right, left("id") === right("data"), "left_outer")
+      .select(left("id"), right("data"))
+    Seq[DataFrameWriterV2[Row] => Unit](
+      _.append(),
+      _.overwrite(lit(true)),
+      _.overwritePartitions()).foreach { write =>
+      val e = intercept[SparkRuntimeException] {
+        write(df.writeTo("testcat.table_name"))
+      }
+      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+    checkAnswer(spark.table("testcat.table_name"), Seq.empty)
   }
 
   test("Create: basic behavior") {
