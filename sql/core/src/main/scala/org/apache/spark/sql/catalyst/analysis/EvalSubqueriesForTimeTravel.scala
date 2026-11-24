@@ -51,8 +51,10 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
         }.toMap
         val hasReadCTEDefs = readCTEDefs.values.forall { case (_, complete) => complete }
         if (!hasReadCTEDefs && AnalysisContext.get.isSubqueryPlan) {
-          // This is the plan of a subquery expression, and the query around it defines a CTE that
-          // the timestamp reads. Leave the time travel for the analysis of that query.
+          // This is the plan of a subquery expression, and it does not define a CTE that the
+          // timestamp reads, directly or through another CTE. Leave the time travel for the
+          // analysis of the query around it, which evaluates it with the CTE definitions of that
+          // query, or fails as before if no plan defines the CTE.
           r
         } else {
           val subqueryEvaluated = ts.transform {
@@ -81,6 +83,10 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
    * Returns the definitions of the CTEs that `plan` reads but does not define, and of the CTEs
    * that those read in turn, in the order of `cteDefs`, and whether `cteDefs` has all of them.
    * The ones that it does not have are left out, so executing the plan fails on them as before.
+   *
+   * TODO: In the body of a recursive CTE, a timestamp subquery that reads that CTE has a
+   * `UnionLoopRef` instead of a `CTERelationRef`, which cannot be planned outside the recursion,
+   * so evaluating the subquery still fails with an internal error.
    */
   private def cteDefsReadBy(
       plan: LogicalPlan,
@@ -103,9 +109,11 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
 
   /** Returns the ids of the CTEs that `plan` reads but does not define. */
   private def outerCTEIds(plan: LogicalPlan): Seq[Long] = {
-    val definedIds = plan.collectWithSubqueries { case cteDef: CTERelationDef => cteDef.id }.toSet
-    plan.collectWithSubqueries {
-      case ref: CTERelationRef if !definedIds.contains(ref.cteId) => ref.cteId
-    }.distinct
+    val (defIds, refIds) = plan.collectWithSubqueries {
+      case cteDef: CTERelationDef => Left(cteDef.id)
+      case ref: CTERelationRef => Right(ref.cteId)
+    }.partitionMap(identity)
+    val definedIds = defIds.toSet
+    refIds.filterNot(definedIds.contains).distinct
   }
 }

@@ -4652,12 +4652,17 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH $cutoff SELECT v.x, l.id FROM VALUES (1) AS v(x), " +
           s"LATERAL (SELECT id FROM t $asOfCutoff) AS l"),
         Seq(Row(1, 7), Row(1, 8)))
-      // The CTE is defined in the subquery expression, or in the query around nested subquery
-      // expressions.
+      // The CTE is defined in the subquery expression, and can read a CTE of the query around it.
       checkAnswer(
         sql("SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
           s"(WITH $cutoff SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
         Row(7))
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts) SELECT id FROM VALUES (6), (7) AS v(id) " +
+          "WHERE EXISTS (WITH cutoff AS (SELECT ts FROM base) " +
+          s"SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      // The CTE is defined in the query around nested subquery expressions.
       val existsAsOfCutoff = "SELECT count(*) FROM VALUES (6), (7), (8) AS v(id) WHERE EXISTS " +
         s"(SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"
       checkAnswer(sql(s"WITH $cutoff SELECT ($existsAsOfCutoff)"), Row(2))
