@@ -24,14 +24,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -1066,7 +1067,145 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Update
   )
 
-  private def scalaTransformWithState(child: LogicalPlan): TransformWithState = {
+  // A key-only join of two watermarked inputs, so the state of either input has no cutoff.
+  private val (leftKey, rightKey, thirdKey) = (
+    AttributeReference("lk", IntegerType)(), AttributeReference("rk", IntegerType)(),
+    AttributeReference("tk", IntegerType)())
+  private val Seq(leftTime, rightTime, thirdTime) = Seq("lt", "rt", "tt").map(
+    AttributeReference(_, TimestampType, metadata = watermarkMetadata)())
+  private def joinOf(left: Seq[Attribute], right: Seq[Attribute], condition: Expression) =
+    Join(TestStreamingRelation(left), TestStreamingRelation(right), Inner, Some(condition),
+      JoinHint.NONE)
+  private val keyOnlyJoin =
+    joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime), leftKey === rightKey)
+      .select(leftKey, leftTime)
+
+  // Each operator that drops late rows rejects the key-only join, naming its left input.
+  Seq[(String, LogicalPlan => LogicalPlan, Boolean)](
+    ("flatMapGroupsWithState with an event-time timeout", child => TestFlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false,
+      GroupStateTimeout.EventTimeTimeout, child), true),
+    ("flatMapGroupsWithState without a timeout", child => TestFlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false,
+      GroupStateTimeout.NoTimeout, child), false),
+    ("applyInPandasWithState with an event-time timeout", FlatMapGroupsInPandasWithState(
+      Literal(1), Seq(leftKey), Seq(att), new StructType(), Append,
+      GroupStateTimeout.EventTimeTimeout, _), true),
+    ("applyInPandasWithState without a timeout", FlatMapGroupsInPandasWithState(
+      Literal(1), Seq(leftKey), Seq(att), new StructType(), Append,
+      GroupStateTimeout.NoTimeout, _), false),
+    ("transformWithState in event-time mode", scalaTransformWithState(_, EventTime), true),
+    ("transformWithState in processing-time mode",
+      scalaTransformWithState(_, ProcessingTime), false),
+    ("transformWithStateInPandas in event-time mode", pythonTransformWithState(_, EventTime),
+      true),
+    ("transformWithStateInPandas in processing-time mode",
+      pythonTransformWithState(_, ProcessingTime), false),
+    ("dropDuplicatesWithinWatermark", DeduplicateWithinWatermark(Seq(leftKey), _), true),
+    ("a stream-stream join",
+      Join(_, TestStreamingRelation(Seq(thirdKey, thirdTime)), Inner,
+        Some(leftKey === thirdKey), JoinHint.NONE), true)
+  ).foreach { case (name, operator, rejected) =>
+    test(s"join output watermark: key-only join before $name") {
+      val check = () => UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        operator(keyOnlyJoin), Append)
+      if (rejected) {
+        val e = intercept[AnalysisException](check())
+        assert(e.getMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff"))
+      } else {
+        check()
+      }
+    }
+  }
+
+  // Each of these passes only because of one condition: the left semi join emits only its left
+  // input, an operator whose input has no event time filters no joined row, and a join input
+  // without an event time emits none. A deduplication by the event time is a stateful operator,
+  // through which the trace does not follow.
+  Seq[(String, LogicalPlan)](
+    "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime),
+      Deduplicate(Seq(leftTime), Join(TestStreamingRelation(Seq(leftKey, leftTime)),
+        TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
+        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE))),
+    "an operator whose input has no event time" ->
+      Deduplicate(Seq(leftKey), Aggregate(Seq(leftKey), Seq(leftKey), keyOnlyJoin)),
+    "a watermark above a join of inputs without one" -> {
+      val (lt, rt) = (leftTime.withMetadata(Metadata.empty), rightTime.withMetadata(Metadata.empty))
+      val watermarked = EventTimeWatermark(java.util.UUID.randomUUID(), lt,
+        new CalendarInterval(0, 0, 1000000L),
+        joinOf(Seq(leftKey, lt), Seq(rightKey, rt), leftKey === rightKey))
+      val time = watermarked.output.find(_.semanticEquals(lt)).get
+      Aggregate(Seq(time), Seq(time), watermarked)
+    }
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: accept $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
+    }
+  }
+
+  // Planning rejects this join with its own error. The right input has no cutoff, so the check
+  // would reject the plan without its early return.
+  test("join output watermark: a stream-stream join without an equality predicate") {
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(rightTime),
+      Seq(rightTime), joinOf(Seq(leftTime), Seq(rightTime), leftTime > rightTime)), Append)
+  }
+
+  // Only the right input has no cutoff. A union maps the traced columns by position into each of
+  // its inputs that holds the join, and a later join traces each of its inputs.
+  private val oneSidedJoin = joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime),
+    leftKey === rightKey && rightTime <= leftTime)
+  private val (otherKey, otherTime) = (AttributeReference("ok", IntegerType)(),
+    AttributeReference("ot", TimestampType, metadata = watermarkMetadata)())
+  Seq[(String, Attribute => LogicalPlan)](
+    "a union with a watermarked stream" -> (time => Aggregate(Seq(otherTime), Seq(otherTime),
+      Union(Seq(TestStreamingRelation(Seq(otherKey, otherTime)),
+        oneSidedJoin.select(leftKey, time))))),
+    "a projection to the attributes of a union" -> (time => Aggregate(Seq(otherTime),
+      Seq(otherTime), Project(Seq(Alias(leftKey, "ok")(otherKey.exprId),
+        Alias(time, "ot")(otherTime.exprId)), oneSidedJoin))),
+    "a later join of two projections of one join" -> (time => Join(
+      oneSidedJoin.select(leftKey, leftTime), oneSidedJoin.select(rightKey, time), Inner,
+      Some(leftKey === rightKey), JoinHint.NONE))
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: one-sided range join through $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(leftTime), Append)
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(rightTime), Append))
+      assert(e.getMessage.contains(
+        "the state of the right input of a stream-stream join has no cutoff"))
+    }
+  }
+
+  // An input evicted by another column, or by a key that the other input's watermark bounds, is
+  // flagged only in the default mode. The legacy mode evicts both inputs as earlier versions did.
+  test("join output watermark: inputs evicted by another column or key in the legacy mode") {
+    val Seq(expiry, otherLeftTime, otherRightTime) =
+      Seq("expiry", "lb", "ra").map(AttributeReference(_, TimestampType)())
+    Seq(
+      joinOf(Seq(leftKey, leftTime, expiry), Seq(rightKey, rightTime),
+        leftKey === rightKey && rightTime >= leftTime && rightTime <= expiry),
+      joinOf(Seq(leftTime, otherLeftTime), Seq(otherRightTime, rightTime),
+        leftTime === otherRightTime && otherLeftTime === rightTime)
+    ).foreach { join =>
+      val check = () => UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        Aggregate(Seq(leftTime), Seq(leftTime), join), Append)
+      val e = intercept[AnalysisException](check())
+      assert(e.getMessage.contains(
+        "the state of the left input of a stream-stream join has no cutoff on its event time"))
+      withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+        check()
+      }
+    }
+  }
+
+  private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =
+    TransformWithStateInPySpark(Literal(1), 1, Seq(att), Append, timeMode,
+      TransformWithStateInPySpark.UserFacingDataType.PANDAS, child, hasInitialState = false,
+      LocalRelation(Seq.empty[Attribute]), 0, new StructType())
+
+  private def scalaTransformWithState(
+      child: LogicalPlan, timeMode: TimeMode = NoTime): TransformWithState = {
     val statefulProcessor = new StatefulProcessor[Any, Any, Any] {
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
@@ -1083,7 +1222,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       groupingAttributes = Seq(attribute),
       dataAttributes = Seq(attribute),
       statefulProcessor = statefulProcessor,
-      timeMode = NoTime,
+      timeMode = timeMode,
       outputMode = Update,
       keyEncoder = keyEncoder,
       outputObjAttr = attribute,
