@@ -723,7 +723,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
   "sqlState" : "42P20",
   "messageParameters" : {
     "funcName" : "`counter_diff`",
@@ -754,7 +754,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
   "sqlState" : "42P20",
   "messageParameters" : {
     "funcName" : "`counter_diff`",

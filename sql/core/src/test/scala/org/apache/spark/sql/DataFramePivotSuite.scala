@@ -590,6 +590,18 @@ class DataFramePivotSuite extends SharedSparkSession {
     }
   }
 
+  test("a column outside of an aggregate function in PIVOT keeps its name") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT * FROM (SELECT 1 AS `a.b`, 2 AS c) PIVOT (`a.b` FOR c IN (2))").collect()
+      },
+      condition = "NON_AGGREGATED_COLUMN_IN_PIVOT",
+      sqlState = "42803",
+      parameters = Map("columnName" -> "`a.b`"),
+      context = ExpectedContext(
+        fragment = "PIVOT (`a.b` FOR c IN (2))", start = 42, stop = 67))
+  }
+
   test("SPARK-58959: pivot values that compare as equal share an output value") {
     withTable("dup_lcase_pivot") {
       sql(

@@ -1142,21 +1142,29 @@ object DescribeColumn {
 
   /**
    * The name parts of a nested column that `ResolveReferences` resolved to field extractions,
-   * such as `col`, `x` for `Alias(GetStructField(col, _, Some("x")), "x")`. Reading them from
-   * the extractions keeps field names that contain dots intact.
+   * such as `col`, `x` for `Alias(GetStructField(col, _, Some("x")), "x")` or `m`, `x` for
+   * `Alias(GetMapValue(m, Literal("x")), "x")`. Reading them from the extractions keeps field
+   * names that contain dots intact.
    */
   def nestedColumnNameParts(
       column: org.apache.spark.sql.catalyst.expressions.Expression): Seq[String] = {
-    import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GetArrayStructFields, GetStructField}
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GetArrayStructFields, GetMapValue, GetStructField, Literal}
     import org.apache.spark.sql.catalyst.util.toPrettySQL
+    import org.apache.spark.sql.types.StringType
     def nameParts(e: Expression): Option[Seq[String]] = e match {
       case Alias(child, _) => nameParts(child)
       case a: Attribute => Some(Seq(a.name))
       case g: GetStructField => nameParts(g.child).map(_ :+ g.extractFieldName)
       case g: GetArrayStructFields => nameParts(g.child).map(_ :+ g.field.name)
+      case GetMapValue(child, Literal(key, _: StringType)) if key != null =>
+        nameParts(child).map(_ :+ key.toString)
       case _ => None
     }
-    nameParts(column).getOrElse(Seq(toPrettySQL(column)))
+    val unaliased = column match {
+      case Alias(child, _) => child
+      case other => other
+    }
+    nameParts(column).getOrElse(Seq(toPrettySQL(unaliased)))
   }
 }
 

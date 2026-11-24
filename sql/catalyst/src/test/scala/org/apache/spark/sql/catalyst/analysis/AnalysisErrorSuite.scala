@@ -340,10 +340,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
-    condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+    condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION.FRAME_NOT_ALLOWED",
     messageParameters = Map(
       "funcName" -> "`lead`",
-      "requiredFrame" -> "\"ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING\"",
       "windowFrame" -> "\"RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING\""))
 
   errorConditionTest(

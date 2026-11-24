@@ -702,7 +702,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def nonAggregatedColumnInPivotError(column: Attribute): Throwable = {
     new AnalysisException(
       errorClass = "NON_AGGREGATED_COLUMN_IN_PIVOT",
-      messageParameters = Map("columnName" -> toSQLId(column.name)),
+      messageParameters = Map("columnName" -> toSQLId(Seq(column.name))),
       origin = column.origin)
   }
 
@@ -1032,19 +1032,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = aggregateExpr.origin)
   }
 
+  def cannotSpecifyWindowFrameError(wf: WindowFunction, f: SpecifiedWindowFrame): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WINDOW_FRAME_FOR_FUNCTION.FRAME_NOT_ALLOWED",
+      messageParameters = Map(
+        "funcName" -> toSQLId(wf.prettyName),
+        "windowFrame" -> toSQLWindowFrame(f)))
+  }
+
   def windowFrameNotMatchRequiredFrameError(
       wf: WindowFunction, f: SpecifiedWindowFrame): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_WINDOW_FRAME_FOR_FUNCTION",
+      errorClass = "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
       messageParameters = Map(
         "funcName" -> toSQLId(wf.prettyName),
         "requiredFrame" -> toSQLWindowFrame(wf.frame),
         "windowFrame" -> toSQLWindowFrame(f)))
   }
 
-  // A frame bound can be a negative literal, such as the folded offset of `lag(x)` or a bound
-  // from `Window.rowsBetween(-1, 1)`. `SpecifiedWindowFrame.sql` shows -1 as `-1 FOLLOWING`, so
-  // show it as `1 PRECEDING`, the way it is written in SQL.
+  // A frame bound can be a negative literal, such as one from `Window.rowsBetween(-1, 1)`.
+  // `SpecifiedWindowFrame.sql` shows -1 as `-1 FOLLOWING`, so show it as `1 PRECEDING`, the way
+  // it is written in SQL.
   private def toSQLWindowFrame(frame: WindowFrame): String = {
     toSQLExpr(frame.transform {
       case Literal(v: Int, IntegerType) if v < 0 && v != Int.MinValue => UnaryMinus(Literal(-v))
@@ -1446,7 +1454,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "UNSUPPORTED_FEATURE.DROP_COLUMNS_FROM_DATA_SCHEMA",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName.nameParts),
-        "columnNames" -> nonExistentColumnNames.map(toSQLId).mkString(", ")))
+        "columnNames" -> nonExistentColumnNames.map(name => toSQLId(Seq(name))).mkString(", ")))
   }
 
   def cannotRetrieveTableOrViewNotInSameDatabaseError(

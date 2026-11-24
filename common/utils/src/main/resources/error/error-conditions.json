@@ -6285,8 +6285,20 @@
   },
   "INVALID_WINDOW_FRAME_FOR_FUNCTION" : {
     "message" : [
-      "The window function <funcName> requires the window frame <requiredFrame>, but the window specification has <windowFrame>. Remove the frame from the window specification or change it to the required frame."
+      "The window function <funcName> does not accept the window frame <windowFrame>."
     ],
+    "subClass" : {
+      "FRAME_NOT_ALLOWED" : {
+        "message" : [
+          "Its frame is determined by its offset. Remove the frame from the window specification."
+        ]
+      },
+      "REQUIRED_FRAME_MISMATCH" : {
+        "message" : [
+          "It requires the window frame <requiredFrame>. Remove the frame from the window specification or change it to the required frame."
+        ]
+      }
+    },
     "sqlState" : "42P20"
   },
   "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {

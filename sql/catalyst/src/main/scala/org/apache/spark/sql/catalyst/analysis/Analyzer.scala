@@ -3875,8 +3875,14 @@ class Analyzer(
         if (distinctWindowSpec.isEmpty) {
           throw QueryCompilationErrors.expressionWithoutWindowExpressionError(expr)
         } else if (distinctWindowSpec.length > 1) {
-          // newExpressionsWithWindowFunctions only have expressions with a single
-          // WindowExpression. If we reach here, we have a bug.
+          // `extract` pulls window expressions out of the arguments of window and aggregate
+          // functions only, so one nested in another function with its own OVER clause, as in
+          // abs(rank() OVER w1) OVER w2, stays in place. Report that function as CheckAnalysis
+          // would. Any other expression with several window specifications is a bug.
+          expr.foreach {
+            case we: WindowExpression => WindowResolution.checkWindowFunction(we)
+            case _ =>
+          }
           throw QueryCompilationErrors.expressionWithMultiWindowExpressionsError(
             expr, distinctWindowSpec)
         } else {
