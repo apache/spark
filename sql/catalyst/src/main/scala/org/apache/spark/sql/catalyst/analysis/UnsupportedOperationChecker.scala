@@ -231,8 +231,10 @@ object UnsupportedOperationChecker extends Logging {
   // aggregation's grouping columns, or else that input's columns. Projections and the expansion of
   // a sliding window map their columns to the columns they read, and a union maps them by position
   // into each of its inputs that contains the join; any other node that is not stateful is
-  // followed into the one child that outputs all the traced columns. None as soon as one path
-  // cannot be followed, such as one through another stateful operator.
+  // followed into the one child that outputs all the traced columns. A path ends at another
+  // operator that drops late rows: its own check traces every event time it outputs from the
+  // join. None as soon as one path cannot be followed, such as one through any other stateful
+  // operator.
   private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
     def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] = {
       val withJoin = paths.filter { case (plan, _) => plan.exists(_ eq join) }
@@ -255,6 +257,7 @@ object UnsupportedOperationChecker extends Logging {
       case u: Union =>
         val positions = u.output.indices.filter(i => attrs.contains(u.output(i)))
         traceAll(u.children.map(c => c -> positions.map(c.output)))
+      case p if dropsLateRows(p) => Some(AttributeSet.empty)
       case p if !isStatefulOperation(p) =>
         p.children.filter(c => attrs.subsetOf(c.outputSet)) match {
           case Seq(child) => trace(child, attrs)

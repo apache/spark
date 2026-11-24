@@ -31,9 +31,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   but whose state is never evicted, for example an input of a join on a key without a watermark
   and without a time range on that input. Such a query could drop joined rows as late. The check
   follows the event time down to the join through projections, unions and the operators that pass
-  their input's columns through. When the join has such an input, it also fails a query whose
-  path to the join passes another stateful operator or an operator none of whose inputs outputs
-  all the columns it follows. Add a watermark in the join
+  their input's columns through, and leaves a path through another operator that drops late rows
+  to that operator's own check. When the join has such an input, it also fails a query whose
+  path to the join passes another stateful operator, such as flatMapGroupsWithState without an
+  event-time timeout, or an operator none of whose inputs outputs all the columns it follows.
+  Add a watermark in the join
   keys, or a range condition that bounds that input by the other input's watermark. Setting
   `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
   a warning, and also turns the existing check of chained stateful operators into a warning.
