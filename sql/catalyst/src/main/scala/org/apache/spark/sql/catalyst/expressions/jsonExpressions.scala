@@ -1508,7 +1508,8 @@ case class JsonArray(
           // with `to_json`) has no serializer for the spatial atomics and would fail at runtime.
           // Reject them here so a passing analysis implies a serializable element. The scan mirrors
           // `verifyType`'s traversal (struct fields, array elements, map *values* -- map keys are
-          // written via `toString`, so a spatial key is fine).
+          // written as strings, a BINARY key in base64 and other keys with `toString`, so a
+          // spatial key is fine).
           if (elemCheck.isFailure) {
             result = elemCheck
           } else if (JsonArray.containsUnsupportedJsonType(dt)) {
@@ -1757,8 +1758,8 @@ object JsonArray {
    * `JacksonGenerator` would have to serialize. These are `AtomicType`s that
    * `JacksonUtils.verifyType` accepts but the JSON writer has no serializer for, so they must be
    * rejected at analysis. The traversal mirrors `verifyType`: it descends into struct fields, array
-   * elements, and map *values* (map keys are written via `toString`, so a spatial key is fine) and
-   * unwraps UDTs.
+   * elements, and map *values* (map keys are written as strings, a BINARY key in base64 and other
+   * keys with `toString`, so a spatial key is fine) and unwraps UDTs.
    */
   def containsUnsupportedJsonType(dt: DataType): Boolean = dt match {
     case _: GeometryType | _: GeographyType => true
@@ -2882,8 +2883,8 @@ object JsonObjectExpr {
    * `JacksonGenerator` would have to serialize. These are `AtomicType`s that
    * `JacksonUtils.verifyType` accepts but the JSON writer has no serializer for, so they must be
    * rejected at analysis. The traversal mirrors `verifyType`: it descends into struct fields, array
-   * elements, and map *values* (map keys are written via `toString`, so a spatial key is fine) and
-   * unwraps UDTs.
+   * elements, and map *values* (map keys are written as strings, a BINARY key in base64 and other
+   * keys with `toString`, so a spatial key is fine) and unwraps UDTs.
    */
   def containsUnsupportedJsonType(dt: DataType): Boolean = dt match {
     case _: GeometryType | _: GeographyType => true

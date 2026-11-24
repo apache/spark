@@ -165,6 +165,39 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     assert(toJson(intKeys, IntegerType, sortKeysOption) === """{"10":2,"9":1}""")
   }
 
+  test("read each BINARY map key once, with or without sortKeys") {
+    val sortKeysOption = new JSONOptions(Map("sortKeys" -> "true"), utcId)
+    // Enough keys that sorting them takes many comparisons. Their base64 names are not in the
+    // order of the keys, and each key has its own value.
+    val n = 100
+    val keyBytes = Array.tabulate(n)(i => Array((i * 7).toByte))
+    var keyReads = 0
+    val keys = new GenericArrayData(keyBytes.map(_.clone(): Any)) {
+      override def getBinary(ordinal: Int): Array[Byte] = {
+        keyReads += 1
+        super.getBinary(ordinal)
+      }
+    }
+    val map = new ArrayBasedMapData(keys, new GenericArrayData(Array.tabulate[Any](n)(i => i)))
+    val names = keyBytes.map(java.util.Base64.getEncoder.encodeToString)
+    def expected(order: Seq[Int]): String =
+      order.map(i => s""""${names(i)}":$i""").mkString("{", ",", "}")
+    def toJson(options: JSONOptions): String = {
+      keyReads = 0
+      val writer = new CharArrayWriter()
+      val gen = new JacksonGenerator(MapType(BinaryType, IntegerType), writer, options)
+      gen.write(map)
+      gen.flush()
+      writer.toString
+    }
+    assert(toJson(option) === expected(0 until n))
+    assert(keyReads === n)
+    val sortedOrder = (0 until n).sortBy(names(_))
+    assert(sortedOrder !== (0 until n))
+    assert(toJson(sortKeysOption) === expected(sortedOrder))
+    assert(keyReads === n)
+  }
+
   test("error handling: initial with StructType but error calling write a map") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = ArrayBasedMapData(Map("a" -> 1))

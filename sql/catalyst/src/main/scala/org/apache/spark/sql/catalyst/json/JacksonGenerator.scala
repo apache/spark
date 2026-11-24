@@ -295,15 +295,19 @@ class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
-    val indices = if (options.sortKeys) {
-      (0 until map.numElements()).sortBy(i => mapKeyName(keyArray, i, mapType.keyType)).toArray
+    // With sortKeys, compute the name of each key once, before writing the map, and sort by the
+    // names: sorting by `mapKeyName` would compute it for both keys of every comparison.
+    val names = if (options.sortKeys) {
+      Array.tabulate(map.numElements())(i => mapKeyName(keyArray, i, mapType.keyType))
     } else {
       null
     }
+    val indices = if (names != null) names.indices.sortBy(i => names(i)).toArray else null
     var j = 0
     while (j < map.numElements()) {
       val i = if (indices != null) indices(j) else j
-      gen.writeFieldName(mapKeyName(keyArray, i, mapType.keyType))
+      val name = if (names != null) names(i) else mapKeyName(keyArray, i, mapType.keyType)
+      gen.writeFieldName(name)
       if (!valueArray.isNullAt(i)) {
         fieldWriter.apply(valueArray, i)
       } else {
@@ -319,6 +323,13 @@ class JacksonGenerator(
   private def mapKeyName(keyArray: ArrayData, ordinal: Int, keyType: DataType): String =
     keyType match {
       case BinaryType => Base64Variants.getDefaultVariant.encode(keyArray.getBinary(ordinal))
+      // The names of other key types are deliberately left unchanged for now, although some do
+      // not identify the key. A user-defined type over BINARY does not match the case above, so
+      // its key is still named by the JVM identity of a byte array, while its value is written
+      // in base64. An ARRAY or STRUCT key is named by the `toString` of its internal form, which
+      // differs between the generic and unsafe forms of the same key. A GEOMETRY or GEOGRAPHY
+      // key is named by a hash of its bytes, and a DATE or TIMESTAMP key by its internal day or
+      // microsecond count.
       case _ => keyArray.get(ordinal, keyType).toString
     }
 
