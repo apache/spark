@@ -388,7 +388,8 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
     // EVOLUTION views no longer store query column names, and schema syncs leave names written
     // by older versions as they are. Rebuild such names from the schema when their count
     // differs; names with a matching count may belong to a column list, so keep them.
-    // TODO(SPARK-62261): matching-count names can also be stale, e.g. after a column reorder.
+    // TODO(SPARK-62261): names with a matching count may also be stale, for example after the
+    // referenced query's columns are reordered or renamed; they are kept unrepaired for now.
     val schemaFieldNames = viewMeta.schema.fieldNames
     val storedColumnNames = viewMeta.viewQueryColumnNames
     val queryColumnNames =
