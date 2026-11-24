@@ -1064,6 +1064,24 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-62133: equal calls of a pushed aggregate function that is not deterministic are " +
+    "pushed down separately") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      // `name`, and one column for each pushed aggregate.
+      Seq("my_avg" -> 2, "my_nondeterministic_avg" -> 3).foreach { case (f, numColumns) =>
+        val df = sql(s"SELECT name, h2.$f(id), h2.$f(id) FROM h2.test.people GROUP BY name")
+        checkAggregateRemoved(df)
+        assert(scanOf(df).output.length == numColumns, f)
+        checkAnswer(df, Seq(Row("fred", 1, 1), Row("mary", 2, 2)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
+  }
+
   test("scan with aggregate push-down, top N push-down and offset push-down") {
     val df1 = spark.read
       .table("h2.test.employee")

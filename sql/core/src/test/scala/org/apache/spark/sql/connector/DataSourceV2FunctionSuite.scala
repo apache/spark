@@ -29,9 +29,11 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
 import org.apache.spark.sql.execution.ProjectExec
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DataSourceV2Test
@@ -723,6 +725,55 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           stop = 23
         )
       )
+    }
+  }
+
+  test("SPARK-62133: an aggregate function whose bound function is not deterministic is not " +
+    "deterministic") {
+    import testImplicits._
+    val t = "testcat.ns.t"
+    withTable(t) {
+      addFunction(Identifier.of(Array("ns"), "avg"), IntegralAverage)
+      addFunction(Identifier.of(Array("ns"), "nd_avg"), NondeterministicIntegralAverage)
+      (1 to 100).map(i => (i % 3, i)).toDF("g", "i").write.saveAsTable(t)
+      Seq("avg" -> true, "nd_avg" -> false).foreach { case (f, deterministic) =>
+        // Two equal calls are evaluated once only if the function is deterministic.
+        val twice = sql(s"SELECT testcat.ns.$f(i), testcat.ns.$f(i) FROM $t")
+        val aggregates = twice.queryExecution.sparkPlan.collectFirst {
+          case a: BaseAggregateExec => a.aggregateExpressions
+        }.getOrElse(fail(s"no aggregate in:\n${twice.queryExecution.sparkPlan}"))
+        assert(aggregates.forall(_.deterministic) == deterministic, f)
+        assert(aggregates.length == (if (deterministic) 1 else 2), s"$f: $aggregates")
+        checkAnswer(twice, Row(50, 50))
+        // A filter on a grouping key stays above the `Aggregate` of a function that is not
+        // deterministic.
+        val filtered = sql(
+          s"SELECT * FROM (SELECT g, testcat.ns.$f(i) AS v FROM $t GROUP BY g) WHERE g > 0")
+        val plan = filtered.queryExecution.optimizedPlan
+        val filterAboveAggregate = plan.exists {
+          case Filter(_, _: Aggregate) => true
+          case _ => false
+        }
+        assert(filterAboveAggregate == !deterministic, s"$f:\n$plan")
+        checkAnswer(filtered, Seq(Row(1, 50), Row(2, 50)))
+      }
+      // A lateral subquery of a multi-row outer query cannot call a function that is not
+      // deterministic.
+      checkAnswer(sql("SELECT * FROM VALUES (1), (2) AS l(x), " +
+        s"LATERAL (SELECT testcat.ns.avg(i) FROM $t WHERE g = x)"), Seq(Row(1, 50), Row(2, 50)))
+      val lateral = "SELECT * FROM VALUES (1), (2) AS l(x), " +
+        s"LATERAL (SELECT testcat.ns.nd_avg(i) FROM $t WHERE g = x)"
+      val fragment = lateral.substring(lateral.indexOf("FROM VALUES"))
+      checkError(
+        exception = intercept[AnalysisException](sql(lateral)),
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+        sqlState = None,
+        parameters = Map("treeNode" -> "(?s).*"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = lateral.length - fragment.length,
+          stop = lateral.length - 1)))
     }
   }
 

@@ -763,7 +763,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val projectExpressions = finalResultExprs.map { expr =>
           expr.transformDown {
             case agg: AggregateExpression =>
-              val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+              val ordinal = aggExprToOutputOrdinal(aggKey(agg))
               Alias(aggOutput(ordinal), agg.resultAttribute.name)(agg.resultAttribute.exprId)
             case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
               val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
@@ -795,7 +795,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // scalastyle:on
         val aggExprs = finalResultExprs.map(_.transform {
           case agg: AggregateExpression =>
-            val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+            val ordinal = aggExprToOutputOrdinal(aggKey(agg))
             val aggAttribute = aggOutput(ordinal)
             val aggFunction: aggregate.AggregateFunction =
               agg.aggregateFunction match {
@@ -840,14 +840,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Do not push down duplicated aggregate expressions. For example,
         // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
         // `max(a)` to the data source.
-        case agg: AggregateExpression
-          if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
-          aggExprToOutputOrdinal(agg.canonicalized) = ordinal
+        case agg: AggregateExpression if !aggExprToOutputOrdinal.contains(aggKey(agg)) =>
+          aggExprToOutputOrdinal(aggKey(agg)) = ordinal
           ordinal += 1
           agg
       }
     }
   }
+
+  // The key of `agg` among the pushed aggregate expressions. Equal deterministic ones share a key,
+  // as `PhysicalAggregation` evaluates them once. A non-deterministic one has its own key, so each
+  // of two equal calls is pushed down.
+  private def aggKey(agg: AggregateExpression): Expression =
+    if (agg.deterministic) agg.canonicalized else agg
 
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We can only partially push down min/max/sum/count without DISTINCT.
@@ -925,16 +930,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       operators.joinedRelationPushedDownOperators.exists(hasRowSelectingOperators)
 
   // Whether every pushed group-by expression and aggregate function is deterministic.
-  // `V2Aggregator` does not take `BoundFunction.isDeterministic` into its `deterministic`, so it is
-  // checked here.
-  // TODO(SPARK-62133): check only `deterministic` once `V2Aggregator` takes `isDeterministic`.
   private def isDeterministicAggregation(holder: ScanBuilderHolder): Boolean =
-    holder.pushedAggOutputMap.values.forall { e =>
-      e.deterministic && !e.exists {
-        case v: aggregate.V2Aggregator[_, _] => !v.aggrFunc.isDeterministic
-        case _ => false
-      }
-    }
+    holder.pushedAggOutputMap.values.forall(_.deterministic)
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
