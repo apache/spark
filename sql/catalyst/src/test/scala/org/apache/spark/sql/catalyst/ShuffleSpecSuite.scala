@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -887,6 +887,32 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(spec.canCreatePartitioning && !spec.canEvaluatePartitioning)
       val e = intercept[AssertionError](spec.createPartitioning(Seq($"b".int)))
       assert(e.getMessage.contains("Cannot shuffle a child onto a layout Spark cannot evaluate"))
+    }
+  }
+
+  test("SPARK-62319: what resolving the call over the other key throws is the error's cause") {
+    // `canEvaluatePartitioning` resolves the layout's own call first, so connector code that
+    // throws only on a later call gets here. The call is asked quietly, so the error carries it.
+    var broken = false
+    val function = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] =
+        if (broken) throw new IllegalStateException("connector bug")
+        else Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val a = $"a".int
+    val spec = KeyedShuffleSpec(KeyedPartitioning(
+      Seq(TransformExpression(function, Seq(a), Some(4))), Seq(InternalRow(1))),
+      ClusteredDistribution(Seq(a)))
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning)
+      broken = true
+      val e = intercept[SparkException](spec.createPartitioning(Seq($"b".int)))
+      assert(e.getCondition == "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH")
+      assert(e.getCause.getMessage == "connector bug")
     }
   }
 
