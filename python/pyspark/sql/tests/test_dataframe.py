@@ -822,7 +822,13 @@ class DataFrameTestsMixin:
         df = self.spark.range(10000)
         expected = sorted(df.sample(0.1, 42).collect())
         self.assertEqual(sorted(df.sample(0.1, seed=42).collect()), expected)
-        self.assertEqual(sorted(df.sample(0.1, seed=42).collect()), expected)
+        with self.assertRaises(PySparkValueError) as pe:
+            df.sample(0.1, 42, seed=42)
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CANNOT_SET_TOGETHER",
+            messageParameters={"arg_list": "positional seed and keyword seed"},
+        )
 
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])

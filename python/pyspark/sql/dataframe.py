@@ -2240,7 +2240,7 @@ class DataFrame:
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> Tuple[bool, float, int]:
-        from pyspark.errors import PySparkTypeError
+        from pyspark.errors import PySparkTypeError, PySparkValueError
 
         if isinstance(withReplacement, bool) and isinstance(fraction, float):
             # For the cases below:
@@ -2259,6 +2259,11 @@ class DataFrame:
         elif isinstance(withReplacement, float):
             # For the case below:
             #   sample(0.5 [, seed])
+            if fraction is not None and seed is not None:
+                raise PySparkValueError(
+                    errorClass="CANNOT_SET_TOGETHER",
+                    messageParameters={"arg_list": "positional seed and keyword seed"},
+                )
             if fraction is not None:
                 _seed = int(fraction)
             elif seed is not None:
