@@ -1901,20 +1901,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'-'", "hint" -> ""),
-        context = ExpectedContext(
-          fragment = "SELECT cast('a' AS CHAR(:n))",
-          start = 0,
-          stop = 27))
+        context = ExpectedContext(fragment = ":n", start = 24, stop = 25))
       checkError(
         exception = intercept[ParseException] {
           spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> 1.5))
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'1.5D'", "hint" -> ""),
-        context = ExpectedContext(
-          fragment = "SELECT cast('a' AS CHAR(:n))",
-          start = 0,
-          stop = 27))
+        context = ExpectedContext(fragment = ":n", start = 24, stop = 25))
     }
   }
 

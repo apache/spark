@@ -270,6 +270,28 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     }
   }
 
+  test("ParseErrorListener keeps the origin context when no value was substituted") {
+    val sql = "SELECT 1 FRUM t"
+    val origin = Origin(
+      sqlText = Some(sql),
+      startIndex = Some(0),
+      stopIndex = Some(sql.length - 1),
+      positionMapper = Some(PositionMapper.identity(sql)))
+    val token = new CommonToken(0)
+    token.setStartIndex(sql.indexOf("FRUM"))
+    token.setStopIndex(sql.indexOf("FRUM") + "FRUM".length - 1)
+    token.setLine(1)
+    token.setCharPositionInLine(sql.indexOf("FRUM"))
+
+    val exception = CurrentOrigin.withOrigin(origin) {
+      intercept[ParseException] {
+        ParseErrorListener.syntaxError(null, token, 1, sql.indexOf("FRUM"), "test error", null)
+      }
+    }
+    val context = exception.getQueryContext.head.asInstanceOf[SQLQueryContext]
+    assert(context.fragment === sql)
+  }
+
   test("parse error inside a replacement underlines the marker in the original SQL") {
     val original = "SELECT :a, CAST(1 AS DECIMAL(:second))"
     val marker = ":second"

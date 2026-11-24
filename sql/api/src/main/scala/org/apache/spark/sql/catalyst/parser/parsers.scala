@@ -221,14 +221,15 @@ case object ParseErrorListener extends BaseErrorListener {
   }
 
   /**
-   * When the statement was parsed after parameter substitution, build a query context that covers
-   * the offending token in the original SQL text. A token inside a substituted value maps to the
-   * whole parameter marker. Returns None when there is no position mapper or the mapped range is
-   * not a valid range of the original text.
+   * When the statement was parsed after a parameter substitution, build a query context that
+   * covers the offending token in the original SQL text. A token inside a substituted value maps
+   * to the whole parameter marker. Returns None when no value was substituted, so that a
+   * statement that was parsed as written keeps the query context of the current origin, or when
+   * the mapped range is not a valid range of the original text.
    */
   private def originalTokenContext(token: Token, start: Origin): Option[Array[QueryContext]] = {
     val currentOrigin = CurrentOrigin.get
-    currentOrigin.positionMapper.flatMap { mapper =>
+    currentOrigin.positionMapper.filter(_.substitutions.nonEmpty).flatMap { mapper =>
       val originalStart = mapper.mapToOriginal(token.getStartIndex)
       val originalStop = math.max(originalStart, mapper.mapStopToOriginal(token.getStopIndex))
       val context = SQLQueryContext(
