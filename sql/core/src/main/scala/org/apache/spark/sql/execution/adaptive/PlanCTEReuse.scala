@@ -26,8 +26,8 @@ import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, ShuffleExchang
  * Builds the shared inner [[AdaptiveSparkPlanExec]] for each [[CTEReuseExchange]] and registers it
  * in [[AdaptiveExecutionContext.cteAQERegistry]] by `cteId`.
  *
- * Runs as a preprocessing rule next to [[PlanAdaptiveSubqueries]] so the shared inner AQE exists
- * before the later preprocessing rules and stage creation need it.
+ * Runs as the last AQE preprocessing rule, after [[PlanAdaptiveSubqueries]], so the shared inner
+ * AQE is registered before stage creation looks it up.
  *
  * The registry is the source of truth: it lives on the shared [[AdaptiveExecutionContext]], so the
  * SAME inner AQE instance is reused across every reference (main query and subqueries) and across

@@ -55,7 +55,8 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
     case _ =>
-      val ctx = new LoweringContext(sealedDefinitions(plan))
+      val (sealedIds, copies) = sealedDefinitions(plan)
+      val ctx = new LoweringContext(sealedIds, copies)
       replaceWithRepartition(plan, mutable.HashMap.empty[Long, LogicalPlan], ctx)
   }
 
@@ -63,13 +64,14 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * The ids of the definitions to seal for guaranteed reuse: with the reuse flag on and in a batch
    * query, each `forceSkipInline` definition whose body the lowered plan holds two or more copies
    * of. Streaming queries seal nothing, so the per-micro-batch rewrites, such as the reseeding of
-   * random expressions, keep reaching every copy of a body.
+   * random expressions, keep reaching every copy of a body. Also returns the number of copies of
+   * every definition's body in the lowered plan (empty when nothing is sealed).
    */
-  private def sealedDefinitions(plan: LogicalPlan): Set[Long] = {
+  private def sealedDefinitions(plan: LogicalPlan): (Set[Long], Map[Long, Int]) = {
     // A plan with no forced definition, inside subqueries included, has nothing to seal.
     if (plan.isStreaming || !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) ||
         !plan.containsPattern(FORCE_SKIP_INLINE_CTE_DEF)) {
-      return Set.empty
+      return (Set.empty, Map.empty)
     }
     // For each reference, the definition whose body holds it (None for the main query), counted
     // across the main query, its subqueries and every definition's body.
@@ -121,18 +123,40 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
         n
     }
     defs.keys.foreach(numCopies)
-    toSeal.toSet
+    (toSeal.toSet, copies.toMap)
   }
 
   /**
-   * Per-query state of the lowering: the definitions to seal, and the plan-reuse id assigned to
+   * Per-query state of the lowering: the definitions to seal, the number of copies of each
+   * definition's body, the definition that lowered each root, and the plan-reuse id assigned to
    * each deterministic shared body, so that forced definitions with canonically equal bodies are
    * materialized once, as canonical exchange reuse does for plain CTE repartitions.
    */
-  private class LoweringContext(sealedIds: Set[Long]) {
+  private class LoweringContext(sealedIds: Set[Long], copies: Map[Long, Int]) {
     private val idByBody = mutable.HashMap.empty[LogicalPlan, Long]
+    // The definition whose lowering produced each lowered plan, by identity. A definition whose
+    // body only selects another definition lowers to that definition's plan object itself, which
+    // keeps its first owner.
+    private val ownerByLowering = new java.util.IdentityHashMap[LogicalPlan, java.lang.Long]()
 
     def shouldSeal(cteId: Long): Boolean = sealedIds.contains(cteId)
+
+    def recordLowering(cteId: Long, lowered: LogicalPlan): Unit = {
+      ownerByLowering.putIfAbsent(lowered, cteId)
+    }
+
+    /**
+     * Whether `inlined`, the inlined body of the definition `cteId`, is the lowered plan of
+     * another definition that is not sealed and whose body the lowered plan also holds outside
+     * this definition. Stamping such a root with a plan-reuse id would give this definition's
+     * copy a different canonical form than the other copies of that body, so they would no
+     * longer share one shuffle.
+     */
+    def isRetainedElsewhere(cteId: Long, inlined: LogicalPlan): Boolean = {
+      Option(ownerByLowering.get(inlined)).map(_.longValue).exists { owner =>
+        owner != cteId && !shouldSeal(owner) && copies.getOrElse(owner, 0) >= 2
+      }
+    }
 
     def assignId(root: RepartitionByExpression): RepartitionByExpression = {
       if (root.isForPlanReuse) {
@@ -176,6 +200,16 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * splitting, because a CTE reuse shuffle keeps one frozen layout for all its consumers. A
    * coalesce root is wrapped in a repartition to its partition count, and any other root, such as
    * a merged-subquery body, in a round-robin repartition.
+   *
+   * The returned root is planned as a protected `LOCAL_SHUFFLE_FOR_CTE` shuffle, which
+   * `EnsureRequirements` never removes. So a user hash repartition root that the body already
+   * satisfies, such as `REPARTITION(k)` over `GROUP BY k`, stays as a shuffle of the CTE output,
+   * where the base lowering let `EnsureRequirements` remove it: a forced CTE whose copies exchange
+   * reuse already shared there shuffles its output one more time. The alternative, letting the
+   * inner plan of a deterministic body materialize at the body's own last shuffle, would re-run
+   * the operators above that shuffle once per consumer and need a second materialization shape
+   * for the CTE reuse stage, while a non-deterministic body would still need the root shuffle. It
+   * is not taken: the root shuffle is the one materialization point every reference reads.
    */
   private def sealableRoot(inlined: LogicalPlan): RepartitionByExpression = inlined match {
     case r: RepartitionByExpression => r
@@ -218,6 +252,18 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
         throw new UnsupportedOperationException(
           s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
             s"${other.getClass.getSimpleName}")
+      case None if seal && ctx.isRetainedElsewhere(cteDef.id, inlined) =>
+        // The body only selects another, unsealed definition that the plan also reads outside
+        // this one, so `inlined` is that definition's lowered root, shared with its other copies.
+        // Keep that root unchanged, so every copy of the other body still plans to one shuffle,
+        // and seal a new repartition above it with the same partitioning. This costs one more
+        // shuffle of this definition's output than stamping the root in place.
+        val converted = sealableRoot(inlined)
+        ctx.assignId(RepartitionByExpression(
+          converted.partitionExpressions,
+          inlined,
+          converted.optNumPartitions,
+          converted.optAdvisoryPartitionSize))
       case None if seal =>
         ctx.assignId(sealableRoot(inlined))
       case None =>
@@ -232,7 +278,9 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap, ctx)
-        cteMap.put(cteDef.id, lower(cteDef, inlined, ctx))
+        val lowered = lower(cteDef, inlined, ctx)
+        ctx.recordLowering(cteDef.id, lowered)
+        cteMap.put(cteDef.id, lowered)
       }
       replaceWithRepartition(child, cteMap, ctx)
 

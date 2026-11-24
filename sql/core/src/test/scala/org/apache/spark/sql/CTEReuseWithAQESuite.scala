@@ -29,12 +29,12 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, CTEReuseQueryStageExec, ShuffleQueryStageExec}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
@@ -176,6 +176,37 @@ class CTEReuseWithAQESuite
           case s: CTEReuseQueryStageExec => s
         }.size == 2)
         assertInnerAQEShared(df)
+      }
+    }
+  }
+
+  test("the shared inner plan starts from a private copy of the sealed CTE body") {
+    withCTEReuseEnabled {
+      withTable("private_body_src") {
+        sql("CREATE TABLE private_body_src (id INT) USING parquet")
+        sql("INSERT INTO private_body_src VALUES (1), (2), (3)")
+        val df = sqlWithForcedCTEReuse(
+          """WITH cte AS (SELECT id, rand() AS r FROM private_body_src)
+            |SELECT c1.id, c1.r = c2.r FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+            |""".stripMargin)
+        checkAnswer(df, (1 to 3).map(Row(_, true)))
+        assertInnerAQEShared(df)
+        // The inner plan re-optimizes its logical plan on another thread, so it must not be the
+        // body the optimized plan holds, which other plannings of the same CTE read.
+        val bodies = collectCTEReuseRelations(df).map(_.sharedSubplan)
+        assert(bodies.size == 2)
+        val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }
+        assert(stages.nonEmpty)
+        stages.foreach { s =>
+          val innerLogical = s.innerAQE.inputPlan.logicalLink.getOrElse(
+            fail(s"Expected the inner plan's root to link its logical plan:\n${s.innerAQE}"))
+          assert(bodies.forall(_ ne innerLogical),
+            s"Expected the inner plan to start from a copy of the shared body:\n$innerLogical")
+          assert(bodies.forall(_.canonicalized == innerLogical.canonicalized),
+            s"Expected the copy to keep the shared body's canonical form:\n$innerLogical")
+        }
       }
     }
   }
@@ -498,11 +529,10 @@ class CTEReuseWithAQESuite
   // -----------------------------------------------------------------
 
   test("nested CTEs: outer CTE body references inner CTE") {
-    // Both CTEs are defined at one WITH level, and cte_outer's body
-    // references cte_inner. Both have rand() to prevent inlining. The outer CTE is
-    // referenced twice in the main query; the inner CTE is referenced
-    // twice inside the outer CTE's definition. This produces 2
-    // distinct CTE materializations in cteAQERegistry.
+    // Both CTEs are defined at one WITH level, and cte_outer's body references cte_inner. Both are
+    // forceSkipInline, which sqlWithForcedCTEReuse sets, so neither is inlined. The outer CTE is
+    // referenced twice in the main query; the inner CTE is referenced twice inside the outer CTE's
+    // definition. This produces 2 distinct CTE materializations in cteAQERegistry.
     withCTEReuseEnabled {
       withTable("nested_src") {
         sql(
@@ -565,9 +595,9 @@ class CTEReuseWithAQESuite
         (1 to 8).foreach { i =>
           sql(s"INSERT INTO all_tuples_src VALUES ($i, ${i * 10})")
         }
-        // Two global aggregates (no GROUP BY) each reference the same forced CTE. rand() keeps the
-        // CTE from inlining; both references must resolve to one shared inner AQE and return
-        // consistent results.
+        // Two global aggregates (no GROUP BY) each reference the same forced CTE.
+        // forceSkipInline, which sqlWithForcedCTEReuse sets, keeps the CTE from inlining; both
+        // references must resolve to one shared inner AQE and return consistent results.
         val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, v, rand() as r FROM all_tuples_src
@@ -767,14 +797,12 @@ class CTEReuseWithAQESuite
                 h.expressions.map(_.references.head.name) == Seq("id"), h)
             case other => fail(s"Expected the pinned hash partitioning, got $other")
           }
-          // Each reference reports the partitioning and statistics in its own attributes.
+          // Each reference reports the partitioning in its own attributes. Built-in shuffles report
+          // no attribute statistics, so CTEReuseQueryStageStatsSuite checks their remapping.
           s.outputPartitioning match {
             case h: HashPartitioning =>
               assert(h.references.subsetOf(s.outputSet), s"Expected $h in terms of ${s.output}")
             case other => fail(s"Expected a hash partitioning on the stage, got $other")
-          }
-          s.computeStats().foreach { stats =>
-            assert(stats.attributeStats.keys.forall(s.outputSet.contains), stats)
           }
         }
         // The two references are aliased copies with distinct attributes.
@@ -890,6 +918,51 @@ class CTEReuseWithAQESuite
           assertInnerAQEShared(df)
         }
       }
+    }
+  }
+
+  test("a forced CTE that only selects a MATERIALIZED CTE read directly shares its shuffle") {
+    withCTEReuseEnabled {
+      // `f`'s body lowers to `m`'s own lowered root. `m`'s body must still run once, under one
+      // shuffle that the copy inside `f`'s shared body and the direct reference `c` both read, so
+      // all three see the same value for each id. The UDF returns a fresh value on every call, so a
+      // second evaluation of `m`'s body shows, which rand() with its fixed seed would hide. The ids
+      // are not nullable and every column is read, so no filter or projection is pushed into `f`'s
+      // body, which stays a bare reference to `m`.
+      spark.udf.register("retained_cte_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
+      val df = sqlWithForcedCTEs(
+        """WITH m AS MATERIALIZED (SELECT id, retained_cte_uuid() AS r FROM range(1, 6)),
+          |  f AS (SELECT * FROM m)
+          |SELECT a.id, a.r = b.r AS ab, a.r = c.r AS ac
+          |FROM f a JOIN f b ON a.id = b.id JOIN m c ON a.id = c.id
+          |""".stripMargin, names = Set("f"))
+      val reuses = collectCTEReuseRelations(df)
+      assert(reuses.size == 2,
+        s"Expected the forced CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+      checkAnswer(df, (1L to 5L).map(Row(_, true, true)))
+      assertInnerAQEShared(df)
+      // The shared body wraps `m`'s plain repartition instead of stamping it with the reuse id.
+      reuses.foreach { r =>
+        assert(r.sharedSubplan.children.exists {
+          case inner: RepartitionByExpression => !inner.isForPlanReuse
+          case _ => false
+        }, s"Expected the shared body to wrap m's plain repartition:\n${r.sharedSubplan}")
+      }
+      // `m`'s plain shuffle appears in the inner plan, under the CTE reuse shuffle, and in the
+      // main query for `c`, and both stages read one shuffle: the second reuses the first.
+      val executed = df.queryExecution.executedPlan
+      val innerPlans = collectWithSubqueries(executed) {
+        case s: CTEReuseQueryStageExec => s.innerAQE
+      }.distinct
+      val bodyShuffles = (executed +: innerPlans).flatMap(p => collectWithSubqueries(p) {
+        case s: ShuffleQueryStageExec
+            if s.shuffle.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s.shuffle
+      })
+      assert(bodyShuffles.size >= 2 &&
+        bodyShuffles.map(System.identityHashCode).distinct.size == 1,
+        s"Expected both copies of the MATERIALIZED body to read one shuffle, got:\n" +
+          bodyShuffles.mkString("\n"))
     }
   }
 
@@ -1162,6 +1235,62 @@ class CTEReuseWithAQESuite
           val rows = ThreadUtils.awaitResult(result, 2.minutes)
           assert(rows.toSeq.map(r => (r.getLong(0), r.getLong(1))).sorted ==
             Seq((0L, 1L), (1L, 1L), (2L, 1L)))
+        } finally {
+          DroppedCTEStageSync.releaseAll()
+        }
+      }
+    }
+  }
+
+  // A replan drops one reference to the CTE while another reference that reads the same inner plan
+  // stays in the plan, and the CTE body then fails. Only the dropped reference's stage may ignore
+  // that failure, so the query must fail with the body's own error instead of hanging or returning
+  // rows. Latches order the events as in the test above: the empty join side waits until the test
+  // has seen both CTE stages, and the CTE body fails only once the adopted plan holds one of them.
+  test("a CTE body failure fails the query when a replan dropped only one of its references") {
+    withCTEReuseEnabled {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation") {
+        DroppedCTEStageSync.reset()
+        spark.udf.register("retained_cte_wait_for_stages", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesSeen, "the CTE stages")
+          id
+        }.asNondeterministic())
+        spark.udf.register("retained_cte_fail_after_drop", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesDropped, "the replan")
+          if (id >= 0) throw new IllegalStateException("retained CTE body failed")
+          true
+        }.asNondeterministic())
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT id FROM range(0, 4, 1, 1) WHERE retained_cte_fail_after_drop(id)
+            |)
+            |SELECT c1.id FROM c c1 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE retained_cte_wait_for_stages(id) > 100
+            |) e1 ON c1.id = e1.id
+            |UNION ALL
+            |SELECT c2.id FROM c c2
+            |""".stripMargin)
+        val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        def cteStages: Seq[CTEReuseQueryStageExec] =
+          aqe.executedPlan.collect { case s: CTEReuseQueryStageExec => s }
+        val result = Future(df.collect())(ExecutionContext.global)
+        try {
+          DroppedCTEStageSync.waitUntil("the outer plan creates both CTE stages") {
+            cteStages.size == 2
+          }
+          DroppedCTEStageSync.stagesSeen.countDown()
+          DroppedCTEStageSync.waitUntil("a replan drops one of the CTE stages") {
+            cteStages.size == 1
+          }
+          DroppedCTEStageSync.stagesDropped.countDown()
+          val e = intercept[Exception](ThreadUtils.awaitResult(result, 2.minutes))
+          val chain = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).toSeq
+          assert(chain.exists(t =>
+            Option(t.getMessage).exists(_.contains("retained CTE body failed"))),
+            chain.mkString("\n"))
         } finally {
           DroppedCTEStageSync.releaseAll()
         }

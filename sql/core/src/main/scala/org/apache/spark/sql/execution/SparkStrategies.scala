@@ -1111,7 +1111,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // instead of adding a separate exchange -- the Repartition serves as the logical plan for
         // the inner AQE, enabling correct re-optimization (broadcast stages are findable as
         // descendants, and re-planning preserves the root exchange).
-        val physicalSubplan = SparkStrategies.this.plan(r.sharedSubplan).next()
+        //
+        // sharedSubplan is not a child, so the clone that QueryExecution takes before planning
+        // does not copy it: every planning of this reference (the main query, a dynamic-pruning
+        // build side, a nested reference) would see the object the optimized plan holds, and the
+        // inner AQE re-optimizes its logical link on another thread. Plan a private clone instead,
+        // which keeps the canonical form.
+        val subplan = r.sharedSubplan.clone()
+        val physicalSubplan = SparkStrategies.this.plan(subplan).next()
         val shuffle = physicalSubplan match {
           case s: ShuffleExchangeExec => s
           case other =>
@@ -1123,7 +1130,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // Set the logical link explicitly because the shuffle is stored inside
         // CTEReuseExchange.subplan (metadata, not a child), so setLogicalLink
         // propagation from the parent won't reach it.
-        shuffle.setLogicalLink(r.sharedSubplan)
+        shuffle.setLogicalLink(subplan)
         CTEReuseExchange(r.cteId, shuffle) :: Nil
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>

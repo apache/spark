@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, Literal, Rand, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{PushdownPredicatesAndPruneColumnsForCTEDef, ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.execution.ExtendedMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -184,7 +184,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     }
   }
 
-  test("CTE with correlated subquery") {
+  test("CTE referenced from an uncorrelated IN subquery") {
     withCTEReuseEnabled {
       withTable("cte_t1") {
         sql("CREATE TABLE cte_t1 (a INT, b INT) USING parquet")
@@ -906,6 +906,65 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       Union(Seq(refTo(first), refTo(first), refTo(second), refTo(second))), Seq(first, second))
     val result = runReuseRules(plan)
     assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 4)
+  }
+
+  test("a forced CTE that only selects a retained CTE read elsewhere wraps that CTE's root") {
+    // `forced`'s body is a reference that keeps `retained`'s output, so it lowers to `retained`'s
+    // own lowered root. When the plan also reads `retained` directly, stamping that root with a
+    // plan-reuse id would give the two copies of `retained`'s body different canonical forms, so
+    // `forced` seals a new repartition above the unchanged root instead.
+    val base = rel
+    val nondeterministic = Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base)
+    Seq(
+      "plain body" ->
+        (nondeterministic, RepartitionByExpression(Seq.empty, nondeterministic, None)),
+      "REPARTITION(n) root" -> {
+        val root = Repartition(3, shuffle = true, nondeterministic)
+        (root, root)
+      },
+      "rebalance root" -> {
+        val root = RebalancePartitions(nondeterministic.output.take(1), nondeterministic)
+        (root, root)
+      }).foreach { case (name, (body, retainedRoot)) =>
+      val retained = CTERelationDef(body, materialized = Some(true))
+      val forced = CTERelationDef(refTo(retained), forceSkipInline = true)
+      val plan = WithCTE(
+        Union(Seq(refTo(forced), refTo(forced), refTo(retained))), Seq(retained, forced))
+      val result = runReuseRules(plan)
+      val reuses = collectCTEReuseRelations(result)
+      assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+      reuses.foreach { r =>
+        val root = sharedRoot(r)
+        assert(root.child == retainedRoot && r.partitioning == sealedRootPartitioning(body),
+          s"$name: expected the retained root wrapped, keeping its partitioning:\n" +
+            r.sharedSubplan.treeString)
+      }
+      // The direct reference keeps the retained CTE's plain lowering, the same plan the forced
+      // CTE's shared body wraps, so the two copies of the retained body stay canonically equal.
+      val direct = result.collect {
+        case r: RepartitionOperation => r
+        case r: RebalancePartitions => r
+      }
+      assert(direct == Seq(retainedRoot),
+        s"$name: expected the plain lowering for the direct reference:\n${result.treeString}")
+
+      // Read only through the forced CTE, the retained root has one copy and is stamped in place.
+      val onlyThrough = runReuseRules(
+        WithCTE(Union(Seq(refTo(forced), refTo(forced))), Seq(retained, forced)))
+      val onlyThroughReuses = collectCTEReuseRelations(onlyThrough)
+      assertAllRefsShareOneNonzeroId(onlyThroughReuses, refCount = 2)
+      onlyThroughReuses.foreach { r =>
+        assert(sharedRoot(r).child == nondeterministic,
+          s"$name: expected the retained root stamped in place:\n${r.sharedSubplan.treeString}")
+      }
+    }
+  }
+
+  // The partitioning a sealed forced definition rooted at `body` gets when stamped in place.
+  private def sealedRootPartitioning(body: LogicalPlan): Partitioning = {
+    val reuses = collectCTEReuseRelations(runReuseRules(forcedCteRefs(body, refCount = 2)))
+    assert(reuses.nonEmpty)
+    reuses.head.partitioning
   }
 
   test("forced under-subquery CTE seals (wrapped)") {

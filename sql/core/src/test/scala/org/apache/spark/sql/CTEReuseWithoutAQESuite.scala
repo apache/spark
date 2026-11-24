@@ -19,13 +19,14 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningExpression, DynamicPruningSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_NONE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -567,6 +568,16 @@ class CTEReuseWithoutAQESuite
           // Collect from this Dataset's own plan: a derived Dataset would be analyzed again.
           val rows = df.collect().map(r => (r.getInt(0), r.getInt(1))).toSeq.sorted
           assert(rows == Seq((1000, 1), (1000, 1), (1010, 2), (1010, 2), (1020, 2), (1020, 2)))
+
+          // The rows are the same without pruning, so check that the fact scan inside the sealed
+          // body was pruned: it carries a planned pruning filter and read only the NL partitions.
+          val scans = prepared.collectWithSubqueries {
+            case s: FileSourceScanExec if s.tableIdentifier.exists(_.table == "dpp_fact") => s
+          }
+          assert(scans.nonEmpty && scans.forall { s =>
+            s.partitionFilters.exists(_.isInstanceOf[DynamicPruningExpression]) &&
+              s.metrics("numPartitions").value == 2
+          }, s"Expected the fact scan to read only the two NL partitions:\n${prepared.treeString}")
         }
       }
     }
@@ -748,8 +759,9 @@ class CTEReuseWithoutAQESuite
         withTable("dim_noaqe") {
           sql("CREATE TABLE dim_noaqe (m INT) USING parquet")
           sql("INSERT INTO dim_noaqe VALUES (1), (2), (3)")
-          // The CTE body contains a scalar subquery `(SELECT max(m) FROM dim_noaqe)`. rand() keeps
-          // the def non-deterministic so it materializes and both refs share it.
+          // The CTE body contains a scalar subquery `(SELECT max(m) FROM dim_noaqe)`.
+          // forceSkipInline, which sqlWithForcedCTEReuse sets, keeps the def materialized so both
+          // refs share it.
           val df = sqlWithForcedCTEReuse(
             """WITH cte AS (
               |  SELECT id, v, (SELECT max(m) FROM dim_noaqe) as mx, rand() as r FROM reuse_src
@@ -1089,6 +1101,57 @@ class CTEReuseWithoutAQESuite
           s"Expected no shuffle below the CTE shuffle:\n${shuffles.head.treeString}")
         checkAnswer(df, (1 to 5).map(_ => Row(true)))
       }
+    }
+  }
+
+  test("a forced CTE that only selects a MATERIALIZED CTE read directly shares its shuffle") {
+    withCTEReuseNoAQE {
+      // Only `f` is forced. Its body lowers to `m`'s own lowered root; `m`'s body must still run
+      // once, under one shuffle that the copy inside `f`'s shared body and the direct reference
+      // `c` both read, so all three see the same value for each id. The UDF returns a fresh value
+      // on every call, so a second evaluation of `m`'s body shows, which rand() with its fixed
+      // seed would hide. The ids are not nullable and every column is read, so no filter or
+      // projection is pushed into `f`'s body, which stays a bare reference to `m`.
+      spark.udf.register("retained_cte_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
+      val analyzed = spark.sql(
+        """WITH m AS MATERIALIZED (SELECT id, retained_cte_uuid() AS r FROM range(1, 6)),
+          |  f AS (SELECT * FROM m)
+          |SELECT a.id, a.r = b.r AS ab, a.r = c.r AS ac
+          |FROM f a JOIN f b ON a.id = b.id JOIN m c ON a.id = c.id
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(spark, analyzed.transformWithSubqueries {
+        case d: CTERelationDef if (d.child match {
+          case a: SubqueryAlias => a.alias == "f"
+          case _ => false
+        }) => d.copy(forceSkipInline = true)
+      })
+      val reuses = df.queryExecution.optimizedPlan.collectWithSubqueries {
+        case r: CTEReuseRelation => r
+      }
+      assert(reuses.size == 2,
+        s"Expected the forced CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+      checkAnswer(df, (1L to 5L).map(Row(_, true, true)))
+      assertCTEReuseApplied(df)
+      // The shared body wraps `m`'s plain repartition instead of stamping it with the reuse id.
+      reuses.foreach { r =>
+        assert(r.sharedSubplan.children.exists {
+          case inner: RepartitionByExpression => !inner.isForPlanReuse
+          case _ => false
+        }, s"Expected the shared body to wrap m's plain repartition:\n${r.sharedSubplan}")
+      }
+      // One live shuffle of `m`'s body, which the other copy reuses.
+      val executed = df.queryExecution.executedPlan
+      val bodyShuffles = executed.collectWithSubqueries {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
+      }
+      val reusedBody = executed.collectWithSubqueries {
+        case r @ ReusedExchangeExec(_, s: ShuffleExchangeExec)
+            if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => r
+      }
+      assert(bodyShuffles.size == 1 && reusedBody.nonEmpty,
+        s"Expected one live shuffle of the MATERIALIZED body, reused by its other copy:\n" +
+          executed.treeString)
     }
   }
 
