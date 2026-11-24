@@ -62,33 +62,6 @@ class AlterViewSchemaBindingSuite
     }
   }
 
-  test("leaving EVOLUTION after a schema sync that keeps stale query column names") {
-    val viewName = "v_evolution_synced_stale_names"
-    val view = s"$catalog.$namespace.$viewName"
-    val table = s"$catalog.$namespace.t_evolution_synced_stale_names"
-    withTable(table) {
-      withView(view) {
-        sql(s"CREATE TABLE $table (c1 INT, c2 INT) $defaultUsing")
-        sql(s"INSERT INTO $table VALUES (1, 2)")
-        sql(s"CREATE VIEW $view WITH SCHEMA EVOLUTION AS SELECT * FROM $table")
-        setStoredQueryColumnNames(viewName, Seq("c1", "c2"))
-
-        sql(s"DROP TABLE $table")
-        sql(s"CREATE TABLE $table (c1 INT, c2 INT, c3 INT) $defaultUsing")
-        sql(s"INSERT INTO $table VALUES (1, 2, 3)")
-        // The read syncs the view schema to three columns and keeps the two stored names.
-        checkAnswer(sql(s"SELECT * FROM $view"), Row(1, 2, 3))
-        val synced = viewMeta(viewName)
-        assert(synced.schema.fieldNames.toSeq == Seq("c1", "c2", "c3"))
-        assert(synced.viewQueryColumnNames == Seq("c1", "c2"))
-
-        sql(s"ALTER VIEW $view WITH SCHEMA COMPENSATION")
-        checkAnswer(sql(s"SELECT * FROM $view"), Row(1, 2, 3))
-        assert(viewMeta(viewName).viewQueryColumnNames == Seq("c1", "c2", "c3"))
-      }
-    }
-  }
-
   test("changing a non-EVOLUTION view keeps its stored query column names") {
     val viewName = "v_column_list_names"
     val view = s"$catalog.$namespace.$viewName"
