@@ -10,13 +10,13 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                   Filter [rnk,item_sk]
                     InputAdapter
                       Window [rank_col]
-                        WholeStageCodegen (3)
-                          WindowGroupLimit [rank_col]
+                        WindowGroupLimit [rank_col]
+                          WholeStageCodegen (3)
                             Sort [rank_col]
                               InputAdapter
                                 Exchange #1
-                                  WholeStageCodegen (2)
-                                    WindowGroupLimit [rank_col]
+                                  WindowGroupLimit [rank_col]
+                                    WholeStageCodegen (2)
                                       Sort [rank_col]
                                         Filter [rank_col]
                                           Subquery #1
@@ -48,13 +48,13 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                         Filter [rnk,item_sk]
                           InputAdapter
                             Window [rank_col]
-                              WholeStageCodegen (6)
-                                WindowGroupLimit [rank_col]
+                              WindowGroupLimit [rank_col]
+                                WholeStageCodegen (6)
                                   Sort [rank_col]
                                     InputAdapter
                                       Exchange #5
-                                        WholeStageCodegen (5)
-                                          WindowGroupLimit [rank_col]
+                                        WindowGroupLimit [rank_col]
+                                          WholeStageCodegen (5)
                                             Sort [rank_col]
                                               Filter [rank_col]
                                                 ReusedSubquery [rank_col] #1

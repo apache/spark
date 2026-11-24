@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 
 sealed trait WindowGroupLimitMode
 
@@ -93,22 +94,68 @@ case class WindowGroupLimitExec(
     }
   }
 
-  // RowNumber, Rank and DenseRank are all wired up for codegen (see `doConsume`); any future
-  // rank-like function defaults to the interpreted path above (`WindowGroupLimitEvaluatorFactory`)
-  // by falling through to `false` here.
-  override def supportCodegen: Boolean = rankLikeFunction match {
-    case _: RowNumber | _: Rank | _: DenseRank => true
-    case _ => false
-  }
+  // RowNumber, Rank and DenseRank are wired up for codegen (see `doConsume`) only when there is a
+  // `PARTITION BY`. Without one, the whole partition is a single group, and this operator has no
+  // way to tell its child to stop producing rows once the limit is reached the way the
+  // interpreted `BaseLimitIterator.hasNext` (`rank < limit && input.hasNext`) does: every
+  // remaining row would still have to be pulled from the child and rejected one at a time, so the
+  // post-limit cost would grow with the partition size instead of staying bounded. Any other
+  // rank-like function also falls through to `false`, defaulting to the interpreted path above
+  // (`WindowGroupLimitEvaluatorFactory`). `ENABLE_WINDOW_GROUP_LIMIT_CODEGEN` is an escape hatch
+  // back to that same interpreted path, mirroring `SortAggregateExec`'s `supportCodegen`.
+  override def supportCodegen: Boolean = super.supportCodegen &&
+    conf.getConf(SQLConf.ENABLE_WINDOW_GROUP_LIMIT_CODEGEN) &&
+    partitionSpec.nonEmpty && (rankLikeFunction match {
+      case _: RowNumber | _: Rank | _: DenseRank => true
+      case _ => false
+    })
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = child.asInstanceOf[CodegenSupport].inputRDDs()
 
   // This operator neither materializes nor reorders columns itself, so let every column stay
   // lazy until a downstream operator actually needs it, the same way `FilterExec` does. Only the
-  // `partitionSpec`/`orderSpec` columns (if any) end up evaluated, by `genKeyChangeCode`.
+  // `partitionSpec` columns end up evaluated by `genKeyChangeCode` (shared by all three
+  // functions' grouped branch); the `orderSpec` columns (`Rank`/`DenseRank` only) are evaluated by
+  // the `genKeyProjection` calls inside `doConsumeRank`/`doConsumeDenseRank`.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  // Stable field names, computed once per operator instance rather than inside `doConsume*`.
+  // `doProduce` runs exactly once per operator, but `doConsume` can run more than once for the
+  // same operator if its immediate child calls `consume()` from more than one code site -- e.g. a
+  // fused sort-merge join's matched-row and streamed-only-guard branches -- so declaring these in
+  // `doProduce` and only referencing the names in `doConsume*` guarantees every call site shares
+  // one counter instead of each independently declaring its own. Mirrors
+  // `BaseLimitExec.countTerm`/`newLimitCountTerm`.
+  private lazy val rankTerm = WindowGroupLimitExec.newStateTerm("rank")
+  private lazy val groupKeyTerm = WindowGroupLimitExec.newStateTerm("groupKey")
+  private lazy val countTerm = WindowGroupLimitExec.newStateTerm("count")
+  private lazy val orderKeyTerm = WindowGroupLimitExec.newStateTerm("orderKey")
+  private lazy val orderingTerm = WindowGroupLimitExec.newStateTerm("ordering")
+
+  // Builds `orderKeyOrdering()` without pulling this operator (and, through `addReferenceObj`'s
+  // object-graph serialization, its whole child subtree) into every task binary just to call back
+  // into it -- see `genOrderKeyOrderingTerm` and `SortExec.sorterHolder` for the same pattern.
+  @transient private lazy val orderKeyOrderingHolder =
+    new WindowGroupLimitOrderKeyOrderingHolder(orderSpec)
+
   protected override def doProduce(ctx: CodegenContext): String = {
+    ctx.addMutableState(CodeGenerator.JAVA_INT, rankTerm, forceInline = true, useFreshName = false)
+    ctx.addMutableState("UnsafeRow", groupKeyTerm, forceInline = true, useFreshName = false)
+    rankLikeFunction match {
+      case _: RowNumber => // No further per-function state.
+      case _: Rank =>
+        ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true,
+          useFreshName = false)
+        ctx.addMutableState("UnsafeRow", orderKeyTerm, forceInline = true, useFreshName = false)
+        genOrderKeyOrderingTerm(ctx)
+      case _: DenseRank =>
+        ctx.addMutableState("UnsafeRow", orderKeyTerm, forceInline = true, useFreshName = false)
+        genOrderKeyOrderingTerm(ctx)
+      case other =>
+        // Unreachable: `supportCodegen` keeps any other rank-like function off the codegen path.
+        throw SparkException.internalError(
+          s"Codegen for rank-like function $other is not supported in WindowGroupLimitExec.")
+    }
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
@@ -125,24 +172,26 @@ case class WindowGroupLimitExec(
   }
 
   /**
-   * Projects `keyExprs` (bound against `child.output`) into a fresh `UnsafeRow`, returning the
+   * Projects `keyExprs` (bound against `child.output`) into a reused `UnsafeRow` -- the
+   * `rowWriter` row `GenerateUnsafeProjection.createCode` resets and returns, which is why
+   * `genKeyChangeBranch` below `.copy()`s it before holding onto it across rows -- returning the
    * code that computes it (to be emitted by the caller) together with the Java expression that
-   * reads the resulting row. Evaluating a key this way -- rather than through `genKeyChangeCode`
-   * below, which also does the comparison -- is for cases where the evaluation must happen before
-   * a `consume()` call but the comparison/branch may happen after it; see the order-key handling
-   * in `doConsumeRank`/`doConsumeDenseRank`.
+   * reads it. Evaluating a key this way -- rather than through `genKeyChangeCode` below, which
+   * also does the comparison -- is for cases where the evaluation must happen before a
+   * `consume()` call but the comparison/branch may happen after it; see the order-key handling in
+   * `doConsumeRank`/`doConsumeDenseRank`.
    *
    * The returned code MUST be emitted, in the generated method, before any `consume()` call for
    * the same row. `usedInputs` is empty (columns stay lazy), so these columns' evaluation code is
-   * still attached to `input` here; `evaluateRequiredVariables` evaluates and clears it. Skipping
-   * that, or running it after `consume(ctx, input)`, would duplicate the work: `consume()`
-   * evaluates and clears the columns `input` owes on its own internal copy of `input` (see its
-   * `outputVars.map(_.copy())`), leaving `input`'s original `ExprCode`s -- the ones this method
-   * reads -- still holding their unclaimed evaluation code, which `GenerateUnsafeProjection` would
-   * then copy as-is (`BoundReference.doGenCode` copies but does not clear a source `ExprCode`'s
-   * code), re-running the same expression a second time. For a non-deterministic expression (e.g.
-   * `ORDER BY rand()`) that would let the materialized output row and the value used for this
-   * projection disagree, not just waste cycles.
+   * still attached to `input` here; `evaluateRequiredVariables` evaluates and clears it directly
+   * on `input`. Emitting after `consume(ctx, input)` instead would be wrong for the opposite
+   * reason: `consume()` calls `prepareRowVar` on `input` itself, whose `evaluateVariables` clears
+   * `input`'s code there, and only afterward points `ctx.currentVars` at a separate set of copies
+   * for whatever `consume()`'s caller builds next (see its `outputVars.map(_.copy())`). A
+   * projection built after `consume(ctx, input)` would read `input`'s now-cleared `ExprCode`s
+   * directly, not those copies, and risk reading a Java variable that was never actually assigned
+   * -- the same hazard `checkLimitAndConsume` (in `doConsumeRowNumber`) calls out for the opposite
+   * ordering.
    */
   private def genKeyProjection(
       ctx: CodegenContext,
@@ -202,41 +251,24 @@ case class WindowGroupLimitExec(
   private def notEqualsCheck(a: String, b: String): String = s"!$a.equals($b)"
 
   /**
-   * An `Ordering` over a row made up of just `orderSpec`'s columns (in order, at ordinal
-   * positions 0..n-1), rather than the full `child.output`. Preserves each column's own
-   * direction and null ordering, same as the interpreted `OrderSpecProvider.ordering`, but is
-   * usable against the narrow projection `genKeyChangeCode` builds for the order-key check.
-   *
-   * `private[sql]`, not `private`: generated code calls it by reflection-free reference (see
-   * `genOrderKeyOrderingTerm`), and those generated classes live in
-   * `org.apache.spark.sql.catalyst.expressions`, inside this scope. The qualifier is enforced
-   * at Scala compile time only -- the bytecode method stays public -- so runtime-generated code
-   * links to it unchanged.
+   * Builds the per-task `BaseOrdering` over `orderSpec`, used to compare the previous row's
+   * projected order key (via `genKeyProjection`) against the current one. The `Ordering` itself is
+   * built by `orderKeyOrderingHolder.orderKeyOrdering()`, not by referencing this operator: that
+   * method compiles a fresh Janino class via `GenerateOrdering.generate`, which exists only in the
+   * generating JVM and so can't be shipped to a task pre-built. Referencing the holder (instead of
+   * `ctx.addReferenceObj("plan", this)`) lets the generated `init()` rebuild it once per task
+   * without pulling this operator or its child subtree into the task binary -- see
+   * `SortExec.sorterHolder` for the same pattern, and `orderKeyOrderingHolder`'s declaration above
+   * for why that matters here.
    */
-  private[sql] def orderKeyOrdering(): BaseOrdering = {
-    val boundOrders = orderSpec.zipWithIndex.map { case (order, i) =>
-      order.copy(child = BoundReference(i, order.dataType, order.nullable))
-    }
-    GenerateOrdering.generate(boundOrders)
-  }
-
-  /**
-   * The generated `SpecificOrdering` class `orderKeyOrdering()` returns isn't `Serializable`
-   * (codegen'd classes never are), so it can't be embedded directly as a task-closure reference
-   * the way the mutable-state terms elsewhere in this file are. Instead, reference `this` plan
-   * (already `Serializable`, like any other operator in the tree) and have the generated `init()`
-   * build the ordering once per task by calling back into it -- the same pattern `SortExec` uses
-   * for its `createSorter()`.
-   */
-  private def genOrderKeyOrderingTerm(ctx: CodegenContext, varName: String): String = {
-    val planTerm = ctx.addReferenceObj("plan", this)
-    ctx.addMutableState(classOf[BaseOrdering].getName, varName,
-      v => s"$v = $planTerm.orderKeyOrdering();", forceInline = true)
+  private def genOrderKeyOrderingTerm(ctx: CodegenContext): String = {
+    val holderTerm = ctx.addReferenceObj("orderKeyOrderingHolder", orderKeyOrderingHolder)
+    ctx.addMutableState(classOf[BaseOrdering].getName, orderingTerm,
+      v => s"$v = $holderTerm.orderKeyOrdering();", forceInline = true, useFreshName = false)
   }
 
   private def doConsumeRowNumber(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val rankTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "rank", forceInline = true)
 
     // A `def`, not a `val`: `consume(ctx, input)` has the side effect of emitting (and marking
     // consumed) the evaluation code for every column `input` still owes. It must run after the
@@ -251,39 +283,32 @@ case class WindowGroupLimitExec(
          |}
        """.stripMargin
 
-    if (partitionSpec.isEmpty) {
+    // Rows arrive already clustered by `partitionSpec` (see `requiredChildDistribution` and
+    // `requiredChildOrdering`; `supportCodegen` keeps this operator off the codegen path when
+    // `partitionSpec` is empty), so a change in the projected partition key marks the start of a
+    // new group: reset the rank counter, mirroring the group-boundary detection
+    // `SortAggregateExec.doConsumeWithKeys` uses for its sort-based grouping.
+    genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck, s"$rankTerm = 0;") +
       checkLimitAndConsume()
-    } else {
-      // Rows arrive already clustered by `partitionSpec` (see `requiredChildDistribution` and
-      // `requiredChildOrdering`), so a change in the projected partition key marks the start of a
-      // new group: reset the rank counter, mirroring the group-boundary detection
-      // `SortAggregateExec.doConsumeWithKeys` uses for its sort-based grouping.
-      val groupKeyTerm = ctx.addMutableState("UnsafeRow", "groupKey", forceInline = true)
-      genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck, s"$rankTerm = 0;") +
-        checkLimitAndConsume()
-    }
   }
 
   private def doConsumeRank(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val rankTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "rank", forceInline = true)
-    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "count", forceInline = true)
-    val orderKeyTerm = ctx.addMutableState("UnsafeRow", "rankOrderKey", forceInline = true)
-    val orderingTerm = genOrderKeyOrderingTerm(ctx, "rankOrdering")
 
-    // A `def`, not a `val`, for the same reason given on `genKeyProjection`: it must run after the
-    // grouped branch's partition-key check has already claimed its columns' code.
+    // A `def`, not a `val`, for the same reason given on `doConsumeRowNumber`'s
+    // `checkLimitAndConsume`: it must run after the grouped branch's partition-key check has
+    // already claimed its columns' code.
     //
     // The whole body -- order-key projection, admission, and the resulting rank advance -- is
     // gated on `rank < limit`, mirroring `BaseLimitIterator.hasNext`/
-    // `GroupedLimitIterator.skipRemainingRows`: once a group's rank reaches `limit`, the rest of
+    // `GroupIterator.skipRemainingRows`: once a group's rank reaches `limit`, the rest of
     // that group is frozen (no further admission, no further order-key work) until the next
-    // group's partition-key reset. Unlike the interpreted path, this operator has no way to skip
-    // straight to the next group's first row, so it still pays for the partition-key check on
-    // each remaining row (the same as before) -- but, unlike a naive port that just ignored the
-    // order-key work's *result* once past the limit, it no longer does that work at all: the
-    // `rank < limit` guard is checked, and found false, *before* `genKeyProjection` ever projects
-    // or compares the order key for an already-rejected row.
+    // group's partition-key reset. Neither this operator nor the interpreted
+    // `GroupIterator.skipRemainingRows` can skip straight to the next group's first row -- both
+    // still pay for the partition-key check on every remaining row of a rejected group -- but
+    // neither does the order-key work for those rows either: the `rank < limit` guard is checked,
+    // and found false, *before* `genKeyProjection` ever projects or compares the order key for an
+    // already-rejected row.
     //
     // The guard uses `rank` as it stood after the *previous* row, matching how
     // `BaseLimitIterator.next()` checks `hasNext` (using the current `rank`) before calling
@@ -308,27 +333,20 @@ case class WindowGroupLimitExec(
        """.stripMargin
     }
 
-    if (partitionSpec.isEmpty) {
-      body()
-    } else {
-      val groupKeyTerm = ctx.addMutableState("UnsafeRow", "groupKey", forceInline = true)
-      genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck,
-        s"""
-           |$rankTerm = 0;
-           |$countTerm = 0;
-           |$orderKeyTerm = null;
-         """.stripMargin) + body()
-    }
+    genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck,
+      s"""
+         |$rankTerm = 0;
+         |$countTerm = 0;
+         |$orderKeyTerm = null;
+       """.stripMargin) + body()
   }
 
   private def doConsumeDenseRank(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val rankTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "rank", forceInline = true)
-    val orderKeyTerm = ctx.addMutableState("UnsafeRow", "denseRankOrderKey", forceInline = true)
-    val orderingTerm = genOrderKeyOrderingTerm(ctx, "denseRankOrdering")
 
-    // A `def`, not a `val`, for the same reason given on `genKeyProjection`: it must run after the
-    // grouped branch's partition-key check has already claimed its columns' code.
+    // A `def`, not a `val`, for the same reason given on `doConsumeRowNumber`'s
+    // `checkLimitAndConsume`: it must run after the grouped branch's partition-key check has
+    // already claimed its columns' code.
     //
     // Gated on `rank < limit` exactly as `doConsumeRank`'s `body` is -- see the longer comment
     // there for why the whole body (not just admission) is inside the guard, and how the guard's
@@ -349,20 +367,54 @@ case class WindowGroupLimitExec(
        """.stripMargin
     }
 
-    if (partitionSpec.isEmpty) {
-      body()
-    } else {
-      val groupKeyTerm = ctx.addMutableState("UnsafeRow", "groupKey", forceInline = true)
-      genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck,
-        s"""
-           |$rankTerm = 0;
-           |$orderKeyTerm = null;
-         """.stripMargin) + body()
-    }
+    genKeyChangeCode(ctx, input, partitionSpec, groupKeyTerm, notEqualsCheck,
+      s"""
+         |$rankTerm = 0;
+         |$orderKeyTerm = null;
+       """.stripMargin) + body()
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): WindowGroupLimitExec =
     copy(child = newChild)
+}
+
+object WindowGroupLimitExec {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  private def newStateTerm(prefix: String): String = {
+    val id = curId.getAndIncrement()
+    s"_windowGroupLimit_${prefix}_$id"
+  }
+}
+
+/**
+ * Builds the `orderKeyOrdering()` used by `doConsumeRank`/`doConsumeDenseRank`'s generated code to
+ * compare order keys, capturing only `orderSpec` -- not the full `WindowGroupLimitExec` node and
+ * its child subtree. See `WindowGroupLimitExec.genOrderKeyOrderingTerm` and
+ * `SortExec.sorterHolder` for why that matters: everything that runs in a task should capture this
+ * holder rather than the node, so the node and its child subtree are not serialized into every
+ * task binary just to build this ordering.
+ */
+private[sql] class WindowGroupLimitOrderKeyOrderingHolder(orderSpec: Seq[SortOrder])
+  extends Serializable {
+
+  /**
+   * An `Ordering` over a row made up of just `orderSpec`'s columns (in order, at ordinal
+   * positions 0..n-1), rather than the full `child.output`. Preserves each column's own
+   * direction and null ordering, same as the interpreted `OrderSpecProvider.ordering`, but is
+   * usable against the narrow projection `genKeyProjection` builds for the order-key check (see
+   * `doConsumeRank`/`doConsumeDenseRank`).
+   *
+   * Not `private`: generated code calls it by reflection-free reference (see
+   * `genOrderKeyOrderingTerm`). The qualifier on the enclosing class is enforced at Scala compile
+   * time only -- the bytecode stays public -- so runtime-generated code links to it unchanged.
+   */
+  def orderKeyOrdering(): BaseOrdering = {
+    val boundOrders = orderSpec.zipWithIndex.map { case (order, i) =>
+      order.copy(child = BoundReference(i, order.dataType, order.nullable))
+    }
+    GenerateOrdering.generate(boundOrders)
+  }
 }
 
 abstract class BaseLimitIterator extends Iterator[InternalRow] {

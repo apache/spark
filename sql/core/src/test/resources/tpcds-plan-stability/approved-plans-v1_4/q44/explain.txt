@@ -11,10 +11,10 @@ TakeOrderedAndProject (43)
       :     :     :     +- * Project (16)
       :     :     :        +- * Filter (15)
       :     :     :           +- Window (14)
-      :     :     :              +- * WindowGroupLimit (13)
+      :     :     :              +- WindowGroupLimit (13)
       :     :     :                 +- * Sort (12)
       :     :     :                    +- Exchange (11)
-      :     :     :                       +- * WindowGroupLimit (10)
+      :     :     :                       +- WindowGroupLimit (10)
       :     :     :                          +- * Sort (9)
       :     :     :                             +- * Filter (8)
       :     :     :                                +- * HashAggregate (7)
@@ -29,10 +29,10 @@ TakeOrderedAndProject (43)
       :     :           +- * Project (29)
       :     :              +- * Filter (28)
       :     :                 +- Window (27)
-      :     :                    +- * WindowGroupLimit (26)
+      :     :                    +- WindowGroupLimit (26)
       :     :                       +- * Sort (25)
       :     :                          +- Exchange (24)
-      :     :                             +- * WindowGroupLimit (23)
+      :     :                             +- WindowGroupLimit (23)
       :     :                                +- * Sort (22)
       :     :                                   +- * Filter (21)
       :     :                                      +- * HashAggregate (20)
@@ -88,7 +88,7 @@ Condition : (isnotnull(rank_col#11) AND (cast(rank_col#11 as decimal(13,7)) > (0
 Input [2]: [item_sk#10, rank_col#11]
 Arguments: [rank_col#11 ASC NULLS FIRST], false, 0
 
-(10) WindowGroupLimit [codegen id : 2]
+(10) WindowGroupLimit
 Input [2]: [item_sk#10, rank_col#11]
 Arguments: [rank_col#11 ASC NULLS FIRST], rank(rank_col#11), 10, Partial
 
@@ -100,7 +100,7 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
 Input [2]: [item_sk#10, rank_col#11]
 Arguments: [rank_col#11 ASC NULLS FIRST], false, 0
 
-(13) WindowGroupLimit [codegen id : 3]
+(13) WindowGroupLimit
 Input [2]: [item_sk#10, rank_col#11]
 Arguments: [rank_col#11 ASC NULLS FIRST], rank(rank_col#11), 10, Final
 
@@ -142,7 +142,7 @@ Condition : (isnotnull(rank_col#20) AND (cast(rank_col#20 as decimal(13,7)) > (0
 Input [2]: [item_sk#19, rank_col#20]
 Arguments: [rank_col#20 DESC NULLS LAST], false, 0
 
-(23) WindowGroupLimit [codegen id : 7]
+(23) WindowGroupLimit
 Input [2]: [item_sk#19, rank_col#20]
 Arguments: [rank_col#20 DESC NULLS LAST], rank(rank_col#20), 10, Partial
 
@@ -154,7 +154,7 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 Input [2]: [item_sk#19, rank_col#20]
 Arguments: [rank_col#20 DESC NULLS LAST], false, 0
 
-(26) WindowGroupLimit [codegen id : 8]
+(26) WindowGroupLimit
 Input [2]: [item_sk#19, rank_col#20]
 Arguments: [rank_col#20 DESC NULLS LAST], rank(rank_col#20), 10, Final
 

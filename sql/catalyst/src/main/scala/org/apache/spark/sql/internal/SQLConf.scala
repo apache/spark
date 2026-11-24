@@ -4767,6 +4767,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_WINDOW_GROUP_LIMIT_CODEGEN =
+    buildConf("spark.sql.codegen.windowGroupLimit.enabled")
+      .internal()
+      .doc("When true, enable code-gen for WindowGroupLimit.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()

@@ -16,13 +16,13 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                               Filter [rnk,item_sk]
                                 InputAdapter
                                   Window [rank_col]
-                                    WholeStageCodegen (3)
-                                      WindowGroupLimit [rank_col]
+                                    WindowGroupLimit [rank_col]
+                                      WholeStageCodegen (3)
                                         Sort [rank_col]
                                           InputAdapter
                                             Exchange #2
-                                              WholeStageCodegen (2)
-                                                WindowGroupLimit [rank_col]
+                                              WindowGroupLimit [rank_col]
+                                                WholeStageCodegen (2)
                                                   Sort [rank_col]
                                                     Filter [rank_col]
                                                       Subquery #1
@@ -57,13 +57,13 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                               Filter [rnk,item_sk]
                                 InputAdapter
                                   Window [rank_col]
-                                    WholeStageCodegen (8)
-                                      WindowGroupLimit [rank_col]
+                                    WindowGroupLimit [rank_col]
+                                      WholeStageCodegen (8)
                                         Sort [rank_col]
                                           InputAdapter
                                             Exchange #6
-                                              WholeStageCodegen (7)
-                                                WindowGroupLimit [rank_col]
+                                              WindowGroupLimit [rank_col]
+                                                WholeStageCodegen (7)
                                                   Sort [rank_col]
                                                     Filter [rank_col]
                                                       ReusedSubquery [rank_col] #1

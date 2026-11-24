@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.internal.SQLConf.{WHOLESTAGE_CODEGEN_ENABLED, WINDOW_GROUP_LIMIT_THRESHOLD}
+import org.apache.spark.sql.internal.SQLConf.{ENABLE_WINDOW_GROUP_LIMIT_CODEGEN, WINDOW_GROUP_LIMIT_THRESHOLD}
 
 /**
  * Benchmark to measure performance for top-k computation.
@@ -76,16 +76,20 @@ object TopKBenchmark extends SqlBasedBenchmark {
     // Guards against a specific regression in `WindowGroupLimitExec`'s codegen for `RANK`/
     // `DENSE_RANK`: once a group's rank has passed `limit`, it must stop projecting the order key
     // and comparing it against the previous row for the group's remaining rows (mirroring the
-    // interpreted `GroupedLimitIterator.skipRemainingRows`'s short-circuit), rather than
-    // continuing to do that work on every already-rejected row. `ROW_NUMBER`'s codegen does no
-    // order-key work at all, admitted or not, so it is unaffected either way and serves as the
-    // reference point: the RANK/DENSE_RANK-to-ROW_NUMBER time ratio here should stay close to
-    // 1.0x with `WholeStageCodegen: true`. A single essentially-unbounded group with `limit=1`
+    // interpreted `GroupIterator.skipRemainingRows`'s short-circuit), rather than continuing to
+    // do that work on every already-rejected row. `ROW_NUMBER`'s codegen does no order-key work
+    // at all, admitted or not, so it is unaffected either way and serves as the reference point:
+    // the RANK/DENSE_RANK-to-ROW_NUMBER time ratio here should stay close to 1.0x with
+    // `WindowGroupLimit codegen: true`. A single essentially-unbounded group with `limit=1`
     // maximizes the number of already-rejected rows, making a reintroduced "keep doing the work
-    // anyway" regression as visible as possible. The `WholeStageCodegen: false` cases take the
-    // interpreted `RankLimitIterator`/`DenseRankLimitIterator` path, which already short-circuits
-    // correctly; they are the pre-codegen baseline, not expected to match `ROW_NUMBER` as closely
-    // (that comparison belongs to the non-skewed "Top-K Computation" benchmark above).
+    // anyway" regression as visible as possible. Toggling just
+    // `ENABLE_WINDOW_GROUP_LIMIT_CODEGEN` (rather than `WHOLESTAGE_CODEGEN_ENABLED`) isolates
+    // `WindowGroupLimitExec`'s own codegen, leaving the rest of the plan's codegen fusion
+    // unchanged, so the `WindowGroupLimit codegen: false` cases take the interpreted
+    // `RankLimitIterator`/`DenseRankLimitIterator` path (which already short-circuits correctly,
+    // and is thus the pre-codegen baseline, not expected to match `ROW_NUMBER` as closely -- that
+    // comparison belongs to the non-skewed "Top-K Computation" benchmark above) while every other
+    // operator in the plan still runs through whole-stage codegen either way.
     runBenchmark("Top-K with Skewed Partition") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath + "/topk_skew_benchmark_table"
@@ -107,13 +111,13 @@ object TopKBenchmark extends SqlBasedBenchmark {
         val benchmark = new Benchmark("Skewed Top-1 per key", N, minNumIters = 10, output = output)
 
         Seq("ROW_NUMBER", "RANK", "DENSE_RANK").foreach { function =>
-          benchmark.addCase(s"$function (WholeStageCodegen: false)") { _ =>
-            withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          benchmark.addCase(s"$function (WindowGroupLimit codegen: false)") { _ =>
+            withSQLConf(ENABLE_WINDOW_GROUP_LIMIT_CODEGEN.key -> "false") {
               f(function)
             }
           }
 
-          benchmark.addCase(s"$function (WholeStageCodegen: true)") { _ =>
+          benchmark.addCase(s"$function (WindowGroupLimit codegen: true)") { _ =>
             f(function)
           }
         }

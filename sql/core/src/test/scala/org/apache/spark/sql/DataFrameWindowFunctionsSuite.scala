@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
+import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec, WindowGroupLimitMode}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1891,8 +1891,12 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
   }
 
   test("WindowGroupLimitExec supports codegen for row_number, rank and dense_rank") {
-    // Ties (the repeated 2s) within each `key` group exercise `Rank`'s skip-across-ties and
-    // `DenseRank`'s no-skip behavior, not just the simpler `RowNumber` count.
+    // Repeated values create ties: group `a`'s repeated 1s make `Rank` and `DenseRank` admit a
+    // different number of rows at `rn <= 2` (`Rank` skips to 3 after the tied 1s, so only those
+    // two 1s qualify; `DenseRank` advances to 2, so the first `2` also qualifies), exercising
+    // `Rank`'s skip-across-ties and `DenseRank`'s no-skip behavior, not just the simpler
+    // `RowNumber` count. Group `b`'s repeated 2s both land at rank/dense_rank 2 and so don't by
+    // themselves create any such difference here.
     val df = Seq(
       ("a", 1), ("a", 1), ("a", 2), ("a", 3),
       ("b", 1), ("b", 2), ("b", 2), ("b", 3),
@@ -1915,9 +1919,11 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       case _: WindowGroupLimitExec => false
     }
 
-    // AQE can reshape the plan for such a tiny input (e.g. a local shuffle reader optimization),
-    // which would make the shape assertions below flaky; disable it, as SQLMetricsSuite's
-    // "SPARK-37099" WindowGroupLimitExec test also does.
+    // AQE can reshape the plan for such a tiny input (e.g. a local shuffle reader optimization);
+    // with it on, `executedPlan` becomes an `AdaptiveSparkPlanExec` leaf that `collectFirst` can't
+    // see through, so the partitioned branch's assertion below would fail deterministically, not
+    // flakily. Disable it, as `SQLMetricsSuite`'s "SPARK-37099" `WindowGroupLimitExec` test also
+    // does.
     Seq(true, false).foreach { partitioned =>
       Seq(row_number(), rank(), dense_rank()).foreach { rankLikeFunc =>
         val expectedRows = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
@@ -1935,9 +1941,14 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
             assert(fused == Some(true),
               s"$rankLikeFunc's WindowGroupLimit should be fused into WholeStageCodegenExec")
           } else {
+            // Unpartitioned: `WindowGroupLimitExec.supportCodegen` keeps the operator off the
+            // codegen path (there is no way to stop the child once the single group's limit is
+            // reached -- see its doc), so if it is present at all here it must NOT be fused, the
+            // opposite of the partitioned case above.
             fused.foreach { isFused =>
-              assert(isFused,
-                s"$rankLikeFunc's WindowGroupLimit should be fused into WholeStageCodegenExec")
+              assert(!isFused,
+                s"$rankLikeFunc's unpartitioned WindowGroupLimit should not be fused into " +
+                  "WholeStageCodegenExec")
             }
           }
         }
@@ -1947,32 +1958,57 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
 
   /**
    * Verifies `buildQuery()` (a `row_number`/`rank`/`dense_rank` top-k query, named by `funcName`)
-   * gives the same answer under codegen as under the interpreted path, and -- for `rank`/
-   * `dense_rank` only -- the same answer as a ground truth computed with the `WindowGroupLimit`
-   * optimizer rule disabled (a structurally different plan, with no `WindowGroupLimitExec` at
-   * all). Checking against that ground truth, not just interpreted-vs-codegen, catches a bug
-   * shared by both execution strategies, e.g. a `WindowGroupLimitExec` that under- or
-   * over-filters in a way that happens to agree between the two.
+   * gives the same answer under codegen as under the interpreted path, that both report the same
+   * `WindowGroupLimitExec.numOutputRows` for every Partial/Final node in the plan, and -- for
+   * `rank`/`dense_rank` only -- the same final answer as a ground truth computed with
+   * `InferWindowGroupLimit` disabled (a structurally different plan, with no `WindowGroupLimit`
+   * node at all).
    *
-   * The ground-truth check is skipped for `row_number`: every tied row in a group gets the same
-   * `rank`/`dense_rank`, but ties can get arbitrary distinct `row_number`s, so a `limit` that
-   * splits a tied group can legitimately see different per-row assignments (though the same *set*
-   * of rows) under a different plan. Codegen and interpreted are still compared for `row_number`
-   * -- they run the exact same optimized plan, so rows reach `WindowExec` in identical order
-   * either way and must match exactly, tie-breaks included.
+   * The final-answer comparisons alone cannot catch a generated path that over-admits rows: the
+   * real `WindowExec` downstream recomputes exact ranks and the `rn <= k` `Filter` above it trims
+   * any extras, so an over-admitting bug can still produce the right answer while every row of the
+   * child is needlessly windowed. The `numOutputRows` comparison catches that directly. The
+   * ground-truth comparison, in turn, catches a bug shared by both execution strategies, e.g. a
+   * `WindowGroupLimitExec` that under- or over-filters in a way that happens to agree between
+   * codegen and interpreted.
    *
-   * AQE is disabled throughout: it can reshape the plan for small inputs (e.g. a local shuffle
-   * reader optimization), which would make these plan-shape-sensitive checks flaky, as
-   * `SQLMetricsSuite`'s "SPARK-37099" `WindowGroupLimitExec` test also notes.
+   * The ground-truth check is skipped for `row_number`: ties can get arbitrary distinct
+   * `row_number`s, so a `limit` that splits a tied group can legitimately return a different *set*
+   * of rows, not just different numbers for the same rows, under a different plan. Codegen and
+   * interpreted are still compared for `row_number` -- they run the exact same optimized plan, so
+   * rows reach `WindowExec` in identical order either way and must match exactly, tie-breaks
+   * included.
+   *
+   * AQE is disabled throughout: it can reshape the plan for such a small input (e.g. a local
+   * shuffle reader optimization), changing which/how many `WindowGroupLimitExec` nodes the
+   * `numOutputRows` comparison above would find. This helper makes no assertions about plan shape
+   * itself; `SQLMetricsSuite`'s "SPARK-37099" test disables AQE for its entire suite rather than
+   * per test, for the same underlying reason.
    */
   private def checkWindowGroupLimitCodegen(funcName: String)(buildQuery: => DataFrame): Unit = {
-    val interpreted = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      buildQuery.collect().toSeq
+    def windowGroupLimitOutputRows(df: DataFrame): Map[WindowGroupLimitMode, Long] = {
+      df.queryExecution.executedPlan.collect {
+        case w: WindowGroupLimitExec => w.mode -> w.metrics("numOutputRows").value
+      }.toMap
     }
+
+    // Building the `DataFrame` and triggering its physical planning (via `collect()`/
+    // `executedPlan`) must happen inside the same `withSQLConf` scope: `executedPlan` is a lazy
+    // val, planned under whatever conf is active the first time it's forced, not under whatever
+    // conf was active when the `DataFrame` was merely constructed.
+    val (interpreted, interpretedOutputRows) =
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val interpretedDf = buildQuery
+        (interpretedDf.collect().toSeq, windowGroupLimitOutputRows(interpretedDf))
+      }
+
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      checkAnswer(buildQuery, interpreted)
+      val codegenDf = buildQuery
+      checkAnswer(codegenDf, interpreted)
+      assert(windowGroupLimitOutputRows(codegenDf) == interpretedOutputRows,
+        "WindowGroupLimitExec's numOutputRows should match between codegen and interpreted")
     }
     if (funcName != "row_number") {
       val groundTruth = withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1",
@@ -2026,8 +2062,10 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
     for {
       partitioned <- Seq(true, false)
       (orderDesc, orderCol) <- orderVariants
-      // 1 and 2 land mid-tie-group; 3 lands exactly on a tie boundary; 10 exceeds every group's
-      // size, so the limit is never reached and every row of the group must pass through.
+      // 1 and 2 land mid-tie-group; 3 lands exactly on a tie boundary; 10 exceeds every
+      // partitioned group's size (at most 4), so the limit is never reached there -- but in the
+      // unpartitioned runs all 11 rows form a single group, so a limit of 10 is reached, with one
+      // row rejected.
       limit <- Seq(1, 2, 3, 10)
       (funcName, rankLikeFunc) <- rankLikeFuncs
     } {
