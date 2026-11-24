@@ -177,6 +177,23 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(column(inexact) === Some(expiry))
   }
 
+  // State format 4 orders such an input by the pick, which a checkpoint must keep, so it must not
+  // change with the session time zone.
+  test("state value watermark column of an input without its own watermark does not depend on " +
+      "the session time zone") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val eventTs = AttributeReference("eventTs", TimestampType)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    Seq("UTC", "America/Los_Angeles").foreach { zone =>
+      val condition = eventTs >= TimestampAddInterval(rightTime,
+        Literal(Duration.ofDays(-1)), Some(zone)) && expiry >= rightTime
+      assert(StreamingJoinHelper.getStateValueWatermarkColumn(Seq(eventTs, expiry),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L)).map(_._1) ===
+        Some(expiry), zone)
+    }
+  }
+
   test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {
     val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
     val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()

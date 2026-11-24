@@ -90,8 +90,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   INTERVAL 5 SECONDS` with a watermark only on `rightTime`. Earlier versions kept such state
   forever and never emitted the unmatched rows of an outer join. A bound through a cast that can
   round or drop digits, such as `CAST(leftTime AS LONG)`, or through whole days added to a
-  TIMESTAMP in a session time zone whose offset changes, such as `rightTime - INTERVAL 1 DAY` in
-  `America/Los_Angeles`, gives such an input no cutoff. A query
+  TIMESTAMP, such as `rightTime - INTERVAL 1 DAY`, which last 23 or 25 hours across a
+  daylight-saving change of the session time zone, gives such an input no cutoff. A query
   restarted from a checkpoint of an earlier version keeps the earlier behavior; start it with a
   new checkpoint to use the new rule. With state format version 4, an outer join that emits the
   unmatched rows of such an input cannot restart from a checkpoint of a query started with

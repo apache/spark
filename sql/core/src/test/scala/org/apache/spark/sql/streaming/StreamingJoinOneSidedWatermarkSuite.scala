@@ -185,11 +185,16 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
 
   // In America/Los_Angeles, the day before 2026-11-01 12:00 PST lasts 25 hours, but the solver
   // reads it as 24, so the cutoff is too high. Earlier versions never evicted the left input.
-  for (version <- Seq(2, 4)) {
+  // A legacy calendar interval of one day gives the same result as a day-time interval.
+  for {
+    version <- Seq(2, 4)
+    legacyInterval <- Seq(false, true)
+  } {
     test(s"an input without its own watermark is not evicted through a day across a " +
-        s"daylight-saving change, V$version") {
+        s"daylight-saving change, V$version legacy interval $legacyInterval") {
       withJoinConf(version) {
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+            SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyInterval.toString) {
           val leftInput = MemoryStream[(Int, Long)]
           val rightInput = MemoryStream[(Int, Long)]
           val left = leftInput.toDF().toDF("leftKey", "time")
@@ -206,12 +211,42 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
             StreamProgressLockedActions(Seq(
               AddData(leftInput, (1, start)), AddData(rightInput, (9, later)))),
             CheckNewAnswer(),
-            // The watermark is 11:45 PST, less than a day read as 24 hours after the left row.
+            // The watermark is 11:45 PST, more than 24 hours but less than the 25-hour local day
+            // after the left row.
             AddData(rightInput, (9, later)),
             CheckNewAnswer(),
             AddData(rightInput, (1, end)),
             CheckNewAnswer(Row(1, start, end)))
         }
+      }
+    }
+  }
+
+  // A cast to DOUBLE keeps every digit, so such an input is evicted through it.
+  for (version <- Seq(2, 4)) {
+    test(s"an input without its own watermark is evicted through an exact cast, V$version") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Double)]
+        val rightInput = MemoryStream[(Int, Double)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("lt"))
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rt"))
+          .withWatermark("rt", "1 second")
+        val joined = left.join(right,
+            expr("leftKey = rightKey AND CAST(lt AS DOUBLE) >= CAST(rt AS DOUBLE) - 5"),
+            "left_outer")
+          .select($"leftKey", $"lt".cast("double"), $"rt".cast("double"))
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 14.2)), AddData(rightInput, (9, 14.2)))),
+          CheckNewAnswer(),
+          // The watermark becomes 19.5 s, so the cutoff is 14.5 s.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 20.5)), AddData(rightInput, (9, 20.5)))),
+          CheckNewAnswer(),
+          AddData(rightInput, (9, 20.6)),
+          CheckNewAnswer(Row(1, 14.2, null)))
       }
     }
   }

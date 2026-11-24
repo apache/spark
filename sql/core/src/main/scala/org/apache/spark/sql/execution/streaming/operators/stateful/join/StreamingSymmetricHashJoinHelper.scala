@@ -340,6 +340,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // which evicted only up to the cutoff solved over the whole input, so the scan starts
           // there, or from the beginning when that cutoff is ahead of the late-input watermark.
           // Both assume that the previous batch evicted with the same rule for cutoffs.
+          // TODO: Once the re-reads of the deleted index entries are measured, start the scan of an
+          //  input evicted by a column other than its event time at the smaller of the previous
+          //  cutoff on that column and the smallest timestamp appended in the micro-batch.
           // TODO: [SPARK-62038] State format 4 keeps a restored row with a NULL in the column at
           //  timestamp 0, below this scan start. Scan from the start in the first batch of each
           //  run.
