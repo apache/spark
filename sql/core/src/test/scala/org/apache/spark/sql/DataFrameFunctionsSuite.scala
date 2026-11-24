@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
@@ -564,6 +564,42 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         checkAnswer(closed, Row(-1, 1, 3))
         checkAnswer(legacy, Row(0, 0, 1))
       }
+    }
+  }
+
+  test("uniform reads its bounds after the optimizer gives them their query values") {
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        Seq("CAST", "try_cast").foreach { castFunction =>
+          val bound = s"datediff($castFunction('today' AS DATE), DATE'2020-01-01')"
+          checkAnswer(sql(s"SELECT uniform(0, $bound, 0) IS NOT NULL"), Row(true))
+        }
+      }
+    }
+  }
+
+  test("uniform with a bound that overflows fails when the query runs") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = sql("SELECT uniform(0, 2147483647 + 1, 0) AS u")
+      checkError(
+        exception = intercept[SparkArithmeticException](df.collect()),
+        condition = "ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "message" -> "overflow",
+          "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead.",
+          "config" -> "\"spark.sql.ansi.enabled\""),
+        context = ExpectedContext(fragment = "2147483647 + 1", start = 18, stop = 31))
+    }
+  }
+
+  test("uniform with a current-time bound reads cached data") {
+    val query = "SELECT uniform(0, unix_timestamp(), 7) AS u FROM range(100)"
+    val cached = sql(query)
+    cached.cache()
+    try {
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql(query)).isDefined)
+    } finally {
+      cached.unpersist(blocking = true)
     }
   }
 

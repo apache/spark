@@ -402,6 +402,99 @@ struct<count(DISTINCT pmod(x, 16)):bigint,(min(x) >= -9223372036854775808):boole
 
 
 -- !query
+SELECT pmod(x, 3) AS r, count(*) BETWEEN 3100 AND 3600 AS balanced
+  FROM (SELECT uniform(0L, 6755399441055743L, 0) AS x FROM range(10000)) GROUP BY r ORDER BY r
+-- !query schema
+struct<r:bigint,balanced:boolean>
+-- !query output
+0	true
+1	true
+2	true
+
+
+-- !query
+SELECT avg(CAST(x < -4611686018427387904L AS INT)) BETWEEN 0.31 AND 0.36 AS balanced
+  FROM (SELECT uniform(-9223372036854775808L, 4611686018427387904L, 0) AS x FROM range(10000))
+-- !query schema
+struct<balanced:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT uniform(unix_micros(now()), unix_micros(now()), 0) = unix_micros(now()) AS result
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT bool_and(x BETWEEN unix_micros(now()) - 1000000 AND unix_micros(now())) AS result
+  FROM (SELECT uniform(unix_micros(now()) - 1000000, unix_micros(now()), 0) AS x FROM range(1000))
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT uniform(0, datediff(CAST('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT uniform(0, datediff(try_cast('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result
+-- !query schema
+struct<result:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT min(x), max(x) FROM (SELECT uniform(0, size(map(1, 2, 3, 4)), 0) AS x FROM range(1000))
+-- !query schema
+struct<min(x):int,max(x):int>
+-- !query output
+0	2
+
+
+-- !query
+SELECT CASE WHEN id < 0 THEN uniform(0, 1 div 0, 0) END AS result FROM range(1)
+-- !query schema
+struct<result:bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, 2147483647 + 1, 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 32,
+    "fragment" : "2147483647 + 1"
+  } ]
+}
+
+
+-- !query
 SELECT uniform(NULL, 1, 0) AS result
 -- !query schema
 struct<result:double>

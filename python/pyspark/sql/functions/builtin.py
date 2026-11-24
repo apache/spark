@@ -18422,10 +18422,10 @@ def uniform(
     """Returns a random value with independent and identically distributed (i.i.d.) values with the
     specified range of numbers. The random seed is optional. The provided numbers specifying the
     minimum and maximum values of the range must be constant. If both of these numbers have
-    integral types, then the result will also be an integer drawn from the closed range [min, max],
-    with each integer equally likely. Otherwise if one or both of these are floating-point or
-    decimal numbers, then the result will be a DOUBLE in [min, max), or a FLOAT or DECIMAL that is
-    rounded to the result type and can equal max.
+    integral types, then the result will be an integer drawn from the closed range between them,
+    given in either order, with each integer equally likely. Otherwise the result lies between
+    them and, after floating-point or decimal rounding, can equal max; a DOUBLE result is not
+    finite when the difference of the bounds overflows.
 
     .. versionadded:: 4.0.0
 

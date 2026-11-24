@@ -310,6 +310,63 @@ SELECT count(DISTINCT pmod(x, 16)), min(x) >= -9223372036854775808L, max(x) < 0
 
 
 -- !query
+SELECT pmod(x, 3) AS r, count(*) BETWEEN 3100 AND 3600 AS balanced
+  FROM (SELECT uniform(0L, 6755399441055743L, 0) AS x FROM range(10000)) GROUP BY r ORDER BY r
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT avg(CAST(x < -4611686018427387904L AS INT)) BETWEEN 0.31 AND 0.36 AS balanced
+  FROM (SELECT uniform(-9223372036854775808L, 4611686018427387904L, 0) AS x FROM range(10000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(unix_micros(now()), unix_micros(now()), 0) = unix_micros(now()) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT bool_and(x BETWEEN unix_micros(now()) - 1000000 AND unix_micros(now())) AS result
+  FROM (SELECT uniform(unix_micros(now()) - 1000000, unix_micros(now()), 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(0, datediff(CAST('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(0, datediff(try_cast('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT min(x), max(x) FROM (SELECT uniform(0, size(map(1, 2, 3, 4)), 0) AS x FROM range(1000))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT CASE WHEN id < 0 THEN uniform(0, 1 div 0, 0) END AS result FROM range(1)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT uniform(0, 2147483647 + 1, 0) AS result
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT uniform(NULL, 1, 0) AS result
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]

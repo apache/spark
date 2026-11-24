@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
@@ -214,10 +212,10 @@ object Randn {
     _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
       distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
       The provided numbers specifying the minimum and maximum values of the range must be constant.
-      If both of these numbers have integral types, then the result will also be an integer drawn
-      from the closed range [min, max], with each integer equally likely. Otherwise if one or both
-      of these are floating-point or decimal numbers, then the result will be a DOUBLE in
-      [min, max), or a FLOAT or DECIMAL that is rounded to the result type and can equal max.
+      If both of these numbers have integral types, then the result will be an integer drawn from
+      the closed range between them, given in either order, with each integer equally likely.
+      Otherwise the result lies between them and, after floating-point or decimal rounding, can
+      equal max; a DOUBLE result is not finite when the difference of the bounds overflows.
   """,
   arguments = """
     Arguments:
@@ -344,64 +342,13 @@ case class Uniform(
    * drawn from [min, max) toward zero would never return a positive `max` or a negative `min`, and
    * would return zero twice as often as any other value when the range spans it.
    *
-   * The bounds are evaluated here so that the draw can be chosen from the size n of the range.
-   * When n is at most 2^53, `lo + floor(n * rand)` is exact: n is exact in DOUBLE, the offset lies
-   * in [0, n - 1] for every draw, and the addition is LONG arithmetic, so the magnitude of the
-   * bounds does not matter. A single DOUBLE draw has only 53 random bits, so wider BIGINT ranges
-   * use [[UniformLongOffset]], which draws the offset from 64 random bits.
+   * The bounds stay children of the draw instead of being evaluated here, so that the optimizer
+   * gives current-time and special datetime bounds their query values and folds each bound once.
    */
   private def integralReplacement(cast: (Expression, DataType) => Expression): Expression = {
-    val bounds = if (min.foldable && max.foldable) {
-      // Bounds that fail to evaluate use nonConstantIntegralReplacement, so the error surfaces at
-      // execution as it would for any other expression.
-      try {
-        Some((cast(min, LongType).eval(), cast(max, LongType).eval()))
-      } catch {
-        case NonFatal(_) => None
-      }
-    } else {
-      // Do not evaluate non-foldable bounds: the replacement can be built during canonicalization
-      // before checkInputDataTypes reports NON_FOLDABLE_INPUT.
-      None
-    }
-    bounds match {
-      case Some((null, _)) | Some((_, null)) =>
-        Literal(null, dataType)
-      case Some((a: Long, b: Long)) =>
-        val lo = math.min(a, b)
-        val hi = math.max(a, b)
-        // hi - lo is the unsigned size of the range minus one, which does not overflow.
-        val width = hi - lo
-        val offset = if (java.lang.Long.compareUnsigned(width, 1L << 53) < 0) {
-          Floor(Multiply(Literal((width + 1).toDouble), Rand(seed)))
-        } else {
-          UniformLongOffset(width + 1, Literal(seed, LongType))
-        }
-        cast(Add(Literal(lo), offset, evalMode = EvalMode.LEGACY), dataType)
-      case _ =>
-        nonConstantIntegralReplacement(cast)
-    }
-  }
-
-  /** Fallback for bounds that cannot be evaluated when the replacement is built. */
-  private def nonConstantIntegralReplacement(
-      cast: (Expression, DataType) => Expression): Expression = {
-    val lo = Least(Seq(cast(min, LongType), cast(max, LongType)))
-    val hi = Greatest(Seq(cast(min, LongType), cast(max, LongType)))
-    // Adding lo in DOUBLE rounds the sum to the DOUBLE grid at the magnitude of the bounds, so
-    // clamp it back into the range. Floor saturates instead of failing on overflow so that the
-    // clamp also covers ranges touching the BIGINT limits.
-    val draw = Floor(
-      Add(
-        cast(lo, DoubleType),
-        Multiply(
-          Add(Subtract(cast(hi, DoubleType), cast(lo, DoubleType)), Literal(1.0d)),
-          Rand(seed))),
-      failOnError = false)
-    // Least and Greatest skip NULLs, so check the bounds explicitly to keep a NULL bound NULL.
-    If(Or(IsNull(min), IsNull(max)),
-      Literal(null, dataType),
-      cast(Least(Seq(Greatest(Seq(draw, lo)), hi)), dataType))
+    cast(
+      UniformIntegralDraw(cast(min, LongType), cast(max, LongType), Literal(seed, LongType)),
+      dataType)
   }
 
   /** Returns a copy of this expression with the specified timeZoneId. */
@@ -418,58 +365,125 @@ object Uniform {
 }
 
 /**
- * Draws a LONG offset uniformly from [0, n), where `n` is read as an unsigned 64-bit value and
- * zero stands for 2^64. Used by [[Uniform]] for BIGINT ranges with more values than a DOUBLE draw
- * can reach. Words below 2^64 mod n are rejected, so the accepted words are a multiple of n and
- * their unsigned remainders by n are equally likely. Fewer than two words are drawn on average.
+ * Draws a LONG uniformly from the closed range between `lower` and `upper`, given in either order,
+ * for [[Uniform]] with integral bounds. Returns NULL when either bound is NULL.
+ *
+ * The bounds are constant, so they are read on the first row of each partition rather than when
+ * the partition is initialized, so that a draw in a branch that never runs cannot fail the query.
+ * A range of n values takes `floor(n * nextDouble())` when n is at most
+ * [[UniformIntegralDraw.MaxDoubleDrawRangeSize]], which keeps every offset's share within about
+ * 2^-21 of the others, and otherwise the unsigned remainder by n of a 64-bit word, redrawing words
+ * below 2^64 mod n so that every remainder is equally likely. The offset is added to the lower
+ * bound with wrapping LONG arithmetic, which stays in range at the BIGINT limits.
  */
-case class UniformLongOffset(n: Long, child: Expression) extends NondeterministicUnaryRDG {
+case class UniformIntegralDraw(lower: Expression, upper: Expression, seedExpression: Expression)
+  extends RDG with TernaryLike[Expression] with Nondeterministic with ExpectsInputTypes {
+
+  override def first: Expression = lower
+  override def second: Expression = upper
+  override def third: Expression = seedExpression
 
   override def dataType: DataType = LongType
+  override def nullable: Boolean = lower.nullable || upper.nullable
 
-  // Unsigned 2^64 mod n: the number of words below which the remainder would be biased.
-  @transient private lazy val rejectBelow: Long =
-    if (n == 0L) 0L else java.lang.Long.remainderUnsigned(-n, n)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(LongType, LongType, TypeCollection(IntegerType, LongType))
 
-  override def withNewSeed(seed: Long): UniformLongOffset =
-    UniformLongOffset(n, Literal(seed, LongType))
+  @transient private var boundsRead: Boolean = _
+  @transient private var nullRange: Boolean = _
+  @transient private var lo: Long = _
+  // The number of values in the range, read as unsigned; zero stands for 2^64.
+  @transient private var rangeSize: Long = _
+  @transient private var rejectBelow: Long = _
 
-  override def withShiftedSeed(shift: Long): UniformLongOffset =
-    UniformLongOffset(n, Add(child, Literal(shift), evalMode = EvalMode.LEGACY))
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    rng = new XORShiftRandom(seed + partitionIndex)
+    boundsRead = false
+  }
 
-  override protected def evalInternal(input: InternalRow): Long = {
-    var word = rng.nextLong()
-    if (n == 0L) {
-      word
-    } else {
-      while (java.lang.Long.compareUnsigned(word, rejectBelow) < 0) {
-        word = rng.nextLong()
+  override protected def evalInternal(input: InternalRow): Any = {
+    if (!boundsRead) {
+      val a = lower.eval(input)
+      val b = upper.eval(input)
+      nullRange = a == null || b == null
+      if (!nullRange) {
+        val (x, y) = (a.asInstanceOf[Long], b.asInstanceOf[Long])
+        lo = math.min(x, y)
+        rangeSize = math.max(x, y) - lo + 1L
+        rejectBelow = UniformIntegralDraw.rejectionThreshold(rangeSize)
       }
-      java.lang.Long.remainderUnsigned(word, n)
+      boundsRead = true
     }
+    if (nullRange) null else lo + UniformIntegralDraw.drawOffset(rng, rangeSize, rejectBelow)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val className = classOf[XORShiftRandom].getName
-    val rngTerm = ctx.addMutableState(className, "rng")
+    val rngClass = classOf[XORShiftRandom].getName
+    val drawClass = classOf[UniformIntegralDraw].getName
+    val rngTerm = ctx.addMutableState(rngClass, "rng")
+    val boundsReadTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "boundsRead")
+    val nullRangeTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "nullRange")
+    val loTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "lo")
+    val rangeSizeTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeSize")
+    val rejectBelowTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rejectBelow")
     ctx.addPartitionInitializationStatement(
-      s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    val draw = if (n == 0L) {
-      ""
-    } else {
-      s"""
-        while (java.lang.Long.compareUnsigned(${ev.value}, ${rejectBelow}L) < 0) {
-          ${ev.value} = $rngTerm.nextLong();
-        }
-        ${ev.value} = java.lang.Long.remainderUnsigned(${ev.value}, ${n}L);"""
-    }
+      s"$rngTerm = new $rngClass(${seed}L + partitionIndex); $boundsReadTerm = false;")
+    val lowerGen = lower.genCode(ctx)
+    val upperGen = upper.genCode(ctx)
     ev.copy(code = code"""
-      long ${ev.value} = $rngTerm.nextLong();$draw""",
-      isNull = FalseLiteral)
+      if (!$boundsReadTerm) {
+        ${lowerGen.code}
+        ${upperGen.code}
+        $nullRangeTerm = ${lowerGen.isNull} || ${upperGen.isNull};
+        if (!$nullRangeTerm) {
+          $loTerm = java.lang.Math.min(${lowerGen.value}, ${upperGen.value});
+          $rangeSizeTerm = java.lang.Math.max(${lowerGen.value}, ${upperGen.value}) - $loTerm + 1L;
+          $rejectBelowTerm = $drawClass.rejectionThreshold($rangeSizeTerm);
+        }
+        $boundsReadTerm = true;
+      }
+      boolean ${ev.isNull} = $nullRangeTerm;
+      long ${ev.value} = -1L;
+      if (!${ev.isNull}) {
+        ${ev.value} = $loTerm + $drawClass.drawOffset($rngTerm, $rangeSizeTerm, $rejectBelowTerm);
+      }""")
   }
 
-  override protected def withNewChildInternal(newChild: Expression): UniformLongOffset =
-    copy(child = newChild)
+  override def withNewSeed(newSeed: Long): UniformIntegralDraw =
+    copy(seedExpression = Literal(newSeed, LongType))
+
+  override def withShiftedSeed(shift: Long): UniformIntegralDraw =
+    copy(seedExpression = Add(seedExpression, Literal(shift), evalMode = EvalMode.LEGACY))
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): UniformIntegralDraw =
+    copy(lower = newFirst, upper = newSecond, seedExpression = newThird)
+}
+
+object UniformIntegralDraw {
+  /** The largest range, in values, that takes one DOUBLE draw instead of a 64-bit draw. */
+  val MaxDoubleDrawRangeSize: Long = 1L << 32
+
+  /** Unsigned 2^64 mod `rangeSize`: words below it would bias the unsigned remainder. */
+  def rejectionThreshold(rangeSize: Long): Long =
+    if (rangeSize == 0L) 0L else java.lang.Long.remainderUnsigned(-rangeSize, rangeSize)
+
+  /** Draws an offset in [0, rangeSize), reading `rangeSize` as unsigned with zero for 2^64. */
+  def drawOffset(rng: XORShiftRandom, rangeSize: Long, rejectBelow: Long): Long = {
+    if (rangeSize != 0L && java.lang.Long.compareUnsigned(rangeSize, MaxDoubleDrawRangeSize) <= 0) {
+      (rangeSize.toDouble * rng.nextDouble()).toLong
+    } else {
+      var word = rng.nextLong()
+      if (rangeSize == 0L) {
+        word
+      } else {
+        while (java.lang.Long.compareUnsigned(word, rejectBelow) < 0) {
+          word = rng.nextLong()
+        }
+        java.lang.Long.remainderUnsigned(word, rangeSize)
+      }
+    }
+  }
 }
 
 @ExpressionDescription(

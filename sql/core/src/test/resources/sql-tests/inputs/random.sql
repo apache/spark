@@ -65,6 +65,21 @@ SELECT count(DISTINCT pmod(x, 1024)) > 1000, min(x) >= 0
   FROM (SELECT uniform(0L, 9223372036854775807L, 0) AS x FROM range(10000));
 SELECT count(DISTINCT pmod(x, 16)), min(x) >= -9223372036854775808L, max(x) < 0
   FROM (SELECT uniform(-9223372036854775808L, -1L, 0) AS x FROM range(10000));
+-- BIGINT ranges of more than 2^32 values give each integer an equal share.
+SELECT pmod(x, 3) AS r, count(*) BETWEEN 3100 AND 3600 AS balanced
+  FROM (SELECT uniform(0L, 6755399441055743L, 0) AS x FROM range(10000)) GROUP BY r ORDER BY r;
+SELECT avg(CAST(x < -4611686018427387904L AS INT)) BETWEEN 0.31 AND 0.36 AS balanced
+  FROM (SELECT uniform(-9223372036854775808L, 4611686018427387904L, 0) AS x FROM range(10000));
+-- Bounds get their query values: current time, special datetime strings and stateful bounds.
+SELECT uniform(unix_micros(now()), unix_micros(now()), 0) = unix_micros(now()) AS result;
+SELECT bool_and(x BETWEEN unix_micros(now()) - 1000000 AND unix_micros(now())) AS result
+  FROM (SELECT uniform(unix_micros(now()) - 1000000, unix_micros(now()), 0) AS x FROM range(1000));
+SELECT uniform(0, datediff(CAST('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result;
+SELECT uniform(0, datediff(try_cast('today' AS DATE), DATE'2020-01-01'), 0) IS NOT NULL AS result;
+SELECT min(x), max(x) FROM (SELECT uniform(0, size(map(1, 2, 3, 4)), 0) AS x FROM range(1000));
+-- A bound that fails to evaluate fails only when a row draws from it.
+SELECT CASE WHEN id < 0 THEN uniform(0, 1 div 0, 0) END AS result FROM range(1);
+SELECT uniform(0, 2147483647 + 1, 0) AS result;
 SELECT uniform(NULL, 1, 0) AS result;
 SELECT uniform(cast(NULL AS int), 1, 0) AS result;
 SELECT uniform(cast(NULL AS float), 1, 0) AS result;
