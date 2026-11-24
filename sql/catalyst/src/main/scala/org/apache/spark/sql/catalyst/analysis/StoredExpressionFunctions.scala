@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, RoutedJsonConstructor,
+  UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -52,11 +53,22 @@ object StoredExpressionFunctions {
    * user-defined function in a text that the DDL no longer accepts still resolves here.
    * A function injected with `SparkSessionExtensions.injectFunction` is not in
    * `FunctionRegistry.builtin`, so it is left as is too and can still be shadowed.
+   *
+   * A clause-free JSON constructor that the parser kept as a [[RoutedJsonConstructor]] (one with a
+   * nested JSON producer, or one written as a constructor's value) is the flat call it stands for,
+   * so it is qualified the same way. The transform runs top-down, so its arguments are qualified
+   * too, and the built-in still splices them as for the flat call.
    */
   def qualifyBuiltinFunctions(expr: Expression): Expression = expr.transform {
-    case f @ UnresolvedFunction(Seq(name), _, _, _, _, _, _, _)
-        if FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) =>
-      f.copy(nameParts =
-        Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE, name))
+    case f @ UnresolvedFunction(Seq(name), _, _, _, _, _, _, _) if isBuiltin(name) =>
+      qualifyBuiltin(f)
+    case r: RoutedJsonConstructor if isBuiltin(r.prettyName) =>
+      qualifyBuiltin(r.toUnresolvedFunction)
   }
+
+  private def isBuiltin(name: String): Boolean =
+    FunctionRegistry.builtin.functionExists(FunctionIdentifier(name))
+
+  private def qualifyBuiltin(f: UnresolvedFunction): UnresolvedFunction = f.copy(nameParts =
+    Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE) ++ f.nameParts)
 }

@@ -23,12 +23,15 @@ import org.apache.spark.sql.catalyst.expressions.Exists
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedMergeIntoTableNoCodegenSuite extends GroupBasedMergeIntoTableSuite {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "false")
 }
 
+@DataSourceV2Test
 class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   import testImplicits._

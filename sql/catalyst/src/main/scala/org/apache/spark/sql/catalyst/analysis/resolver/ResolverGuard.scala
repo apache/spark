@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   GetViewColumnByNameAndOrdinal,
   MultiAlias,
   NamedParameter,
+  OptionalReferences,
   ResolvedInlineTable,
   Star,
   UnresolvedAlias,
@@ -207,6 +208,9 @@ class ResolverGuard(
         checkCreateNamedStruct(createNamedStruct)
       case unresolvedFunction: UnresolvedFunction =>
         checkUnresolvedFunction(unresolvedFunction)
+      // A routine may own a routed constructor, so check it like the flat call.
+      case routedJsonConstructor: RoutedJsonConstructor =>
+        checkUnresolvedFunction(routedJsonConstructor.toUnresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
         checkGetViewColumnByNameAndOrdinal(getViewColumnByNameAndOrdinal)
       case semiStructuredExtract: SemiStructuredExtract =>
@@ -418,8 +422,18 @@ class ResolverGuard(
 
   private def checkUnresolvedUpCast(upCast: UpCast) = checkExpression(upCast.child)
 
-  private def checkUnresolvedExtractValue(unresolvedExtractValue: UnresolvedExtractValue) =
-    unresolvedExtractValue.children.collectFirst { case CheckExpression(reason) => reason }
+  /**
+   * An optional field of an expression other than a name, e.g. `array_col[0].field?`, is
+   * unsupported: if the field is missing, the fixed-point analyzer resolves the reference to NULL
+   * without adding the columns of the expression to the operators below ORDER BY or HAVING.
+   */
+  private def checkUnresolvedExtractValue(unresolvedExtractValue: UnresolvedExtractValue) = {
+    if (OptionalReferences.isOptional(unresolvedExtractValue)) {
+      Some("optional field extraction")
+    } else {
+      unresolvedExtractValue.children.collectFirst { case CheckExpression(reason) => reason }
+    }
+  }
 
   /**
    * Recursively check the children of the [[Star]] expression.
@@ -450,7 +464,17 @@ class ResolverGuard(
     case _ => None
   }
 
-  private def checkNamedParameter(namedParameter: NamedParameter) = None
+  /**
+   * Named parameters are not resolved by the single-pass analyzer, so an optional named parameter
+   * marker (`:name?`), which resolves to NULL when it is not bound, is unsupported.
+   */
+  private def checkNamedParameter(namedParameter: NamedParameter) = {
+    if (OptionalReferences.isOptional(namedParameter)) {
+      Some("optional named parameter")
+    } else {
+      None
+    }
+  }
 
   private def checkGetStructField(getStructField: GetStructField) = {
     checkExpression(getStructField.child)
@@ -465,6 +489,7 @@ class ResolverGuard(
    * Checks whether the provided attribute is supported. It's unsupported if:
    *  - Any of its name parts is in the [[ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES]] list.
    *  - It has the `PLAN_ID_TAG` tag.
+   *  - It has an optional name part while optional reference resolution is disabled.
    */
   private def checkUnresolvedAttribute(unresolvedAttribute: UnresolvedAttribute) = {
     val unsupportedNameOption =
@@ -481,7 +506,22 @@ class ResolverGuard(
       case None if unresolvedAttribute.containsTag(LogicalPlan.PLAN_ID_TAG) =>
         Some("PLAN_ID_TAG")
       case None =>
-        None
+        checkOptionalReference(unresolvedAttribute)
+    }
+  }
+
+  /**
+   * Checks whether the provided attribute is supported with respect to optional references. It's
+   * unsupported if it has an optional name part while optional reference resolution is disabled.
+   */
+  private def checkOptionalReference(unresolvedAttribute: UnresolvedAttribute) = {
+    if (OptionalReferences.hasOptionalMarker(unresolvedAttribute) &&
+        !conf.getConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION
+        )) {
+      Some("optional reference")
+    } else {
+      None
     }
   }
 
@@ -629,7 +669,8 @@ class ResolverGuard(
       // JSON
       case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
           _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray | _: JsonArray |
-          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr =>
+          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr |
+          _: StockJsonConstructor =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
@@ -663,8 +704,6 @@ class ResolverGuard(
       Some("legacyCTEPrecedencePolicy")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
-    } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
-      Some("persistentCatalogFirst")
     } else {
       None
     }

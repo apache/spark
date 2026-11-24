@@ -1,0 +1,101 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Scheduled to avoid pull_request_target; never check out or run PR code here.
+# Labels in .github/labeler.yml are authoritative and must already exist.
+# Manually added configured labels are removed on the next scan if they do not
+# match the PR's changed files.
+#
+# Each run labels PRs updated since 10 minutes before the last successful run
+# was created, so failed or skipped runs only widen the next run's window. The
+# PRs are split into groups that are labeled by parallel jobs, keeping each job
+# well within ubuntu-slim's 15-minute job limit.
+name: Label pull requests
+
+on:
+  schedule:
+  - cron: "7-59/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  list:
+    name: List pull requests
+    if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-slim
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      groups: ${{ steps.prs.outputs.groups }}
+    steps:
+      - name: List PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          last_success=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow labeler.yml --branch master --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
+          if [ -n "$last_success" ]; then
+            # Keep a short overlap to cover updates around the run's creation time.
+            since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          else
+            since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          fi
+          echo "Listing PRs updated since $since"
+          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
+            -f state=all -f since="$since" -f sort=updated -f direction=desc \
+            -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
+          # Dedupe, since updates during pagination can shift PRs across page boundaries.
+          numbers=$(sort -nu <<< "$numbers")
+          echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
+          # Groups of 100 PRs take about 4 minutes each at ~2.4 seconds per PR.
+          groups=$(jq -Rnc '[inputs | select(. != "")]
+            | [range(0; length; 100) as $i | .[$i:$i+100] | join("\n")]' <<< "$numbers")
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
+
+  label:
+    # Keep names short; matrix values contain up to 100 PR numbers.
+    name: Label pull requests (group ${{ strategy.job-index }})
+    needs: list
+    if: needs.list.outputs.groups != '[]'
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      # ASF policy caps a workflow at 20 concurrent jobs.
+      max-parallel: 10
+      matrix:
+        prs: ${{ fromJSON(needs.list.outputs.groups) }}
+    steps:
+      - name: Checkout labeler configuration
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Label PRs
+        uses: actions/labeler@v7
+        with:
+          pr-number: ${{ matrix.prs }}
+          sync-labels: true

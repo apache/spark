@@ -61,7 +61,8 @@ from pandas.api.types import (
     is_list_like,
     is_scalar,
 )
-from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[attr-defined]
+from pandas.tseries.frequencies import to_offset
+from pandas.tseries.offsets import DateOffset
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -11810,12 +11811,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             * top: smallest rank if ascending
             * bottom: largest rank if ascending
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         pct : bool, default False
             Whether or not to display the returned rankings in percentile form.
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         Returns
         -------

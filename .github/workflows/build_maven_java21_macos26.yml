@@ -21,7 +21,7 @@ name: "Build / Maven (Scala 2.13, JDK 21, MacOS-26)"
 
 on:
   schedule:
-    - cron: '0 20 */4 * *'
+    - cron: '17 3 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -35,6 +35,8 @@ jobs:
       java: 21
       os: macos-26
       arch: arm64
+      # macOS Maven test shards can take close to five hours.
+      build_timeout_minutes: 360
       envs: >-
         {
           "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",

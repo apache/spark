@@ -75,6 +75,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
+    assert(gm.getIntermediateStorageLevel === "MEMORY_AND_DISK")
     val model = gm.setMaxIter(1).fit(dataset)
 
     val transformed = model.transform(dataset)
@@ -109,6 +110,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
       .setMaxIter(33)
       .setSeed(123)
       .setTol(1e-3)
+      .setIntermediateStorageLevel("DISK_ONLY")
 
     assert(gm.getK === 9)
     assert(gm.getFeaturesCol === "test_feature")
@@ -117,6 +119,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getMaxIter === 33)
     assert(gm.getSeed === 123)
     assert(gm.getTol === 1e-3)
+    assert(gm.getIntermediateStorageLevel === "DISK_ONLY")
   }
 
   test("parameters validation") {
@@ -311,7 +314,8 @@ object GaussianMixtureSuite extends SparkFunSuite {
     "probabilityCol" -> "myProbability",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "intermediateStorageLevel" -> "DISK_ONLY"
   )
 
   val denseData = Seq(

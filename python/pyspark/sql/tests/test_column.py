@@ -123,6 +123,22 @@ class ColumnTestsMixin:
             ValueError, "Cannot apply 'in' operator against a column", lambda: 1 in cs
         )
 
+    def test_startswith_endswith_with_none(self):
+        # SPARK-48995: startswith/endswith with None should return null instead of failing
+        df = self.spark.createDataFrame([("abc",), (None,)], "s string")
+        for name in ["startswith", "endswith"]:
+            with self.subTest(name=name):
+                result = df.select(getattr(df.s, name)(None).alias("r")).collect()
+                self.assertEqual(result, [Row(r=None), Row(r=None)])
+
+    def test_startswith_endswith_with_non_string_literal(self):
+        # SPARK-48995: non-string literals are cast to string, as in SQL and Spark Connect
+        df = self.spark.createDataFrame([("1abc1",), ("abc",), (None,)], "s string")
+        for name in ["startswith", "endswith"]:
+            with self.subTest(name=name):
+                result = df.select(getattr(df.s, name)(1).alias("r")).collect()
+                self.assertEqual(result, [Row(r=True), Row(r=False), Row(r=None)])
+
     def test_column_date_time_op(self):
         query = """
             SELECT * FROM VALUES

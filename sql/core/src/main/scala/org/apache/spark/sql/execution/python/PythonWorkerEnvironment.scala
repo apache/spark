@@ -91,9 +91,8 @@ private[sql] object PythonWorkerEnvironment {
    * `PythonWorkerFactory` folds the session's value into the path it computes instead of discarding
    * it, so a session adds to the worker's import path. It is left settable because a session
    * already chooses the code its own worker runs, not because Spark's entries are guaranteed to
-   * come first -- `PythonUtils.sparkPythonPath` is empty when `SPARK_HOME` is unset and Spark's
-   * classes did not come from a jar, and `mergePythonPaths` drops empty entries, which can leave
-   * the session's path first.
+   * come first -- `PythonUtils.sparkPythonPath` is empty when `SPARK_HOME` is unset, and
+   * `mergePythonPaths` drops empty entries, which can leave the session's path first.
    *
    * These are the ones write order does not protect, because Spark sets them only when a condition
    * holds and a session's value survives when it does not. Two of them would desynchronize the JVM

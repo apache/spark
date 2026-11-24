@@ -57,7 +57,7 @@ from pandas.api.types import (
 )
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
-from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
+from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark._globals import _NoValue, _NoValueType
@@ -4237,12 +4237,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * top: smallest rank if ascending
             * bottom: largest rank if ascending
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         pct : bool, default False
             Whether or not to display the returned rankings in percentile form.
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         Returns
         -------
@@ -4340,7 +4340,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    3.0
         Name: A, dtype: float64
         """
-        validate_axis(axis)
+        axis = validate_axis(axis)
+        if axis == 1:
+            raise ValueError("Series does not support columns axis.")
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
