@@ -262,7 +262,10 @@ object SQLExecution extends Logging {
       // long as it runs. A thread inherits both local properties from the thread that starts it,
       // so the queries on a thread started during a stream are not limited either. The ones on
       // a thread started during a query are nested in it: they count towards its limit while it
-      // runs, and are not limited after it ends.
+      // runs, and are not limited after it ends. Under Spark Connect, the queries that a Python
+      // foreachBatch function runs come back to the server from its Python worker, on threads
+      // without the query ID of the stream, so they are root executions of their own and are
+      // limited.
       val hasScanLimit = existingRootId == null && maxScanBytes >= 0 &&
         sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null
       // sparkContext.getCallSite() would first try to pick up any call site that was previously

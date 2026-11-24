@@ -37,7 +37,8 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * The bytes are the task input metric `bytesRead`. It arrives with the executor heartbeats while
  * a task runs and with the task end event, so an execution is cancelled some time after it went
- * over its limit, not at that point.
+ * over its limit, not at that point. The metric comes from the Hadoop FileSystem statistics, so
+ * reads on threads that a source starts itself can be missed.
  *
  * A task retry, a speculative task and a new attempt of a stage read the data of a partition
  * again. To keep that from counting against the limit, the listener keeps one value per
