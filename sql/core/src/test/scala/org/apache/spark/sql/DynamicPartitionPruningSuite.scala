@@ -2718,6 +2718,28 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
       }
     }
   }
+
+  test("SPARK-62241: no partition pruning on an equality that is not a join key") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("fact", "dim") {
+        spark.range(0, 8).selectExpr("id AS k", "CAST(id % 4 AS STRING) AS p")
+          .write.partitionBy("p").format(tableFormat).saveAsTable("fact")
+        Seq((1L, 1, 1, 1), (2L, 2, -1, 2)).toDF("k", "pi", "x", "y")
+          .write.format(tableFormat).saveAsTable("dim")
+        // The cast of the partition column, which can fail, follows the throwable CASE WHEN, so
+        // it is not a join key, and no pruning filter evaluates it ahead of the join.
+        val df = sql(
+          """SELECT f.k FROM fact f JOIN dim d ON f.k = d.k
+            |  AND CASE WHEN d.x < -5 THEN raise_error('neg') ELSE true END
+            |  AND CAST(f.p AS INT) = d.pi
+            |WHERE d.y = 1
+            |""".stripMargin)
+        checkPartitionPruningPredicate(df, false, false)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
 }
 
 class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite

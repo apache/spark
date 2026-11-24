@@ -57,7 +57,9 @@ abstract class BasePythonUDFRunner(
     ).getOrElse(Map.empty) ++
     Map(
       SQLConf.PYTHON_UDF_PROFILER_SAMPLING_INTERVAL.key ->
-        SQLConf.get.pythonUDFProfilerSamplingInterval.toString
+        SQLConf.get.pythonUDFProfilerSamplingInterval.toString,
+      SQLConf.PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION.key ->
+        SQLConf.get.pythonUDFProfilerSamplingAggregation
     )
   }
 

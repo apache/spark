@@ -3178,6 +3178,74 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+1	2	0	2
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_1h
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	NULL	NULL
+0	2	0	2
+1	2	0	2
+
+
+-- !query
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	2
+0	2	0	3
+1	2	0	3
+
+
+-- !query
+DROP FUNCTION foo3_1i
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1 ORDER BY foo3_1b(c1)
 -- !query schema
 struct<>

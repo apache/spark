@@ -27,7 +27,7 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -86,7 +86,8 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
     // A FILE in the return type cannot have a qualifier.
     TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(udaf.dataType, name)
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
-    functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
+    functionRegistry.createOrReplaceTempFunction(
+      name, rejectNamedArguments(name, builder), "scala_udf")
     udaf
   }
 
@@ -125,8 +126,22 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
       case udf: SparkUserDefinedFunction =>
         toScalaUDF(udf, _)
     }
-    functionRegistry.createOrReplaceTempFunction(name, builder, source)
+    functionRegistry.createOrReplaceTempFunction(
+      name, rejectNamedArguments(name, builder), source)
     named
+  }
+
+  /**
+   * Wraps the builder of a Scala or Java function, which takes its arguments by position only, so
+   * that a call with a named argument fails the analysis, instead of the execution.
+   */
+  private def rejectNamedArguments(
+      name: String,
+      builder: Seq[Expression] => Expression): Seq[Expression] => Expression = { children =>
+    if (children.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+    builder(children)
   }
 
 
