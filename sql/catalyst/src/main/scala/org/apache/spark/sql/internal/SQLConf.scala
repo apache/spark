@@ -6418,8 +6418,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val KLL_SKETCH_MERGE_LOWEST_COMPACTING_K =
-    buildConf("spark.sql.function.kllSketchMerge.lowestCompactingK.enabled")
+  val KLL_MERGE_LOWEST_COMPACTING_K =
+    buildConf("spark.sql.function.kllMerge.lowestCompactingK.enabled")
       .internal()
       .doc("When true, kll_sketch_merge_{bigint,float,double}(left, right) returns a sketch " +
         "with k = min(k of the first non-empty input, k of `right`), where the k of `right` " +
@@ -10798,7 +10798,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
 
-  def kllSketchMergeLowestCompactingK: Boolean = getConf(KLL_SKETCH_MERGE_LOWEST_COMPACTING_K)
+  def kllMergeLowestCompactingK: Boolean = getConf(KLL_MERGE_LOWEST_COMPACTING_K)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 

@@ -717,11 +717,11 @@ FROM (
 );
 
 -- With the k rule off, the result has the k of left
-SET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled=false;
+SET spark.sql.function.kllMerge.lowestCompactingK.enabled=false;
 SELECT regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l, r)), 'K +: ([0-9]+)', 1) AS k
 FROM (SELECT kll_sketch_agg_bigint(id, 1000) AS l FROM range(10)),
      (SELECT kll_sketch_agg_bigint(id, 100) AS r FROM range(100000));
-RESET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled;
+RESET spark.sql.function.kllMerge.lowestCompactingK.enabled;
 
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;

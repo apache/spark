@@ -277,7 +277,7 @@ case class KllSketchMergeBigint(
     lowestCompactingK: Boolean)
   extends KllSketchMergeBase {
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
+    this(left, right, SQLConf.get.kllMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_bigint"
@@ -313,7 +313,7 @@ case class KllSketchMergeFloat(
     lowestCompactingK: Boolean)
   extends KllSketchMergeBase {
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
+    this(left, right, SQLConf.get.kllMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_float"
@@ -349,7 +349,7 @@ case class KllSketchMergeDouble(
     lowestCompactingK: Boolean)
   extends KllSketchMergeBase {
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.kllSketchMergeLowestCompactingK)
+    this(left, right, SQLConf.get.kllMergeLowestCompactingK)
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
   override def prettyName: String = "kll_sketch_merge_double"
@@ -366,7 +366,7 @@ abstract class KllSketchMergeBase
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def nullIntolerant: Boolean = true
 
-  /** The value of [[SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K]] at resolve time. */
+  /** The value of [[SQLConf.KLL_MERGE_LOWEST_COMPACTING_K]] at resolve time. */
   def lowestCompactingK: Boolean
 
   // Leaves out `lowestCompactingK`, so plan strings do not change.

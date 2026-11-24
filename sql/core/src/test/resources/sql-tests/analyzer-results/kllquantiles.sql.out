@@ -1914,9 +1914,9 @@ Project [kll_sketch_merge_bigint(agg1#x, agg2#x) AS incompatible_merge_right_tar
 
 
 -- !query
-SET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled=false
+SET spark.sql.function.kllMerge.lowestCompactingK.enabled=false
 -- !query analysis
-SetCommand (spark.sql.function.kllSketchMerge.lowestCompactingK.enabled,Some(false))
+SetCommand (spark.sql.function.kllMerge.lowestCompactingK.enabled,Some(false))
 
 
 -- !query
@@ -1935,9 +1935,9 @@ Project [regexp_extract(kll_sketch_to_string_bigint(kll_sketch_merge_bigint(l#x,
 
 
 -- !query
-RESET spark.sql.function.kllSketchMerge.lowestCompactingK.enabled
+RESET spark.sql.function.kllMerge.lowestCompactingK.enabled
 -- !query analysis
-ResetCommand spark.sql.function.kllSketchMerge.lowestCompactingK.enabled
+ResetCommand spark.sql.function.kllMerge.lowestCompactingK.enabled
 
 
 -- !query

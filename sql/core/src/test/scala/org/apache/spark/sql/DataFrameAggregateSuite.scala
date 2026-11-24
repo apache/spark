@@ -4289,7 +4289,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
   }
 
   private object KllMergeKRule {
-    val confKey = SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K.key
+    val confKey = SQLConf.KLL_MERGE_LOWEST_COMPACTING_K.key
     val types = Seq("bigint", "float", "double")
 
     // A sketch over [from, from + n). It compacts iff n > k, and n = 0 gives an empty sketch.
@@ -4319,7 +4319,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
         (id, inputs.map { case (k, n) => sketch(t, k, n) })
       }.toDF("id", "ss").selectExpr("id", s"$mergeSql AS m")
     def kAndN(t: String, df: DataFrame): Seq[(Int, Long)] =
-      df.selectExpr("id", "m", s"kll_sketch_get_n_$t(m)").orderBy("id").collect().toSeq
+      // Sorts on the driver: an orderBy adds a sampling job and a shuffle to every query.
+      df.selectExpr("id", "m", s"kll_sketch_get_n_$t(m)").collect().sortBy(_.getInt(0)).toSeq
         .map(r => (kOf(t, r.getAs[Array[Byte]](1)), r.getLong(2)))
     def merged(t: String, cases: Seq[Seq[(Int, Int)]], mergeSql: String): Seq[(Int, Long)] =
       kAndN(t, mergedDf(t, cases, mergeSql))
@@ -4423,6 +4424,25 @@ class DataFrameAggregateSuite extends SharedSparkSession
     val builtOff = withSQLConf(confKey -> "false") { mergedDf("bigint", pair, two) }
     withSQLConf(confKey -> "false") { assert(kAndN("bigint", builtOn) == Seq((100, 10000))) }
     withSQLConf(confKey -> "true") { assert(kAndN("bigint", builtOff) == Seq((400, 10000))) }
+  }
+
+  // The conf binds as SESSION, so a view resolves with the value of the session that reads it,
+  // not the value it captured when it was created.
+  test("SPARK-61981: a view with kll_sketch_merge uses the conf of the session that reads it") {
+    import KllMergeKRule._
+    withTempView("kll_pairs", "kll_merged") {
+      Seq((0, Seq(sketch("bigint", 400, 8000), sketch("bigint", 100, 2000))))
+        .toDF("id", "ss").createOrReplaceTempView("kll_pairs")
+      for ((createdWith, readWith, k) <- Seq(("true", "false", 400), ("false", "true", 100))) {
+        withSQLConf(confKey -> createdWith) {
+          sql("CREATE OR REPLACE TEMP VIEW kll_merged AS " +
+            "SELECT id, kll_sketch_merge_bigint(ss[0], ss[1]) AS m FROM kll_pairs")
+        }
+        withSQLConf(confKey -> readWith) {
+          assert(kAndN("bigint", spark.table("kll_merged")) == Seq((k, 10000)), createdWith)
+        }
+      }
+    }
   }
 
   // 50000 is the median of the union [0, 100000), so its rank is about 0.5.
