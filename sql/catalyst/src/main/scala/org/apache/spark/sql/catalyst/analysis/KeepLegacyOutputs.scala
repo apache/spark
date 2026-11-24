@@ -40,7 +40,7 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
           d.copy(output = Seq(d.output.head.withName("database_description_item"),
             d.output.last.withName("database_description_value")))
         case s: ShowTableProperties if s.propertyKey.isDefined =>
-           s.copy(output = Seq(s.output.last))
+          keepLegacyShowTablePropertiesOutput(s)
       }
     }
   }
@@ -55,6 +55,19 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
       showTables.copy(output = withLegacyShowTablesDatabaseColumn(showTables.output))
     } else {
       showTables
+    }
+  }
+
+  /**
+   * Keeps only the value column for keyed SHOW TBLPROPERTIES, preserving its expression ID.
+   * The caller checks `spark.sql.legacy.keepCommandOutputSchema`.
+   */
+  def keepLegacyShowTablePropertiesOutput(
+      showTableProperties: ShowTableProperties): ShowTableProperties = {
+    if (showTableProperties.propertyKey.isDefined) {
+      showTableProperties.copy(output = Seq(showTableProperties.output.last))
+    } else {
+      showTableProperties
     }
   }
 
