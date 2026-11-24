@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -1574,8 +1574,32 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(
-    plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    lazy val retainJoinEventTime =
+      conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS) &&
+        plan.isStreaming &&
+        !plan.exists {
+          case _: WithCTE | _: CTERelationRef => true
+          case _ => false
+        } &&
+        (plan.collect { case p if p.isStateful => p } match {
+          case Seq(join: Join) =>
+            ExtractEquiJoinKeys.unapply(join).exists(_._4.isEmpty) &&
+              join.children.forall { child =>
+                val columns = child.output.filter(
+                  _.metadata.contains(EventTimeWatermark.delayKey))
+                columns.isEmpty ||
+                  (columns.map(_.exprId).distinct.size == 1 &&
+                    columns.head.dataType == TimestampType)
+              }
+          case _ => false
+        })
+
+    // Retain event time when the plan's only stateful operator is a stream-stream join with
+    // unambiguous timestamp watermarks and no residual condition after predicate pushdown.
+    // Eligibility determines the stored join row schema. Changing which plans qualify, including
+    // through earlier optimizer rules, requires a separately pinned mode or a state migration.
+    removeProjectBeforeFilter(plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -1635,7 +1659,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
-      j.copy(right = prunedChild(right, j.references))
+      j.copy(right = prunedChild(right, requiredInputReferences(j, retainJoinEventTime)))
 
     // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
     // is pruned to them in the next pass, once the join no longer references the others.
@@ -1704,14 +1728,41 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
-      val required = child.references ++ p.references
+      val required = requiredInputReferences(child, retainJoinEventTime) ++ p.references
       if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
         p
       }
-  })
+    })
+  }
+
+  private def requiredInputReferences(
+      plan: LogicalPlan,
+      retainJoinEventTime: => Boolean): AttributeSet = {
+    val eventTimeAttributes = plan match {
+      case join: Join if join.isStateful && retainJoinEventTime =>
+        join.children.flatMap { child =>
+          val eventTimeColumns = child.output.filter(
+            _.metadata.contains(EventTimeWatermark.delayKey))
+          if (eventTimeColumns.map(_.exprId).distinct.size == 1 &&
+              eventTimeColumns.head.dataType == TimestampType) {
+            eventTimeColumns
+          } else {
+            Nil
+          }
+        }
+      case _ => Nil
+    }
+    val references = plan.references
+    val addedEventTimeAttributes = eventTimeAttributes.filterNot(references.contains)
+    if (addedEventTimeAttributes.isEmpty) {
+      references
+    } else {
+      references ++ AttributeSet(addedEventTimeAttributes)
+    }
+  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =

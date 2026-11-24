@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -215,19 +215,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(ResolvedV1Database(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(ResolvedV1Database(db), pattern, output) if conf.useV1Command =>
-      ShowTablesCommand(Some(db), pattern, output)
-
-    case ShowTablesExtended(
-        ResolvedV1Database(db),
-        pattern,
-        output) =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        output.head.withName("database") +: output.tail
-      } else {
-        output
-      }
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true)
+    case command @ (_: ShowTables | _: ShowTablesExtended | _: ShowViews | _: ShowFunctions) =>
+      ShowCommandHelper.rewrite(command, conf)
 
     case ShowTablePartition(
         ResolvedTable(catalog, _, table: V1Table, _),
@@ -418,17 +407,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         cm.allowExisting,
         cm.replace)
 
-    // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
-    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
-    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
-    case ShowViews(ns: ResolvedNamespace, pattern, output)
-        if !ns.catalog.isInstanceOf[ViewCatalog] =>
-      ns match {
-        case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
-        case _ =>
-          throw QueryCompilationErrors.missingCatalogViewsAbilityError(ns.catalog)
-      }
-
     // If target is view, force use v1 command
     case ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
@@ -446,10 +424,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       } else {
         throw QueryCompilationErrors.missingCatalogFunctionsAbilityError(catalog)
       }
-
-    case ShowFunctions(
-        ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
-      ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
     case d @ DropFunction(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
       // Builtin or temp function - throw appropriate error
