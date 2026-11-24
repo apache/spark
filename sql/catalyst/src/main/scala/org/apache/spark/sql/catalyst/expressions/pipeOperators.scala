@@ -62,36 +62,50 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Validates and strips PipeExpression nodes from a logical plan once the child expressions are
- * resolved.
+ * Validates and strips PipeExpression nodes from a logical plan once their children are ready:
+ * either resolved, or a generator whose arguments are resolved.
+ *
+ * A generator, optionally wrapped in GeneratorOuter (for the *_outer functions), is never resolved
+ * while it is wrapped, and may only become resolved after this rule runs, when type coercion fixes
+ * its arguments (for example, stack(2, id, null)). So the PipeExpression is stripped as soon as
+ * the generator's arguments are resolved, keeping GeneratorOuter in place for ExtractGenerator to
+ * plan; otherwise ExtractGenerator sees the PipeExpression above the generator and rejects it as
+ * nested inside another expression. A parenthesized alias list stays above the PipeExpression
+ * (see AstBuilder), so ExtractGenerator never trims its names.
  */
 case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved =>
+        case p: PipeExpression if p.child.resolved || isReadyGenerator(p.child) =>
           validateAndStripPipeExpression(p, p.child)
       }
   }
 
+  private def isReadyGenerator(e: Expression): Boolean = e match {
+    case GeneratorItem(g, None, _) => g.childrenResolved
+    case _ => false
+  }
+
   /**
-   * Validates aggregate function constraints for a [[PipeExpression]] and returns the resolved
-   * child expression (stripping the [[PipeExpression]] wrapper).
-   *
-   * This method is shared between the fixed-point analyzer rule and the single-pass resolver.
+   * Validates aggregate function constraints for a [[PipeExpression]] and returns its child
+   * expression (stripping the [[PipeExpression]] wrapper).
    *
    * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
-   * @param resolvedChild The resolved child expression to validate and return.
-   * @return The resolved child expression after validation.
+   * @param child The child expression to validate and return. It is either resolved, or a
+   *              generator whose arguments are resolved but which is not resolved itself,
+   *              optionally wrapped in [[GeneratorOuter]]. The aggregate checks run before such
+   *              a generator's own type check.
+   * @return The child expression after validation.
    */
   def validateAndStripPipeExpression(
       pipeExpression: PipeExpression,
-      resolvedChild: Expression): Expression = {
-    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(resolvedChild)
+      child: Expression): Expression = {
+    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(child)
     if (pipeExpression.isAggregate && firstAggregateFunction.isEmpty) {
       throw QueryCompilationErrors
-          .pipeOperatorAggregateExpressionContainsNoAggregateFunction(resolvedChild)
+          .pipeOperatorAggregateExpressionContainsNoAggregateFunction(child)
     }
     if (!pipeExpression.isAggregate) {
       // For non-aggregate clauses, only allow aggregate functions in SELECT.
@@ -106,7 +120,7 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
         }
       }
     }
-    resolvedChild
+    child
   }
 
   /** Returns the first aggregate function in the given expression, or None if not found. */
@@ -126,6 +140,7 @@ object PipeOperators {
   val aggregateClause = "AGGREGATE"
   val clusterByClause = "CLUSTER BY"
   val distributeByClause = "DISTRIBUTE BY"
+  val evalClause = "EVAL"
   val extendClause = "EXTEND"
   val limitClause = "LIMIT"
   val offsetClause = "OFFSET"

@@ -204,6 +204,16 @@ CreateViewCommand `lateral_test_t4`, [(c1,None), (c2,None)], values (0, 1), (0, 
 
 
 -- !query
+create temporary view outer_gen_test(id, author, tags)
+  as values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null)
+-- !query analysis
+CreateViewCommand `outer_gen_test`, [(id,None), (author,None), (tags,None)], values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null), false, false, LocalTempView, UNSUPPORTED, true
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
 create temporary view natural_join_test_t1 as select * from values
   ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1)
 -- !query analysis
@@ -1015,6 +1025,72 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, x from t
+|> set x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "select x, x from t\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> set x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "select x, * from t\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x from t union all select x, x from t)
+|> set x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 76,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
 table t
 |> set x = 1 as z
 -- !query analysis
@@ -1044,6 +1120,503 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectName" : "",
     "startIndex" : 27,
     "stopIndex" : 37,
+    "fragment" : "col.i1 = 42"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1
+-- !query analysis
+Project [1 AS x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval z = 1
+-- !query analysis
+Project [x#x, y#x, 1 AS z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval z = x + length(y), x = x * 10, zz = z + x
+-- !query analysis
+Project [x#x, y#x, z#x, (z#x + x#x) AS zz#x]
++- Project [(x#x * 10) AS x#x, y#x, z#x]
+   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval c = 3, a = 1, b = 2
+-- !query analysis
+Project [x#x, y#x, c#x, a#x, 2 AS b#x]
++- Project [x#x, y#x, c#x, 1 AS a#x]
+   +- Project [x#x, y#x, 3 AS c#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0), (1) tab(col)
+|> eval col = col * 2, half = col / 2
+-- !query analysis
+Project [col#x, (cast(col#x as double) / cast(2 as double)) AS half#x]
++- Project [(col#x * 2) AS col#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [col#x]
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> eval duration_s = response_ms / 1000,
+        slow = if(duration_s > 2, 1, 0),
+        uri = lower(uri),
+        is_api = if(uri like '/api/%', 1, 0)
+-- !query analysis
+Project [uri#x, response_ms#x, duration_s#x, slow#x, if (uri#x LIKE /api/%) 1 else 0 AS is_api#x]
++- Project [lower(uri#x) AS uri#x, response_ms#x, duration_s#x, slow#x]
+   +- Project [uri#x, response_ms#x, duration_s#x, if ((duration_s#x > cast(2 as double))) 1 else 0 AS slow#x]
+      +- Project [uri#x, response_ms#x, (cast(response_ms#x as double) / cast(1000 as double)) AS duration_s#x]
+         +- SubqueryAlias web_logs
+            +- LocalRelation [uri#x, response_ms#x]
+
+
+-- !query
+table t
+|> eval z = 1, z = z + 1
+-- !query analysis
+Project [x#x, y#x, (z#x + 1) AS z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(true))
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, Z#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(false))
+
+
+-- !query
+table t
+|> eval z = x + 1
+|> where z > 1
+|> select z
+-- !query analysis
+Project [z#x]
++- Filter (z#x > 1)
+   +- PipeOperator
+      +- Project [x#x, y#x, (x#x + 1) AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval `x.y z` = x
+-- !query analysis
+Project [x#x, y#x, x#x AS x.y z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select col from st
+|> eval i1 = col.i1
+-- !query analysis
+Project [col#x, col#x.i1 AS i1#x]
++- Project [col#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> eval m = (select max(a) from other)
+-- !query analysis
+Project [x#x, y#x, scalar-subquery#x [] AS m#x]
+:  +- Aggregate [max(a#x) AS max(a)#x]
+:     +- SubqueryAlias spark_catalog.default.other
+:        +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval w = sum(x) over (order by x)
+-- !query analysis
+Project [x#x, y#x, w#xL]
++- Project [x#x, y#x, w#xL, w#xL]
+   +- Window [sum(x#x) windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS w#xL], [x#x ASC NULLS FIRST]
+      +- Project [x#x, y#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as v
+|> eval z = v.x + 1
+|> select v.x, z
+-- !query analysis
+Project [x#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- SubqueryAlias v
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval _metadata = x + 1
+|> select x, _metadata
+-- !query analysis
+Project [x#x, _metadata#x]
++- Project [x#x, y#x, (x#x + 1) AS _metadata#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as eval
+|> eval eval = eval + 1
+-- !query analysis
+Project [(eval#x + 1) AS eval#x]
++- Project [1 AS eval#x]
+   +- OneRowRelation
+
+
+-- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query analysis
+Project [named_struct(s, (col#x.i1 + col#x.i2)) AS col#x, x#x]
++- Project [col#x, x#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query analysis
+Project [0 AS x#x, y#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- Filter false
+      +- PipeOperator
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query analysis
+Project [(z#x + 1) AS x#x, y#x, z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+create or replace temporary view pipe_eval_view as
+table t
+|> eval z = x + 1
+-- !query analysis
+CreateViewCommand `pipe_eval_view`, table t
+|> eval z = x + 1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x, y#x, (x#x + 1) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from pipe_eval_view
+-- !query analysis
+Project [x#x, y#x, z#x]
++- SubqueryAlias pipe_eval_view
+   +- View (`pipe_eval_view`, [x#x, y#x, z#x])
+      +- Project [cast(x#x as int) AS x#x, cast(y#x as string) AS y#x, cast(z#x as int) AS z#x]
+         +- Project [x#x, y#x, (x#x + 1) AS z#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+drop view pipe_eval_view
+-- !query analysis
+DropTempViewCommand pipe_eval_view, false
+
+
+-- !query
+select (table t |> eval z = 1 |> select z |> limit 1) as z from values (0) as o(z)
+-- !query analysis
+Project [scalar-subquery#x [] AS z#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- PipeOperator
+:           +- Project [z#x]
+:              +- Project [x#x, y#x, 1 AS z#x]
+:                 +- SubqueryAlias spark_catalog.default.t
+:                    +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias o
+   +- LocalRelation [z#x]
+
+
+-- !query
+select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t
+-- !query analysis
+Project [x#x, scalar-subquery#x [x#x] AS m#x]
+:  +- Aggregate [max(z#x) AS max(z)#x]
+:     +- Project [a#x, b#x, (a#x + outer(x#x)) AS z#x]
+:        +- SubqueryAlias spark_catalog.default.other
+:           +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as a, 2 as a
+|> eval a = 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 35,
+    "fragment" : "select 1 as a, 2 as a\n|> eval a = 3"
+  } ]
+}
+
+
+-- !query
+select x, x from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x from t union all select x, x from t)
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 77,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "select * from (select x, x, x from t union all select x, x, x from t)\n|> drop x\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
+  "messageParameters" : {
+    "number" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "(table t |> eval z = 1 |> limit 1)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval z = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1 as z
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select col from st
+|> eval col.i1 = 42
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> EVAL operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 38,
     "fragment" : "col.i1 = 42"
   } ]
 }
@@ -2023,7 +2596,8 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0014",
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_TABLESAMPLE",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2127,9 +2701,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0015",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "msg" : "byteLengthLiteral"
+    "sampleMethod" : "BYTES"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2147,9 +2722,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0016",
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "bytesStr" : "200"
+    "sampleMethod" : "200"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3537,6 +4113,159 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 59,
+    "fragment" : "2 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x, 2 grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 59,
+    "fragment" : "2 grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by (2) as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 61,
+    "fragment" : "(2) as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by -1 as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 60,
+    "fragment" : "-1 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x as grp
+-- !query analysis
+Aggregate [x#x], [x#x AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1 + 1 as grp
+-- !query analysis
+Aggregate [(1 + 1)], [(1 + 1) AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2L as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#xL, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowAliasedPipeAggregateOrdinals,Some(true))
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowAliasedPipeAggregateOrdinals,Some(false))
+
+
+-- !query
+set spark.sql.groupByOrdinal=false
+-- !query analysis
+SetCommand (spark.sql.groupByOrdinal,Some(false))
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.groupByOrdinal=true
+-- !query analysis
+SetCommand (spark.sql.groupByOrdinal,Some(true))
+
+
+-- !query
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)
 |> where course = 'dotNET' and `year` = '2013'
@@ -4759,6 +5488,16 @@ Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
 
 
 -- !query
+table t
+| eval z = x + length(y), x = z
+-- !query analysis
+Project [z#x AS x#x, y#x, z#x]
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
@@ -4885,6 +5624,31 @@ drop temporary variable extend
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.extend
+
+
+-- !query
+select x | eval from values (1, 2) as v(x, eval)
+-- !query analysis
+Project [(x#x | eval#x) AS (x | eval)#x]
++- SubqueryAlias v
+   +- LocalRelation [x#x, eval#x]
+
+
+-- !query
+select x | eval as y from values (1, 2) as v(x, eval)
+-- !query analysis
+Project [(x#x | eval#x) AS y#x]
++- SubqueryAlias v
+   +- LocalRelation [x#x, eval#x]
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query analysis
+Project [x#x, eval#x]
++- Filter ((x#x | eval#x) = 3)
+   +- SubqueryAlias v
+      +- LocalRelation [x#x, eval#x]
 
 
 -- !query
@@ -5094,6 +5858,937 @@ table other
 Aggregate [sum(a#x) AS total_a#xL]
 +- SubqueryAlias spark_catalog.default.other
    +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.*
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> aggregate count(*) as c group by id
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`c`, `tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 112,
+    "stopIndex" : 114,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> where h.a > 0
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 85,
+    "stopIndex" : 87,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> extend h.a as z
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id, h
+|> select h.*
+-- !query analysis
+Project [h#x.a AS a#x, h#x.b AS b#x]
++- Project [id#x, h#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select g.*, g.a
+-- !query analysis
+Project [g#x.a AS a#x, g#x.b AS b#x, g#x.a AS a#x]
++- Project [h#x AS g#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`g`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 90,
+    "stopIndex" : 92,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> as x
+|> select x.h.a
+-- !query analysis
+Project [h#x.a AS a#x]
++- SubqueryAlias x
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(tags) as tag
+-- !query analysis
+Project [id#x, tag#x]
++- Generate explode(tags#x), true, [tag#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, posexplode_outer(tags)
+-- !query analysis
+Project [id#x, pos#x, col#x]
++- Generate posexplode(tags#x), true, [pos#x, col#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, inline_outer(transform(tags, t -> named_struct('tag', t)))
+-- !query analysis
+Project [id#x, tag#x]
++- Generate inline(transform(tags#x, lambdafunction(named_struct(tag, lambda t#x), lambda t#x, false))), true, [tag#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(map_from_arrays(tags, tags))
+-- !query analysis
+Project [id#x, key#x, value#x]
++- Generate explode(map_from_arrays(tags#x, tags#x)), true, [key#x, value#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as tag
+|> select id, tag
+-- !query analysis
+Project [id#x, tag#x]
++- Project [id#x, author#x, tags#x, tag#x]
+   +- Generate explode(tags#x), true, [tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> set tags = explode_outer(tags)
+|> select id, tags
+-- !query analysis
+Project [id#x, tags#x]
++- Project [id#x, author#x, tags#x]
+   +- Generate explode(tags#x), true, [tags#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(collect_list(id)) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), true, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> where id > 10
+|> aggregate collect_list(id) as ids
+|> select explode_outer(ids)
+-- !query analysis
+Project [col#x]
++- Generate explode(ids#x), true, [col#x]
+   +- Aggregate [collect_list(id#x, 0, 0, true) AS ids#x]
+      +- Filter (id#x > 10)
+         +- PipeOperator
+            +- SubqueryAlias outer_gen_test
+               +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                  +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query analysis
+Project [id#x, pos#x, tag#x]
++- Project [id#x, author#x, tags#x, pos#x, tag#x]
+   +- Generate posexplode(tags#x), true, [pos#x, tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v
+-- !query analysis
+Project [id#x, k#x, v#x]
++- Project [id#x, author#x, tags#x, k#x, v#x]
+   +- Generate explode(map_from_arrays(tags#x, tags#x)), true, [k#x, v#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len
+-- !query analysis
+Project [id#x, tag#x, len#x]
++- Project [id#x, author#x, tags#x, tag#x, len#x]
+   +- Generate inline(transform(tags#x, lambdafunction(named_struct(tag, lambda t#x, len, length(lambda t#x)), lambda t#x, false))), true, [tag#x, len#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query analysis
+Project [id#x, pos#x, tag#x]
++- Project [id#x, author#x, tags#x, pos#x, tag#x]
+   +- Generate posexplode(tags#x), false, [pos#x, tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author
+-- !query analysis
+Project [author#x, pos#x, id#x]
++- Generate posexplode(_gen_input_0#x), true, [pos#x, id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author
+-- !query analysis
+Project [author#x, k#x, v#x]
++- Generate explode(_gen_input_0#x), true, [k#x, v#x]
+   +- Aggregate [author#x], [author#x, map_from_arrays(collect_list(id#x, 0, 0, true), collect_list(id#x, 0, 0, true)) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author
+-- !query analysis
+Project [author#x, id#x, n#x]
++- Generate inline(_gen_input_0#x), true, [id#x, n#x]
+   +- Aggregate [author#x], [author#x, collect_list(named_struct(id, id#x, n, size(tags#x, false)), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author
+-- !query analysis
+Project [author#x, pos#x, id#x]
++- Generate posexplode(_gen_input_0#x), false, [pos#x, id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a
+-- !query analysis
+Project [id#x, a#x]
++- Project [id#x, author#x, tags#x, a#x]
+   +- Generate stack(2, id#x, null), false, [a#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author
+-- !query analysis
+Project [author#x, c#xL]
++- Generate stack(2, _gen_input_1#xL, null), false, [c#xL]
+   +- Aggregate [author#x], [author#x, count(1) AS _gen_input_1#xL]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null) as a
+-- !query analysis
+Project [id#x, a#x]
++- Generate stack(2, id#x, null), false, [a#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null)
+-- !query analysis
+Project [id#x, col0#x]
++- Generate stack(2, id#x, null), false, [col0#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a
+-- !query analysis
+Project [id#x, a#x]
++- Project [id#x, author#x, tags#x, a#x]
+   +- Generate stack(2, id#x, null), false, [a#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0
+-- !query analysis
+Project [id#x, col0#x]
++- Project [id#x, author#x, tags#x, col0#x]
+   +- Generate stack(2, id#x, null), false, [col0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), true, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(if ((id#x > 10)) id#x else cast(null as int), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), false, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(if ((id#x > 10)) id#x else cast(null as int), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author
+-- !query analysis
+Project [id#x, author#x]
++- Project [id#x, author#x, tags#x]
+   +- Generate stack(2, id#x, null), false, [id#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v
+-- !query analysis
+Project [id#x, t#x, p#x, v#x]
++- Project [id#x, author#x, tags#x, t#x, p#x, v#x]
+   +- Generate posexplode(array(1, 2)), true, [p#x, v#x]
+      +- Project [id#x, author#x, tags#x, t#x]
+         +- Generate explode(tags#x), true, [t#x]
+            +- SubqueryAlias outer_gen_test
+               +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                  +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(array('x', 'y')) as (pos, b)
+|> select id, a, pos, b
+-- !query analysis
+Project [id#x, a#x, pos#x, b#x]
++- Project [id#x, arr#x, a#x, pos#x, b#x]
+   +- Generate posexplode(array(x, y)), false, [pos#x, b#x]
+      +- Generate explode(array(1, 2)), false, [a#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, e, p, v
+-- !query analysis
+Project [id#x, t#x, e#x, p#x, v#x]
++- Project [id#x, author#x, tags#x, t#x, e#x, p#x, v#x]
+   +- Generate posexplode(array(1, 2)), true, [p#x, v#x]
+      +- Generate explode(array(1)), false, [e#x]
+         +- Project [id#x, author#x, tags#x, t#x]
+            +- Generate explode(tags#x), true, [t#x]
+               +- SubqueryAlias outer_gen_test
+                  +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(arr) as (pos, b)
+|> select id, a, pos, b
+-- !query analysis
+Project [id#x, a#x, pos#x, b#x]
++- Project [id#x, arr#x, a#x, pos#x, b#x]
+   +- Generate posexplode(arr#x), false, [pos#x, b#x]
+      +- Generate explode(array(1, 2)), false, [a#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(tags) as (p, v)
+|> select id, t, e, p, v
+-- !query analysis
+Project [id#x, t#x, e#x, p#x, v#x]
++- Project [id#x, author#x, tags#x, t#x, e#x, p#x, v#x]
+   +- Generate posexplode(tags#x), true, [p#x, v#x]
+      +- Generate explode(array(1)), false, [e#x]
+         +- Project [id#x, author#x, tags#x, t#x]
+            +- Generate explode(tags#x), true, [t#x]
+               +- SubqueryAlias outer_gen_test
+                  +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> aggregate posexplode_outer(collect_list(t)) as (p, v) group by author
+-- !query analysis
+Project [author#x, p#x, v#x]
++- Generate posexplode(_gen_input_0#x), true, [p#x, v#x]
+   +- Aggregate [author#x], [author#x, collect_list(t#x, 0, 0, true) AS _gen_input_0#x]
+      +- Project [id#x, author#x, tags#x, t#x]
+         +- Generate explode(tags#x), true, [t#x]
+            +- SubqueryAlias outer_gen_test
+               +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                  +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select upper(explode_outer(tags))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select upper(explode_outer(tags)) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(tags)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(tags#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 53,
+    "fragment" : "explode_outer(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(collect_list(tags))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 46,
+    "stopIndex" : 63,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 66,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(posexplode(tags#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 56,
+    "fragment" : "posexplode_outer(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(id)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 52,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+select id, explode_outer(id) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 28,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(id) as (pos, v)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 45,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+select *, posexplode(id) as (pos, v) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 24,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(id)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(id#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 51,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"count(1)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(count(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 57,
+    "fragment" : "explode_outer(count(*))"
+  } ]
+}
 
 
 -- !query

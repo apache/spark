@@ -74,7 +74,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    - cron: '0 7 */2 * *'
+    - cron: '17 10 1-28/3 * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -96,6 +96,7 @@ jobs:
   release:
     name: Release Apache Spark
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.repository == 'apache/spark' && 180 || 360 }}
     # Allow workflow to run only in the following cases:
     # 1. In the apache/spark repository:
     #    - Only allow dry runs (i.e., both 'branch' and 'release-version' inputs are empty).
@@ -127,10 +128,11 @@ jobs:
           git checkout origin/master -- dev/create-release/spark-rm/Dockerfile.base
           echo "Using master branch's Dockerfile.base for building release image"
       - name: Free up disk space
+        # Always use master's script, which is maintained against the current runner image.
+        # Old branch scripts may fail on newer images (e.g., packages missing from apt sources).
         run: |
-          if [ -f ./dev/free_disk_space ]; then
-            ./dev/free_disk_space
-          fi
+          git checkout origin/master -- dev/free_disk_space
+          ./dev/free_disk_space
       - name: Release Apache Spark
         env:
           GIT_BRANCH: "${{ inputs.branch }}"

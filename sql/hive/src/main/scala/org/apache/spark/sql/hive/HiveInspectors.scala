@@ -943,24 +943,6 @@ private[hive] trait HiveInspectors {
     }
 
   /**
-   * In-place unwrapper that uses DataType-aware conversion when the target
-   * contains CHAR/VARCHAR or nanosecond timestamps. Other fields keep the
-   * specialized primitive setters from the field-only overload.
-   */
-  def unwrapperFor(
-      field: HiveStructField,
-      dataType: DataType): (Any, InternalRow, Int) => Unit = {
-    if (CharVarcharUtils.hasCharVarchar(dataType) ||
-        dataType.existsRecursively(_.isInstanceOf[AnyTimestampNanoType])) {
-      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
-      (value: Any, row: InternalRow, ordinal: Int) =>
-        row.update(ordinal, unwrapper(value))
-    } else {
-      unwrapperFor(field)
-    }
-  }
-
-  /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
    *
@@ -1069,6 +1051,8 @@ private[hive] trait HiveInspectors {
     // Hive has no nanosecond-precision timestamp type, so it cannot be represented by any Hive
     // object inspector. Reject it instead of silently downgrading to microsecond precision.
     case _: AnyTimestampNanoType => throw unsupportedHiveType(dataType)
+    // Hive has no geospatial types, so they cannot be represented by any Hive object inspector.
+    case _: GeometryType | _: GeographyType => throw unsupportedHiveType(dataType)
   }
 
   private def unsupportedHiveType(dataType: DataType): AnalysisException = {
@@ -1167,6 +1151,10 @@ private[hive] trait HiveInspectors {
     // Hive has no nanosecond-precision timestamp type, so such a constant cannot be mapped to a
     // Hive object inspector.
     case Literal(_, dt: AnyTimestampNanoType) =>
+      throw unsupportedHiveType(dt)
+    // Hive has no geospatial types, so a geospatial constant cannot be mapped to a Hive object
+    // inspector.
+    case Literal(_, dt @ (_: GeometryType | _: GeographyType)) =>
       throw unsupportedHiveType(dt)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>

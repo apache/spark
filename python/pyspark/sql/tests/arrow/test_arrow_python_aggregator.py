@@ -14,15 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import unittest
 from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySparkValueError
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    CharType,
     DecimalType,
     DoubleType,
     LongType,
+    StringType,
     StructField,
     StructType,
 )
@@ -109,6 +114,80 @@ if have_pyarrow:
 
         def finish(self, buffer):
             return buffer[0]
+
+    class CollectList(Aggregator):
+        # Updates its list buffer in place and returns that very list from ``finish``, as the
+        # Aggregator contract allows.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        @property
+        def outputType(self):
+            return ArrayType(DoubleType())
+
+        def zero(self):
+            return ([],)
+
+        def reduce(self, buffer, value):
+            (v,) = value
+            if v is not None:  # skip nulls, like collect_list
+                buffer[0].append(v)
+            return buffer
+
+        def merge(self, b1, b2):
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class CollectListStruct(CollectList):
+        # Like CollectList, but nests the buffer's list in a struct, so a shallow copy of the
+        # ``finish`` result would still share it with the buffer.
+        @property
+        def outputType(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        def finish(self, buffer):
+            return (buffer[0],)
+
+    class ConcatStrings(Aggregator):
+        # Appends each non-null value to a bytearray in place, comma-separated like
+        # ``concat_ws(",", collect_list(...))``, and returns that very bytearray from ``finish``:
+        # a mutable value of a string type, which is not nested.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("s", BinaryType())])
+
+        @property
+        def outputType(self):
+            return StringType()
+
+        def zero(self):
+            return (bytearray(),)
+
+        def reduce(self, buffer, value):
+            (s,) = value
+            if s is not None:
+                if buffer[0]:
+                    buffer[0].extend(b",")
+                buffer[0].extend(s.encode("utf-8"))
+            return buffer
+
+        def merge(self, b1, b2):
+            if b1[0] and b2[0]:
+                b1[0].extend(b",")
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class ConcatBinary(ConcatStrings):
+        @property
+        def outputType(self):
+            return BinaryType()
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -242,6 +321,72 @@ class ArrowPythonAggregatorTestsMixin:
         exp = {r["k"]: r["m"] for r in expected}
         self.assertEqual(got, exp)
 
+    def test_char_varchar_buffer_schema_rejected(self):
+        class BadBuffer(Aggregator):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("s", CharType(3))])
+
+            @property
+            def outputType(self):
+                return DoubleType()
+
+            def zero(self):
+                return ("",)
+
+            def reduce(self, buffer, value):
+                return buffer
+
+            def merge(self, b1, b2):
+                return b1
+
+            def finish(self, buffer):
+                return 0.0
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udaf(BadBuffer())
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDAF buffer schemas",
+                "data_type": "struct<s:char(3)>",
+            },
+        )
+
+    def test_char_varchar_output_type_rejected(self):
+        class BadOutput(Aggregator):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("n", LongType())])
+
+            @property
+            def outputType(self):
+                return CharType(3)
+
+            def zero(self):
+                return (0,)
+
+            def reduce(self, buffer, value):
+                return buffer
+
+            def merge(self, b1, b2):
+                return b1
+
+            def finish(self, buffer):
+                return "a"
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udaf(BadOutput())
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": "char(3)",
+            },
+        )
+
     def test_named_arguments(self):
         # A named argument (both DataFrame and SQL forms) must feed the aggregator's value tuple,
         # not be silently dropped.
@@ -279,6 +424,66 @@ class ArrowPythonAggregatorTestsMixin:
         )
         with self.assertRaises(AnalysisException):
             df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
+
+    def _event_data(self):
+        # With a 5 minute gap, the rows of key 1 at 10:00, 10:03 and 10:07 chain into one session
+        # (10:07 overlaps only the session that 10:03 extends), and so do the rows of key 2 at 10:01
+        # and 10:04. The later rows of each key start sessions of their own.
+        def ts(minute):
+            return datetime.datetime(2026, 1, 1, 10, minute)
+
+        return self.spark.createDataFrame(
+            [
+                (1, ts(0), 1.0),
+                (1, ts(3), 3.0),
+                (1, ts(7), 5.0),
+                (1, ts(20), 7.0),
+                (2, ts(1), 2.0),
+                (2, ts(4), 4.0),
+                (2, ts(30), 6.0),
+            ],
+            "k int, ts timestamp, v double",
+        ).repartition(3)
+
+    def test_session_window(self):
+        # A batch session window starts as one session per row, so the overlapping sessions must
+        # be merged before they are aggregated, as for the built-in aggregate functions.
+        df = self._event_data()
+        mean = udaf(Mean())
+        groupings = {
+            "session window": ([sf.session_window("ts", "5 minutes")], 3),
+            "key and session window": (["k", sf.session_window("ts", "5 minutes")], 4),
+        }
+        for name, (keys, num_sessions) in groupings.items():
+            with self.subTest(grouping=name):
+                result = df.groupBy(*keys).agg(mean(sf.col("v")).alias("m")).collect()
+                expected = df.groupBy(*keys).agg(sf.avg("v").alias("m")).collect()
+                self.assertEqual(len(expected), num_sessions)
+                self.assertEqual(sorted(result), sorted(expected))
+
+        with self.subTest(grouping="SQL"):
+            df.createOrReplaceTempView("session_input")
+            self.spark.udf.register("session_mean", mean)
+            query = (
+                "SELECT k, session_window.start AS start, session_window.end AS end, {}(v) AS m "
+                "FROM session_input GROUP BY k, session_window(ts, '5 minutes')"
+            )
+            result = self.spark.sql(query.format("session_mean")).collect()
+            expected = self.spark.sql(query.format("avg")).collect()
+            self.assertEqual(sorted(result), sorted(expected))
+
+    def test_time_window(self):
+        # Tumbling and sliding windows need no merging: each row belongs to its fixed windows.
+        df = self._event_data()
+        windows = {
+            "tumbling": sf.window("ts", "5 minutes"),
+            "sliding": sf.window("ts", "5 minutes", "1 minute"),
+        }
+        for name, window in windows.items():
+            with self.subTest(window=name):
+                result = df.groupBy(window).agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+                expected = df.groupBy(window).agg(sf.avg("v").alias("m")).collect()
+                self.assertEqual(sorted(result), sorted(expected))
 
     def test_window_unbounded(self):
         # Unbounded partition frame: every row gets its whole group's aggregate. Cross-checked
@@ -333,6 +538,71 @@ class ArrowPythonAggregatorTestsMixin:
         self.assertEqual(len(result), len(expected))
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def _data_with_ties_and_nulls(self):
+        # 60 rows across 3 keys, with ties and nulls in ``v``, and ``v`` as a string in ``s``.
+        # Each key has two nulls, which an ordered window sorts first. ``id`` breaks the ties of
+        # ROWS frames, so that every frame is deterministic; a RANGE frame includes all peers of a
+        # row, which share ``v`` and ``s``.
+        return (
+            self.spark.range(0, 60)
+            .select(
+                "id",
+                (sf.col("id") % 3).alias("k"),
+                sf.when(sf.col("id") % 11 == 0, sf.lit(None))
+                .otherwise((sf.col("id") % 4).cast("double"))
+                .alias("v"),
+            )
+            .withColumn("s", sf.col("v").cast("string"))
+            .repartition(4, sf.col("id") % 2)
+        )
+
+    def test_window_frames_with_in_place_buffer(self):
+        # ``reduce`` may update its buffer in place, and while a frame's lower bound stays fixed,
+        # later rows keep reducing into the buffer that earlier rows were finished from. Each row
+        # must still get its own frame's value when ``finish`` returns the buffer's list, nests it
+        # in a struct, or returns its bytearray as a string or binary value.
+        df = self._data_with_ties_and_nulls()
+        by_v = Window.partitionBy("k").orderBy("v")
+        by_v_id = Window.partitionBy("k").orderBy("v", "id")
+        frames = {
+            # RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW. The peers of a row (its ties and
+            # nulls in ``v``) share its frame, so ``finish`` runs again on a buffer that did not
+            # grow.
+            "default": by_v,
+            "rows": by_v_id.rowsBetween(Window.unboundedPreceding, Window.currentRow),
+            # The upper bound runs ahead of the current row.
+            "range": by_v.rangeBetween(Window.unboundedPreceding, 1),
+            # The lower bound stays at the first row for the first three rows, then advances.
+            # The third row extends the buffer that the first two (nulls) were finished from.
+            "sliding": by_v_id.rowsBetween(-2, Window.currentRow),
+        }
+        for name, w in frames.items():
+            with self.subTest(frame=name):
+                result = (
+                    df.select(
+                        "id",
+                        udaf(CollectList())(sf.col("v")).over(w).alias("l"),
+                        udaf(CollectListStruct())(sf.col("v")).over(w).alias("ls"),
+                        udaf(ConcatStrings())(sf.col("s")).over(w).alias("cs"),
+                        udaf(ConcatBinary())(sf.col("s")).over(w).alias("cb"),
+                    )
+                    .orderBy("id")
+                    .collect()
+                )
+                concat = sf.concat_ws(",", sf.collect_list("s").over(w))
+                expected = (
+                    df.select(
+                        "id",
+                        sf.collect_list("v").over(w).alias("l"),
+                        sf.struct(sf.collect_list("v").over(w).alias("values")).alias("ls"),
+                        concat.alias("cs"),
+                        concat.cast("binary").alias("cb"),
+                    )
+                    .orderBy("id")
+                    .collect()
+                )
+                self.assertEqual(result, expected)
 
     def test_window_decimal_output(self):
         # A non-trivial (Decimal) output type over a window, exercising the explicit

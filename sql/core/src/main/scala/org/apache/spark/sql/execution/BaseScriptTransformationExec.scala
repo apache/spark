@@ -31,33 +31,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  AttributeSet,
-  BoundReference,
-  Cast,
-  Expression,
-  GenericInternalRow,
-  JsonToStructs,
-  Literal,
-  StructsToJson,
-  UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{
-  ArrayBasedMapBuilder,
-  ArrayData,
-  CharVarcharCodegenUtils,
-  CharVarcharUtils,
-  DateTimeUtils,
-  GenericArrayData,
-  IntervalUtils,
-  MapData}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, TaskInputThreads, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
@@ -79,11 +61,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  // Bound at parse into the I/O schema under the query or persisted-view SQLConf.
-  // Do not re-read SQLConf: planning and task conf can differ from that captured mode.
-  private def standardCharVarcharSemantics: Boolean =
-    ioschema.standardCharVarcharSemantics
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
@@ -131,6 +108,24 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     (outputStream, proc, inputStream, stderrBuffer)
   }
 
+  /**
+   * Starts the thread that writes the input rows to the process, and once the task completes
+   * before it reads the whole output of the process, destroys the process and interrupts the
+   * thread, as `PipedRDD` does. Otherwise, as under a LIMIT, the process blocks on writing its
+   * output, and the thread on writing the rest of the input or on reading it, e.g. from a shuffle
+   * fetch that the completed task no longer serves, so that neither ends. A process whose whole
+   * output the task read runs to its end, as it may still do work after it closes its output.
+   */
+  protected def startWriterThread(writerThread: BaseScriptTransformationWriterThread): Unit = {
+    writerThread.taskContext.addTaskCompletionListener[Unit] { context =>
+      writerThread.stopOnTaskCompletion(context.isFailed())
+    }
+    // The listener does not wait for the thread, which may still read the input rows once the
+    // task completes: the readers that free what they returned when they are closed must know.
+    TaskInputThreads.registerUnawaited(writerThread.taskContext)
+    writerThread.start()
+  }
+
   protected def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]
@@ -169,6 +164,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
             curLine = reader.readLine()
             if (curLine == null) {
               checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+              writerThread.outputReadToEnd = true
               return false
             }
           }
@@ -189,6 +185,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         }
         val prevLine = curLine
         curLine = reader.readLine()
+        if (curLine == null) {
+          // The task may not call `hasNext` again, as under a LIMIT, so record the end here too.
+          writerThread.outputReadToEnd = true
+        }
         processRowWithoutSerde(prevLine)
       }
     }
@@ -224,19 +224,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case dt @ (_: CharType | _: VarcharType) =>
-        // Without standard semantics, no-SerDe scalar CHAR/VARCHAR stays unsupported
-        // (they extend StringType, so this case must come before `_: StringType`).
-        if (!standardCharVarcharSemantics) {
-          throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
-        }
-        // Do not use the SerDe null-on-error wrapper; that would hide EXCEED_LIMIT_LENGTH.
-        (data: String) =>
-          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
-            null
-          } else {
-            converter(data)
-          }
+      // CHAR/VARCHAR must not reach the script reader; AstBuilder rewrites them to
+      // unbounded STRING and applies assignment in a Project when first-class types
+      // are enabled. Reject leftover CHAR/VARCHAR, including nested (hand-built plans).
+      case dt if CharVarcharUtils.hasCharVarchar(dt) =>
+        throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
+      // Match collated STRING too (CHAR/VARCHAR COLLATE rewrite via toStringType).
       case _: StringType => wrapperConvertException(data => data, converter)
       case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)
@@ -277,34 +270,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.microsToDuration(
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
-      case dt @ (_: ArrayType | _: MapType | _: StructType)
-          if standardCharVarcharSemantics && CharVarcharUtils.hasCharVarchar(dt) =>
-        val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
-        // JSON object keys are strings. Restore non-string keys inside the malformed
-        // wrapper, then apply CHAR/VARCHAR (and CHAR/VARCHAR map-key dedup) outside it.
-        val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)
-        val tz = Some(conf.sessionLocalTimeZone)
-        val complexTypeFactory = JsonToStructs(
-          jsonType,
-          ioschema.outputSerdeProps.toMap,
-          Literal(null),
-          tz)
-        val restoreJsonKeys = if (jsonType.sameType(physicalType)) {
-          identity[Any] _
-        } else {
-          ScriptTransformationIOSchema.makeJsonToTargetRestorer(
-            jsonType, physicalType, tz)
-        }
-        val toDeclaredType = ScriptTransformationIOSchema.makeJsonToTargetRestorer(
-          physicalType, dt, tz)
-        val parser = wrapperConvertException(
-          data => restoreJsonKeys(
-            complexTypeFactory.nullSafeEval(UTF8String.fromString(data))),
-          identity)
-        (data: String) => {
-          val parsed = parser(data)
-          if (parsed == null) null else toDeclaredType(parsed)
-        }
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -351,6 +316,34 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
 
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
+
+  // Whether the task read the output of the process to its end. The process is then not stopped
+  // when the task completes.
+  @volatile private[sql] var outputReadToEnd = false
+
+  // Whether the process was destroyed as a task that did not fail completed before the process
+  // ended. The task then no longer reads the output of the process, so the failure of the thread
+  // and the exit status of the process are expected, and not logged as errors.
+  @volatile private var destroyedOnTaskCompletion = false
+
+  /**
+   * Destroys the process if it is still alive, and interrupts this thread, once a task that did
+   * not read the whole output of the process completes, failed if `taskFailed`.
+   */
+  private[execution] def stopOnTaskCompletion(taskFailed: Boolean): Unit = {
+    if (!outputReadToEnd) {
+      if (proc.isAlive) {
+        destroyedOnTaskCompletion = !taskFailed
+        // `Process.destroy()` would close the input of the process, which waits for a write of
+        // this thread blocked on a full pipe, and so would block the task on a process that
+        // ignores the signal. Only signal the process instead, and close its output, which the
+        // completed task no longer reads, to stop a process blocked on writing it.
+        proc.toHandle.destroy()
+        Utils.tryLogNonFatalError(proc.getInputStream.close())
+      }
+      interrupt()
+    }
+  }
 
   protected def processRows(): Unit
 
@@ -400,12 +393,29 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
-          log"exit cause by: ", t)
+        if (destroyedOnTaskCompletion) {
+          logDebug(s"Thread-${this.getClass.getSimpleName}-Feed exit after the task completed", t)
+        } else {
+          logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
+            log"exit cause by: ", t)
+        }
     } finally {
       try {
-        Utils.tryLogNonFatalError(outputStream.close())
-        if (proc.waitFor() != 0) {
+        if (destroyedOnTaskCompletion) {
+          // The stream may still hold input, which it fails to flush to the destroyed process.
+          try outputStream.close() catch {
+            case NonFatal(e) => logDebug("Failed to close the input of the destroyed process", e)
+          }
+        } else {
+          Utils.tryLogNonFatalError(outputStream.close())
+        }
+        val exitCode = try proc.waitFor() catch {
+          // The task completion listener interrupts this thread once it destroyed the process.
+          // The InterruptedException must not escape the thread, which would exit the executor
+          // (see SPARK-25158), so wait for the destroyed process again.
+          case _: InterruptedException => proc.waitFor()
+        }
+        if (exitCode != 0 && !destroyedOnTaskCompletion) {
           logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         }
       } catch {
@@ -432,8 +442,7 @@ case class ScriptTransformationIOSchema(
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean,
-    standardCharVarcharSemantics: Boolean = false) extends Serializable {
+    schemaLess: Boolean) extends Serializable {
   import ScriptTransformationIOSchema._
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
@@ -441,115 +450,13 @@ case class ScriptTransformationIOSchema(
 }
 
 object ScriptTransformationIOSchema {
-  private[sql] def toUnboundedStringType(dataType: DataType): DataType = {
-    dataType.transformRecursively {
-      case c: CharType => c.toStringType
-      case v: VarcharType => v.toStringType
-    }
-  }
-
-  // JSON object keys are always strings. Rewrite every map key, including nested maps.
-  // `transformRecursively` would stop at the first matching MapType and skip children.
-  private[sql] def toJsonMapKeyType(dataType: DataType): DataType = dataType match {
-    case ArrayType(et, n) => ArrayType(toJsonMapKeyType(et), n)
-    case MapType(kt, vt, n) =>
-      val jsonKey = if (kt.isInstanceOf[StringType]) kt else StringType
-      MapType(jsonKey, toJsonMapKeyType(vt), n)
-    case StructType(fields) =>
-      StructType(fields.map(f => f.copy(dataType = toJsonMapKeyType(f.dataType))))
-    case other => other
-  }
-
-  /**
-   * Convert a Catalyst value from `sourceType` to `targetType`. `sourceType` is
-   * the parsed Catalyst type (unbounded STRING in place of CHAR/VARCHAR, and
-   * STRING map keys where JSON cannot preserve the declared key type).
-   * CHAR/VARCHAR leaves use write-side length checks. Maps rebuild through a
-   * fresh [[ArrayBasedMapBuilder]] when the source and target map types differ
-   * or the target contains CHAR/VARCHAR, so CHAR/VARCHAR key collisions follow
-   * MAP_KEY_DEDUP_POLICY. Same-typed maps without CHAR/VARCHAR are unchanged.
-   */
-  private[sql] def makeJsonToTargetRestorer(
-      sourceType: DataType,
-      targetType: DataType,
-      timeZoneId: Option[String]): Any => Any = {
-
-    def make(jt: DataType, tt: DataType): Any => Any = {
-      if (jt.sameType(tt) && !CharVarcharUtils.hasCharVarchar(tt)) {
-        identity
-      } else (jt, tt) match {
-        case (_, c: CharType) =>
-          (input: Any) =>
-            CharVarcharCodegenUtils.charTypeWriteSideCheck(
-              input.asInstanceOf[UTF8String], c.length)
-        case (_, v: VarcharType) =>
-          (input: Any) =>
-            CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
-              input.asInstanceOf[UTF8String], v.length)
-        case (ArrayType(jet, _), ArrayType(tet, _)) =>
-          val elem = make(jet, tet)
-          (input: Any) => {
-            val arr = input.asInstanceOf[ArrayData]
-            val n = arr.numElements()
-            val out = new Array[Any](n)
-            var i = 0
-            while (i < n) {
-              out(i) = if (arr.isNullAt(i)) null
-                else elem(arr.get(i, jet))
-              i += 1
-            }
-            new GenericArrayData(out)
-          }
-        case (MapType(jkt, jvt, _), MapType(tkt, tvt, _)) =>
-          val keyConvert = make(jkt, tkt)
-          val valRestore = make(jvt, tvt)
-          (input: Any) => {
-            val map = input.asInstanceOf[MapData]
-            val n = map.numElements()
-            val builder = new ArrayBasedMapBuilder(tkt, tvt)
-            var i = 0
-            while (i < n) {
-              val k = keyConvert(map.keyArray().get(i, jkt))
-              val v = if (map.valueArray().isNullAt(i)) null
-                else valRestore(map.valueArray().get(i, jvt))
-              builder.put(k, v)
-              i += 1
-            }
-            builder.build()
-          }
-        case (js: StructType, ts: StructType) =>
-          val restorers = js.fields.zip(ts.fields).map {
-            case (jf, tf) => make(jf.dataType, tf.dataType)
-          }
-          (input: Any) => {
-            val row = input.asInstanceOf[InternalRow]
-            val out = new GenericInternalRow(ts.length)
-            var i = 0
-            while (i < ts.length) {
-              if (row.isNullAt(i)) out.setNullAt(i)
-              else out.update(i,
-                restorers(i)(row.get(i, js(i).dataType)))
-              i += 1
-            }
-            out
-          }
-        case _ if !jt.sameType(tt) =>
-          val c = Cast(BoundReference(0, jt, nullable = false), tt, timeZoneId)
-          (input: Any) => c.eval(InternalRow(input))
-        case _ => identity
-      }
-    }
-
-    make(sourceType, targetType)
-  }
-
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),
     ("TOK_TABLEROWFORMATNULL" -> "\\N")
   )
 
-  def defaultIOSchema: ScriptTransformationIOSchema = ScriptTransformationIOSchema(
+  val defaultIOSchema = ScriptTransformationIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -558,8 +465,7 @@ object ScriptTransformationIOSchema {
     outputSerdeProps = Seq.empty,
     recordReaderClass = None,
     recordWriterClass = None,
-    schemaLess = false,
-    standardCharVarcharSemantics = SQLConf.get.charVarcharStandardSemantics
+    schemaLess = false
   )
 
   def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {
@@ -572,7 +478,6 @@ object ScriptTransformationIOSchema {
       input.outputSerdeProps,
       input.recordReaderClass,
       input.recordWriterClass,
-      input.schemaLess,
-      input.standardCharVarcharSemantics)
+      input.schemaLess)
   }
 }

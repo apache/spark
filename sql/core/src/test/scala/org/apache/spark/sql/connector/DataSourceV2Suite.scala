@@ -21,6 +21,7 @@ import java.io.File
 import java.util
 import java.util.Optional
 import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
@@ -69,8 +70,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 
+@DataSourceV2Test
 class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -347,49 +350,60 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
           ).foreach { testParams =>
             val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
 
+            // With partitioning on `i` and no order keys, the source reports an empty ordering.
+            // So the scan would derive `[i]` from its keys and drop the sort this case expects.
+            // That ordering only holds by accident. The source breaks the `KeyGroupedPartitioning`
+            // contract, as its partition with the key 1 holds `i` values 1, 1 and 3. So the
+            // derivation is turned off for this case.
+            val derive = !(partitionKeys.contains("i") && orderKeys.isEmpty)
             withClue(f"${partitionKeys.orNull} ${orderKeys.orNull}") {
-              val df = spark.read
-                .option("partitionKeys", partitionKeys.orNull)
-                .option("orderKeys", orderKeys.orNull)
-                .format(cls.getName)
-                .load()
-              checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
+              withSQLConf(
+                  SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> derive.toString) {
+                val df = spark.read
+                  .option("partitionKeys", partitionKeys.orNull)
+                  .option("orderKeys", orderKeys.orNull)
+                  .format(cls.getName)
+                  .load()
+                checkAnswer(df,
+                  Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
 
-              // groupBy(i).flatMapGroups
-              {
-                val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
-                  .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
-                    Iterator.single((i, it.length)) }
-                checkAnswer(
-                  groupBy.toDF(),
-                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
-                )
+                // groupBy(i).flatMapGroups
+                {
+                  val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+                    .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
+                      Iterator.single((i, it.length)) }
+                  checkAnswer(
+                    groupBy.toDF(),
+                    Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+                  )
 
-                val (shuffleExpected, sortExpected) = groupByExpects
-                assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                  case e: ShuffleExchangeExec => e
-                }.isDefined === shuffleExpected)
-                assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                  case e: SortExec => e
-                }.isDefined === sortExpected)
-              }
+                  val (shuffleExpected, sortExpected) = groupByExpects
+                  assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                    case e: ShuffleExchangeExec => e
+                  }.isDefined === shuffleExpected)
+                  assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                    case e: SortExec => e
+                  }.isDefined === sortExpected)
+                }
 
-              // aggregation function over window partitioned by i and ordered by j
-              {
-                val windowPartByColIOrderByColJ = df.withColumn("no",
-                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-                )
-                checkAnswer(windowPartByColIOrderByColJ, Seq(
-                  Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
-                ))
+                // aggregation function over window partitioned by i and ordered by j
+                {
+                  val windowPartByColIOrderByColJ = df.withColumn("no",
+                    row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                  )
+                  checkAnswer(windowPartByColIOrderByColJ, Seq(
+                    Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1),
+                    Row(4, 2, 2)
+                  ))
 
-                val (shuffleExpected, sortExpected) = windowFuncExpects
-                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                  case e: ShuffleExchangeExec => e
-                }.isDefined === shuffleExpected)
-                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                  case e: SortExec => e
-                }.isDefined === sortExpected)
+                  val (shuffleExpected, sortExpected) = windowFuncExpects
+                  assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                    case e: ShuffleExchangeExec => e
+                  }.isDefined === shuffleExpected)
+                  assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                    case e: SortExec => e
+                  }.isDefined === sortExpected)
+                }
               }
             }
           }
@@ -2424,6 +2438,48 @@ class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
     } else {
       super.createReaderFactory()
     }
+  }
+}
+
+/**
+ * Serves `i` from 1 to 10 and takes a pushed LIMIT in whole. As a LIMIT without ORDER BY may, each
+ * read returns other rows: the n-th read starts at the n-th row. Its size estimate is tiny.
+ */
+class RotatingLimitDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder with SupportsPushDownLimit with SupportsReportStatistics {
+        private var limit = 10
+
+        override def pushLimit(limit: Int): Boolean = {
+          this.limit = limit
+          true
+        }
+
+        override def isPartiallyPushed: Boolean = false
+
+        override def estimateStatistics(): Statistics = new Statistics {
+          override def sizeInBytes(): OptionalLong = OptionalLong.of(1L)
+          override def numRows(): OptionalLong = OptionalLong.empty()
+        }
+
+        override def planInputPartitions(): Array[InputPartition] =
+          Array(RangeInputPartition(0, limit))
+
+        override def createReaderFactory(): PartitionReaderFactory = RotatingLimitReaderFactory
+      }
+  }
+}
+
+object RotatingLimitReaderFactory extends PartitionReaderFactory {
+  private val reads = new AtomicInteger
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val RangeInputPartition(_, limit) = partition
+    val start = reads.getAndIncrement()
+    new ValuesReaderFactory(TestingV2Source.schema)
+      .createReader(ValuesInputPartition((start until start + limit).map(_ % 10 + 1)))
   }
 }
 

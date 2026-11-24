@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{RecordReader, RecordWriter}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
-import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
@@ -37,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -65,7 +64,6 @@ private[hive] case class HiveScriptTransformationExec(
       outputSoi: StructObjectInspector,
       hadoopConf: Configuration): Iterator[InternalRow] = {
     new Iterator[InternalRow] with HiveInspectors {
-      private var completed = false
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
@@ -76,12 +74,10 @@ private[hive] case class HiveScriptTransformationExec(
       val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
       @transient
-      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.zip(output).map {
-        case (field, attr) => unwrapperFor(field, attr.dataType)
-      }
+      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
       override def hasNext: Boolean = {
-        if (completed) {
+        if (writerThread.outputReadToEnd) {
           return false
         }
         try {
@@ -91,7 +87,7 @@ private[hive] case class HiveScriptTransformationExec(
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                 checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-                completed = true
+                writerThread.outputReadToEnd = true
                 return false
               }
             } else {
@@ -104,7 +100,7 @@ private[hive] case class HiveScriptTransformationExec(
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
                   checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-                  completed = true
+                  writerThread.outputReadToEnd = true
                   return false
               }
             }
@@ -137,6 +133,10 @@ private[hive] case class HiveScriptTransformationExec(
           }
           i += 1
         }
+        // Read ahead, as the iterator without serde does: the task may not call `hasNext` again,
+        // as under a LIMIT, so the end of the output must also be recorded here. The unwrappers
+        // copy the values, so reading the next row into the reused writable keeps `mutableRow`.
+        hasNext
         mutableRow
       }
     }
@@ -186,7 +186,7 @@ private[hive] case class HiveScriptTransformationExec(
         writerThread, inputStream, proc, stderrBuffer, outputSerde, outputSoi, hadoopConf)
     }
 
-    writerThread.start()
+    startWriterThread(writerThread)
 
     outputIterator
   }
@@ -259,9 +259,7 @@ object HiveScriptIOSchema extends HiveInspectors {
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serdeTypes = outputTypesForSerDe(
-        serdeClass, columnTypes, ioschema.standardCharVarcharSemantics)
-      val serde = initSerDe(serdeClass, columns, serdeTypes, ioschema.outputSerdeProps)
+      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
     }
@@ -271,25 +269,6 @@ object HiveScriptIOSchema extends HiveInspectors {
     val columns = attrs.zipWithIndex.map(e => s"${e._1.prettyName}_${e._2}")
     val columnTypes = attrs.map(_.dataType)
     (columns, columnTypes)
-  }
-
-  /**
-   * Hive LazySimpleSerDe CHAR/VARCHAR types truncate on deserialize. Under standard
-   * semantics, map them to STRING so Spark applies length checks. Only LazySimpleSerDe
-   * and subclasses get this rewrite; other SerDes keep the declared schema.
-   * preserveCharVarcharTypeInfo without standard semantics is unchanged.
-   */
-  private def outputTypesForSerDe(
-      serdeClassName: String,
-      columnTypes: Seq[DataType],
-      standardCharVarcharSemantics: Boolean): Seq[DataType] = {
-    val serdeClass = Utils.classForName[AbstractSerDe](serdeClassName)
-    if (standardCharVarcharSemantics &&
-        classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
-      columnTypes.map(ScriptTransformationIOSchema.toUnboundedStringType)
-    } else {
-      columnTypes
-    }
   }
 
   def initSerDe(

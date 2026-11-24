@@ -2,6 +2,11 @@
 
 --SET spark.sql.join.asofJoin.enabled=true
 
+-- Run with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
   VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
          (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),

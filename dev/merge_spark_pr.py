@@ -41,10 +41,12 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import time
 import traceback
-from typing import List, Optional
+from typing import Iterator, List, Optional, Union
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -78,6 +80,10 @@ JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # Connection timeout (in seconds) for the JIRA client. Raise this if the default is too
 # short for your network, e.g. when the TLS handshake goes through a slow proxy.
 JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
+# Read timeout (in seconds) for a single JIRA request. Doubles as the budget for the startup
+# liveness probe, so a server that is down or too slow to answer disables JIRA for this run
+# rather than failing or stalling the merge.
+JIRA_READ_TIMEOUT = float(os.environ.get("JIRA_READ_TIMEOUT", "30"))
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
@@ -98,6 +104,13 @@ DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+# Items per page that get_json_pages asks GitHub list endpoints for: the most GitHub allows.
+# Without it, GitHub returns 30.
+GITHUB_PAGE_SIZE = 100
+# How many more times, and how many seconds apart, mergeable_warning reads an open PR while
+# GitHub is still computing whether it is mergeable.
+MERGEABLE_RETRIES = 5
+MERGEABLE_RETRY_SECONDS = 2
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
@@ -107,6 +120,48 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
+# Optional pre-push check offered by maybe_compile_check: a clean SBT compile of the main and
+# test sources in the backport's working tree. A smoke test, not CI: only the default modules
+# plus Hive, since the full CI profile list pulls in flaky ones. `clean` deletes every module's
+# build output, so the offer says so -- declining is a reasonable answer.
+# -Phive is not optional: with no -P at all SparkBuild falls back to the `sbt` profile, which
+# puts guava and pmml-model on every compile classpath and turns CI failures into local passes.
+COMPILE_CHECK_CMD = ["build/sbt", "-Phive", ";clean;compile;Test/compile"]
+# Set by --compile-prompt (see build_arg_parser). Off by default: maybe_compile_check then
+# returns without asking, so a backport goes straight to the push prompt.
+COMPILE_PROMPT = False
+# Precise patterns for the 4.2+ ConfigBindingPolicy API. A backport to a pre-4.2 branch
+# that adds either will not compile there (the API arrived in SPARK-55928): the
+# .withBindingPolicy(...) call and the ConfigBindingPolicy import have to be dropped. Nothing
+# else -- in particular .version(...) names the release the config shipped in, so it is only
+# wrong on the backport if the config itself is new. maybe_binding_policy_warning scans the diff
+# about to be pushed (Scala/Java only) for these as a pre-push check. The call is anchored on "."
+# so a comment that merely says "withBindingPolicy" is not flagged; ConfigBindingPolicy in a
+# comment still can be, which is fine -- the prompt is advisory and the remedy (drop the import)
+# is the same either way.
+BINDING_POLICY_PATTERNS = (
+    ("withBindingPolicy", re.compile(r"\.withBindingPolicy\s*\(")),
+    ("ConfigBindingPolicy", re.compile(r"\bConfigBindingPolicy\b")),
+)
+# git pathspecs -- not suffixes -- the binding-policy diff is restricted to; the Scala API these
+# patterns match only appears in Scala/Java. The proto enum behind it (BindingPolicy in
+# common/config/src/main/protobuf/.../config_schema.proto) is spelled differently and is not
+# covered; the optional compile check is what catches a backport that touches it. The :(top)
+# magic anchors the match at the repo root: a bare pathspec is relative to the cwd, and the
+# script's own usage line has it running from dev/, where no Scala/Java file exists -- the
+# check would scan nothing while looking like it ran.
+BINDING_POLICY_PATHSPECS = (":(top)*.scala", ":(top)*.java")
+
+# Run the push-triggered post-merge workflows at each branch's configured commit interval.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning, unless
+# the PR has the do-not-skip-ci label.
+# See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
+POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
+POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# A PR carrying this GitHub label is exempt from the interval and never gets the skip trailer.
+POST_MERGE_CI_FORCE_LABEL = "do-not-skip-ci"
+# Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
+POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
 
 def semver_branch_rank(name):
@@ -526,12 +581,20 @@ def red(text):
     return "\033[91m%s\033[0m" % text
 
 
+def yellow(text):
+    return "\033[33m%s\033[0m" % text
+
+
 def bold(text):
     return "\033[1m%s\033[0m" % text
 
 
 def print_error(msg):
     print(red(msg))
+
+
+def print_warning(msg):
+    print(yellow(msg))
 
 
 def bold_input(prompt) -> str:
@@ -593,12 +656,13 @@ def get_input(prompt, options, bold=True, ignore_case=True):
                     return option
 
 
-def get_json(url):
+def open_github_url(url):
+    """Open the GitHub API `url`, with GITHUB_OAUTH_KEY if set, and exit on an HTTP error."""
     try:
         request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-        return json.load(urlopen(request))
+        return urlopen(request)
     except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == "0":
             print_error(
@@ -615,6 +679,142 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def get_json(url):
+    return json.load(open_github_url(url))
+
+
+def get_json_pages(url):
+    """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
+
+    `get_json` reads only the first page, and GitHub fills it with 30 items unless asked for
+    more. On a PR with a long history, that misses the `closed` event that records the merge
+    commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
+    after the 30th, so their authors get no Co-authored-by, and the release branches after
+    the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
+    reading follows the `rel="next"` URL of each page's `Link` header until a page has none,
+    as `gh api --paginate` does, so a page with fewer items does not end the read early.
+
+    >>> import io
+    >>> from unittest.mock import patch
+    >>> base = "https://api.github.com/repos/apache/spark"
+    >>> def read(path, *pages):
+    ...     # Serve `pages` in order, with Link headers like the ones GitHub sends.
+    ...     requested = []
+    ...     def links(*rels):
+    ...         return ", ".join('<%s/p?page=%d>; rel="%s"' % (base, n, rel) for rel, n in rels)
+    ...     def open_page(page_url):
+    ...         requested.append(page_url[len(base) :])
+    ...         n = len(requested)
+    ...         page = io.BytesIO(json.dumps(pages[n - 1]).encode())
+    ...         page.headers = {}
+    ...         if n < len(pages):
+    ...             page.headers["Link"] = links(("next", n + 1), ("last", len(pages)))
+    ...         elif n > 1:
+    ...             page.headers["Link"] = links(("prev", n - 1), ("first", 1))
+    ...         return page
+    ...     with patch.dict(get_json_pages.__globals__, open_github_url=open_page):
+    ...         return get_json_pages(base + path), requested
+
+    Every page is read in order, including the page after one with fewer items, and the last
+    page's links back to earlier pages are not followed:
+
+    >>> read("/issues/1/events", ["a", "b"], ["c"], ["d", "e"])
+    (['a', 'b', 'c', 'd', 'e'], ['/issues/1/events?per_page=100', '/p?page=2', '/p?page=3'])
+
+    A list that fits on one page comes without a Link header and costs one request, and a URL
+    that already has a query string gets the page size appended to it:
+
+    >>> read("/branches?protected=false", ["master", "branch-4.x"])
+    (['master', 'branch-4.x'], ['/branches?protected=false&per_page=100'])
+    """
+    separator = "&" if "?" in url else "?"
+    url = "%s%sper_page=%d" % (url, separator, GITHUB_PAGE_SIZE)
+    items = []
+    while url is not None:
+        response = open_github_url(url)
+        items.extend(json.load(response))
+        next_link = re.search(r'<([^>]*)>;\s*rel="next"', response.headers.get("Link") or "")
+        url = next_link.group(1) if next_link else None
+    return items
+
+
+def mergeable_warning(pr_num, pr):
+    """Return the warning to confirm before merging `pr` (the PR as read from GitHub), or None.
+
+    GitHub computes whether an open PR is mergeable in a background job, and reports
+    `mergeable` as null until the job is done, e.g. right after a push to the PR or to its base
+    branch. Taking that null for a conflict, this script warned that #59961 was not mergeable
+    right after a push to master, though GitHub reported it as mergeable a little later. So an
+    open PR that reads as null is read again, up to MERGEABLE_RETRIES times,
+    MERGEABLE_RETRY_SECONDS apart. GitHub does not compute it for a closed PR, which always
+    reads as null, so a closed PR is not read again, and a PR that a re-read finds closed is
+    taken as not mergeable.
+
+    >>> from unittest.mock import patch
+    >>> def warning(state, *mergeables, reread_state="open"):
+    ...     # Read the PR with the first of `mergeables`, and serve the rest to the re-reads,
+    ...     # which find the PR in `reread_state`.
+    ...     rereads = iter(mergeables[1:])
+    ...     def get_json(url):
+    ...         assert url == GITHUB_API_BASE + "/pulls/1", url
+    ...         return {"state": reread_state, "mergeable": next(rereads)}
+    ...     pr = {"state": state, "mergeable": mergeables[0]}
+    ...     with (
+    ...         patch.dict(mergeable_warning.__globals__, get_json=get_json),
+    ...         patch("time.sleep") as sleep,
+    ...     ):
+    ...         return mergeable_warning("1", pr), sleep.call_count
+
+    A PR that GitHub has checked is not read again:
+
+    >>> warning("open", True)
+    (None, 0)
+    >>> warning("open", False)
+    ('Pull request 1 is not mergeable in its current form.', 0)
+
+    An open PR that reads as null is read again until GitHub has checked it, up to five times:
+
+    >>> warning("open", None, None, True)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    (None, 2)
+    >>> warning("open", None, False)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    >>> warning("open", *[None] * 6)
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('GitHub is still checking whether pull request 1 is mergeable.', 5)
+
+    A closed PR is not read again:
+
+    >>> warning("closed", None)
+    ('Pull request 1 is not mergeable in its current form.', 0)
+
+    A PR closed while it is read again, e.g. merged by another committer, is not mergeable:
+
+    >>> warning("open", None, None, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    >>> warning("open", None, True, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    """
+    mergeable = pr["mergeable"]
+    if mergeable is None and pr["state"] == "open":
+        print("Waiting for GitHub to check whether pull request %s is mergeable..." % pr_num)
+        for _ in range(MERGEABLE_RETRIES):
+            time.sleep(MERGEABLE_RETRY_SECONDS)
+            pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+            # A PR closed during the wait, e.g. merged by another committer, is not mergeable.
+            mergeable = pr["mergeable"] if pr["state"] == "open" else False
+            if mergeable is not None:
+                break
+        if mergeable is None:
+            return "GitHub is still checking whether pull request %s is mergeable." % pr_num
+    if not mergeable:
+        return "Pull request %s is not mergeable in its current form." % pr_num
+    return None
 
 
 def merge_commit_candidates(pr_events):
@@ -650,6 +850,19 @@ def find_merge_commit(pr_num, pr_events):
     survives only as a `referenced` event. Prefer the `closed` commit, which GitHub itself
     linked; otherwise fall back to `referenced` events, which are also raised by any commit
     merely mentioning the PR, so confirm each against the merge footer `merge_pr` generates.
+
+    A GitHub squash-button merge, e.g. #52460 or #47309, links its commit to the `merged`
+    event, which is not read; its `closed` event has no commit, and its message has no merge
+    footer, so a `referenced` event for the commit, as #47309 has, does not count either:
+
+    >>> from unittest.mock import patch
+    >>> events = [{"event": "merged", "commit_id": "s", "created_at": "t1"},
+    ...           {"event": "closed", "commit_id": None, "created_at": "t1"},
+    ...           {"event": "referenced", "commit_id": "s", "created_at": "t2"}]
+    >>> squash = {"commit": {"message": "[SPARK-1][SQL] Fix (#1)\\n\\nBody"}}
+    >>> with patch.dict(find_merge_commit.__globals__, get_json=lambda url: squash):
+    ...     find_merge_commit(1, events)
+    (None, None)
     """
 
     def message_of(commit_hash):
@@ -666,12 +879,42 @@ def find_merge_commit(pr_num, pr_events):
     return None, None
 
 
+def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional[str]:
+    """Return the subject of the merge commit ``message`` if ``merge_pr`` made it for this PR.
+
+    That is the title that was committed, and a backport run reads it for the JIRA update
+    instead of the current PR title, which may have been edited since the merge. It is
+    used only when the merge footer of ``message`` closes ``pr_num``; otherwise this
+    returns None, and the PR title is used as before, e.g. for a commit of another PR that
+    :func:`find_merge_commit` takes from the PR's ``closed`` event. A commit made with the
+    GitHub squash button, whose subject ends with ``(#N)``, does not get here: GitHub links
+    it to the PR's ``merged`` event, not its ``closed`` event, and it has no merge footer,
+    so :func:`find_merge_commit` does not find it.
+
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from a/b.\\n\\nAuthored-by: A <a@e.org>"
+    >>> committed_title(1, 'Revert "Revert "[SPARK-1][SQL] Fix"" \\r' + footer)
+    'Revert "Revert "[SPARK-1][SQL] Fix""'
+    >>> committed_title("1", "[SPARK-1][SQL] Fix" + footer)
+    '[SPARK-1][SQL] Fix'
+    >>> # A squash-button message has no merge footer, so it gives None.
+    >>> committed_title(1, 'Revert "[SPARK-1][SQL] Fix" (#1)\\n\\nBody') is None
+    True
+    >>> committed_title(1, "[SPARK-2][SQL] Other" + footer.replace("#1", "#2")) is None
+    True
+    >>> committed_title(1, None) is None
+    True
+    """
+    if message is None or not has_merge_footer(message, pr_num):
+        return None
+    return message.split("\n", 1)[0].strip()
+
+
 class GitHub:
     """GitHub REST writes used by the merge script -- the single seam for PR mutations.
 
-    Reads go through the module-level get_json(); only the two mutations (closing the PR and
-    posting a comment) live here, so DryRunGitHub can override them without touching any read
-    path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    Reads go through the module-level get_json() and get_json_pages(); only the two mutations
+    (closing the PR and posting a comment) live here, so DryRunGitHub can override them without
+    touching any read path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
     """
 
     def close_pr(self, pr_num):
@@ -789,8 +1032,13 @@ class DryRunGit(Git):
 git = Git()
 
 
+# Set by [a]bort at the checkout-retry prompt: from then on clean_up() leaves git alone, so
+# the pick and the committer's edits survive whatever main()'s finally blocks do on the way out.
+preserve_local_state = False
+
+
 class SkipCherryPick(Exception):
-    """Signals that the committer declined to resolve a conflicting cherry-pick.
+    """Signals that the committer skipped this branch: declined a conflict or a pre-push check.
 
     A backport conflict is routine, and by the time one is hit the merge into the target
     branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
@@ -799,20 +1047,143 @@ class SkipCherryPick(Exception):
     """
 
 
-def continue_maybe(prompt, cherry=False):
+def continue_maybe(prompt: str, cherry: bool = False) -> None:
+    """Prompt to continue; on "no" either skip this cherry-pick (`cherry`) or exit the script.
+
+    `cherry` is the decline semantics, not a statement that a cherry-pick is mid-flight: the
+    pre-push checks run after the pick is committed, and declining there must still skip only
+    that branch. So the abort is skipped only when git says no pick is in progress.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+
+    Declining with `cherry` while a pick is mid-flight aborts the pick before skipping --
+    the first git call is the probe, the second the abort:
+
+    >>> with (
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=["", ""]) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Resolved?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> run.call_args_list[0]
+    call(['git', 'rev-parse', '--verify', '--quiet', 'CHERRY_PICK_HEAD'])
+    >>> run.call_args_list[1]
+    call('git cherry-pick --abort')
+    >>> run.call_count
+    2
+
+    After the pick is committed there is nothing to abort. A checkout git refuses over
+    uncommitted edits waits for the committer to stash them, then the branch is skipped:
+
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", ""]) as inp,
+    ...     patch.object(git, "run", side_effect=[refused, refused, "", ""]) as run,
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     patch.object(sys.modules[__name__], "clean_up") as clean,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> [c.args[0] for c in run.call_args_list[1:3]]
+    [['git', 'checkout', '--quiet', 'master'], ['git', 'checkout', '--quiet', 'master']]
+    >>> inp.call_count, clean.call_count
+    (2, 1)
+
+    A checkout git keeps refusing, e.g. over a stale index.lock, can be given up on:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", "a"]),
+    ...     patch.object(git, "run", side_effect=[refused, refused]),
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         exited = False
+    ...     except SystemExit:
+    ...         exited = True
+    >>> exited
+    True
+    """
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
-            try:
-                git.run("git cherry-pick --abort")
-            except Exception:
-                print_error("Unable to abort and get back to the state before cherry-pick")
+            if _cherry_pick_in_progress():
+                try:
+                    git.run("git cherry-pick --abort")
+                except Exception:
+                    print_error("Unable to abort and get back to the state before cherry-pick")
+            else:
+                _restore_original_head()
             print("Skipping this cherry-pick; the merge continues.")
             clean_up()
             raise SkipCherryPick()
         fail("Okay, exiting")
 
 
+def _cherry_pick_in_progress() -> bool:
+    """True if the repo is mid-cherry-pick. With --quiet, exit 1 is git's "no such ref" answer,
+    i.e. no pick in progress. Any other trouble answers "yes", so the caller still attempts
+    the abort, as if a pick were in progress.
+
+    >>> from unittest.mock import patch
+    >>> answers = []
+    >>> for failure in (None, subprocess.CalledProcessError(1, "g"),
+    ...                 subprocess.CalledProcessError(128, "g"), OSError("no git")):
+    ...     with patch.object(git, "run", side_effect=failure):
+    ...         answers.append(_cherry_pick_in_progress())
+    >>> answers
+    [True, False, True, True]
+    """
+    try:
+        git.run(["git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"])
+        return True
+    except subprocess.CalledProcessError as e:
+        return e.returncode != 1
+    except Exception:
+        return True
+
+
+def _restore_original_head():
+    """Check out original_head, waiting for the committer while git refuses over local edits.
+
+    The committed pick is discarded by clean_up() afterwards; the edits are theirs to keep, and
+    any git carries over to original_head are listed."""
+    if "original_head" not in globals():
+        return
+    while True:
+        try:
+            git.run(["git", "checkout", "--quiet", original_head])
+            carried = git.run(["git", "status", "--porcelain", "--untracked-files=no"]).strip()
+            if carried:
+                print("Uncommitted changes carried over to %s:\n%s" % (original_head, carried))
+            return
+        except subprocess.CalledProcessError:
+            # git already printed why it refused.
+            prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
+            if get_input(prompt, ["", "a"]) == "a":
+                global preserve_local_state
+                preserve_local_state = True
+                print_error("Okay, exiting; local edits and temporary branches are preserved.")
+                sys.exit(-1)
+
+
 def clean_up():
+    if preserve_local_state:
+        return
     if "original_head" in globals():
         print("Restoring head pointer to %s" % original_head)
         git.run("git checkout %s" % original_head)
@@ -824,6 +1195,476 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
+def maybe_compile_check(ref_name: str) -> None:
+    """Offer to run a clean SBT compile of main and test sources before pushing `ref_name`.
+
+    `ref_name` is the checked-out cherry-pick, so a clean compile here catches a mis-resolved
+    conflict, or a PR that bit-rotted against the target branch, before it lands. It is a smoke
+    test (see COMPILE_CHECK_CMD), not CI: modules behind other profiles are not compiled.
+    Declining skips the check. A red build asks rather than aborts, because a non-zero sbt is
+    as easily a JDK the branch rejects or a failed download as it is the backport; declining
+    there skips this branch (see continue_maybe). Output streams so a long compile does not
+    look like a hang.
+
+    What is compiled is the working tree, not the commit: a file re-edited after the merge
+    commit, or an untracked source file left over from a manual conflict resolution, compiles
+    here and is absent from the push. (A resolved-but-never-`git add`ed conflict is NOT the
+    case -- the commit itself fails while files are unmerged, so the check is never reached.)
+    So warn when the tree is dirty rather than report a green that is about something else,
+    and name the remedy (`git add` + `git commit --amend`) since the fix is the commit, not
+    the build.
+
+    Only offered with --compile-prompt (COMPILE_PROMPT); without it this returns at once,
+    asking nothing and running neither git nor the build:
+
+    >>> import sys
+    >>> from unittest.mock import patch
+    >>> m = sys.modules[__name__]
+    >>> with (
+    ...     patch("builtins.input", side_effect=AssertionError("should not prompt")),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    The examples below all run with it enabled.
+
+    Declining runs no build and no git -- the git.run mock raises if a regression moves a
+    git call above the prompt, which otherwise would run real git in the committer's repo on
+    every startup (doctest.testmod() runs on invocation):
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    Accepting runs the SBT compile once, from the repo root, with an explicit -P so SparkBuild
+    does not fall back to `-Psbt`; a green build returns quietly. The two git calls are pinned
+    too -- transposing them or dropping --porcelain would otherwise stay green:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]) as grun,
+    ...     patch("subprocess.call", return_value=0) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> grun.call_args_list[0]
+    call(['git', 'rev-parse', '--show-toplevel'])
+    >>> grun.call_args_list[1]
+    call(['git', 'status', '--porcelain', '--untracked-files=normal'])
+    >>> run.call_count
+    1
+    >>> run.call_args[0][0][0], run.call_args[0][0][-1]
+    ('build/sbt', ';clean;compile;Test/compile')
+    >>> [a for a in run.call_args[0][0] if a.startswith("-P")]
+    ['-Phive']
+    >>> run.call_args[1]["cwd"]
+    '/repo'
+
+    A dirty tree still builds, but warns first -- and the warning names the remedy
+    (`git add` + `git commit --amend`) alongside the porcelain output:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
+    ...     patch("subprocess.call", return_value=0),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> "git commit --amend" in out.getvalue()
+    True
+    >>> "M foo.scala" in out.getvalue()  # porcelain output is strip()ed before printing
+    True
+    >>> "Compile check passed." in out.getvalue()
+    True
+
+    The experts-only override continues past a red build:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y", "y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+
+    Ctrl-C during the build, and a build/sbt that cannot be run at all, are "did not pass" and
+    get the same override prompt -- never a traceback, which would reach the top-level handler
+    and let clean_up() delete the unpushed pick:
+
+    >>> for boom in (KeyboardInterrupt(), OSError("no build/sbt")):
+    ...     with (
+    ...         patch.object(m, "COMPILE_PROMPT", True),
+    ...         patch("builtins.input", side_effect=["y", "y"]) as inp,
+    ...         patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...         patch("subprocess.call", side_effect=boom),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...     print(inp.call_count)
+    2
+    2
+
+    Declining the override skips just this branch instead of exiting:
+
+    >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
+    ...     patch("builtins.input", side_effect=["y", ""]),
+    ...     patch.object(
+    ...         git, "run", side_effect=["/repo\\n", "", subprocess.CalledProcessError(1, "g")]
+    ...     ),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    """
+    if not COMPILE_PROMPT:
+        return
+    # The command is too long to read inside a prompt, so print it on its own line first.
+    # shlex.join quotes the ";clean;..." argument, so the printed line can be copy-pasted
+    # into a shell without the semicolons splitting it into four commands.
+    print("Optional pre-push check: %s" % shlex.join(COMPILE_CHECK_CMD))
+    print("Note: 'clean' deletes every module's build output, including under --dry-run.")
+    prompt = "Run an optional clean compile on %s before pushing? (y/N): " % ref_name
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
+    # build/sbt is repo-relative and SPARK_HOME defaults to the cwd, which is dev/ when the
+    # script is run as ./merge_spark_pr.py per its own usage line. Ask git for the root instead.
+    root = git.run(["git", "rev-parse", "--show-toplevel"]).strip()
+    dirty = git.run(["git", "status", "--porcelain", "--untracked-files=normal"]).strip()
+    if dirty:
+        print_error(
+            "Working tree is not clean, so what compiles below is not exactly the commit that "
+            "would be pushed -- the uncommitted or untracked changes below compile here but "
+            "are not in the push. If any of them belong in the pick, 'git add' them and "
+            "'git commit --amend' before pushing; if they are unrelated scratch, ignore this "
+            "and carry on:\n%s" % dirty
+        )
+    try:
+        status = subprocess.call(COMPILE_CHECK_CMD, cwd=root)
+    except KeyboardInterrupt:
+        # Interrupting the build must not unwind into the top-level handler: clean_up() there
+        # force-deletes the PR_TOOL_* branch holding the unpushed commit and any hand-resolved
+        # conflicts. Treat it as "the check did not finish" and let the committer decide.
+        print_error("Compile check interrupted.")
+    except OSError as e:
+        print_error("Could not run %s in %s: %s" % (COMPILE_CHECK_CMD[0], root, e))
+    else:
+        if status == 0:
+            print("Compile check passed.")
+            return
+        print_error(
+            "Compile check exited %d. That is the backport, or your toolchain -- a JDK this "
+            "branch rejects and a failed dependency download look the same here." % status
+        )
+    continue_maybe(
+        "Compile check did not pass on %s. Push anyway? (experts only!)" % ref_name, True
+    )
+
+
+def _is_pre_binding_policy_branch(ref: str) -> bool:
+    """True if `ref` is a Spark branch that predates the ConfigBindingPolicy API (4.2+).
+
+    master and branch-M.x (M >= 4) carry the API; branch-4.0/branch-4.1 and any branch-3.x
+    do not. Ranking is semver_branch_rank's job -- branch-M.x sorts above every branch-M.N,
+    and a ref it cannot classify as a maintenance branch gets its (-1, -1) sentinel. Those
+    refs are treated as carrying the API: fail-open, so master, a tag, or a custom ref never
+    raises a false warning -- none of them is a pre-4.2 branch anyway.
+
+    >>> _is_pre_binding_policy_branch("master")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.x")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.2")
+    False
+    >>> [_is_pre_binding_policy_branch(b) for b in ("branch-4.1", "branch-4.0", "branch-3.x")]
+    [True, True, True]
+    >>> _is_pre_binding_policy_branch("branch-3.5")
+    True
+    >>> _is_pre_binding_policy_branch("HEAD")
+    False
+    >>> _is_pre_binding_policy_branch("my-custom-ref")
+    False
+    """
+    rank = semver_branch_rank(ref)
+    return rank != (-1, -1) and rank < (4, 2)
+
+
+def _added_binding_policy_tokens(diff: str) -> list[str]:
+    """Return the sorted subset of BINDING_POLICY_PATTERNS matched on added (``+``) lines.
+
+    Only scans lines the diff added (a leading ``+`` that is not the ``+++ `` file header --
+    the trailing space keeps an added line whose own text starts with ``++`` counted, apart
+    from the ``++ <space>`` case no real Scala/Java line starts with), so a cherry-pick that
+    *removes* a stray .withBindingPolicy is not flagged. Matching uses the
+    precise patterns from BINDING_POLICY_PATTERNS, so a comment that merely mentions
+    ``withBindingPolicy`` (no leading dot, no call) is not flagged; ``ConfigBindingPolicy`` in
+    a comment still can match, which is fine -- the prompt is advisory.
+
+    >>> _added_binding_policy_tokens(
+    ...     "+++ b/foo\\n"
+    ...     "+.withBindingPolicy(X)\\n"
+    ...     "-.withBindingPolicy(Y)\\n"
+    ...     "+import ...ConfigBindingPolicy\\n"
+    ...     "+// see withBindingPolicy usage\\n"
+    ...     " context\\n"
+    ... )
+    ['ConfigBindingPolicy', 'withBindingPolicy']
+    >>> _added_binding_policy_tokens("-.withBindingPolicy(X)\\n")
+    []
+    >>> _added_binding_policy_tokens("+// mentions ConfigBindingPolicy in a comment\\n")
+    ['ConfigBindingPolicy']
+    >>> _added_binding_policy_tokens("")
+    []
+    """
+    found = set()
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++ "):
+            for token, pattern in BINDING_POLICY_PATTERNS:
+                if pattern.search(line):
+                    found.add(token)
+    return sorted(found)
+
+
+def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
+    """Warn before pushing to a pre-4.2 `ref` a cherry-pick that adds ConfigBindingPolicy.
+
+    A cherry-pick onto branch-4.1/4.0/3.x that introduces ``.withBindingPolicy(...)`` or
+    ``ConfigBindingPolicy`` will not compile there (the API arrived in SPARK-55928, 4.2+).
+    This is a git-diff + grep pre-push check: it diffs `base_head` (the branch tip before the
+    pick) against HEAD restricted to Scala/Java sources, scans only the added lines for the
+    precise patterns in BINDING_POLICY_PATTERNS, and on a hit prints the remedy and asks the
+    committer to confirm the push; declining skips this branch (see continue_maybe). No-op on
+    branches that carry the API. Only backports are checked: a PR opened straight against a
+    maintenance branch already ran that branch's CI.
+
+    The diff is forced plain: without --no-color a committer with ``color.ui = always`` gets
+    added lines behind an ANSI escape, no line starts with "+", and the check reports nothing
+    while looking like it ran. ``-c diff.relative=false`` does the same for a committer's
+    ``diff.relative = true``, which would cut the diff down to dev/. Like
+    branches_with_merge_footer, a git failure only warns: this runs after the merge has
+    already been pushed.
+
+    `never` below is how these tests assert "does not prompt": a bare input mock would return a
+    MagicMock that get_input's loop never accepts, so a regressed guard would hang the script at
+    startup -- doctest.testmod() runs on every invocation -- instead of failing.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> never = AssertionError("should not prompt")
+
+    No-op on a branch that carries the API (no diff fetched, no prompt):
+
+    >>> with (
+    ...     patch.object(git, "run") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.2", "deadbeef")
+    >>> run.call_count
+    0
+
+    No-op when the change added none of the tokens. The git command is pinned here because
+    nothing else in these tests would notice it being wrong -- transposing the two endpoints
+    inverts the whole check, and dropping the pathspec or --no-color silently defeats it:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+ unrelated change\\n") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> run.call_args[0][0][:8]
+    ['git', '-c', 'diff.relative=false', 'diff', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
+    >>> run.call_args[0][0][8:]
+    ['--', ':(top)*.scala', ':(top)*.java']
+
+    Warns and prompts when the change adds a token on a pre-4.2 branch; accepting continues
+    (no abort), so input is called once by the continue_maybe prompt:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+.withBindingPolicy(X)\\n"),
+    ...     patch("builtins.input", return_value="y") as inp,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> inp.call_count
+    1
+
+    Declining skips just that branch, so an already-pushed branch-M.x pick
+    and the JIRA resolution survive (the second git.run is the CHERRY_PICK_HEAD probe):
+
+    >>> with (
+    ...     patch.object(
+    ...         git,
+    ...         "run",
+    ...         side_effect=[
+    ...             "+.withBindingPolicy(X)\\n",
+    ...             subprocess.CalledProcessError(1, "git"),
+    ...         ],
+    ...     ),
+    ...     patch("builtins.input", return_value=""),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+
+    A git failure warns and scans nothing rather than aborting a half-pushed merge:
+
+    >>> with (
+    ...     patch.object(git, "run", side_effect=OSError("git is sad")),
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> "git is sad" in out.getvalue()
+    True
+    """
+    if not _is_pre_binding_policy_branch(ref):
+        return
+    try:
+        diff = git.run(
+            ["git", "-c", "diff.relative=false", "diff", "--no-color", "--no-ext-diff", base_head]
+            + ["HEAD", "--"]
+            + list(BINDING_POLICY_PATHSPECS)
+        )
+    except Exception as e:
+        print_error(
+            "Could not diff %s..HEAD; skipping the ConfigBindingPolicy check: %s" % (base_head, e)
+        )
+        return
+    tokens = _added_binding_policy_tokens(diff)
+    if not tokens:
+        return
+    print_error(
+        "Warning: what would be pushed to %s adds %s, which does not exist before branch-4.2 "
+        "(SPARK-55928). Drop the .withBindingPolicy(...) call and the ConfigBindingPolicy "
+        "import. Leave .version(...) alone -- it names the release the config shipped in -- "
+        "unless the config itself is new on this branch, in which case retarget it to this "
+        "branch's next release." % (ref, " / ".join(tokens))
+    )
+    continue_maybe("Push to %s anyway? (experts only!)" % ref, True)
+
+
+def should_skip_post_merge_ci(target_ref, pr_num):
+    """Return whether the next commit on ``target_ref`` should skip post-merge CI.
+
+    The branch history count matches the check formerly performed in ``build_main.yml``.
+    A commit that would skip is exempt when PR ``pr_num`` carries ``POST_MERGE_CI_FORCE_LABEL``.
+    The labels are read only then, on every call, so a label added during the run reaches the
+    later picks.
+    """
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    if interval is None:
+        return False
+
+    commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
+    if commit_count % interval == 0:
+        print(
+            "Post-merge CI will run on %s: commit count %s is divisible by %s."
+            % (target_ref, commit_count, interval)
+        )
+        return False
+
+    labels = get_json_pages("%s/issues/%s/labels" % (GITHUB_API_BASE, pr_num))
+    # GitHub matches label names case-insensitively.
+    if any(label["name"].lower() == POST_MERGE_CI_FORCE_LABEL for label in labels):
+        print(
+            "Post-merge CI is exempt from sampling on %s: the PR has the %r label."
+            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
+        )
+        return False
+
+    print_warning(
+        "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
+        "divisible by %s. GitHub's %r trailer will be added. To force post-merge CI to "
+        "run, add the %r label to the PR and rerun this script."
+        % (
+            target_ref,
+            commit_count,
+            interval,
+            POST_MERGE_CI_SKIP_TRAILER,
+            POST_MERGE_CI_FORCE_LABEL,
+        )
+    )
+    return True
+
+
+def append_post_merge_ci_skip(message):
+    """Append the workflow-skip trailer after GitHub's required two empty lines.
+
+    >>> append_post_merge_ci_skip("Subject\\n")
+    'Subject\\n\\n\\nskip-checks: true\\n'
+    """
+    return "%s\n\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
+
+
+def remove_inherited_post_merge_ci_skip(message):
+    """Remove an inherited skip trailer found near the end of a cherry-pick message.
+
+    >>> message = "Subject\\n\\nskip-checks: true\\n(cherry picked from commit abc)\\n"
+    >>> remove_inherited_post_merge_ci_skip(message)
+    'Subject\\n\\n(cherry picked from commit abc)\\n'
+    >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
+    >>> remove_inherited_post_merge_ci_skip(distant) == distant
+    True
+    """
+    tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
+    marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
+    marker_index = tail.rfind(marker)
+    if marker_index == -1:
+        return message
+
+    marker_index += len(message) - len(tail)
+    before = message[:marker_index].rstrip()
+    after = message[marker_index + len(marker) :].strip()
+    return "\n\n".join(part for part in (before, after) if part) + "\n"
+
+
+def amend_commit_message(message):
+    """Replace the current commit's message with the in-memory multi-line ``message``."""
+    # The command is an argument list rather than a shell string, so -m safely receives the
+    # complete multi-line message without shell quoting or a temporary file.
+    git.run(
+        [
+            "git",
+            "commit",
+            "--amend",
+            "--allow-empty",
+            "--cleanup=verbatim",
+            "-m",
+            message,
+        ]
+    )
+
+
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
@@ -831,6 +1672,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, pr_num)
 
     had_conflicts = False
     try:
@@ -878,7 +1720,15 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     merge_message_flags += ["-m", authors]
 
-    git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
+    if skip_post_merge_ci:
+        # A leading newline plus git's paragraph separator leaves the two empty lines which
+        # GitHub requires before the skip-checks trailer. --cleanup=verbatim preserves them.
+        merge_message_flags += ["-m", "\n%s" % POST_MERGE_CI_SKIP_TRAILER]
+
+    git.run(
+        ["git", "commit", "--cleanup=verbatim", '--author="%s"' % primary_author]
+        + merge_message_flags
+    )
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
@@ -897,18 +1747,82 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, record=None):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
-    Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
-    cherry-pick conflicts and the committer declines to resolve it, after attempting to
-    abort the cherry-pick and restore the working tree.
+    Returns the (pushed ref, pushed commit hash) pair, which `record` also gets, right after
+    the push and before the cleanup that can raise. Raises `SkipCherryPick` when the
+    committer declines to resolve a conflict, after aborting the pick, or declines a pre-push
+    check. The pick is committed by then, so nothing is aborted: it and its temporary branch
+    are discarded, and uncommitted edits must be stashed first (see continue_maybe).
+
+    Both pre-push checks run once, in order, before the push prompt; the binding-policy one
+    gets the target branch and its tip from before the pick. A declined check pushes nothing:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> last_policy_call = last_record_call = None
+    >>> def pick(**effects):
+    ...     steps = Mock()
+    ...     steps.prompt.return_value = "y"
+    ...     for name, effect in effects.items():
+    ...         getattr(steps, name).side_effect = effect
+    ...     tip = ["pre\\n"]
+    ...     def run(cmd):
+    ...         if "cherry-pick" in cmd:
+    ...             tip[0] = "post\\n"
+    ...         return tip[0]
+    ...     with (
+    ...         patch("builtins.input", steps.prompt),
+    ...         patch.object(git, "run", side_effect=run),
+    ...         patch.object(git, "push", steps.push),
+    ...         patch.multiple(sys.modules[__name__], clean_up=steps.clean_up,
+    ...                        should_skip_post_merge_ci=Mock(return_value=False),
+    ...                        maybe_compile_check=steps.compile,
+    ...                        maybe_binding_policy_warning=steps.policy),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             result = _do_cherry_pick(1, "feed", "branch-4.2", steps.record)
+    ...         except SkipCherryPick:
+    ...             result = "skipped"
+    ...         except (SystemExit, subprocess.CalledProcessError) as e:
+    ...             result = type(e).__name__
+    ...     global last_policy_call, last_record_call
+    ...     last_policy_call, last_record_call = steps.policy.call_args, steps.record.call_args
+    ...     return result, [name for name, _, _ in steps.mock_calls]
+    >>> pick()
+    (('branch-4.2', 'post'), ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
+    >>> last_record_call
+    call(('branch-4.2', 'post'))
+    >>> pick(compile=SkipCherryPick())
+    ('skipped', ['policy', 'compile'])
+    >>> last_policy_call
+    call('branch-4.2', 'pre')
+
+    A push that lands is recorded before the cleanup after it, so a cleanup that raises loses
+    nothing; a push that fails is not recorded:
+
+    >>> pick(clean_up=subprocess.CalledProcessError(1, "git checkout"))
+    ('CalledProcessError', ['policy', 'compile', 'prompt', 'push', 'record', 'clean_up'])
+    >>> pick(push=OSError("no route"))
+    ('SystemExit', ['policy', 'compile', 'prompt', 'push', 'clean_up'])
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, pr_num)
+    if skip_post_merge_ci:
+        # The merge is already pushed, so stopping here still reaches the JIRA update in main().
+        # Resolving the ticket then and again on the rerun leaves e.g. both 5.0.0 and 4.4.0,
+        # where a single run records only 4.4.0.
+        print_warning(
+            "If you stop this pick to rerun, answer N to 'Would you like to update an "
+            "associated JIRA?' first. The rerun updates the JIRA."
+        )
 
     try:
         git.run(
@@ -942,16 +1856,29 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
+    raw_message = git.run(["git", "log", "-1", "--format=%B"])
+    updated_message = remove_inherited_post_merge_ci_skip(raw_message)
+    if skip_post_merge_ci:
+        updated_message = append_post_merge_ci_skip(updated_message)
+    if updated_message != raw_message:
+        amend_commit_message(updated_message)
+
+    maybe_binding_policy_warning(pick_ref, pick_head)
+    maybe_compile_check(pick_branch_name)
+
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
     )
 
+    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     try:
         git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
+    # Before clean_up(), which can raise: the push has landed either way.
+    if record:
+        record((pick_ref, pick_hash))
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
@@ -1027,7 +1954,9 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
     return None
 
 
-def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+def cherry_pick(
+    pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=(), record=None
+):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
@@ -1035,11 +1964,56 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     types a branch-M.N target while branch-M.x is also a known release branch AND
     has not already received this commit, prompt to confirm whether to pick into
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
-    maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
-    picked into, so the main loop can advance its remaining-branches list correctly
-    and record each backport commit for the merge comment. The list is empty (or, for the
-    Upstream-First two-branch path, holds only what landed) when the committer declines to
-    resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
+    maintenance-only bugfix).
+
+    `record` gets each (ref, commit_hash) pair right after its push, and main() learns of
+    picks only through it, so one survives a later pick that ends the run. Declining to
+    resolve a conflict, or to push past a pre-push check, skips that branch and records
+    nothing; the caller then offers the next branch and still resolves JIRA. The returned list
+    repeats the recorded pairs; nothing reads it.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def picks(branch, choice="", ends=(), skips=()):
+    ...     recorded = []
+    ...     def do(pr_num, merge_hash, ref, record):
+    ...         if ref in ends:
+    ...             sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
+    ...         if ref in skips:
+    ...             raise SkipCherryPick()
+    ...         record((ref, "abc"))
+    ...         return ref, "abc"
+    ...     with (
+    ...         patch.multiple(sys.modules[__name__], _do_cherry_pick=do,
+    ...                        get_input=lambda *a: choice),
+    ...         patch("builtins.input", return_value=branch), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             cherry_pick(1, "abc", branch, ["branch-4.x", "branch-4.2"], "master",
+    ...                         already_picked=("master",), record=recorded.append)
+    ...         except SystemExit:
+    ...             pass
+    ...     return recorded
+
+    A plain pick, an [o]nly pick, and a [b]oth pair each record what lands, in order:
+
+    >>> picks("branch-4.x")
+    [('branch-4.x', 'abc')]
+    >>> picks("branch-4.2", "o")
+    [('branch-4.2', 'abc')]
+    >>> picks("branch-4.2", "b")
+    [('branch-4.x', 'abc'), ('branch-4.2', 'abc')]
+
+    A skipped pick records nothing, and the branch-M.x pick survives a branch-M.N pick that
+    is skipped or ends the run:
+
+    >>> picks("branch-4.x", skips=("branch-4.x",)), picks("branch-4.2", "o", skips=("branch-4.2",))
+    ([], [])
+    >>> picks("branch-4.2", "b", skips=("branch-4.2",))
+    [('branch-4.x', 'abc')]
+    >>> picks("branch-4.2", "b", ends=("branch-4.2",))
+    [('branch-4.x', 'abc')]
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -1052,6 +2026,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             f"'{pick_ref}' is not a known release branch. "
             f"Valid branches: {valid_branches}. Please try again."
         )
+
+    def pick(ref):
+        return _do_cherry_pick(pr_num, merge_hash, ref, record)
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
@@ -1071,19 +2048,18 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
-            # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
-            # reflect it.
+            # A branch-M.x pick that landed stays recorded when the branch-M.N pick is skipped
+            # or ends the run.
             picked = []
             try:
-                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
-                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+                picked.append(pick(sibling_x))
+                picked.append(pick(pick_ref))
             except SkipCherryPick:
                 pass
             return picked
         elif choice == "o":
             try:
-                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+                return [pick(pick_ref)]
             except SkipCherryPick:
                 return []
         elif choice == "a":
@@ -1092,7 +2068,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             fail("Unrecognized choice %r; aborting." % choice)
 
     try:
-        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        return [pick(pick_ref)]
     except SkipCherryPick:
         return []
 
@@ -1158,7 +2134,7 @@ def title_similarity(pr_title, summary):
     >>> title_similarity("[SPARK-1][FOLLOWUP] Fix a typo", "Add a cache")
     0.0
 
-    A Revert PR keeps its title verbatim (the "Revert" prefix and quotes are not
+    A Revert PR keeps its title as is (the "Revert" prefix and quotes are not
     tags), so the extra word lowers the score but a genuine match still scores high:
 
     >>> round(title_similarity('Revert "[SPARK-1] Add a cache"', "Add a cache"), 2)
@@ -1302,6 +2278,74 @@ def print_jira_issue_summary(issue):
         "%s%s%s%s%s%s%s%s"
         % (summary, assignee, status, resolution, components, url, target_versions, fix_versions)
     )
+
+
+def check_linked_jira_issues(pr_num, title):
+    """Check the JIRA tickets that open ``title`` before merging, failing on a mismatch.
+
+    Only the leading ids count (see :func:`leading_jira_ids`), so a ticket that
+    the title body mentions is neither fetched nor checked.  Requires
+    ``asf_jira`` to be set unless JIRA was disabled for this run, in which case
+    both checks are skipped (see :func:`jira_ids_to_verify`).
+    """
+    jira_ids = jira_ids_to_verify(title)
+    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+    # Collect every offender so the committer sees the full list in one shot rather than
+    # discovering them one-by-one across repeated merge attempts.
+    blocking_issue_types = {"Epic", "Umbrella"}
+    blockers = []
+    linked_issues = []
+    for jira_id in jira_ids:
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception:
+            print_error("Unable to fetch summary of %s" % jira_id)
+            continue
+        print_jira_issue_summary(issue)
+        linked_issues.append((jira_id, issue))
+        issue_type = issue.fields.issuetype.name
+        if issue_type in blocking_issue_types:
+            blockers.append((jira_id, issue_type))
+    if blockers:
+        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+        fail(
+            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+            "tickets and MUST not be resolved by a single PR. File "
+            "Sub-task(s) under %s and update the PR title to reference "
+            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+        )
+
+    # Confirm each linked JIRA actually matches this PR before merging. A committer can
+    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
+    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
+    # Show the PR title next to each ticket's summary, warn when a ticket is already
+    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
+    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
+    # its low similarity to the JIRA summary is expected and the warning is suppressed.
+    # The tag is read inside Revert/Reapply wrappers too.
+    is_followup = "FOLLOWUP" in leading_title_tags(title)
+    for jira_id, issue in linked_issues:
+        print()
+        print(
+            format_jira_verification(
+                pr_num,
+                title,
+                jira_id,
+                issue.fields.summary,
+                issue.fields.status.name,
+                issue.fields.issuetype.name,
+                resolution=(
+                    issue.fields.resolution.name if issue.fields.resolution is not None else None
+                ),
+                use_color=True,
+                is_followup=is_followup,
+            )
+        )
+        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
+            fail(
+                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
+                "correct JIRA ticket and retry." % (jira_id, pr_num)
+            )
 
 
 def jira_components_from_title_tags(tags):
@@ -1866,10 +2910,13 @@ class DryRunJira(Jira):
 # run. None until then; only the JIRA-write flow, well after construction, uses it.
 jira_ops = None
 
+# Set True by initialize_jira() when the liveness probe fails, leaving asf_jira None and every JIRA
+# step skipped. A module-level default (unlike asf_jira, which only exists after initialize_jira())
+# so callers can short-circuit on it without JIRA being set up -- which the doctests rely on.
+jira_disabled = False
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=()):
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
+def resolve_jira_issues(jira_ids, merge_branches, comment, title_components=()):
     if len(jira_ids) == 0:
         resolve_jira_issue(
             merge_branches,
@@ -1885,30 +2932,86 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
         )
 
 
-def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
+def jira_action(title: str) -> tuple[str, list[str]]:
+    """Return what :func:`update_jira_for_pr` does for ``title``, as ``(action, detail)``.
+
+    ``action`` is ``"skip"`` when the title has skip tags (``detail`` lists them; [MINOR]
+    and [TRIVIAL] next to a leading JIRA id do not count), and
+    otherwise ``"revert"`` or ``"resolve"``, with the leading JIRA ids as ``detail``; with
+    no id, the committer enters one at the prompt. A title whose ``Revert "..."`` /
+    ``Reapply "..."`` wrappers net to a revert (see :func:`_is_net_revert`) is a revert.
+    Whether JIRA is reachable is up to the caller.
+
+    >>> jira_action("[SPARK-1234][SPARK-5678][SQL] Fix")
+    ('resolve', ['SPARK-1234', 'SPARK-5678'])
+    >>> jira_action('Revert "Fix"')
+    ('revert', [])
+    >>> jira_action('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ('resolve', ['SPARK-1234'])
+    >>> jira_action('Revert "[MINOR][SQL] Fix"')
+    ('skip', ['MINOR'])
+    >>> jira_action("[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix")
+    ('skip', ['FOLLOWUP'])
+    >>> jira_action('Revert "[SPARK-1234][SQL][MINOR] Fix"')
+    ('revert', ['SPARK-1234'])
+    """
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
-    tags = set(title_components)
-    jira_title = title[len('Revert "') : -1] if is_revert else title
-    try:
-        parsed = Title.parse(jira_title)
-        tags.update(parsed.leading)
-        tags.update(parsed.components)
-    except ValueError:
-        pass
+    jira_ids = leading_jira_ids(title)
+    # Revert/Reapply PRs keep their title as is, so the tags are read inside the wrappers,
+    # without Title.parse, which rejects some older titles such as [SPARK-N][FOLLOWUP][MINOR].
+    tags = leading_title_tags(title)
+    if jira_ids:
+        # Title.parse rejects an id next to [MINOR] or [TRIVIAL], and prompt_for_components()
+        # rejects both markers, so only a subject that predates the rule or was not merged with
+        # this script, or a current PR title chosen on a backport, which is not parsed (see
+        # jira_title_for_backport), has both. Such a title normally names the fix for that id,
+        # so the id is updated.
+        tags -= _LEADING_TAGS
     skipped = [tag for tag in skip_jira_title_tags if tag in tags]
     if skipped:
+        return "skip", skipped
+    return ("revert" if _is_net_revert(_unwrap_wrappers(title)[1]) else "resolve"), jira_ids
+
+
+def update_jira_for_pr(pr_num, title, merge_branches):
+    """Resolve or revert the JIRA ticket(s) of a merged ``title``.
+
+    Everything is read from ``title``: :func:`jira_action` decides whether JIRA is skipped
+    and otherwise whether the ticket(s) are reverted, which removes fix versions, or
+    resolved, and the component tags of a resolved title are reconciled with an unresolved
+    ticket. On a merge, ``title`` is the result of :func:`prepare_merge_title`, which wrote
+    the normalized components into it. On a backport, it is the merge commit subject (see
+    :func:`committed_title`), which an older version of this script may have committed;
+    the current PR title as is, apart from surrounding whitespace, if the committer chose
+    it (see :func:`jira_title_for_backport`); or the prepared PR title when the commit has
+    no merge footer of the PR (see :func:`title_for_run`). So the components are
+    normalized again here. The components of a Revert/Reapply title, or of a title that
+    :meth:`Title.parse` rejects, are not reconciled.
+    """
+    if jira_disabled:
+        # JIRA was disabled at startup (unreachable); nothing to update.
         print()
         print_error(
-            "Skipping JIRA operations for PR #%s because title has %s."
-            % (pr_num, ", ".join("[%s]" % tag for tag in skipped))
+            f"JIRA is disabled; skipping JIRA update for PR #{pr_num}. "
+            f"Reconcile the ticket(s) manually."
         )
         return
 
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    action, detail = jira_action(title)
+    if action == "skip":
+        print()
+        print_error(
+            "Skipping JIRA operations for PR #%s because title has %s."
+            % (pr_num, _bracketed(detail))
+        )
+        return
+
+    # asf_jira is set here: the jira_disabled guard above returns when JIRA is unreachable, and
+    # initialize_jira() fails fast on a missing library/credentials when JIRA is live.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
-    if is_revert:
-        jira_ids = list(dict.fromkeys(re.findall("SPARK-[0-9]{4,5}", jira_title)))
+    jira_ids = detail
+    if action == "revert":
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
         return
@@ -1918,12 +3021,173 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
         GITHUB_BASE,
         pr_num,
     )
+    try:
+        # A Revert/Reapply title is not reconciled, as before: Title.parse rejects it.
+        title_components = [Component.normalize(t) for t in Title.parse(title).components]
+    except ValueError:
+        title_components = []
     resolve_jira_issues(
-        title,
+        jira_ids,
         merge_branches,
         jira_comment,
         title_components,
     )
+
+
+def _bracketed(tags):
+    """Format tags as in a title, e.g. ``[MINOR], [FOLLOWUP]``, for messages."""
+    return ", ".join("[%s]" % tag for tag in tags)
+
+
+def committed_title_notice(subject: str, pr_title: str) -> Optional[str]:
+    """Say that ``subject`` and ``pr_title`` would update JIRA differently, or return None.
+
+    Both are compared by :func:`jira_action`: whether JIRA is skipped, and if not, which
+    tickets and in which direction. The components are not compared: they differ whenever
+    one was entered at the merge prompt, and are only reconciled with an unresolved ticket.
+    A resolve of a ticket that is already resolved as Fixed offers to add fix versions, and
+    may offer to correct the Affects Version/s, without reconciling components (see
+    :func:`resolve_jira_issue`); a ticket resolved other than as Fixed is left as is (see
+    :func:`get_jira_issue`).
+
+    >>> print(committed_title_notice(
+    ...     'Revert "Revert "[SPARK-1][SQL] Fix""', ' Revert "[SPARK-1][SQL] Fix" '))
+    The merge commit subject and the current PR title would update JIRA differently:
+      merge commit subject: Revert "Revert "[SPARK-1][SQL] Fix""
+        -> resolve SPARK-1, or add fix versions to it
+      current PR title:     Revert "[SPARK-1][SQL] Fix"
+        -> offer to remove fix versions from SPARK-1, and to reopen it if resolved
+    A ticket resolved other than as Fixed is left as is either way.
+    >>> print(committed_title_notice(
+    ...     "[SPARK-1][SQL][FOLLOWUP] Fix", "  [SPARK-2][SPARK-3][SQL] Fix  "))
+    The merge commit subject and the current PR title would update JIRA differently:
+      merge commit subject: [SPARK-1][SQL][FOLLOWUP] Fix
+        -> skip JIRA ([FOLLOWUP])
+      current PR title:     [SPARK-2][SPARK-3][SQL] Fix
+        -> resolve SPARK-2 and SPARK-3, or add fix versions to them
+    A ticket resolved other than as Fixed is left as is either way.
+    >>> print(committed_title_notice("[SPARK-1][SQL] Fix", "Fix").splitlines()[-2])
+        -> resolve a ticket entered at the prompt, or add fix versions to it
+
+    Titles that update the same tickets in the same direction, or that both skip JIRA, are
+    not reported, whatever their components, text, case, or whitespace:
+
+    >>> for subject, pr_title in (
+    ...     ("[SPARK-1][CORE] Fix", "[SPARK-1] Fix"),
+    ...     ("[SPARK-1][CORE] Fix", " [spark-1][TESTS] Fixed "),
+    ...     ("[SPARK-1][SPARK-2][SQL] Fix", "[SPARK-2][SPARK-1][SQL] Fix"),
+    ...     ("[SPARK-1][SQL][FOLLOWUP] Fix", "[SPARK-2][SQL][FOLLOWUP] Fix"),
+    ...     ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix"),
+    ... ):
+    ...     print(committed_title_notice(subject, pr_title))
+    None
+    None
+    None
+    None
+    None
+    """
+    pr_title = pr_title.strip()
+    subject_action, pr_title_action = jira_action(subject), jira_action(pr_title)
+
+    def compared(action_detail):
+        action, detail = action_detail
+        return "skip" if action == "skip" else (action, sorted(detail))
+
+    def described(action_detail):
+        action, detail = action_detail
+        if action == "skip":
+            return "skip JIRA (%s)" % _bracketed(detail)
+        ids = " and ".join(detail) or "a ticket entered at the prompt"
+        them = "them" if len(detail) > 1 else "it"
+        if action == "revert":
+            return "offer to remove fix versions from %s, and to reopen %s if resolved" % (
+                ids,
+                them,
+            )
+        return "resolve %s, or add fix versions to %s" % (ids, them)
+
+    if compared(subject_action) == compared(pr_title_action):
+        return None
+    return "\n".join(
+        [
+            "The merge commit subject and the current PR title would update JIRA differently:",
+            "  merge commit subject: %s" % subject,
+            "    -> %s" % described(subject_action),
+            "  current PR title:     %s" % pr_title,
+            "    -> %s" % described(pr_title_action),
+            "A ticket resolved other than as Fixed is left as is either way.",
+        ]
+    )
+
+
+def jira_title_for_backport(subject: str, pr_title: str) -> str:
+    """Return the title that the JIRA update of a backport of the committed ``subject`` reads.
+
+    ``subject`` is the committed title (see :func:`committed_title`); ``main()`` calls this
+    only on a backport of a commit with the PR's merge footer. When the current PR title
+    would update JIRA differently (see :func:`committed_title_notice`), e.g. because it was
+    edited after the merge, or because a tag such as [FOLLOWUP] was entered at the merge
+    prompt, the notice is printed, and the committer may choose the PR title instead, e.g.
+    after fixing a wrong JIRA id in it. The PR title is then used as is, apart from
+    surrounding whitespace: it is not prepared, so no component is asked for, and it is not
+    checked with :func:`check_wrapped_title`; the notice has shown what it would do. When
+    JIRA is disabled, the notice is printed without the question, so the committer knows
+    which title to reconcile by hand. In every other case ``subject`` is returned silently.
+
+    >>> from unittest.mock import Mock, patch
+    >>> def choose(answer, pr_title, disabled=False):
+    ...     ask = Mock(return_value=answer)
+    ...     with patch.dict(jira_title_for_backport.__globals__, get_input=ask,
+    ...                     print_error=print, jira_disabled=disabled):
+    ...         title = jira_title_for_backport("[SPARK-1][SQL] Fix", pr_title)
+    ...     return title, ask.called
+    >>> choose("y", " [SPARK-2][SQL] Fix ")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject and the current PR title would update JIRA differently:
+    ...
+    ('[SPARK-2][SQL] Fix', True)
+    >>> choose("n", "[SPARK-2][SQL] Fix")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', True)
+    >>> choose("", "[SPARK-2][SQL] Fix")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', True)
+    >>> choose("y", "[SPARK-1][sql] Fixed")
+    ('[SPARK-1][SQL] Fix', False)
+    >>> choose("y", "[SPARK-2][SQL] Fix", disabled=True)  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', False)
+    """
+    notice = committed_title_notice(subject, pr_title)
+    if notice is None:
+        return subject
+    print()
+    print_error(notice)
+    if jira_disabled:
+        return subject
+    prompt = "Update JIRA from the current PR title instead of the merge commit subject? (y/N): "
+    if get_input(prompt, ["y", "n", ""]) == "y":
+        return pr_title.strip()
+    return subject
+
+
+def jira_ids_to_verify(title):
+    """Leading JIRA ids of the PR title, for check_linked_jira_issues().
+
+    Empty -- after a printed reminder to reconcile by hand -- when JIRA was disabled for this
+    run, so both checks are skipped instead of failing on asf_jira being None.
+    """
+    jira_ids = leading_jira_ids(title)
+    if jira_disabled:
+        print_error(
+            f"JIRA is disabled; skipping the Epic/Umbrella check and ticket verification. "
+            f"Confirm {', '.join(jira_ids) or 'the linked ticket(s)'} manually."
+        )
+        return []
+    return jira_ids
 
 
 class Component:
@@ -1966,6 +3230,16 @@ class Component:
                 return c
         return None
 
+    @classmethod
+    def normalize(cls, token):
+        """Return the registered tag for ``token``, or the stripped, upper-cased token if none.
+
+        >>> Component.normalize(" follow-up "), Component.normalize(" bogus ")
+        ('FOLLOWUP', 'BOGUS')
+        """
+        c = cls.find(token)
+        return c.tag if c is not None else token.strip().upper()
+
 
 # Full SPARK JIRA component list (sorted alphabetically by tag), followed
 # by status markers. Keep in sync with the components in JIRA — fetch the
@@ -1985,6 +3259,7 @@ COMPONENTS = (
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
     Component("EXAMPLES", ("EXAMPLE",), primary=True, jira_name="Examples"),
+    Component("GRAPH", ("GRAPHFRAME", "GRAPHFRAMES"), primary=True, jira_name="Graph"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
     Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),
@@ -2023,6 +3298,36 @@ _BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9._-]+)\s*\]")
 _SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
 _VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
 _LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
+# A SPARK id that opens a title without brackets, e.g. the old subject "SPARK-49004".
+_BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE | re.ASCII)
+# A Revert "..." / Reapply "..." wrapper, which prepare_merge_title() keeps in the PR title.
+_WRAPPER_RE = re.compile(r'(Revert|Reapply) "(.*)"', re.DOTALL)
+# Revert or Reapply, or a form of either such as Reverting, Reapplied, or Re-apply, still
+# opening a title after unwrapping, e.g. 'Revert [SPARK-N] ...', which check_wrapped_title()
+# warns about. Case is ignored, as older subjects include 'revert [SPARK-N] ...'.
+_WRAPPER_WORD_RE = re.compile(r"Revert|Re-?appl", re.IGNORECASE)
+# A quote, or one word and a quote with at most one space between, opening a title after
+# unwrapping, e.g. the doubled quote in 'Revert ""[SPARK-N] ...""' or the misspelled wrapper
+# in 'Revert "Reaply "[SPARK-N] ...""', which check_wrapped_title() warns about too.
+_WRAPPER_LIKE_RE = re.compile(r'"|[A-Za-z][A-Za-z-]* ?"')
+
+
+def _iter_bracket_tags(raw: str) -> Iterator[tuple[str, int]]:
+    """Yield ``(TAG, end)`` for each tag in the leading run of bracket tags of ``raw``.
+
+    ``TAG`` is upper-cased, and ``end`` is the position just past the tag and
+    the spaces that follow it.  Scanning stops at the first position where no
+    complete bracket tag starts.
+
+    >>> list(_iter_bracket_tags("[SPARK-1] [sql]Fix [X]"))
+    [('SPARK-1', 10), ('SQL', 15)]
+    """
+    pos = 0
+    while m := _BRACKET_TAG_RE.match(raw, pos):
+        pos = m.end()
+        while pos < len(raw) and raw[pos] == " ":
+            pos += 1
+        yield m.group(1).upper(), pos
 
 
 class Title:
@@ -2121,12 +3426,8 @@ class Title:
             raise ValueError("title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw)
 
         past_leading = False
-        pos = 0
-        while pos < len(raw):
-            m = _BRACKET_TAG_RE.match(raw, pos)
-            if not m:
-                break
-            tag = m.group(1).upper()
+        end = 0
+        for tag, end in _iter_bracket_tags(raw):
             if _SPARK_ID_RE.match(tag):
                 if past_leading:
                     raise ValueError(
@@ -2138,11 +3439,8 @@ class Title:
             else:
                 components.append(tag)
                 past_leading = True
-            pos = m.end()
-            while pos < len(raw) and raw[pos] == " ":
-                pos += 1
 
-        text = raw[pos:].lstrip()
+        text = raw[end:].lstrip()
         markers = [t for t in leading if t in _LEADING_TAGS]
         if len(markers) > 1 or (markers and len(leading) > len(markers)):
             raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
@@ -2156,14 +3454,159 @@ class Title:
         return parts + (" " if parts else "") + self.text
 
 
+def _unwrap_wrappers(title: str) -> tuple[str, list[str]]:
+    """Return the innermost title and the wrapper words (``Revert``/``Reapply``), outermost first.
+
+    ``prepare_merge_title()`` keeps Revert and Reapply PR titles as they are, apart
+    from surrounding whitespace, so the JIRA id, leading markers, and components all
+    live inside the quotes.  Unwrapping lets the id-extraction and skip-tag logic see
+    them, and the wrapper words decide the direction (see :func:`_is_net_revert`).
+    Wrappers are stripped repeatedly, so a revert-of-revert (``Revert "Revert "...""``),
+    including mixed ``Revert``/``Reapply`` nesting, is reduced to its innermost title.
+    Surrounding whitespace is stripped from the title and from each unwrapped layer.  A
+    title without such a wrapper is otherwise returned unchanged, with no words.
+
+    >>> _unwrap_wrappers('Revert "[SPARK-1234][SQL] Fix"')
+    ('[SPARK-1234][SQL] Fix', ['Revert'])
+    >>> _unwrap_wrappers('Reapply "[SPARK-1234][SQL] Fix"')
+    ('[SPARK-1234][SQL] Fix', ['Reapply'])
+    >>> _unwrap_wrappers('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Revert'])
+    >>> _unwrap_wrappers('Revert "Reapply "[SPARK-1234][SQL] Fix""')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Reapply'])
+    >>> _unwrap_wrappers(' Revert " Reapply " [SPARK-1234][SQL] Fix"" ')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Reapply'])
+    >>> _unwrap_wrappers('[SPARK-1234][SQL] Fix')
+    ('[SPARK-1234][SQL] Fix', [])
+    >>> _unwrap_wrappers('Revert "')
+    ('Revert "', [])
+    """
+    title = title.strip()
+    words = []
+    while m := _WRAPPER_RE.fullmatch(title):
+        words.append(m.group(1))
+        title = m.group(2).strip()
+    return title, words
+
+
+def _is_net_revert(words: list[str]) -> bool:
+    """Whether the wrapper words from :func:`_unwrap_wrappers` net to a revert.
+
+    A net revert takes the revert path of :func:`update_jira_for_pr`, which removes fix
+    versions instead of resolving. The direction is decided by all the wrappers (see
+    :func:`_unwrap_wrappers`), not only the outermost one: each ``Revert`` flips it, while
+    a ``Reapply``, which git uses for a revert of a revert, flips it twice and so leaves
+    it unchanged. So the title is a revert when it has an odd number of ``Revert``
+    wrappers.
+
+    >>> for t in ('[SPARK-1234][SQL] Fix',
+    ...           'Revert "[SPARK-1234][SQL] Fix"',
+    ...           'Reapply "[SPARK-1234][SQL] Fix"',
+    ...           'Revert "Revert "[SPARK-1234][SQL] Fix""',
+    ...           'Revert "Reapply "[SPARK-1234][SQL] Fix""',
+    ...           'Reapply "Revert "[SPARK-1234][SQL] Fix""',
+    ...           'Reapply "Reapply "[SPARK-1234][SQL] Fix""',
+    ...           'Revert "Revert "Revert "[SPARK-1234][SQL] Fix\"\"\"',
+    ...           'Revert "Reapply "Revert "[SPARK-1234][SQL] Fix\"\"\"',
+    ...           ' Revert "[SPARK-1234][SQL] Fix" ',
+    ...           'Revert "',
+    ...           'Reapply "'):
+    ...     print(_is_net_revert(_unwrap_wrappers(t)[1]), repr(t))
+    False '[SPARK-1234][SQL] Fix'
+    True 'Revert "[SPARK-1234][SQL] Fix"'
+    False 'Reapply "[SPARK-1234][SQL] Fix"'
+    False 'Revert "Revert "[SPARK-1234][SQL] Fix""'
+    True 'Revert "Reapply "[SPARK-1234][SQL] Fix""'
+    True 'Reapply "Revert "[SPARK-1234][SQL] Fix""'
+    False 'Reapply "Reapply "[SPARK-1234][SQL] Fix""'
+    True 'Revert "Revert "Revert "[SPARK-1234][SQL] Fix\"\"\"'
+    False 'Revert "Reapply "Revert "[SPARK-1234][SQL] Fix\"\"\"'
+    True ' Revert "[SPARK-1234][SQL] Fix" '
+    False 'Revert "'
+    False 'Reapply "'
+    """
+    return words.count("Revert") % 2 == 1
+
+
+def leading_jira_ids(title: str) -> list[str]:
+    """Return the JIRA ids that open ``title``, in order, upper-cased, without duplicates.
+
+    ``Revert "..."`` / ``Reapply "..."`` wrappers, including nested ones, are
+    stripped first (see :func:`_unwrap_wrappers`), so those PRs still yield the
+    wrapped id.  The ids are the run of ``[SPARK-N]`` bracket tags at the start
+    of the title.  Scanning stops at the first other tag, so a SPARK id later in
+    the title, such as a reference to a related ticket in the body, is not
+    collected.  The tags after the ids are not validated, so a title that
+    :meth:`Title.parse` rejects, such as ``[SPARK-1234][SQL][MINOR] Fix``, still
+    yields its id.  A title that opens with a bare id instead of a bracket, such
+    as the old subject ``SPARK-49004``, yields only that first id.  Any other
+    title, including one whose id follows another tag, yields an empty list.
+
+    >>> leading_jira_ids("[SPARK-1234][SPARK-5678][SQL] Follow up to SPARK-9999")
+    ['SPARK-1234', 'SPARK-5678']
+    >>> leading_jira_ids('Reapply "[SPARK-1234][SQL] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-1234][spark-1234] Fix")
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-123456][SQL] Fix")
+    ['SPARK-123456']
+    >>> leading_jira_ids("[SPARK-1234][SQL][MINOR] Fix")
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert " [SPARK-1234][SQL][MINOR] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "SPARK-49004"')
+    ['SPARK-49004']
+    >>> leading_jira_ids('Revert "SPARK-9545, SPARK-9547: Fix"')
+    ['SPARK-9545']
+    >>> leading_jira_ids("[MINOR][SQL] Fix typo")
+    []
+    >>> leading_jira_ids("[WIP][SPARK-1234] Fix")
+    []
+    >>> leading_jira_ids("No leading tag, mentions SPARK-5678")
+    []
+    """
+    title = _unwrap_wrappers(title)[0]
+    m = _BARE_SPARK_ID_RE.match(title)
+    if m:
+        return [m.group(0).upper()]
+    ids = []
+    for tag, _ in _iter_bracket_tags(title):
+        if not _SPARK_ID_RE.match(tag):
+            break
+        ids.append(tag)
+    return list(dict.fromkeys(ids))
+
+
+def leading_title_tags(title: str) -> set[str]:
+    """Return the tags in the leading run of bracket tags of ``title``, normalized.
+
+    ``Revert "..."`` / ``Reapply "..."`` wrappers are stripped first (see
+    :func:`_unwrap_wrappers`), and aliases are normalized (see
+    :meth:`Component.normalize`).  Like :func:`leading_jira_ids`, the run is not
+    validated, so a title that :meth:`Title.parse` rejects still yields its tags.
+
+    >>> sorted(leading_title_tags('Revert "[SPARK-1234][FOLLOW-UP][SQL][MINOR] Fix [X]"'))
+    ['FOLLOWUP', 'MINOR', 'SPARK-1234', 'SQL']
+    >>> leading_title_tags("SPARK-49004")
+    set()
+    """
+    return {Component.normalize(tag) for tag, _ in _iter_bracket_tags(_unwrap_wrappers(title)[0])}
+
+
 def prompt_for_components():
     """
     Prompt the committer for component(s) when the PR title lacks a primary
-    component. Each entered token is normalized via Component.find
-    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
-    passed through as-is. Re-prompts until at least one entered token resolves
-    to a primary Component (one with primary=True). Returns an uppercase list
-    of tags in insertion order.
+    component. Each entered token is normalized via Component.normalize
+    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"); unrecognized tokens are only
+    upper-cased. Re-prompts until at least one entered token resolves to a
+    primary Component (one with primary=True) and every token is one that the
+    bracket-tag scan reads back from the title as a component. So a token with
+    other characters, such as "SPARK CORE", is rejected. A SPARK id is rejected
+    too: it belongs in the PR title. So are [MINOR] and [TRIVIAL]: they mark a PR
+    without a JIRA ticket and belong at the start of its title, where Title.parse
+    checks them. Returns an uppercase list of tags in insertion order.
     """
     print("PR title is missing a primary [COMPONENT] tag.")
     print("Primary components (one of these is required):")
@@ -2183,9 +3626,31 @@ def prompt_for_components():
                 c = Component.find(t)
                 if c is not None and c.primary:
                     has_primary = True
-                components.append(c.tag if c else t)
+                components.append(Component.normalize(t))
         if not components:
             print_error("Component(s) cannot be empty. Please enter at least one.")
+            continue
+        # A tag that the bracket scan cannot read would hide the tags after it, such as
+        # FOLLOWUP, from the JIRA skip check, at this merge and at a later revert. A SPARK id
+        # would become an extra linked ticket or an id after a component.
+        invalid = [
+            t
+            for t in components
+            if not _BRACKET_TAG_RE.fullmatch("[%s]" % t) or _SPARK_ID_RE.match(t)
+        ]
+        if invalid:
+            print_error(
+                "Invalid component(s): %s. Use letters, digits, '.', '_', or '-', and no SPARK id."
+                % ", ".join(invalid)
+            )
+            continue
+        markers = [t for t in components if t in _LEADING_TAGS]
+        if markers:
+            print_error(
+                "%s cannot be entered here. A PR without a JIRA ticket puts [MINOR] or "
+                "[TRIVIAL] at the start of its title instead; a PR with one cannot be marked so."
+                % _bracketed(markers)
+            )
             continue
         if not has_primary:
             print_error(
@@ -2194,6 +3659,173 @@ def prompt_for_components():
             )
             continue
         return components
+
+
+def prepare_merge_title(raw_title: str) -> str:
+    """Return the title to merge for the PR title ``raw_title``.
+
+    Surrounding whitespace is stripped. A ``Revert "..."`` / ``Reapply "..."`` title is
+    otherwise kept as is: the wrapped title is an existing commit subject, which may
+    predate the current title rules, so it is not parsed and has no components (see
+    :func:`check_wrapped_title` for what the merge path checks in it). Any other title
+    is parsed with :meth:`Title.parse`, which fails on a malformed title, and its
+    component tags are normalized, with a prompt for a primary component when there is
+    none, and written back into the title, from which :func:`update_jira_for_pr` reads
+    them. A title that changes is printed.
+    """
+    title = raw_title.strip()
+    if not _unwrap_wrappers(title)[1]:
+        # Parse; fail on a malformed title.
+        try:
+            parsed = Title.parse(title)
+        except ValueError as e:
+            fail("Malformed PR title: %s" % e)
+
+        # Normalize component tags via the registry and track primary.
+        components = []
+        has_primary = False
+        for tag in parsed.components:
+            c = Component.find(tag)
+            if c is not None and c.primary:
+                has_primary = True
+            components.append(Component.normalize(tag))
+        if not has_primary:
+            new_tags = prompt_for_components()
+            components = new_tags + components
+
+        # Deduplicate tags in insertion order.
+        components = list(dict.fromkeys(components))
+
+        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
+        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
+        if versions:
+            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
+            components = versions + others
+
+        # Move FOLLOWUP to the last tag.
+        non_followup = [t for t in components if t != "FOLLOWUP"]
+        if len(non_followup) < len(components):
+            components = non_followup + ["FOLLOWUP"]
+
+        # Warn about tags that are neither known components nor version tags.
+        unknown = [
+            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+        ]
+        if unknown:
+            print_error("Title has unknown tag(s): %s" % _bracketed(unknown))
+
+        parsed.components = components
+        title = str(parsed)
+    if title != raw_title:
+        print("Normalized title: %s" % title)
+    return title
+
+
+def check_wrapped_title(title: str) -> None:
+    """Check the ``Revert "..."`` / ``Reapply "..."`` wrappers of a PR title before merging.
+
+    An innermost title that is empty, or made only of quotes and whitespace, fails, since
+    the commit subject would say nothing. An innermost title that still looks like a wrapper
+    is warned about and needs a confirmation, since only the outer wrappers decide the
+    direction, and no JIRA id or skip tag is read from it:
+
+    - It starts with ``Revert`` or ``Reapply``, or a form of either such as ``Reverting``
+      (see ``_WRAPPER_WORD_RE``). Such a title may have a dropped quote, e.g.
+      ``Revert "Revert "[SPARK-N] ..."``, or wrap a subject that is not a wrapper, e.g.
+      ``Revert to using ...``. The shape does not tell which: the revert of an existing
+      subject that GitHub truncated without its closing quote looks like a dropped quote.
+    - It starts with a quote, or with one word and a quote (see ``_WRAPPER_LIKE_RE``),
+      e.g. a doubled quote, ``Revert ""[SPARK-N] ...""``, or a misspelled wrapper,
+      ``Revert "Reaply "[SPARK-N] ...""``. A subject that starts with a quoted word, or
+      quotes one after its first word, e.g. ``Rename "jobs" to ...``, looks the same.
+
+    Other titles pass silently.
+    """
+    inner, words = _unwrap_wrappers(title)
+    if not words:
+        return
+    if not inner.replace('"', "").strip():
+        fail("Empty title inside the Revert/Reapply wrappers of the PR title: %s" % title)
+    if _WRAPPER_WORD_RE.match(inner):
+        shape = "still starts with Revert or Reapply"
+        fix = (
+            "If a quote was dropped, or the innermost title is the subject of a revert commit, "
+            "e.g. Revert [SPARK-N] ..., retitle the PR"
+        )
+        keep = "If it only starts with the word, as in Revert to using ..."
+    elif _WRAPPER_LIKE_RE.match(inner):
+        shape = (
+            "starts with a quote" if inner.startswith('"') else "starts with one word and a quote"
+        )
+        fix = (
+            'If a quote is doubled or a wrapper misspelled, e.g. Revert ""..."" or Reaply "...", '
+            "fix it"
+        )
+        keep = 'If the subject only quotes something, as in Rename "jobs" to ... or "launch" ...'
+    else:
+        return
+    if _is_net_revert(words):
+        direction = "a revert, which offers to remove fix versions"
+    else:
+        direction = "a re-land, which resolves the ticket or adds fix versions"
+    if jira_disabled:
+        update = "JIRA update (disabled for this run): would be %s" % direction
+        after = "reconcile the ticket by hand after the merge"
+    else:
+        update = "JIRA update: %s" % direction
+        after = "enter the JIRA id at the prompt after the merge, or leave it blank to skip"
+    print_error(
+        "\n".join(
+            [
+                "The innermost title of %s %s." % (title, shape),
+                "  %s (decided by the outer wrappers alone; no JIRA id or skip tag is read from"
+                " the innermost title)." % update,
+                '  %s so that each layer is Revert "..." or Reapply "...", e.g. Reapply'
+                ' "[SPARK-N] ..." for a revert of a revert.' % fix,
+                "  %s, keep the title, and %s." % (keep, after),
+            ]
+        )
+    )
+    continue_maybe("Merge with this title?")
+
+
+def title_for_run(raw_title: str, subject: Optional[str], *, merging: bool) -> str:
+    """Return the title of a run on the PR titled ``raw_title``.
+
+    ``subject`` is the committed title of a backport of a commit that ``merge_pr`` made for
+    the PR (see :func:`committed_title`), and None otherwise. ``merging`` is whether this
+    run merges the PR, i.e. no merge commit was found, e.g. for an open PR or one that was
+    reopened after a merge; ``main()`` passes it instead of this function inferring it from
+    the commit message. A run with a ``subject`` is a backport, so it never merges. With a
+    ``subject``, the title is the subject, and the current PR title is not prepared: it is
+    not passed to :meth:`Title.parse`, and no component is asked for. Otherwise the title is
+    prepared with :func:`prepare_merge_title` and, when ``merging``, checked with
+    :func:`check_wrapped_title`. The result is what a merge commits; on a backport, it is
+    what the JIRA update reads unless the committer chooses the PR title (see
+    :func:`jira_title_for_backport`).
+
+    >>> from unittest.mock import Mock, patch
+    >>> prepare, check = Mock(return_value="prepared"), Mock()
+    >>> def run(subject, merging):
+    ...     prepare.reset_mock()
+    ...     check.reset_mock()
+    ...     with patch.dict(title_for_run.__globals__, prepare_merge_title=prepare,
+    ...                     check_wrapped_title=check):
+    ...         result = title_for_run("[SPARK-1] Fix", subject, merging=merging)
+    ...     return result, prepare.called, check.called
+    >>> run(None, True)
+    ('prepared', True, True)
+    >>> run("[SPARK-1][CORE] Fix", False)
+    ('[SPARK-1][CORE] Fix', False, False)
+    >>> run(None, False)
+    ('prepared', True, False)
+    """
+    if subject is not None:
+        return subject
+    title = prepare_merge_title(raw_title)
+    if merging:
+        check_wrapped_title(title)
+    return title
 
 
 def get_current_ref():
@@ -2205,19 +3837,57 @@ def get_current_ref():
         return ref
 
 
+def jira_is_live():
+    """Quick liveness probe for the SPARK JIRA backend, to decide whether to touch JIRA at all.
+
+    Returns (True, None) when the backend looks reachable, and (False, reason) -- so the merge
+    proceeds with JIRA disabled rather than failing or hanging -- when JIRA is down, errors out,
+    or takes longer than JIRA_READ_TIMEOUT to answer. The reason names what the probe hit (an
+    HTTP status or the raised exception) so the disable message can tell the committer why.
+    The ASF JIRA instance goes down for infra maintenance often enough to be worth tolerating.
+    """
+    # issues.apache.org is a reverse proxy in front of several backends, so the front door can be
+    # up while the backend serving SPARK returns 503. Probe a SPARK-specific endpoint so the result
+    # reflects whether SPARK operations will actually work. A 4xx still means a backend answered
+    # (up); a 5xx (e.g. that 503) or a connection/timeout error means it is effectively dead.
+    url = f"{JIRA_API_BASE}/rest/api/2/project/SPARK"
+    try:
+        with urlopen(Request(url), timeout=JIRA_READ_TIMEOUT):
+            return True, None
+    except HTTPError as e:
+        if e.code < 500:
+            return True, None
+        return False, f"server answered HTTP {e.code}"
+    except Exception as e:
+        return False, f"{e.__class__.__name__}: {e}"
+
+
 def initialize_jira():
-    # JIRA access is mandatory: a successful merge must resolve the associated ticket. Bail out
-    # early -- before any git work -- if a prerequisite is missing, rather than silently merging
-    # and leaving the JIRA open (which is easy to miss and tedious to reconcile after the fact).
-    global asf_jira
+    # A successful merge should resolve its ticket, so JIRA access is normally mandatory and we
+    # bail out early -- before any git work -- on a missing library or credentials. But the ASF
+    # JIRA instance is not always up; probe it first and, if it is unreachable or too slow, disable
+    # JIRA for this run (asf_jira stays None) and let the merge proceed, reconciling by hand later.
+    global asf_jira, jira_disabled
     asf_jira = None
+    jira_disabled = False
     jira_server = {"server": JIRA_API_BASE}
+
+    live, reason = jira_is_live()
+    if not live:
+        jira_disabled = True
+        print_error(
+            f"JIRA is unreachable or unhealthy ({reason}); disabling all JIRA steps for this "
+            f"merge. Resolve the associated ticket(s) manually."
+        )
+        return
 
     if not JIRA_IMPORTED:
         fail("ERROR finding jira library. Run 'pip3 install jira' to install, then retry.")
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(
-            jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
+            jira_server,
+            token_auth=JIRA_ACCESS_TOKEN,
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
@@ -2240,7 +3910,7 @@ def initialize_jira():
         asf_jira = jira.client.JIRA(
             jira_server,
             basic_auth=(JIRA_USERNAME, JIRA_PASSWORD),
-            timeout=(JIRA_CONNECT_TIMEOUT, 30),
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
     else:
         fail(
@@ -2305,7 +3975,7 @@ def check_script_up_to_date():
 
 
 def build_arg_parser():
-    """CLI parser: an optional PR number plus the --dry-run/-n flag.
+    """CLI parser: an optional PR number plus the --dry-run/-n and --compile-prompt flags.
 
     --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
     DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
@@ -2326,12 +3996,19 @@ def build_arg_parser():
         "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
         "Also enabled by setting the DRY_RUN environment variable.",
     )
+    parser.add_argument(
+        "--compile-prompt",
+        action="store_true",
+        help="Before pushing each backport pick, offer an optional clean SBT compile of it "
+        "(see COMPILE_CHECK_CMD). Off by default: no compile is offered.",
+    )
     return parser
 
 
 def main():
-    global git, github, jira_ops, original_head
+    global git, github, jira_ops, original_head, COMPILE_PROMPT
     args = build_arg_parser().parse_args()
+    COMPILE_PROMPT = args.compile_prompt
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
         git = DryRunGit()
@@ -2351,7 +4028,7 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
-    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branches = get_json_pages("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
@@ -2361,7 +4038,6 @@ def main():
         pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
     title = pr["title"]
@@ -2370,61 +4046,28 @@ def main():
     if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
         fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
 
-    # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
-    is_revert_pr = title.startswith('Revert "') and title.endswith('"')
-    # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
-    is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
-
-    # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
-    # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
-    title_components: List[str] = []
-
-    # Revert and Reapply PRs keep their title verbatim.
-    if not (is_revert_pr or is_reapply_pr):
-        # Parse; fail on a malformed title.
-        try:
-            parsed = Title.parse(title)
-        except ValueError as e:
-            fail("Malformed PR title: %s" % e)
-
-        # Normalize component tags via the registry and track primary.
-        components = []
-        has_primary = False
-        for tag in parsed.components:
-            c = Component.find(tag)
-            if c is not None and c.primary:
-                has_primary = True
-            components.append(c.tag if c is not None else tag)
-        if not has_primary:
-            new_tags = prompt_for_components()
-            components = new_tags + components
-
-        # Deduplicate tags in insertion order.
-        components = list(dict.fromkeys(components))
-
-        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
-        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
-        if versions:
-            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
-            components = versions + others
-
-        # Move FOLLOWUP to the last tag.
-        non_followup = [t for t in components if t != "FOLLOWUP"]
-        if len(non_followup) < len(components):
-            components = non_followup + ["FOLLOWUP"]
-
-        # Warn about tags that are neither known components nor version tags.
-        unknown = [
-            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
-        ]
-        if unknown:
-            print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
-
-        parsed.components = components
-        title_components = list(parsed.components)
-        title = str(parsed)
-        if title != pr["title"]:
-            print("Normalized title: %s" % title)
+    # Merged pull requests don't appear as merged in the GitHub API;
+    # Instead, they're closed by committers.
+    # A PR might have multiple merge commits, if it's reopened and merged again. We shall
+    # cherry-pick PRs in closed state with the latest merge hash.
+    # If the PR is still open (reopened), we shall not cherry-pick it but perform the normal
+    # merge as it could have been reverted earlier.
+    merge_hash, message = (None, None)
+    if pr["state"] == "closed":
+        pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
+        merge_hash, message = find_merge_commit(pr_num, pr_events)
+    if merge_hash is not None:
+        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
+        commit_is_downloaded = (
+            git.run(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
+            != ""
+        )
+        if not commit_is_downloaded:
+            fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
+        print("Found commit %s:\n%s" % (merge_hash, message))
+    # The committed title of a backport of a commit that merge_pr made for the PR, if any.
+    subject = committed_title(pr_num, message)
+    title = title_for_run(title, subject, merging=merge_hash is None)
 
     body = pr["body"]
     if body is None:
@@ -2448,11 +4091,57 @@ def main():
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
+    if merge_hash is not None:
+        # The change is already on target_ref and on any branch a previous run backported it
+        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
+        picked_refs = [target_ref] + [
+            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
+        ]
+        if len(picked_refs) > 1:
+            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # Loop so one invocation can reach several maintenance branches, as the merge path does.
+        picked_commits = []
+
+        def record(pair):
+            picked_refs.append(pair[0])
+            picked_commits.append(pair)
+
+        try:
+            while True:
+                default = default_pick_branch(branch_names, tuple(picked_refs))
+                if default is None:
+                    print(
+                        "Every known release branch already contains #%s; nothing to pick." % pr_num
+                    )
+                    break
+                cherry_pick(
+                    pr_num,
+                    merge_hash,
+                    default,
+                    branch_names,
+                    target_ref,
+                    already_picked=tuple(picked_refs),
+                    record=record,
+                )
+                prompt = "Would you like to pick %s into another branch?" % merge_hash
+                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                    break
+        finally:
+            # Report whatever was pushed even if a later pick is aborted, since the earlier
+            # pushes have already landed.
+            if picked_commits:
+                post_merge_comment(pr_num, picked_commits)
+            # Reconcile JIRA with every branch that contains the merge or revert.
+            if subject is not None:
+                title = jira_title_for_backport(subject, pr["title"])
+            update_jira_for_pr(pr_num, title, picked_refs)
+        sys.exit(0)
+
     # Fetch PR author's GitHub profile and PR commits for commit attribution
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
@@ -2479,130 +4168,11 @@ def main():
             seen.add(raw)
             co_authors.append(raw)
 
-    # Merged pull requests don't appear as merged in the GitHub API;
-    # Instead, they're closed by committers.
-    # A PR might have multiple merge commits, if it's reopened and merged again. We shall
-    # cherry-pick PRs in closed state with the latest merge hash.
-    # If the PR is still open (reopened), we shall not cherry-pick it but perform the normal
-    # merge as it could have been reverted earlier.
-    merge_hash, message = (None, None)
-    if pr["state"] == "closed":
-        merge_hash, message = find_merge_commit(pr_num, pr_events)
+    warning = mergeable_warning(pr_num, pr)
+    if warning is not None:
+        continue_maybe(warning + "\nContinue? (experts only!)")
 
-    if merge_hash is not None:
-        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
-        commit_is_downloaded = (
-            git.run(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
-            != ""
-        )
-        if not commit_is_downloaded:
-            fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
-
-        print("Found commit %s:\n%s" % (merge_hash, message))
-        # The change is already on target_ref and on any branch a previous run backported it
-        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
-        picked_refs = [target_ref] + [
-            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
-        ]
-        if len(picked_refs) > 1:
-            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
-        # Loop so one invocation can reach several maintenance branches, as the merge path does.
-        picked_commits = []
-        try:
-            while True:
-                default = default_pick_branch(branch_names, tuple(picked_refs))
-                if default is None:
-                    print(
-                        "Every known release branch already contains #%s; nothing to pick." % pr_num
-                    )
-                    break
-                picked = cherry_pick(
-                    pr_num,
-                    merge_hash,
-                    default,
-                    branch_names,
-                    target_ref,
-                    already_picked=tuple(picked_refs),
-                )
-                picked_refs = picked_refs + [ref for ref, _ in picked]
-                picked_commits = picked_commits + picked
-                prompt = "Would you like to pick %s into another branch?" % merge_hash
-                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
-                    break
-        finally:
-            # Report whatever was pushed even if a later pick is aborted, since the earlier
-            # pushes have already landed.
-            if picked_commits:
-                post_merge_comment(pr_num, picked_commits)
-            # Reconcile JIRA with every branch that contains the merge or revert.
-            update_jira_for_pr(pr_num, title, picked_refs, title_components, is_revert=is_revert_pr)
-        sys.exit(0)
-
-    if not bool(pr["mergeable"]):
-        msg = (
-            "Pull request %s is not mergeable in its current form.\n" % pr_num
-            + "Continue? (experts only!)"
-        )
-        continue_maybe(msg)
-
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
-    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
-    # Collect every offender so the committer sees the full list in one shot rather than
-    # discovering them one-by-one across repeated merge attempts.
-    blocking_issue_types = {"Epic", "Umbrella"}
-    blockers = []
-    linked_issues = []
-    for jira_id in jira_ids:
-        try:
-            issue = asf_jira.issue(jira_id)
-        except Exception:
-            print_error("Unable to fetch summary of %s" % jira_id)
-            continue
-        print_jira_issue_summary(issue)
-        linked_issues.append((jira_id, issue))
-        issue_type = issue.fields.issuetype.name
-        if issue_type in blocking_issue_types:
-            blockers.append((jira_id, issue_type))
-    if blockers:
-        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
-        fail(
-            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
-            "tickets and MUST not be resolved by a single PR. File "
-            "Sub-task(s) under %s and update the PR title to reference "
-            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
-        )
-
-    # Confirm each linked JIRA actually matches this PR before merging. A committer can
-    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
-    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
-    # Show the PR title next to each ticket's summary, warn when a ticket is already
-    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
-    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
-    # its low similarity to the JIRA summary is expected and the warning is suppressed.
-    is_followup = "FOLLOWUP" in title_components
-    for jira_id, issue in linked_issues:
-        print()
-        print(
-            format_jira_verification(
-                pr_num,
-                title,
-                jira_id,
-                issue.fields.summary,
-                issue.fields.status.name,
-                issue.fields.issuetype.name,
-                resolution=(
-                    issue.fields.resolution.name if issue.fields.resolution is not None else None
-                ),
-                use_color=True,
-                is_followup=is_followup,
-            )
-        )
-        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
-            fail(
-                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
-                "correct JIRA ticket and retry." % (jira_id, pr_num)
-            )
+    check_linked_jira_issues(pr_num, title)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -2620,6 +4190,10 @@ def main():
     # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
     # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
     # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
+    def record(pair):
+        merged_refs.append(pair[0])
+        merged_commits.append(pair)
+
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
@@ -2630,16 +4204,15 @@ def main():
             if default is None:
                 print("Every known release branch already contains #%s; nothing to pick." % pr_num)
                 break
-            picked = cherry_pick(
+            cherry_pick(
                 pr_num,
                 merge_hash,
                 default,
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
+                record=record,
             )
-            merged_refs = merged_refs + [ref for ref, _ in picked]
-            merged_commits = merged_commits + picked
     finally:
         if merged_commits:
             # The "Closes #N" keyword in the commit message only auto-closes the PR when the
@@ -2654,10 +4227,62 @@ def main():
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the JIRA update decision.
-        update_jira_for_pr(pr_num, title, merged_refs, title_components, is_revert=is_revert_pr)
+        update_jira_for_pr(pr_num, title, merged_refs)
 
 
 __test__ = {
+    "abort_entrypoint": """
+    After [a]bort at the checkout-retry prompt no git runs again, by any route out: the CLI
+    handler, or a fail() in main()'s finally blocks such as declining the JIRA prompt. An
+    ordinary exit still cleans up.
+
+    >>> import ast, doctest
+    >>> from pathlib import Path
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> entrypoint = ast.parse(Path(__file__).read_bytes()).body[-1]
+    >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> def abort_then_fail():
+    ...     try:
+    ...         _restore_original_head()
+    ...     finally:
+    ...         fail("Okay, exiting")
+    >>> def ordinary_exit():
+    ...     raise SystemExit(-1)
+    >>> for entry in (_restore_original_head, abort_then_fail, ordinary_exit):
+    ...     with (
+    ...         patch.object(doctest, "testmod", return_value=(0, 0)),
+    ...         patch.dict(clean_up.__globals__, original_head="master",
+    ...                    preserve_local_state=False),
+    ...         patch.object(git, "run", side_effect=refused) as run,
+    ...         patch("builtins.input", side_effect=["a"]), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             exec(code, dict(globals(), __name__="__main__", main=entry))
+    ...         except BaseException as e:
+    ...             ended = getattr(e, "code", type(e).__name__)
+    ...     cmds = [c.args[0] if isinstance(c.args[0], str) else " ".join(c.args[0])
+    ...             for c in run.call_args_list]
+    ...     print(entry.__name__, [cmd.split()[1] for cmd in cmds], ended)
+    _restore_original_head ['checkout'] -1
+    abort_then_fail ['checkout'] -1
+    ordinary_exit ['checkout'] CalledProcessError
+
+    The flag clean_up() reads is off again, and one left on stops the run before main():
+
+    >>> clean_up.__globals__["preserve_local_state"]
+    False
+    >>> ran = []
+    >>> with patch.object(doctest, "testmod", return_value=(0, 0)):
+    ...     try:
+    ...         exec(code, dict(globals(), __name__="__main__", main=lambda: ran.append(1),
+    ...                         preserve_local_state=True))
+    ...     except SystemExit as e:
+    ...         print(e.code, ran)
+    -1 []
+    """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
     and unrelated versions. JIRA receives individual removals so concurrent additions survive.
@@ -2814,24 +4439,26 @@ __test__ = {
     ...     client.transition_issue.assert_not_called()
     """,
     "update_jira_for_revert": """
-    Reverts update each referenced JIRA once and bypass the resolve/add path.
+    Reverts update each leading JIRA id once and bypass the resolve/add path. The
+    direction comes from the title's wrappers (see _is_net_revert), so a net re-land
+    resolves.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import Mock, call, patch
     >>> reverter, resolver, confirm = Mock(), Mock(), Mock()
-    >>> def update(title, branches, is_revert=False):
+    >>> def update(title, branches):
     ...     reverter.reset_mock()
     ...     resolver.reset_mock()
     ...     confirm.reset_mock()
     ...     with (
     ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
-    ...                    resolve_jira_issues=resolver, continue_maybe=confirm),
+    ...                    resolve_jira_issue=resolver, continue_maybe=confirm),
     ...         redirect_stdout(StringIO()),
     ...     ):
-    ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
-    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix SPARK-1234"'
-    >>> update(title, ["master", "branch-4.x"], is_revert=True)
+    ...         update_jira_for_pr("123", title, branches)
+    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix mentions SPARK-9999"'
+    >>> update(title, ["master", "branch-4.x"])
     >>> assert reverter.call_args_list == [
     ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
     ...     call(['master', 'branch-4.x'], 'SPARK-5678')]
@@ -2839,29 +4466,698 @@ __test__ = {
 
     Backport-only runs use the same revert path. A missing JIRA id is entered interactively.
 
-    >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"], is_revert=True)
+    >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"])
     >>> reverter.assert_called_once_with(["branch-4.2"], "SPARK-1234")
-    >>> update('Revert "Fix"', ["master"], is_revert=True)
+    >>> update('Revert "Fix"', ["master"])
     >>> reverter.assert_called_once_with(["master"], "")
 
-    Wrapped skip tags preserve the existing policy for MINOR, TRIVIAL, and FOLLOWUP changes.
+    A bare leading id, as in the old subject SPARK-49004, still reaches the revert path.
+
+    >>> update('Revert "SPARK-49004"', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
+
+    Wrapped skip tags follow the same policy as direct merges for FOLLOWUP, including the
+    FOLLOW-UP alias, and for MINOR and TRIVIAL when the title has no leading id. The tags are
+    read even from a wrapped title that Title.parse rejects.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
-    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
-    ...     update(title, ["master"], is_revert=True)
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"',
+    ...               'Revert "[MINOR][TRIVIAL][SQL] Fix"', 'Revert "[SQL][MINOR] Fix"',
+    ...               'Revert "[MINOR][SPARK-1234] Fix"'):
+    ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
     ...     confirm.assert_not_called()
 
-    Ordinary merges and reapplies still resolve the issue or add fix versions.
+    Title.parse rejects an id next to MINOR or TRIVIAL, and so does the component prompt, so
+    only an older subject opens with an id and has one. Such a commit was normally merged as
+    the fix for its id, so the id is updated.
 
-    >>> for title in ('[SPARK-1234][SQL] Fix', 'Reapply "[SPARK-1234][SQL] Fix"'):
+    >>> update('Revert "[SPARK-1234][SQL][MINOR] Fix"', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+
+    The skip tags come from the title alone, so direct merges skip through it.
+
+    >>> for title in ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix", "[SPARK-1234][SQL][FOLLOWUP] Fix"):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Reapply titles are unwrapped too, so their skip tags apply as well.
+
+    >>> for title in ('Reapply "[MINOR][SQL] Fix"', 'Reapply "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"'):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Nested wrappers are unwrapped before the skip-tag and id checks, so an inner
+    skip tag is still honored and an inner id still reaches the revert path. A
+    revert of a reapply nets to a revert.
+
+    >>> update('Revert "Reapply "[MINOR][SQL] Fix""', ["master"])
+    >>> reverter.assert_not_called()
+    >>> resolver.assert_not_called()
+    >>> confirm.assert_not_called()
+    >>> update('Revert "Reapply "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+
+    Ordinary merges and reapplies resolve the leading id, not an id in the title body. The
+    components to reconcile are read from an ordinary title; a Revert/Reapply title, or an
+    older subject that Title.parse rejects, has none.
+
+    >>> for title, components in (('[SPARK-1234][SQL] Fix mentions SPARK-9999', ['SQL']),
+    ...                           ('[SPARK-1234][sql][DOCS] Fix', ['SQL', 'DOC']),
+    ...                           ('Reapply "[SPARK-1234][SQL] Fix"', []),
+    ...                           ('Reapply "[SPARK-1234][SQL][TRIVIAL] Fix"', []),
+    ...                           ('[SPARK-1234][SQL][MINOR] Fix', [])):
     ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_called_once_with(
-    ...         title, ["master"],
+    ...         ["master"],
     ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
-    ...         [])
+    ...         "SPARK-1234", title_components=components)
+    >>> update("[SPARK-1234][SPARK-5678][SQL] Fix", ["master"])
+    >>> [c.args[2] for c in resolver.call_args_list]
+    ['SPARK-1234', 'SPARK-5678']
+
+    The direction is decided by all the wrappers, not only the outermost one: a revert
+    of a revert re-lands the change and resolves the id, while a reapply of a revert
+    reverts it.
+
+    >>> update('Revert "Revert "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_not_called()
+    >>> resolver.assert_called_once_with(
+    ...     ["master"],
+    ...     "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...     "SPARK-1234", title_components=[])
+    >>> update('Reapply "Revert "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+    >>> resolver.assert_not_called()
+
+    A title without an id still offers to resolve one that the committer enters.
+
+    >>> update('Reapply "Fix"', ["master"])
+    >>> resolver.assert_called_once_with(
+    ...     ["master"],
+    ...     "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...     title_components=[])
+
+    When JIRA was disabled at startup (unreachable), every shape of update is skipped: no
+    prompt, no resolve, no revert. The disabled message is the one printed even for titles
+    carrying skip tags, so the committer is told JIRA was the reason.
+
+    >>> def update_disabled(title):
+    ...     reverter.reset_mock()
+    ...     resolver.reset_mock()
+    ...     confirm.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
+    ...                    resolve_jira_issue=resolver, continue_maybe=confirm,
+    ...                    jira_disabled=True),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         update_jira_for_pr("123", title, ["master"])
+    ...     assert not reverter.called
+    ...     assert not resolver.called
+    ...     assert not confirm.called
+    ...     return output.getvalue()
+    >>> disabled_outputs = [
+    ...     update_disabled(t)
+    ...     for t in ('[SPARK-1234][SQL] Fix', 'Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "[MINOR][SQL] Fix"', '[SPARK-1234][SQL][FOLLOWUP] Fix')]
+    >>> all("JIRA is disabled; skipping JIRA update for PR #123" in o for o in disabled_outputs)
+    True
+    >>> all("because title has" not in o for o in disabled_outputs)
+    True
+    """,
+    "prompt_for_components": """
+    The prompt rejects MINOR and TRIVIAL, which belong at the start of the title, tokens that
+    the bracket-tag scan cannot read back, and SPARK ids, and asks again until the components
+    include a primary one.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> output = StringIO()
+    >>> answers = ["sql,minor", " Trivial ", "sql, spark core", "sql,[tests]", "sql,spark-2",
+    ...            "sql][minor", "tests", "sql, follow-up"]
+    >>> with (
+    ...     patch.dict(prompt_for_components.__globals__, bold_input=lambda _: answers.pop(0)),
+    ...     redirect_stdout(output),
+    ... ):
+    ...     components = prompt_for_components()
+    >>> components
+    ['SQL', 'FOLLOWUP']
+    >>> answers
+    []
+    >>> "[MINOR] cannot be entered here" in output.getvalue()
+    True
+    >>> "[TRIVIAL] cannot be entered here" in output.getvalue()
+    True
+    >>> for bad in ("SPARK CORE", "[TESTS]", "SPARK-2", "SQL][MINOR"):
+    ...     assert "Invalid component(s): %s." % bad in output.getvalue(), bad
+    """,
+    "prepare_merge_title": """
+    An ordinary title is parsed and its components are normalized in it, prompting for a
+    primary component when there is none. A changed title is printed.
+
+    >>> from unittest.mock import Mock, patch
+    >>> stop, prompt = Mock(side_effect=SystemExit), Mock(return_value=["CORE"])
+    >>> def prepare(title):
+    ...     stop.reset_mock()
+    ...     prompt.reset_mock()
+    ...     with patch.dict(prepare_merge_title.__globals__, fail=stop,
+    ...                     prompt_for_components=prompt):
+    ...         try:
+    ...             return prepare_merge_title(title)
+    ...         except SystemExit:
+    ...             return stop.call_args.args[0]
+    >>> prepare("[SPARK-1234][SQL] Fix")
+    '[SPARK-1234][SQL] Fix'
+    >>> prepare("[SPARK-1234][FOLLOWUP][sql] Fix")
+    Normalized title: [SPARK-1234][SQL][FOLLOWUP] Fix
+    '[SPARK-1234][SQL][FOLLOWUP] Fix'
+    >>> prepare("[SPARK-1234] Fix")
+    Normalized title: [SPARK-1234][CORE] Fix
+    '[SPARK-1234][CORE] Fix'
+    >>> prepare("[SPARK-1234][SQL][4.2][sql] Fix")
+    Normalized title: [SPARK-1234][4.2][SQL] Fix
+    '[SPARK-1234][4.2][SQL] Fix'
+    >>> with patch.dict(prepare_merge_title.__globals__, print_error=print):
+    ...     prepare("[SPARK-1234][SQL][BOGUS] Fix")
+    Title has unknown tag(s): [BOGUS]
+    '[SPARK-1234][SQL][BOGUS] Fix'
+    >>> prepare("[SQL] Fix")
+    "Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: '[SQL] Fix'"
+
+    A Revert/Reapply title, nested or not, is kept as is, without a prompt.
+
+    >>> for title in ('Revert "[SPARK-1234][SQL] Fix"', 'Revert "Revert "[SPARK-1234][SQL] Fix""',
+    ...               'Reapply "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert to using comma-delimited split"'):
+    ...     print(prepare(title) == title, prompt.called)
+    True False
+    True False
+    True False
+    True False
+
+    Surrounding whitespace is stripped from either kind of title, and the result printed.
+
+    >>> prepare(' Revert "[SPARK-1234][SQL] Fix" ')
+    Normalized title: Revert "[SPARK-1234][SQL] Fix"
+    'Revert "[SPARK-1234][SQL] Fix"'
+    >>> prepare(" [SPARK-1234][SQL] Fix ")
+    Normalized title: [SPARK-1234][SQL] Fix
+    '[SPARK-1234][SQL] Fix'
+
+    A bare Revert " is not a wrapper, so it is parsed as an ordinary title and rejected.
+
+    >>> print(prepare('Revert "'))
+    Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'Revert "'
+    >>> print(prepare('Reapply "'))
+    Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'Reapply "'
+    """,
+    "check_wrapped_title": """
+    A title whose innermost title still starts with Revert or Reapply, or a form of either,
+    is warned about with the direction it takes, and the merge asks for a confirmation.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> stop, confirm = Mock(side_effect=SystemExit), Mock()
+    >>> def check(title):
+    ...     stop.reset_mock()
+    ...     confirm.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(check_wrapped_title.__globals__, fail=stop, continue_maybe=confirm),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         try:
+    ...             check_wrapped_title(title)
+    ...         except SystemExit:
+    ...             return "fail: " + stop.call_args.args[0]
+    ...     if confirm.called:
+    ...         confirm.assert_called_once_with("Merge with this title?")
+    ...         said = output.getvalue()
+    ...         shape = ("word" if "still starts with Revert or Reapply" in said
+    ...                  else "quote" if "starts with a quote." in said else "one word")
+    ...         line = said.splitlines()[1]
+    ...         assert line.startswith("  JIRA update") and said.count("JIRA update") == 1, said
+    ...         taken = ("a revert" if "a revert, which offers to remove fix versions" in line
+    ...                  else "a re-land" if "a re-land, which resolves the ticket or adds"
+    ...                  " fix versions" in line else line)
+    ...         return "confirm: %s (%s)" % (taken, shape)
+    ...     return output.getvalue() or "pass"
+    >>> for title in ('Revert "Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Reapply "Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert [SPARK-1234][SQL] Fix""',
+    ...               'Revert "revert [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reverted [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reapply "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reapplied [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Re-apply [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert to using comma-delimited split"',
+    ...               'Reapply "Revert to using comma-delimited split"',
+    ...               'Revert "Revert "Revert "[SPARK-1234][SQL] Fix""'):
+    ...     print(check(title))
+    confirm: a revert (word)
+    confirm: a re-land (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a re-land (word)
+    confirm: a re-land (word)
+
+    So is an innermost title that starts with a quote, or with one word and a quote, as a
+    doubled or misspelled wrapper would, including a subject that only quotes something
+    after its first word. A quote later in the title is not warned about.
+
+    >>> for title in ('Revert ""[SPARK-1234][SQL] Fix""',
+    ...               'Revert "Reaply "[SPARK-1234][SQL] Fix""',
+    ...               'Reapply "Revet "[SPARK-1234][SQL] Fix""',
+    ...               'Revert "Reaply"[SPARK-1234][SQL] Fix""',
+    ...               'Revert ""launch" scripts is more accurate terminology"',
+    ...               'Revert "Rename "jobs" to "applications""',
+    ...               'Revert "[SPARK-1234][SQL] Support "foo" in X"',
+    ...               'Revert "[SPARK-1234][SQL] Fix "foo""'):
+    ...     print(check(title))
+    confirm: a revert (quote)
+    confirm: a revert (one word)
+    confirm: a re-land (one word)
+    confirm: a revert (one word)
+    confirm: a revert (quote)
+    confirm: a revert (one word)
+    pass
+    pass
+
+    The whole warning, here for a misspelled wrapper:
+
+    >>> said = []
+    >>> with patch.dict(check_wrapped_title.__globals__,
+    ...                 print_error=lambda msg: said.append(msg) or print(msg)):
+    ...     print(check('Revert "Reaply "[SPARK-1234][SQL] Fix""'))
+    confirm: a revert (one word)
+    >>> print(said[0])  # doctest: +NORMALIZE_WHITESPACE
+    The innermost title of Revert "Reaply "[SPARK-1234][SQL] Fix"" starts with one word and
+    a quote.
+      JIRA update: a revert, which offers to remove fix versions (decided by the outer
+      wrappers alone; no JIRA id or skip tag is read from the innermost title).
+      If a quote is doubled or a wrapper misspelled, e.g. Revert ""..."" or Reaply "...", fix
+      it so that each layer is Revert "..." or Reapply "...", e.g. Reapply "[SPARK-N] ..."
+      for a revert of a revert.
+      If the subject only quotes something, as in Rename "jobs" to ... or "launch" ..., keep
+      the title, and enter the JIRA id at the prompt after the merge, or leave it blank to
+      skip.
+
+    When JIRA is disabled, the warning says to reconcile the ticket by hand instead of
+    entering an id at a prompt that will not come.
+
+    >>> said = []
+    >>> with patch.dict(check_wrapped_title.__globals__, jira_disabled=True,
+    ...                 print_error=lambda msg: said.append(msg) or print(msg)):
+    ...     print(check('Revert "Revert to using comma-delimited split"'))
+    confirm: a revert (word)
+    >>> print(said[0])  # doctest: +NORMALIZE_WHITESPACE
+    The innermost title of Revert "Revert to using comma-delimited split" still starts with
+    Revert or Reapply.
+      JIRA update (disabled for this run): would be a revert, which offers to remove fix
+      versions (decided by the outer wrappers alone; no JIRA id or skip tag is read from the
+      innermost title).
+      If a quote was dropped, or the innermost title is the subject of a revert commit, e.g.
+      Revert [SPARK-N] ..., retitle the PR so that each layer is Revert "..." or
+      Reapply "...", e.g. Reapply "[SPARK-N] ..." for a revert of a revert.
+      If it only starts with the word, as in Revert to using ..., keep the title, and
+      reconcile the ticket by hand after the merge.
+
+    An innermost title that is empty, or made only of quotes and spaces, fails. Balanced
+    wrappers and ordinary titles pass.
+
+    >>> for title in ('Revert ""', 'Revert " "', 'Reapply ""', 'Revert "Revert \"\"\"'):
+    ...     print(check(title))
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert ""
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert " "
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Reapply ""
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert "Revert \"\"\"
+    >>> for title in ('Revert \"\"\"\"', 'Revert \"\"\"', 'Revert "Revert \"\"\"\"',
+    ...               'Revert "" ""'):
+    ...     print(check(title).split(" inside ")[0])
+    fail: Empty title
+    fail: Empty title
+    fail: Empty title
+    fail: Empty title
+    >>> for title in ('Revert "[SPARK-1234][SQL] Fix"', 'Revert "Reapply "[SPARK-1234] Fix""',
+    ...               'Revert "SPARK-49004"', 'Revert "Fix"', '[SPARK-1234][SQL] Revert X',
+    ...               'Revert "[SPARK-1234][SQL] Revert X"'):
+    ...     print(check(title))
+    pass
+    pass
+    pass
+    pass
+    pass
+    pass
+    """,
+    "main_records": """
+    main() reports the picks cherry_pick hands to `record`, on a merge and on a backport of a
+    merged PR: the merge comment gets them in order and the JIRA update their branches, also
+    for picks recorded before a later pick ends the run. Each run takes the pairs the
+    cherry_pick stand-in records, one list per call (None ends the run), and returns the
+    pairs the merge comment receives, the branches the JIRA update receives, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(calls, message=None):
+    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     def get_json(url):
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": b} for b in ("master", "branch-4.x", "branch-4.2")]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     remaining = list(calls)
+    ...     def ask(prompt, *args, **kwargs):
+    ...         return "y" if remaining and "into another branch" in prompt else "n"
+    ...     def pick(*args, record, **kwargs):
+    ...         for pair in remaining.pop(0):
+    ...             if pair is None:
+    ...                 sys.exit(-1)  # a later pick ends the run
+    ...             record(pair)
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     comment, update = Mock(), Mock()
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=Mock(),
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=Mock(return_value="abc"),
+    ...                    post_merge_comment=comment,
+    ...                    prompt_for_components=Mock(return_value=["CORE"]),
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock()),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     return (comment.call_args.args[1] if comment.called else None,
+    ...             update.call_args.args[2], code)
+
+    On a merge, the merged branch comes first and every recorded pick follows:
+
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]])  # doctest: +NORMALIZE_WHITESPACE
+    ([('master', 'abc'), ('branch-4.x', 'd'), ('branch-4.2', 'e')],
+     ['master', 'branch-4.x', 'branch-4.2'], None)
+
+    A pick recorded before a later pick ends the run is still reported, and so is a merge
+    with no picks:
+
+    >>> run([[("branch-4.x", "d")], [None]])
+    ([('master', 'abc'), ('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    >>> run([])
+    ([('master', 'abc')], ['master'], None)
+
+    On a backport of a merged PR the comment holds only the picks, and the JIRA update also
+    the branch the PR merged into:
+
+    >>> message = "[SPARK-1][SQL] Fix" + footer
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]], message)
+    ([('branch-4.x', 'd'), ('branch-4.2', 'e')], ['master', 'branch-4.x', 'branch-4.2'], 0)
+    >>> run([[("branch-4.x", "d")], [None]], message)
+    ([('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    """,
+    "main_titles": """
+    main() hands the title that title_for_run() returns to the commit, the JIRA checks, and
+    the JIRA update: on a merge the prepared title, with a component entered at the prompt;
+    on a backport of a commit with the PR's merge footer, the committed subject, or, when
+    the current PR title would update JIRA differently and the committer answers y at the
+    question printed after the cherry-picks, right before the JIRA update, the current PR
+    title; and on a backport without that footer, the prepared current PR title. Every
+    GitHub, git, and JIRA call is mocked. Each run prints what it does, and returns the
+    title that update_jira_for_pr() receives, the title committed and checked against
+    JIRA (None on a backport), whether a component was asked for, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(pr_title, message=None, answer="n"):
+    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     requested = []
+    ...     def get_json(url):
+    ...         requested.append(url)
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": "master"}, {"name": "branch-4.x"}]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     def ask(prompt, *args, **kwargs):
+    ...         if prompt.startswith("Update JIRA from the current PR title"):
+    ...             print("asked: use the current PR title?")
+    ...             return answer
+    ...         if "into another branch" in prompt and message is not None:
+    ...             print("asked: pick another?")
+    ...         return "n"
+    ...     prompt = Mock(return_value=["CORE"])
+    ...     update = Mock(side_effect=lambda *args: print("JIRA update"))
+    ...     merge, check = Mock(return_value="abc"), Mock()
+    ...     pick = Mock(side_effect=lambda *a, **k: print("picked") or [("branch-4.x", "d")])
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     pick_default = Mock(return_value="branch-4.x")
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=check,
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
+    ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    default_pick_branch=pick_default,
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
+    ...                    print_error=lambda msg: print(msg.splitlines()[0])),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     committed = merge.call_args.args[2] if merge.called else None
+    ...     assert committed == (check.call_args.args[1] if check.called else None)
+    ...     assert all(c.args[0] == ["branch-4.x"] for c in pick_default.call_args_list)
+    ...     # A merge reads no events, and a backport reads neither commits nor the author.
+    ...     unused = ("/issues/1/events",) if message is None else ("/pulls/1/commits", "/users/x")
+    ...     assert not [url for url in requested if url.endswith(unused)], requested
+    ...     return update.call_args.args[1], committed, prompt.called, code
+
+    A merge commits, checks, and updates JIRA from the prepared title:
+
+    >>> run("[SPARK-1] Fix")
+    JIRA update
+    ('[SPARK-1][CORE] Fix', '[SPARK-1][CORE] Fix', True, None)
+
+    A merge runs the wrapper check, which warns here:
+
+    >>> run('Revert "Revert to using X"')
+    The innermost title of Revert "Revert to using X" still starts with Revert or Reapply.
+    JIRA update
+    ('Revert "Revert to using X"', 'Revert "Revert to using X"', False, None)
+
+    A backport of a commit with the PR's merge footer reads the committed subject without
+    preparing the current PR title, whether the PR title is the same, differs only in how a
+    tag is spelled, or also lacks the component entered at the merge prompt:
+
+    >>> run("[SPARK-1][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-1][CORE][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+    >>> run("[SPARK-1][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+
+    For a PR title edited to another id since, the notice and the question come after the
+    cherry-picks, right before the JIRA update:
+
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer, answer="y")
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-2][SQL] Fix', None, False, 0)
+
+    A backport does not run the wrapper check, which is for titles about to be committed,
+    even when it prepares the current PR title for a commit without the PR's merge footer:
+
+    >>> wrapped = 'Revert "Revert to using comma-delimited split"'
+    >>> run(wrapped, wrapped + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('Revert "Revert to using comma-delimited split"', None, False, 0)
+    >>> run(wrapped, "[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
+    picked
+    asked: pick another?
+    JIRA update
+    ('Revert "Revert to using comma-delimited split"', None, False, 0)
+
+    A backport of a commit without the PR's merge footer, e.g. another PR's merge commit
+    linked to the PR's closed event, prepares the current PR title, as before:
+
+    >>> run("[SPARK-2] Fix", "[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-2][CORE] Fix', None, True, 0)
+    """,
+    "check_linked_jira_issues": """
+    Only the leading ids are fetched and checked, so an Epic that the title body mentions
+    neither blocks the merge nor asks for confirmation.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> def issue(issue_type):
+    ...     i = Mock()
+    ...     i.fields.issuetype.name = issue_type
+    ...     return i
+    >>> client = Mock()
+    >>> client.issue.side_effect = {
+    ...     "SPARK-60328": issue("Sub-task"), "SPARK-60329": issue("Bug"),
+    ...     "SPARK-34261": issue("Epic"), "SPARK-34262": issue("Umbrella")}.__getitem__
+    >>> verify = Mock(return_value="")
+    >>> stop = Mock(side_effect=SystemExit)
+    >>> def check(title, answers=("y",)):
+    ...     for m in (client, verify, stop):
+    ...         m.reset_mock()
+    ...     with (
+    ...         patch.dict(check_linked_jira_issues.__globals__, asf_jira=client,
+    ...                    print_jira_issue_summary=Mock(), format_jira_verification=verify,
+    ...                    fail=stop),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         check_linked_jira_issues("123", title)
+    >>> check("[SPARK-60328][SQL][TESTS] Use a unique jar copy in the HiveDDLSuite "
+    ...       "SPARK-34261 test")
+    >>> client.issue.call_args_list
+    [call('SPARK-60328')]
+    >>> stop.assert_not_called()
+    >>> verify.call_args.args[2]
+    'SPARK-60328'
+
+    Each leading id is confirmed, and declining one aborts the merge.
+
+    >>> check("[SPARK-60328][SPARK-60329][SQL] Fix", answers=("y", "y"))
+    >>> [c.args[2] for c in verify.call_args_list]
+    ['SPARK-60328', 'SPARK-60329']
+    >>> stop.assert_not_called()
+    >>> try:
+    ...     check("[SPARK-60328][SQL] Fix", answers=("n",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_args.args[0].startswith("Aborting: SPARK-60328 does not match PR #123.")
+    True
+    >>> try:
+    ...     check("[SPARK-60328][SQL] Fix", answers=("",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_count
+    1
+
+    A ticket that cannot be fetched is skipped.
+
+    >>> check("[SPARK-1][SQL] Fix")
+    >>> client.issue.call_args_list
+    [call('SPARK-1')]
+    >>> verify.assert_not_called()
+    >>> stop.assert_not_called()
+    >>> try:
+    ...     check("[SPARK-1][SPARK-34261][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> "SPARK-34261 (Epic)" in stop.call_args.args[0]
+    True
+
+    When JIRA was disabled for this run, nothing is fetched or confirmed.
+
+    >>> client.reset_mock()
+    >>> output = StringIO()
+    >>> with (
+    ...     patch.dict(check_linked_jira_issues.__globals__, asf_jira=client, jira_disabled=True),
+    ...     redirect_stdout(output),
+    ... ):
+    ...     check_linked_jira_issues("123", "[SPARK-60328][SQL] Fix")
+    >>> client.issue.assert_not_called()
+    >>> "skipping the Epic/Umbrella check" in output.getvalue()
+    True
+
+    Leading Epic and Umbrella tickets block the merge, all listed at once, before any
+    confirmation.
+
+    >>> try:
+    ...     check("[SPARK-34261][SPARK-60328][SPARK-34262][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> msg = stop.call_args.args[0]
+    >>> "SPARK-34261 (Epic), SPARK-34262 (Umbrella)" in msg
+    True
+    >>> verify.assert_not_called()
+
+    A FOLLOWUP tag suppresses the similarity check inside Revert/Reapply wrappers and
+    under the FOLLOW-UP alias too, while a title without the tag is still checked.
+
+    >>> for title in ('[SPARK-60328][SQL][FOLLOWUP] Fix', 'Revert "[SPARK-60328][SQL] Fix"',
+    ...               '[SPARK-60328][SQL] Fix FOLLOWUP handling',
+    ...               'Revert "[SPARK-60328][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-60328][FOLLOWUP][SQL][MINOR] Fix"'):
+    ...     check(title)
+    ...     print(verify.call_args.kwargs["is_followup"])
+    True
+    False
+    False
+    True
+    True
     """,
     "reconcile_jira_affects_versions": """
     Blank input accepts the suggested version and appends it to the existing versions:
@@ -2898,6 +5194,78 @@ __test__ = {
     >>> user_input.call_count
     1
     """,
+    "jira_is_live": """
+    The probe classifies what urlopen hit: a response -- even a 4xx -- means live, a 5xx or
+    any non-HTTP error (DNS failure, connection refused, TLS error) means dead, and the
+    reason names it so the committer can tell an ASF outage from a local network problem.
+
+    >>> from unittest.mock import MagicMock, Mock, patch
+    >>> from urllib.error import HTTPError, URLError
+    >>> import socket
+    >>> def probe(error=None):
+    ...     opener = MagicMock() if error is None else Mock(side_effect=error)
+    ...     with patch.dict(jira_is_live.__globals__, urlopen=opener):
+    ...         return jira_is_live()
+    >>> probe()
+    (True, None)
+    >>> probe(HTTPError("https://issues.apache.org/jira", 404, "Not Found", {}, None))
+    (True, None)
+    >>> probe(HTTPError("https://issues.apache.org/jira", 503, "Service Unavailable", {}, None))
+    (False, 'server answered HTTP 503')
+    >>> probe(URLError("connection refused"))
+    (False, 'URLError: <urlopen error connection refused>')
+    >>> live, reason = probe(socket.timeout("timed out"))
+    >>> live, "timed out" in reason
+    (False, True)
+    """,
+    "initialize_jira": """
+    An unreachable or unhealthy JIRA disables this run's JIRA steps without touching the
+    client library or credentials, which are only checked once the probe says JIRA is live.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> def initialize_with_probe(result):
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(initialize_jira.__globals__, jira_is_live=Mock(return_value=result)),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         initialize_jira()
+    ...         g = initialize_jira.__globals__
+    ...         return (g["jira_disabled"], g["asf_jira"]), output.getvalue()
+    >>> state, output = initialize_with_probe((False, "server answered HTTP 503"))
+    >>> state
+    (True, None)
+    >>> "JIRA is unreachable or unhealthy (server answered HTTP 503)" in output
+    True
+    >>> "disabling all JIRA steps for this merge" in output
+    True
+    """,
+    "jira_ids_to_verify": """
+    The leading ids of the title feed the Epic/Umbrella and match checks; with JIRA disabled
+    they are dropped -- with a reminder naming them, or the generic fallback -- so the checks
+    are skipped rather than failing on asf_jira being None.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def ids_for(title, disabled):
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(jira_ids_to_verify.__globals__, jira_disabled=disabled),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         return jira_ids_to_verify(title), output.getvalue()
+    >>> ids_for("[SPARK-1234][SPARK-5678][SQL] Fix", False)
+    (['SPARK-1234', 'SPARK-5678'], '')
+    >>> ids, output = ids_for("[SPARK-1234][SQL] Fix mentions SPARK-9999", True)
+    >>> ids, "Confirm SPARK-1234 manually" in output
+    ([], True)
+    >>> ids, output = ids_for("[SQL] Fix", True)
+    >>> ids, "the linked ticket(s)" in output
+    ([], True)
+    """,
 }
 
 
@@ -2905,7 +5273,8 @@ if __name__ == "__main__":
     import doctest
 
     failure_count, test_count = doctest.testmod()
-    if failure_count:
+    # A doctest that left the abort flag on would make every clean_up() of this run a no-op.
+    if failure_count or preserve_local_state:
         sys.exit(-1)
     try:
         main()

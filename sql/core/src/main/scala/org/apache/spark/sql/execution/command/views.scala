@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.analysis.V2Reference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, DefinesView, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
@@ -89,7 +89,8 @@ case class CreateViewCommand(
   extends RunnableCommand
   with AnalysisOnlyCommand
   with CTEInChildren
-  with CreateTempView {
+  with CreateTempView
+  with DefinesView {
 
   import ViewHelper._
 
@@ -255,7 +256,7 @@ case class AlterViewAsCommand(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   import ViewHelper._
 
@@ -1019,9 +1020,8 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
       }
 
     case av: AlterViewAs if av.isAnalyzed =>
-      // No capability check here: `Analyzer.lookupTableOrView(identifier, viewOnly=true)`
-      // already rejects non-ViewCatalog catalogs upstream for `UnresolvedView`, so by the time
-      // an AlterViewAs reaches this rule the catalog is guaranteed to be a ViewCatalog.
+      // `RelationResolution.lookupTableOrView(identifier, viewOnly = true)` rejects catalogs
+      // without view support for `UnresolvedView`, so no capability check is needed here.
       val fullIdent = fullIdentFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, fullIdent, av.query, av.referredTempFunctions,

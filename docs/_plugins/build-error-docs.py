@@ -22,7 +22,14 @@ ERROR_CONDITIONS_PATH = (
 
 def assemble_message(message_parts):
     message = " ".join(message_parts)
-    cleaned_message = re.sub(r"(<.*?>)", lambda x: f"`{x.group(1)}`", message)
+    # If a message section contains backticks (e.g. `APPROX NEAREST <numResults> BY ...`),
+    # keep it as-is. Otherwise, wrap <placeholder> tags with backticks so they are not
+    # interpreted as HTML tags.
+    cleaned_message = re.sub(
+        r"`[^`]*`|(<.*?>)",
+        lambda x: x.group(0) if x.group(1) is None else f"`{x.group(1)}`",
+        message,
+    )
     return markdown.markdown(cleaned_message)
 
 

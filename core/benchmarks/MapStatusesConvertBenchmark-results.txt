@@ -2,12 +2,12 @@
 MapStatuses Convert Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 MapStatuses Convert:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Num Maps: 50000 Fetch partitions:500                844            856          10          0.0   844337851.0       1.0X
-Num Maps: 50000 Fetch partitions:1000              1688           1704          27          0.0  1687764447.0       0.5X
-Num Maps: 50000 Fetch partitions:1500              2571           2599          44          0.0  2571433464.0       0.3X
+Num Maps: 50000 Fetch partitions:500                769            796          37          0.0   768969736.0       1.0X
+Num Maps: 50000 Fetch partitions:1000              1480           1491          10          0.0  1479519599.0       0.5X
+Num Maps: 50000 Fetch partitions:1500              2234           2339         101          0.0  2233878220.0       0.3X
 
 

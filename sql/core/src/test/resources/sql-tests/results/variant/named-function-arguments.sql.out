@@ -18,6 +18,26 @@ struct<pos:int,key:string,value:variant>
 
 
 -- !query
+SELECT * FROM variant_explode(input => parse_json('{"a": [1, 2]}'), recursive => true)
+-- !query schema
+struct<path:string,pos:int,key:string,value:variant>
+-- !query output
+$.a	0	a	[1,2]
+$.a[0]	0	NULL	1
+$.a[1]	1	NULL	2
+
+
+-- !query
+SELECT * FROM variant_explode_outer(recursive => true, input => parse_json('{"a": [1, 2]}'))
+-- !query schema
+struct<path:string,pos:int,key:string,value:variant>
+-- !query output
+$.a	0	a	[1,2]
+$.a[0]	0	NULL	1
+$.a[1]	1	NULL	2
+
+
+-- !query
 SELECT * FROM variant_explode(parse_json('["hello", "world"]')), variant_explode(parse_json('{"a": true, "b": 3.14}'))
 -- !query schema
 struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>

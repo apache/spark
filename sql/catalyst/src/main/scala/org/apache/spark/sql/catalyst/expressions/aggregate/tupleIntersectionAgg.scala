@@ -67,6 +67,13 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D), (3, 15.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D), (4, 12.0D) tab(key, summary));
        2.0
+      > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0.0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -165,6 +172,13 @@ case class TupleIntersectionAggDouble(
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 1), (2, 2), (3, 3) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 2), (3, 3), (4, 4) tab(key, summary));
        2.0
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0.0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -242,6 +256,8 @@ abstract class TupleIntersectionAggBase[S <: Summary]
   // Type and input validation overrides
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
@@ -315,6 +331,9 @@ abstract class TupleIntersectionAggBase[S <: Summary]
       input: TupleSketchState[S]): TupleSketchState[S] = {
 
     (intersectionBuffer, input) match {
+      // Untouched input states do not contribute to the intersection.
+      case (_, IntersectionTupleAggregationBuffer(intersection)) if !intersection.hasResult() =>
+        intersectionBuffer
       // The input was serialized then deserialized.
       case (
             intersectionBuffer @ IntersectionTupleAggregationBuffer(intersection),

@@ -1871,7 +1871,7 @@ def median(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a numeric, interval, or time.
+        A column that evaluates to a numeric, interval, time, or nanosecond-precision timestamp.
 
     Returns
     -------
@@ -12839,6 +12839,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -12993,6 +12994,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -14481,7 +14483,7 @@ def window(
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
+    def check_string_field(field: Any, fieldName: str) -> None:
         if not field or type(field) is not str:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
@@ -14748,6 +14750,7 @@ def to_timestamp_ltz(
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
         A column that evaluates to a string.
@@ -15246,6 +15249,41 @@ def xxh3_128(col: "ColumnOrName") -> Column:
     [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
     """
     return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+    algorithm.
+
+    The result matches ``FARM_FINGERPRINT`` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. String input is hashed as its UTF-8 bytes.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to fingerprint, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.farm_fingerprint('a').alias('h')).collect()
+    [Row(h=-2743780590904673122)]
+    """
+    return _invoke_function_over_columns("farm_fingerprint", col)
 
 
 @_try_remote_functions
@@ -23123,6 +23161,13 @@ def from_json(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
+      ``spark.sql.charVarchar.standardSemantics.enabled``.
 
     Examples
     --------
@@ -24525,6 +24570,15 @@ def from_xml(
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
     * ``spark.sql.xml.variant.respectInferSchema``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. With this flag, CHAR/VARCHAR
+      map keys are length-checked without padding or trimming; with only
+      ``spark.sql.preserveCharVarcharTypeInfo``, short CHAR keys are padded and
+      over-length keys raise ``EXCEED_LIMIT_LENGTH``.
 
     Examples
     --------
@@ -24807,6 +24861,9 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Affected by these public SQL configurations:
 
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. When CHAR is first-class, padding can change
+      inferred field count and types.
 
     Examples
     --------
@@ -26462,6 +26519,12 @@ def from_csv(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``.
 
     Examples
     --------
@@ -31260,6 +31323,13 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a long, or an array of longs if the rank
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31299,6 +31369,13 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
         The quantile value(s).
         Returns a column that evaluates to a float, or an array of floats if the rank
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
 
     Examples
     --------
@@ -31340,6 +31417,13 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a double, or an array of doubles if the rank
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31379,6 +31463,13 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type BIGINT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3L, NULL)`` is accepted, but ``array(3, NULL)`` fails.
 
     Examples
     --------
@@ -31420,6 +31511,13 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type FLOAT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0F, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31459,6 +31557,13 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type DOUBLE, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0D, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
 
     Examples
     --------
@@ -34859,10 +34964,13 @@ def vector_avg(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def vector_sum(col: "ColumnOrName") -> Column:
-    """Aggregate function: returns the element-wise sum of float vectors in a group.
+    """Aggregate function: returns the element-wise sum of float or double vectors in a group.
     All vectors must have the same dimension.
 
     .. versionadded:: 4.3.0
+
+    .. versionchanged:: 4.4.0
+        Supports arrays of doubles.
 
     Parameters
     ----------
@@ -34872,7 +34980,8 @@ def vector_sum(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the element-wise sum vector as an array of floats.
+        the element-wise sum vector as an array with the same element type as the input
+        (float or double).
 
     Examples
     --------

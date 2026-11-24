@@ -10,9 +10,10 @@ select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval 4 month 2 weeks 3 microseconds"
+    "input" : "4 month 2 weeks 3 microseconds"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -355,9 +356,10 @@ select -interval '-1 month 1 day -1 second'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -388,9 +390,10 @@ select -interval -1 month 1 day -1 second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -421,9 +424,10 @@ select +interval '-1 month 1 day -1 second'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -454,9 +458,10 @@ select +interval -1 month 1 day -1 second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -823,9 +828,10 @@ select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisec
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
+    "input" : "1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -863,9 +869,10 @@ select interval '30' year '25' month '-100' day '40' hour '80' minute '299.88998
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second"
+    "input" : "30 year 25 month -100 day 40 hour 80 minute 299.889987299 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1223,7 +1230,11 @@ select interval 1 year to month
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0027",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.FROM_TO_VALUE_NOT_STRING",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "1"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1261,7 +1272,8 @@ select interval '10-9' year to month '2-1' year to month
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1277,7 +1289,8 @@ select interval '10-9' year to month '12:11:10' hour to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1293,7 +1306,8 @@ select interval '1 15:11' day to minute '12:11:10' hour to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1309,7 +1323,8 @@ select interval 1 year '2-1' year to month
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1325,7 +1340,8 @@ select interval 1 year '12:11:10' hour to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1341,7 +1357,8 @@ select interval '10-9' year to month '1' year
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1357,7 +1374,8 @@ select interval '12:11:10' hour to second '1' year
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2116,7 +2134,7 @@ SELECT
   to_csv(named_struct('a', interval 32 year, 'b', interval 10 month)),
   from_csv(to_csv(named_struct('a', interval 32 year, 'b', interval 10 month)), 'a interval year, b interval month')
 -- !query analysis
-Project [from_json(StructField(a,CalendarIntervalType,true), {"a":"1 days"}, Some(America/Los_Angeles), false) AS from_json({"a":"1 days"})#x, from_csv(StructField(a,IntegerType,true), StructField(b,YearMonthIntervalType(0,0),true), 1, 1, Some(America/Los_Angeles), None) AS from_csv(1, 1)#x, to_json(from_json(StructField(a,CalendarIntervalType,true), {"a":"1 days"}, Some(America/Los_Angeles), false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1 days"}))#x, to_csv(from_csv(StructField(a,IntegerType,true), StructField(b,YearMonthIntervalType(0,0),true), 1, 1, Some(America/Los_Angeles), None), Some(America/Los_Angeles)) AS to_csv(from_csv(1, 1))#x, to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH), Some(America/Los_Angeles)) AS to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH))#x, from_csv(StructField(a,YearMonthIntervalType(0,0),true), StructField(b,YearMonthIntervalType(1,1),true), to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH)))#x]
+Project [from_json(StructField(a,CalendarIntervalType,true), {"a":"1 days"}, Some(America/Los_Angeles), false, false) AS from_json({"a":"1 days"})#x, from_csv(StructField(a,IntegerType,true), StructField(b,YearMonthIntervalType(0,0),true), 1, 1, Some(America/Los_Angeles), None) AS from_csv(1, 1)#x, to_json(from_json(StructField(a,CalendarIntervalType,true), {"a":"1 days"}, Some(America/Los_Angeles), false, false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1 days"}))#x, to_csv(from_csv(StructField(a,IntegerType,true), StructField(b,YearMonthIntervalType(0,0),true), 1, 1, Some(America/Los_Angeles), None), Some(America/Los_Angeles)) AS to_csv(from_csv(1, 1))#x, to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH), Some(America/Los_Angeles)) AS to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH))#x, from_csv(StructField(a,YearMonthIntervalType(0,0),true), StructField(b,YearMonthIntervalType(1,1),true), to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(a, INTERVAL '32' YEAR, b, INTERVAL '10' MONTH)))#x]
 +- OneRowRelation
 
 
@@ -2127,7 +2145,7 @@ SELECT
   to_json(map('a', interval 100 day 130 minute)),
   from_json(to_json(map('a', interval 100 day 130 minute)), 'a interval day to minute')
 -- !query analysis
-Project [from_json(StructField(a,DayTimeIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false) AS from_json({"a":"1"})#x, to_json(from_json(StructField(a,DayTimeIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1"}))#x, to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE), Some(America/Los_Angeles)) AS to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE))#x, from_json(StructField(a,DayTimeIntervalType(0,2),true), to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE), Some(America/Los_Angeles)), Some(America/Los_Angeles), false) AS from_json(to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE)))#x]
+Project [from_json(StructField(a,DayTimeIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false, false) AS from_json({"a":"1"})#x, to_json(from_json(StructField(a,DayTimeIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false, false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1"}))#x, to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE), Some(America/Los_Angeles)) AS to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE))#x, from_json(StructField(a,DayTimeIntervalType(0,2),true), to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE), Some(America/Los_Angeles)), Some(America/Los_Angeles), false, false) AS from_json(to_json(map(a, INTERVAL '100 02:10' DAY TO MINUTE)))#x]
 +- OneRowRelation
 
 
@@ -2138,7 +2156,7 @@ SELECT
   to_json(map('a', interval 32 year 10 month)),
   from_json(to_json(map('a', interval 32 year 10 month)), 'a interval year to month')
 -- !query analysis
-Project [from_json(StructField(a,YearMonthIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false) AS from_json({"a":"1"})#x, to_json(from_json(StructField(a,YearMonthIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1"}))#x, to_json(map(a, INTERVAL '32-10' YEAR TO MONTH), Some(America/Los_Angeles)) AS to_json(map(a, INTERVAL '32-10' YEAR TO MONTH))#x, from_json(StructField(a,YearMonthIntervalType(0,1),true), to_json(map(a, INTERVAL '32-10' YEAR TO MONTH), Some(America/Los_Angeles)), Some(America/Los_Angeles), false) AS from_json(to_json(map(a, INTERVAL '32-10' YEAR TO MONTH)))#x]
+Project [from_json(StructField(a,YearMonthIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false, false) AS from_json({"a":"1"})#x, to_json(from_json(StructField(a,YearMonthIntervalType(0,0),true), {"a":"1"}, Some(America/Los_Angeles), false, false), Some(America/Los_Angeles)) AS to_json(from_json({"a":"1"}))#x, to_json(map(a, INTERVAL '32-10' YEAR TO MONTH), Some(America/Los_Angeles)) AS to_json(map(a, INTERVAL '32-10' YEAR TO MONTH))#x, from_json(StructField(a,YearMonthIntervalType(0,1),true), to_json(map(a, INTERVAL '32-10' YEAR TO MONTH), Some(America/Los_Angeles)), Some(America/Los_Angeles), false, false) AS from_json(to_json(map(a, INTERVAL '32-10' YEAR TO MONTH)))#x]
 +- OneRowRelation
 
 
@@ -2294,9 +2312,10 @@ select interval '1 day 2' day
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.NON_NUMERIC_MULTI_UNIT_VALUE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "value" : "1 day 2"
+    "input" : "1 day 2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2313,9 +2332,10 @@ select interval 'interval 1' day
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.NON_NUMERIC_MULTI_UNIT_VALUE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "value" : "interval 1"
+    "input" : "interval 1"
   },
   "queryContext" : [ {
     "objectType" : "",

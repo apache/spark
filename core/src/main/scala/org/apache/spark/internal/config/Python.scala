@@ -97,6 +97,10 @@ private[spark] object Python {
   private val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY = "spark.python.worker.idleTimeoutSeconds"
   private val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY = "spark.python.worker.killOnIdleTimeout"
 
+  // The idle timeout is waited for as an Int of milliseconds, both by the socket read timeout
+  // and by the selectors of the JDK, so a longer one cannot be honored.
+  private[spark] val PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS: Long = Int.MaxValue / 1000
+
   val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS = ConfigBuilder(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY)
     .doc("The time (in seconds) Spark will wait for activity " +
       "(e.g., data transfer or communication) from a Python worker before considering it " +
@@ -104,10 +108,13 @@ private[spark] object Python {
       "Spark will log the network-related status for debugging purposes. " +
       "However, the Python worker will remain active and continue waiting for communication " +
       s"unless explicitly terminated via $PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY." +
-      "The default is `0` that means no timeout.")
+      "The default is `0` that means no timeout. " +
+      s"The maximum is $PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS seconds (about 24.8 days).")
     .version("4.0.0")
     .timeConf(TimeUnit.SECONDS)
-    .checkValue(_ >= 0, "The idle timeout should be 0 or positive.")
+    .checkValue(v => v >= 0 && v <= PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS,
+      "The idle timeout should be 0 or positive, and at most " +
+        s"$PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS seconds.")
     .createWithDefault(0)
 
   val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT = ConfigBuilder(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY)
@@ -158,7 +165,9 @@ private[spark] object Python {
         "while the main task thread reads output from the Python worker, allowing the two " +
         "directions to overlap. This can improve throughput for some workloads " +
         "(e.g., multi-column UDFs or compute-heavy UDFs like ML inference); for light, " +
-        "single-column UDFs the overhead of the extra thread may offset the gain.")
+        "single-column UDFs the overhead of the extra thread may offset the gain. " +
+        "Detailed Python UDF phase timings are not collected in this mode. " +
+        "pythonNumPipelinedTasks counts tasks using this mode.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

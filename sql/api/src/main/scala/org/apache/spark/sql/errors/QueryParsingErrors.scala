@@ -19,12 +19,13 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.antlr.v4.runtime.ParserRuleContext
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.util.SparkParserUtils
 
 /**
  * Object for grouping all error messages of the query parsing. Currently it includes all
@@ -33,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
+    SparkException.internalError(s"Unexpected INSERT statement: ${ctx.getClass.getSimpleName}.")
   }
 
   def parserStackOverflow(parserRuleContext: ParserRuleContext): Throwable = {
@@ -101,7 +102,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def emptySourceForMergeError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
+    SparkException.internalError("MERGE INTO has neither a source table nor a source query.")
   }
 
   def insertedValueNumberNotMatchColumnNumberError(
@@ -308,20 +309,24 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0014", ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_TABLESAMPLE", ctx)
   }
 
-  def tableSampleByBytesUnsupportedError(msg: String, ctx: SampleMethodContext): Throwable = {
+  def tableSampleByBytesUnsupportedError(
+      sampleMethod: String,
+      ctx: SampleMethodContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0015",
-      messageParameters = Map("msg" -> msg),
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      messageParameters = Map("sampleMethod" -> sampleMethod),
       ctx)
   }
 
-  def invalidByteLengthLiteralError(bytesStr: String, ctx: SampleByBytesContext): Throwable = {
+  def invalidByteLengthLiteralError(
+      sampleMethod: String,
+      ctx: SampleByBytesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0016",
-      messageParameters = Map("bytesStr" -> bytesStr),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+      messageParameters = Map("sampleMethod" -> sampleMethod),
       ctx)
   }
 
@@ -374,10 +379,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def trimOptionUnsupportedError(trimOption: Int, ctx: TrimContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0018",
-      messageParameters = Map("trimOption" -> trimOption.toString),
-      ctx)
+    SparkException.internalError(s"Unexpected TRIM option token type: $trimOption.")
   }
 
   def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
@@ -443,19 +445,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0024", ctx)
+  def fromToIntervalWithOtherUnitsError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS", ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0026",
-      messageParameters = Map("value" -> value),
+      errorClass = "INVALID_INTERVAL_FORMAT.NON_NUMERIC_MULTI_UNIT_VALUE",
+      messageParameters = Map("input" -> value),
       ctx)
   }
 
   def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0027", ctx)
+    new ParseException(
+      errorClass = "INVALID_INTERVAL_FORMAT.FROM_TO_VALUE_NOT_STRING",
+      messageParameters = Map("input" -> ctx.getText),
+      ctx)
   }
 
   def fromToIntervalUnsupportedError(
@@ -475,10 +480,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
+  def mixedIntervalUnitsError(input: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0029",
-      messageParameters = Map("literal" -> literal),
+      errorClass = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+      messageParameters = Map("input" -> input),
       ctx)
   }
 
@@ -582,7 +587,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       pathTwo: String,
       ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0032",
+      errorClass = "DUPLICATE_TABLE_PATH",
       messageParameters = Map("pathOne" -> pathOne, "pathTwo" -> pathTwo),
       ctx)
   }
@@ -591,18 +596,29 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     SparkException.internalError("Expected either STORED AS or STORED BY, not both.")
   }
 
-  def operationInHiveStyleCommandUnsupportedError(
-      operation: String,
-      command: String,
-      ctx: StatementContext,
-      msgOpt: Option[String] = None): Throwable = {
+  def changeColumnRenameUnsupportedError(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_CHANGE_COLUMN.RENAME", ctx)
+  }
+
+  def changeColumnNotNullUnsupportedError(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_CHANGE_COLUMN.NOT_NULL", ctx)
+  }
+
+  def replaceColumnsNestedColumnUnsupportedError(
+      columnName: Seq[String],
+      ctx: StatementContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0034",
-      messageParameters = Map(
-        "operation" -> operation,
-        "command" -> command,
-        "msg" -> msgOpt.map(m => s", $m").getOrElse("")),
+      errorClass = "UNSUPPORTED_REPLACE_COLUMNS.NESTED_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)),
       ctx)
+  }
+
+  def replaceColumnsNotNullUnsupportedError(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_REPLACE_COLUMNS.NOT_NULL", ctx)
+  }
+
+  def replaceColumnsColumnPositionUnsupportedError(ctx: StatementContext): Throwable = {
+    new ParseException(errorClass = "UNSUPPORTED_REPLACE_COLUMNS.COLUMN_POSITION", ctx)
   }
 
   def operationNotAllowedError(message: String, ctx: ParserRuleContext): Throwable = {
@@ -650,11 +666,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def addCatalogInCacheTableAsSelectNotAllowedError(
-      quoted: String,
+      nameParts: Seq[String],
       ctx: CacheTableContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0037",
-      messageParameters = Map("quoted" -> quoted),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      messageParameters =
+        Map("statement" -> toSQLStmt("CACHE TABLE ... AS SELECT"), "name" -> toSQLId(nameParts)),
       ctx)
   }
 
@@ -745,23 +762,27 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def invalidTimeZoneDisplacementValueError(ctx: SetTimeZoneContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0045", ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.SET_TIME_ZONE_INVALID_VALUE", ctx)
   }
 
   def createTempTableNotSpecifyProviderError(ctx: CreateTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0046", ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_WITHOUT_PROVIDER", ctx)
   }
 
   def rowFormatNotUsedWithStoredAsError(ctx: CreateTableLikeContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0047", ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.ROW_FORMAT_SERDE_WITHOUT_STORED_AS", ctx)
   }
 
   def useDefinedRecordReaderOrWriterClassesError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0048", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_RECORD_READER_WRITER", ctx)
   }
 
   def directoryPathAndOptionsPathBothSpecifiedError(ctx: InsertOverwriteDirContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0049", ctx)
+    new ParseException(errorClass = "INSERT_OVERWRITE_DIRECTORY_PATH.BOTH_SPECIFIED", ctx)
+  }
+
+  def directoryPathMissingError(ctx: InsertOverwriteDirContext): Throwable = {
+    new ParseException(errorClass = "INSERT_OVERWRITE_DIRECTORY_PATH.MISSING", ctx)
   }
 
   def unsupportedLocalFileSchemeError(
@@ -775,7 +796,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0051",
+      errorClass = "UNSUPPORTED_FEATURE.EMPTY_GROUPING_SET_IN_CUBE_OR_ROLLUP",
       messageParameters = Map("element" -> element),
       ctx)
   }
@@ -824,7 +845,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_VIEW_WITH_IF_NOT_EXISTS", ctx)
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
@@ -908,10 +929,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
+  def timeTravelTimestampReferencesColumnsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0056",
-      messageParameters = Map("reason" -> reason),
+      errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      messageParameters = Map("expr" -> quoteByDefault(SparkParserUtils.source(ctx))),
       ctx)
   }
 
@@ -1031,6 +1052,18 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
   }
 
+  def clusterByWithDistributedByPartition(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED",
+      ctx)
+  }
+
+  def distributedByPartitionWithoutPartitioningError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED",
+      ctx)
+  }
+
   def invalidConstraintCharacteristics(
       ctx: ParserRuleContext,
       characteristics: String): Throwable = {
@@ -1068,6 +1101,46 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
+  }
+
+  def optionalReferenceInDmlNotSupportedError(
+      statement: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+      messageParameters = Map("context" -> toSQLStmt(statement)),
+      ctx)
+  }
+
+  def optionalReferenceInDdlNotSupportedError(
+      clause: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
+      messageParameters = Map("context" -> toSQLStmt(clause)),
+      ctx)
+  }
+
+  def optionalReferenceInPartitionSpecNotSupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
+      messageParameters = Map("context" -> toSQLStmt("PARTITION")),
+      ctx)
+  }
+
+  /**
+   * The syntax error for the `?` optional-reference marker `marker` of the reference `ctx` where
+   * the grammar accepts the marker but it has no meaning, e.g. after a regular expression that
+   * selects columns. Like the syntax error that the parser raises for any other unexpected token,
+   * it points at the token.
+   */
+  def unexpectedOptionalReferenceMarkerError(ctx: ParserRuleContext, marker: Token): Throwable = {
+    new ParseException(
+      command = Option(SparkParserUtils.command(ctx)),
+      start = SparkParserUtils.position(marker),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      messageParameters = Map("error" -> "'?'", "hint" -> ""),
+      queryContext = Array.empty)
   }
 
   /**

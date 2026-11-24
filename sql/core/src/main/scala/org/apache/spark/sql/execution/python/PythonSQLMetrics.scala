@@ -21,6 +21,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
+  // PythonPhaseMetrics supplies the phase schema; Python decides whether to collect timing.
+  // A zero pythonNumTimingReports means detailed timing data is unavailable.
   protected val pythonMetrics: Map[String, SQLMetric] = {
     PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
@@ -28,12 +30,22 @@ trait PythonSQLMetrics { self: SparkPlan =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
-    } ++ additionalMetrics
+    } ++ additionalMetrics ++ phaseMetrics
   }
 
   // Hook for subtraits to add operator-specific metrics on top of the shared ones above. Default
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].
   protected def additionalMetrics: Map[String, SQLMetric] = Map.empty
+
+  protected def phaseMetrics: Map[String, SQLMetric] = Map.empty
+
+  protected def createPythonPhaseMetrics(): Map[String, SQLMetric] = {
+    PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonPhaseCountMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createMetric(sparkContext, v)
+    }
+  }
 
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 }
@@ -56,8 +68,30 @@ object PythonSQLMetrics {
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {
-    Map("pythonNumRowsReceived" -> "number of output rows")
+    Map(
+      "pythonNumRowsReceived" -> "number of output rows",
+      "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
   }
+
+  val pythonPhaseTimingMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonDataReadTime" -> "time to read and deserialize Arrow data",
+      "pythonInputPreparationTime" -> "time to prepare Python UDF input",
+      "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
+      "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
+      "pythonDataWriteTime" -> "time to serialize and write Arrow data")
+  }
+
+  val pythonPhaseCountMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonNumTimingReports" -> "number of Python tasks with detailed timing",
+      "pythonNumTimedBatches" -> "number of Python batches with detailed timing")
+  }
+}
+
+/** Shared detailed timing schema for Python execution operators. */
+trait PythonPhaseMetrics extends PythonSQLMetrics { self: SparkPlan =>
+  override protected def phaseMetrics: Map[String, SQLMetric] = createPythonPhaseMetrics()
 }
 
 /**
@@ -80,7 +114,7 @@ object PythonSQLMetrics {
  * Also kept out of pythonSizeMetricsDesc, which feeds the Python data source DSv2 metric
  * declarations (UserDefinedPythonDataSource.createPythonMetrics) that never populate these.
  */
-trait PythonPickleBatchMetrics extends PythonSQLMetrics { self: SparkPlan =>
+trait PythonPickleBatchMetrics extends PythonPhaseMetrics { self: SparkPlan =>
   override protected def additionalMetrics: Map[String, SQLMetric] =
     PythonPickleBatchMetrics.pickleBatchSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)

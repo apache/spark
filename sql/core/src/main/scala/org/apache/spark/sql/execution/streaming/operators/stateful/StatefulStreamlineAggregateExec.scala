@@ -300,10 +300,6 @@ case class StatefulStreamlineAggregateExec(
             incrementalEvictionIter.foreach { evictionIter =>
               allRemovalsTimeMs += timeTakenMs {
                 var numRemovalsCurrRecord = 0
-                // NOTE: EvictionIterator removes (and counts) a row inside hasNext, not next(), so
-                //  a bare hasNext already deletes and bumps the metrics. To stop at exactly
-                //  incrementalCleanupFactor removals per input we must re-check the count before
-                //  each hasNext rather than draining the iterator.
                 while (numRemovalsCurrRecord < incrementalCleanupFactor
                   && evictionIter.hasNext) {
                   // The removal happens inside of the iterator; in Update mode,
@@ -419,8 +415,8 @@ class StatefulStreamlineAggregationProcessor(
   // Guava logs and SWALLOWS any exception a removal listener throws (see the
   // CacheBuilder.removalListener scaladoc), so the put below cannot fail the task on its own --
   // without this capture a failed write would be silently dropped and the batch would still commit,
-  // losing that key's update. flushDirtyWrites rethrows it so the task fails instead of committing
-  // partial state.
+  // losing that key's update. Processing and flushing must propagate the captured failure instead
+  // of continuing with potentially stale state or committing partial state.
   private var writeFailure: Option[Throwable] = None
 
   // The writes which did not go into state store yet. We also leverage this dirty writes to the
@@ -460,6 +456,13 @@ class StatefulStreamlineAggregationProcessor(
     throw new UnsupportedOperationException(
       "next is not supported for StatefulStreamlineAggregationProcessor")
 
+  private def throwIfWriteFailed(): Unit = {
+    writeFailure.foreach { e =>
+      throw new IllegalStateException(
+        "Failed to write an aggregation update to the state store", e)
+    }
+  }
+
   /**
    * Flush the dirty writes to state store. This should be called at the end of each microbatch.
    *
@@ -468,13 +471,12 @@ class StatefulStreamlineAggregationProcessor(
    */
   def flushDirtyWrites(): Unit = {
     dirtyWrites.invalidateAll()
-    writeFailure.foreach { e =>
-      throw new IllegalStateException(
-        "Failed to write an aggregation update to the state store", e)
-    }
+    throwIfWriteFailed()
   }
 
   def process(newInput: InternalRow): UnsafeRow = {
+    throwIfWriteFailed()
+
     // groupingProjection hands back the same UnsafeRow on every call, overwriting its bytes, so the
     // key has to be copied before the cache can store it. Without the copy, one shared row becomes
     // the key of every entry: each entry is then only findable through the hash captured when it
@@ -484,6 +486,8 @@ class StatefulStreamlineAggregationProcessor(
     val buffer = newAggregationBuffer()
 
     val existingValueRef = dirtyWrites.get(groupingKey)
+    // A lookup can evict an entry and capture a write failure in the removal listener.
+    throwIfWriteFailed()
 
     if (existingValueRef.getRow != null) {
       processRow(buffer, existingValueRef.getRow)

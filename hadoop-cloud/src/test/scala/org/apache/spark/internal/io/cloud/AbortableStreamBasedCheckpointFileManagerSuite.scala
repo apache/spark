@@ -16,7 +16,7 @@
  */
 package org.apache.spark.internal.io.cloud
 
-import java.io.File
+import java.io.{File, IOException}
 
 import scala.util.Properties
 
@@ -30,8 +30,39 @@ import org.apache.spark.internal.io.cloud.abortable.AbortableFileSystem
 import org.apache.spark.sql.execution.streaming.CheckpointFileManagerTests
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 
-class AbortableStreamBasedCheckpointFileManagerSuite
+/** Tests that apply to any file system with abortable stream support. */
+abstract class AbortableStreamBasedCheckpointFileManagerTests
   extends CheckpointFileManagerTests with Logging {
+
+  override def checkLeakingCrcFiles(path: Path): Unit = { }
+
+  test("SPARK-60264: close() should fail if the destination was created after createAtomic") {
+    withTempHadoopPath { basePath =>
+      val fm = createManager(basePath)
+      val dir = new Path(basePath, "concurrent-create")
+      fm.mkdirs(dir)
+      val path = new Path(dir, "file")
+      val out = fm.createAtomic(path, overwriteIfPossible = false)
+      out.writeInt(1)
+      // Another writer creates the destination between createAtomic() and close().
+      val concurrentOut = fm.createAtomic(path, overwriteIfPossible = true)
+      concurrentOut.writeInt(2)
+      concurrentOut.close()
+      intercept[FileAlreadyExistsException] {
+        out.close()
+      }
+      val in = fm.open(path)
+      try {
+        assert(in.readInt() === 2)
+      } finally {
+        in.close()
+      }
+    }
+  }
+}
+
+class AbortableStreamBasedCheckpointFileManagerSuite
+  extends AbortableStreamBasedCheckpointFileManagerTests {
 
   override def withTempHadoopPath(p: Path => Unit): Unit = {
     withTempDir { f: File =>
@@ -40,19 +71,35 @@ class AbortableStreamBasedCheckpointFileManagerSuite
     }
   }
 
-  override def checkLeakingCrcFiles(path: Path): Unit = { }
-
   override def createManager(path: Path): CheckpointFileManager = {
     val conf = new Configuration()
     conf.set(s"fs.AbstractFileSystem.${AbortableFileSystem.ABORTABLE_FS_SCHEME}.impl",
       "org.apache.spark.internal.io.cloud.abortable.AbstractAbortableFileSystem")
     new AbortableStreamBasedCheckpointFileManager(path, conf)
   }
+
+  test("SPARK-60264: close() should propagate failures of the underlying stream") {
+    withTempHadoopPath { basePath =>
+      val fm = createManager(basePath)
+      val dir = new Path(basePath, "dir")
+      fm.mkdirs(dir)
+      val path = new Path(dir, "file")
+      val out = fm.createAtomic(path, overwriteIfPossible = false)
+      out.writeInt(1)
+      // Like S3A, the test file system only writes the file when the stream is closed, so
+      // removing the parent directory makes that write fail.
+      fm.delete(dir)
+      intercept[IOException] {
+        out.close()
+      }
+      assert(!fm.exists(path))
+    }
+  }
 }
 
 @IntegrationTestSuite
 class AwsS3AbortableStreamBasedCheckpointFileManagerSuite
-    extends AbortableStreamBasedCheckpointFileManagerSuite with BeforeAndAfter {
+    extends AbortableStreamBasedCheckpointFileManagerTests with BeforeAndAfter {
 
   val s3aPath = Properties.envOrNone("S3A_PATH")
 
