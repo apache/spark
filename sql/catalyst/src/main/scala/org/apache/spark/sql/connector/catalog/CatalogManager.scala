@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{METADATA_JSON, REASON}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
@@ -709,7 +710,8 @@ private[sql] object CatalogManager extends Logging {
       case Right(entries) => Some(entries)
       case Left(reason) =>
         logWarning(
-          s"Invalid stored SQL path metadata: $reason. Raw payload: $storedPathStr")
+          log"Invalid stored SQL path metadata: ${MDC(REASON, reason)}. " +
+            log"Raw payload: ${MDC(METADATA_JSON, storedPathStr)}")
         None
     }
   }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.avro.AvroOptions
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.execution.datasources.v2.FileScan
+import org.apache.spark.sql.execution.datasources.v2.RuntimePartitionPruningFileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -41,7 +41,7 @@ case class AvroScan(
     options: CaseInsensitiveStringMap,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty) extends RuntimePartitionPruningFileScan {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -50,7 +50,7 @@ case class AvroScan(
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val broadcastedConf = SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = new AvroOptions(caseSensitiveMap, hadoopConf)
-    // The partition values are already truncated in `FileScan.partitions`.
+    // The partition values are already truncated in `FileScan.filePartitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     AvroPartitionReaderFactory(
       conf,

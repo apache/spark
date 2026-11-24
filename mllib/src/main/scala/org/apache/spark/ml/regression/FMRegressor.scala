@@ -269,7 +269,8 @@ private[ml] object FactorizationMachines {
 /**
  * Params for FMRegressor
  */
-private[regression] trait FMRegressorParams extends FactorizationMachinesParams {
+private[regression] trait FMRegressorParams extends FactorizationMachinesParams
+  with HasIntermediateStorageLevel {
 }
 
 // scalastyle:off line.size.limit
@@ -408,6 +409,10 @@ class FMRegressor @Since("3.0.0") (
   @Since("3.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]
     ): FMRegressionModel = instrumented { instr =>
@@ -415,7 +420,8 @@ class FMRegressor @Since("3.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver,
+      intermediateStorageLevel)
 
     val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
@@ -428,7 +434,9 @@ class FMRegressor @Since("3.0.0") (
     ).rdd.map { case Row(l: Double, v: Vector) => (l, OldVectors.fromML(v))
     }.setName("training instances")
 
-    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
+    if (handlePersistence) {
+      data.persist(StorageLevel.fromString($(intermediateStorageLevel)))
+    }
 
     val (coefficients, _) = trainImpl(data, numFeatures, SquaredError)
 

@@ -338,3 +338,93 @@ SELECT xxh3_128(CAST(NULL AS BINARY))
 -- !query analysis
 Project [xxh3_128(cast(null as binary)) AS xxh3_128(CAST(NULL AS BINARY))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint('Spark')
+-- !query analysis
+Project [farm_fingerprint(cast(Spark as binary)) AS farm_fingerprint(Spark)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint(CAST('Spark' AS BINARY))
+-- !query analysis
+Project [farm_fingerprint(cast(Spark as binary)) AS farm_fingerprint(CAST(Spark AS BINARY))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint('')
+-- !query analysis
+Project [farm_fingerprint(cast( as binary)) AS farm_fingerprint()#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint(concat(CAST(1 AS STRING), 'foo', CAST(true AS STRING)))
+-- !query analysis
+Project [farm_fingerprint(cast(concat(cast(1 as string), foo, cast(true as string)) as binary)) AS farm_fingerprint(concat(CAST(1 AS STRING), foo, CAST(true AS STRING)))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint(CAST(NULL AS STRING))
+-- !query analysis
+Project [farm_fingerprint(cast(cast(null as string) as binary)) AS farm_fingerprint(CAST(NULL AS STRING))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint(CAST(NULL AS BINARY))
+-- !query analysis
+Project [farm_fingerprint(cast(null as binary)) AS farm_fingerprint(CAST(NULL AS BINARY))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT farm_fingerprint(1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"farm_fingerprint(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "farm_fingerprint(1)"
+  } ]
+}
+
+
+-- !query
+SELECT farm_fingerprint(array(1, 2))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"array(1, 2)\"",
+    "inputType" : "\"ARRAY<INT>\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"farm_fingerprint(array(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "farm_fingerprint(array(1, 2))"
+  } ]
+}

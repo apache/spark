@@ -27,7 +27,7 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -128,6 +128,21 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       snapshotsStore.clock)
     podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
     verify(driverPodResource, never()).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58776: executor conf carries the auth secret and SparkConf SSL RPC passwords") {
+    val sslConf = confWithAuthAndSslRpc(conf)
+    val sslAllocator = new DeploymentPodsAllocator(sslConf, new SecurityManager(sslConf),
+      executorBuilder, kubernetesClient, snapshotsStore, snapshotsStore.clock)
+    sslAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    sslAllocator.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    val captor = ArgumentCaptor.forClass(classOf[KubernetesExecutorConf])
+    verify(executorBuilder).buildFromFeatures(
+      captor.capture(), meq(kubernetesClient), any(classOf[ResourceProfile]))
+    assert(captor.getValue.authSecret === Some(TEST_AUTH_SECRET))
+    assert(captor.getValue.sslRpcPasswordEnvs ===
+      Map(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> TEST_RPC_SSL_KEY_STORE_PASSWORD))
   }
 
   test("creates deployments per resource profile and seeds deletion cost annotation") {

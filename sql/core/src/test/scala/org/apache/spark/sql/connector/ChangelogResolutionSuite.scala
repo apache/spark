@@ -34,12 +34,14 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
  * RelationChanges -> resolveChangelog -> DataSourceV2Relation(ChangelogTable).
  */
+@DataSourceV2Test
 class ChangelogResolutionSuite extends SharedSparkSession {
 
   private val cdcCatalogName = "cdc_catalog"
@@ -164,6 +166,135 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assert(colNames.contains("_commit_timestamp"))
   }
 
+  test("CHANGES metadata columns are available internally but not user-queryable") {
+    val ident = Identifier.of(Array.empty, "test_table")
+    val catalog = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    val metadataColumn = new MetadataColumn {
+      override def name(): String = "_metadata"
+      override def dataType(): StructType = new StructType()
+        .add("row_id", LongType, nullable = false)
+      override def isNullable(): Boolean = false
+    }
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
+      rowIdPaths = Seq(Seq("_metadata", "row_id")),
+      rowVersionName = Some("_commit_version"),
+      metadataColumns = Seq(metadataColumn)))
+
+    val changes =
+      s"$cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5"
+    val starSchema = sql(s"SELECT * FROM $changes").schema
+    assert(!starSchema.fieldNames.contains("_metadata"))
+
+    Seq(false, true).foreach { computeUpdates =>
+      val netChanges = spark.read
+        .option("startingVersion", "1")
+        .option("endingVersion", "5")
+        .option("deduplicationMode", "netChanges")
+        .option("computeUpdates", computeUpdates.toString)
+        .changes(s"$cdcCatalogName.test_table")
+      assert(netChanges.schema == starSchema)
+    }
+
+    def assertMetadataUnavailable(query: => Unit): Unit = {
+      val error = intercept[AnalysisException](query)
+      assert(error.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      assert(error.getMessageParameters.get("objectName").contains("_metadata"))
+    }
+
+    assertMetadataUnavailable {
+      sql(s"SELECT _metadata.row_id FROM $changes").schema
+    }
+    val changesDf = spark.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "5")
+      .changes(s"$cdcCatalogName.test_table")
+    checkError(
+      intercept[AnalysisException] {
+        changesDf.select(changesDf.metadataColumn("_metadata").getField("row_id")).schema
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`_metadata`"))
+    Seq(
+      s"SELECT * FROM $changes WHERE _metadata.row_id = 1",
+      s"SELECT * FROM $changes ORDER BY _metadata.row_id",
+      s"SELECT (SELECT max(_metadata.row_id) FROM $changes)",
+      s"SELECT 1 WHERE EXISTS (SELECT _metadata.row_id FROM $changes)",
+      s"SELECT 1L WHERE 1L IN (SELECT _metadata.row_id FROM $changes)").foreach { query =>
+      assertMetadataUnavailable { sql(query).schema }
+    }
+  }
+
+  for {
+    streaming <- Seq(false, true)
+    mode <- Seq("none", "dropCarryovers", "netChanges")
+  } {
+    test(s"changelog output boundary: streaming=$streaming, mode=$mode") {
+      val metadataColumn = new MetadataColumn {
+        override def name(): String = "_metadata"
+        override def dataType(): StructType = new StructType()
+          .add("row_id", LongType, nullable = false)
+        override def isNullable(): Boolean = false
+      }
+      cdcCatalog.setChangelogProperties(ident, ChangelogProperties(
+        containsCarryoverRows = true,
+        containsIntermediateChanges = true,
+        rowIdPaths = Seq(Seq("_metadata", "row_id")),
+        rowVersionName = Some("_commit_version"),
+        metadataColumns = Seq(metadataColumn)))
+      val changes = if (streaming) {
+        spark.readStream.option("deduplicationMode", mode)
+          .changes(s"$cdcCatalogName.test_table")
+      } else {
+        spark.read.option("startingVersion", "1").option("endingVersion", "5")
+          .option("deduplicationMode", mode).changes(s"$cdcCatalogName.test_table")
+      }
+      assert(changes.schema.fieldNames.toSeq ==
+        Seq("id", "data", "_change_type", "_commit_version", "_commit_timestamp"))
+      assert(changes.queryExecution.analyzed.metadataOutput.isEmpty)
+      assert(changes.alias("c").select("c.id").schema.fieldNames.toSeq == Seq("id"))
+      if (!streaming) {
+        val joined = changes.alias("left").join(changes.alias("right"), Seq("id"))
+        assert(!joined.schema.fieldNames.exists(_.startsWith("_metadata")))
+      }
+      val error = intercept[AnalysisException] {
+        changes.select(changes.metadataColumn("_metadata")).schema
+      }
+      checkError(
+        error,
+        condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        parameters = Map("objectName" -> "`_metadata`"))
+    }
+  }
+
+  test("streaming netChanges preserves internal changelog row identity") {
+    val metadataColumn = new MetadataColumn {
+      override def name(): String = "_metadata"
+      override def dataType(): StructType = new StructType()
+        .add("row_id", LongType, nullable = false)
+      override def isNullable(): Boolean = false
+    }
+    cdcCatalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdPaths = Seq(Seq("_metadata", "row_id"), Seq("id")),
+      rowVersionName = Some("_commit_version"),
+      metadataColumns = Seq(metadataColumn)))
+    val expectedSchema = sql(
+      s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5").schema
+    Seq(false, true).foreach { computeUpdates =>
+      val changes = spark.readStream
+        .option("deduplicationMode", "netChanges")
+        .option("computeUpdates", computeUpdates.toString)
+        .changes(s"$cdcCatalogName.test_table")
+      assert(changes.schema == expectedSchema)
+    }
+  }
+
   test("DataStreamReader - changes() rejects user-specified schema") {
     val e = intercept[AnalysisException] {
       import org.apache.spark.sql.types.StructType
@@ -280,6 +411,13 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     id, UTF8String.fromString(s"data-$id"), UTF8String.fromString(Changelog.CHANGE_TYPE_INSERT),
     version, version * 1000000L)
 
+  private def lookupSharedRelationCache(
+      catalog: CatalogPlugin,
+      ident: Identifier): Option[LogicalPlan] = {
+    spark.sharedState.relationCache.lookup(
+      catalog, ident, tableId = None, CaseInsensitiveStringMap.empty())
+  }
+
   test("CDC metadata loads are shared across scan options but isolate contexts and state values") {
     val cat = cdcCatalog
     cat.addChangeRows(ident, Seq(changeRow(1L, 1L), changeRow(2L, 2L)))
@@ -365,6 +503,71 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       val differentRange = sql(
         s"SELECT * FROM $tableName CHANGES FROM VERSION 2")
       assert(cacheManager.lookupCachedData(differentRange).isEmpty)
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
+  test("shared relation cache does not offer a cached CHANGES relation to table reads") {
+    val tableName = s"$cdcCatalogName.test_table"
+    sql(s"INSERT INTO $tableName VALUES (100, 'current')")
+    val cat = cdcCatalog
+    cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+    val cacheManager = spark.sharedState.cacheManager
+    try {
+      // cache changelog
+      val changes = spark.read.option("startingVersion", "1").changes(tableName)
+      changes.cache()
+      checkAnswer(changes.select("id"), Seq(Row(1L)))
+      assert(cacheManager.lookupCachedData(changes).isDefined)
+      assert(cacheManager.numCachedEntries == 1)
+
+      // ensure cached changelog doesn't impact shared relation cache
+      assert(lookupSharedRelationCache(cat, ident).isEmpty)
+
+      // ensure cached changelog doesn't impact table state
+      sql(s"INSERT INTO $tableName VALUES (101, 'next')")
+      val df = spark.table(tableName)
+      assert(cacheManager.lookupCachedData(df).isEmpty)
+      checkAnswer(df.select("id"), Seq(Row(100L), Row(101L)))
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
+  test("shared relation cache offers the cached table when its CHANGES are cached too") {
+    val tableName = s"$cdcCatalogName.test_table"
+    sql(s"INSERT INTO $tableName VALUES (100, 'current')")
+    val cat = cdcCatalog
+    cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+    val cacheManager = spark.sharedState.cacheManager
+    try {
+      // cache table
+      spark.table(tableName).cache()
+      assert(cacheManager.numCachedEntries == 1)
+
+      // ensure shared relation cache is populated correctly
+      assert(lookupSharedRelationCache(cat, ident).isDefined)
+
+      // cache changelog
+      val changes = spark.read.option("startingVersion", "1").changes(tableName)
+      changes.cache()
+      checkAnswer(changes.select("id"), Seq(Row(1L)))
+      assert(cacheManager.lookupCachedData(changes).isDefined)
+      assert(cacheManager.numCachedEntries == 2)
+
+      // ensure cached changelog doesn't invalidate shared relation cache
+      assert(lookupSharedRelationCache(cat, ident).exists {
+        case r: DataSourceV2Relation => !r.table.isInstanceOf[ChangelogTable]
+        case _ => false
+      })
+      checkAnswer(spark.table(tableName).select("id"), Seq(Row(100L)))
+
+      // ensure cached changelog doesn't impact table state
+      sql(s"INSERT INTO $tableName VALUES (101, 'next')")
+      val df = spark.table(tableName)
+      assert(cacheManager.lookupCachedData(df).isDefined)
+      checkAnswer(df.select("id"), Seq(Row(100L), Row(101L)))
     } finally {
       spark.catalog.clearCache()
     }

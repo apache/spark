@@ -688,6 +688,9 @@ class DataFrameTestsMixin:
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
 
+        # SPARK-60761: an empty dict returns the DataFrame unchanged
+        assertDataFrameEqual(self.df.withColumns({}), self.df)
+
     def test_with_columns_with_dependencies(self):
         df = self.spark.range(3).withColumns(
             {

@@ -1758,6 +1758,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.xxh3_128(fn.col("g").cast("binary"))
   }
 
+  functionTest("farm_fingerprint") {
+    fn.farm_fingerprint(fn.col("g"))
+  }
+
   functionTest("hash") {
     fn.hash(fn.col("b"), fn.col("id"))
   }

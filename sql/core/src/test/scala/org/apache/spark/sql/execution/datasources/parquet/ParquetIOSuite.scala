@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.{ByteArrayInputStream, File}
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
-import java.util.Locale
+import java.util.{Arrays, Locale}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -30,6 +31,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext, TaskAttemptID}
@@ -43,10 +45,16 @@ import org.apache.parquet.format.{PageType, Util}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.InitContext
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.hadoop.metadata.CompressionCodecName.SNAPPY
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.ParquetDecodingException
-import org.apache.parquet.io.api.Binary
+import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.apache.parquet.schema.PrimitiveComparator.UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.{mock, verify}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler}
 import org.scalatest.time.{Seconds, Span}
 
@@ -63,6 +71,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -169,6 +178,157 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     // as we store Spark SQL schema in the extra metadata.
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
+  }
+
+  /**
+   * Values covering what a Parquet string writer has to get right: nulls, empty and repeated
+   * values that feed the dictionary, multi-byte and surrogate-pair UTF-8, values long enough to
+   * force dictionary fallback, and embedded NULs. Independent of the writer settings and of how
+   * a test stores each value, so it is built once for the whole suite.
+   */
+  private lazy val reusedStringTestValues: Seq[String] = {
+    // scalastyle:off nonascii
+    val long = "very-long-\u96ea" * 1024
+    (0 until 1024).map { id =>
+      id % 8 match {
+        case 0 => null
+        case 1 => ""
+        case 2 => "repeated"
+        case 3 => "\u96ea\u2603\u00e9\ud801\udc00"
+        case 4 if id >= 256 => s"id-$id-" + "x" * 128
+        case 5 if id >= 256 => long
+        case 6 => "\u0000inside\u0000"
+        case _ => "escape-\"\\\n\t"
+      }
+    }
+    // scalastyle:on nonascii
+  }
+
+  private def parquetStringWriterConf: Configuration = {
+    val conf = spark.sessionState.newHadoopConf()
+    ParquetWriteSupport.setSchema(new StructType().add("text", StringType), conf)
+    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
+    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
+    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
+    conf
+  }
+
+  private class InternalRowParquetWriterBuilder(path: Path)
+    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
+
+    override protected def self(): InternalRowParquetWriterBuilder = this
+
+    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
+      new ParquetWriteSupport
+  }
+
+  test("SPARK-60321: string writer reuses the backing array of a UTF8String slice") {
+    val bytes = "prefix-value-suffix".getBytes(UTF_8)
+    Seq(0 -> "prefix", 7 -> "value").foreach { case (offset, expected) =>
+      val consumer = mock(classOf[RecordConsumer])
+      val support = new ParquetWriteSupport
+      support.init(parquetStringWriterConf)
+      support.prepareForWrite(consumer)
+      support.write(InternalRow(UTF8String.fromBytes(bytes, offset, expected.length)))
+
+      val argument = ArgumentCaptor.forClass(classOf[Binary])
+      verify(consumer).addBinary(argument.capture())
+      val binary = argument.getValue
+      assert(binary.isBackingBytesReused)
+      assert(binary.toByteBuffer.array() eq bytes)
+      assert(binary.toStringUsingUTF8 == expected)
+    }
+  }
+
+  for {
+    storage <- Seq("array", "slice", "offheap")
+    dictionary <- Seq("off", "on", "fallback")
+    version <- ParquetProperties.WriterVersion.values()
+  } {
+    test(s"SPARK-60321: strings with reused $storage memory, " +
+        s"dictionary $dictionary, writer $version") {
+      val expected = reusedStringTestValues
+      val offHeap = storage == "offheap"
+      withTempPath { dir =>
+        val conf = parquetStringWriterConf
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val padding = 13
+        val shared = new Array[Byte](64 * 1024)
+        val address = if (offHeap) Platform.allocateMemory(shared.length) else 0L
+        try {
+          // Surround each payload with sentinel bytes, so that an off-by-one offset or length
+          // corrupts the output instead of silently passing.
+          Arrays.fill(shared, '!'.toByte)
+          if (offHeap) {
+            Platform.setMemory(address, '!'.toByte, shared.length)
+          }
+          val writer = new InternalRowParquetWriterBuilder(path)
+            .withConf(conf)
+            .withWriterVersion(version)
+            .withCompressionCodec(SNAPPY)
+            .withDictionaryEncoding(dictionary != "off")
+            .withDictionaryPageSize(if (dictionary == "fallback") 4096 else 1024 * 1024)
+            .withPageRowCountLimit(64)
+            .withMinRowCountForPageSizeCheck(1)
+            .withMaxRowCountForPageSizeCheck(64)
+            .build()
+          try {
+            expected.foreach { text =>
+              if (text == null) {
+                writer.write(InternalRow(null))
+              } else {
+                // Each case writes into the storage it exercises and then overwrites just the
+                // range it wrote: retained values must survive the producer reusing its storage.
+                val bytes = text.getBytes(UTF_8)
+                storage match {
+                  case "array" =>
+                    writer.write(InternalRow(UTF8String.fromBytes(bytes)))
+                    Arrays.fill(bytes, '?'.toByte)
+                  case "slice" =>
+                    System.arraycopy(bytes, 0, shared, padding, bytes.length)
+                    writer.write(InternalRow(UTF8String.fromBytes(shared, padding, bytes.length)))
+                    Arrays.fill(shared, padding, padding + bytes.length, '?'.toByte)
+                  case "offheap" =>
+                    Platform.copyMemory(
+                      bytes, Platform.BYTE_ARRAY_OFFSET, null, address + padding, bytes.length)
+                    writer.write(
+                      InternalRow(UTF8String.fromAddress(null, address + padding, bytes.length)))
+                    Platform.setMemory(address + padding, '?'.toByte, bytes.length)
+                }
+              }
+            }
+          } finally {
+            writer.close()
+          }
+        } finally {
+          if (offHeap) {
+            Platform.freeMemory(address)
+          }
+        }
+
+        withAllParquetReaders {
+          checkAnswer(spark.read.parquet(dir.toString), expected.map(Row(_)))
+        }
+        val reader = ParquetFileReader.open(HadoopInputFile.fromPath(path, conf))
+        try {
+          val blocks = reader.getFooter.getBlocks
+          assert(blocks.size() == 1)
+          val column = blocks.get(0).getColumns.get(0)
+          val encodings = column.getEncodingStats
+          assert(encodings.hasDictionaryEncodedPages == (dictionary != "off"))
+          assert(encodings.hasNonDictionaryEncodedPages == (dictionary != "on"))
+          val ordering: Ordering[Binary] =
+            Ordering.comparatorToOrdering(UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR)
+          val values = expected.filter(_ != null).distinct.map(Binary.fromString)
+          assert(column.getStatistics.genericGetMin == values.min(ordering))
+          assert(column.getStatistics.genericGetMax == values.max(ordering))
+          assert(column.getStatistics.getNumNulls == expected.count(_ == null))
+        } finally {
+          reader.close()
+        }
+      }
+    }
   }
 
   test("SPARK-36182: TimestampNTZ") {

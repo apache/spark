@@ -14,9 +14,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval 4 month 2 weeks 3 microseconds"
+    "input" : "4 month 2 weeks 3 microseconds"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -66,8 +67,21 @@ select interval 2147483647 month / 0.5
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "interval 2147483647 month / 0.5"
+  } ]
+}
 
 
 -- !query
@@ -529,9 +543,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -566,9 +581,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -603,9 +619,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -640,9 +657,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1111,9 +1129,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
+    "input" : "1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1156,9 +1175,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second"
+    "input" : "30 year 25 month -100 day 40 hour 80 minute 299.889987299 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1559,7 +1579,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0027",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.FROM_TO_VALUE_NOT_STRING",
+  "sqlState" : "22006",
+  "messageParameters" : {
+    "input" : "1"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1601,7 +1625,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1619,7 +1644,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1637,7 +1663,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1655,7 +1682,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1673,7 +1701,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1691,7 +1720,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1709,7 +1739,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2588,8 +2619,21 @@ select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "a / 0.5"
+  } ]
+}
 
 
 -- !query
@@ -2812,9 +2856,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.NON_NUMERIC_MULTI_UNIT_VALUE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "value" : "1 day 2"
+    "input" : "1 day 2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2833,9 +2878,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.NON_NUMERIC_MULTI_UNIT_VALUE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "value" : "interval 1"
+    "input" : "interval 1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2920,8 +2966,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0"
+  } ]
+}
 
 
 -- !query
@@ -2929,8 +2988,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-rounded value is out of range for input 2.147483648E9 and rounding mode HALF_UP
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D"
+  } ]
+}
 
 
 -- !query
@@ -2998,8 +3070,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 67,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0"
+  } ]
+}
 
 
 -- !query
@@ -3007,8 +3092,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-rounded value is out of range for input 9.223372036854776E18 and rounding mode HALF_UP
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 68,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D"
+  } ]
+}
 
 
 -- !query

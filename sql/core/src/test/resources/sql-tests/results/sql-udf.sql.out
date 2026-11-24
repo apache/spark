@@ -3178,6 +3178,74 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+1	2	0	2
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_1h
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	NULL	NULL
+0	2	0	2
+1	2	0	2
+
+
+-- !query
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2
+-- !query schema
+struct<c1:int,c2:int,c1:int,c2:int>
+-- !query output
+0	1	0	2
+0	2	0	3
+1	2	0	3
+
+
+-- !query
+DROP FUNCTION foo3_1i
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1 ORDER BY foo3_1b(c1)
 -- !query schema
 struct<>
@@ -3635,6 +3703,42 @@ SELECT foo3_2e1(
 struct<spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), struct(2022-01-01 10:11:15, 2)), 2022-01-01):string>
 -- !query output
 1
+
+
+-- !query
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.scalarSubqueryUseSingleJoin	false
+
+
+-- !query
+SELECT c1, foo3_2e2(c1) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_2e2(c1):int>
+-- !query output
+0	5
+0	5
+1	NULL
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -4189,6 +4293,241 @@ org.apache.spark.sql.AnalysisException
     "tempObjName" : "`t`"
   }
 }
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE foo3_5_col STRING DEFAULT 'a'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN x + length(foo3_5_col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS a FROM VALUES (1) AS T(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5e(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_5e(0)
+-- !query schema
+struct<foo3_5e(0):int>
+-- !query output
+1
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5e
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE foo3_5_tbl STRING DEFAULT 't1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c1 INT)
+RETURN SELECT c1 FROM IDENTIFIER(foo3_5_tbl)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(session.foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`session`.`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS c FROM IDENTIFIER(foo3_5_tbl) AS T(a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	true
+
+
+-- !query
+CREATE FUNCTION foo3_5f(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_5f(0)
+-- !query schema
+struct<spark_catalog.default.foo3_5f(0):int>
+-- !query output
+1
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	false
+
+
+-- !query
+CREATE FUNCTION foo3_5g(x INT) RETURNS INT RETURN foo3_5f(x) + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_5g(0)
+-- !query schema
+struct<spark_catalog.default.foo3_5g(0):int>
+-- !query output
+2
+
+
+-- !query
+DROP FUNCTION foo3_5g
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION foo3_5f
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_tbl
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_col
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -5503,6 +5842,14 @@ struct<>
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_2e1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2e2
 -- !query schema
 struct<>
 -- !query output

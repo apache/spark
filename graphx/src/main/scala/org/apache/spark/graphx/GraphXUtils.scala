@@ -45,7 +45,12 @@ object GraphXUtils {
       classOf[EdgeDirection],
       classOf[GraphXPrimitiveKeyOpenHashMap[VertexId, Int]],
       classOf[OpenHashSet[Int]],
-      classOf[OpenHashSet[Long]]))
+      classOf[OpenHashSet[Long]],
+      // The label counts of LabelPropagation: the class specialized on Long keys and values,
+      // and the fields it serializes.
+      new GraphXPrimitiveKeyOpenHashMap[VertexId, Long](1).getClass,
+      classOf[OpenHashSet.LongHasher],
+      ClassTag.Long.getClass))
   }
 
   /**

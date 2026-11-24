@@ -22,6 +22,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -228,6 +229,13 @@ public final class ColumnarBatchRow extends InternalRow {
     } else if (dataType instanceof UserDefinedType<?> udt) {
       return get(ordinal, udt.sqlType());
     } else {
+      // Read any other type that has a physical type through it: framework types (e.g. a
+      // struct-backed type as PhysicalStructType), and types not matched above, such as TIME
+      // and CalendarIntervalType. Types without a physical type, and NullType, keep the error.
+      PhysicalDataType pdt = PhysicalDataType.apply(dataType);
+      if (pdt != UninitializedPhysicalType$.MODULE$ && pdt != PhysicalNullType$.MODULE$) {
+        return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
+      }
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3152", Map.of("dataType", String.valueOf(dataType)));
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import com.ibm.icu.text.Normalizer2;
 
 import java.nio.ByteBuffer;
@@ -54,6 +56,7 @@ public class ExpressionImplUtils {
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
   private static final int CBC_IV_LEN = 16;
+  private static final HashFunction FARM_FINGERPRINT_64 = Hashing.farmHashFingerprint64();
 
   enum CipherMode {
     ECB("ECB", 0, 0, "AES/ECB/PKCS5Padding", false, false),
@@ -351,9 +354,9 @@ public class ExpressionImplUtils {
     if (str == null) return null;
     Locale locale;
     if (language != null && country != null) {
-      locale = new Locale(language.toString(), country.toString());
+      locale = Locale.of(language.toString(), country.toString());
     } else if (language != null) {
-      locale = new Locale(language.toString());
+      locale = Locale.of(language.toString());
     } else {
       locale = Locale.US;
     }
@@ -494,6 +497,14 @@ public class ExpressionImplUtils {
     CRC32 checksum = new CRC32();
     checksum.update(bytes, 0, bytes.length);
     return checksum.getValue();
+  }
+
+  /**
+   * Computes the FarmHash Fingerprint64 of {@code bytes} for the {@code farm_fingerprint}
+   * expression. Shared by the eval and codegen paths.
+   */
+  public static long farmFingerprint(byte[] bytes) {
+    return FARM_FINGERPRINT_64.hashBytes(bytes).asLong();
   }
 
   /**

@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture
 import io.netty.buffer.{ByteBuf, Unpooled}
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.server.{RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.streaming.{CreditControlMessage, StreamingShuffleMessage, TerminationAckMessage}
@@ -73,8 +74,8 @@ class StreamingShuffleServerHandler(
           futureClients(creditControlMessage.shuffleReaderId).complete(client)
         case terminationAck: TerminationAckMessage =>
           logInfo(
-            s"Received termination ack message from shuffle reader " +
-              s"${terminationAck.shuffleReaderId}"
+            log"Received termination ack message from shuffle reader " +
+              log"${MDC(LogKeys.SHUFFLE_READER_ID, terminationAck.shuffleReaderId)}"
           )
           onTerminationAckReceived(terminationAck.shuffleReaderId, terminationAck.getSeqNum)
         case _ =>
