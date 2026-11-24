@@ -22,6 +22,7 @@ import java.time.Duration
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -300,23 +301,47 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
     val (df1, df2) = prepareForAsOfJoin()
     val left = df1.withColumn("m", map(lit("k"), col("a")))
     // With DecorrelateInnerQuery disabled, the first join used to fail with INTERNAL_ERROR (an
-    // outer reference was left in the MIN_BY order expression), and the second used to return
-    // every right row with `right_val <= m['k']` instead of the nearest one. The second also
-    // needs the map member pulled out of the subquery before decorrelation.
-    Seq((left.col("a"), null), (lit(10), left.col("m")("k") >= df2.col("right_val"))).foreach {
-      case (leftAsOf, joinExprs) =>
+    // outer reference was left in the MIN_BY order expression, the only one of a nearest join),
+    // and the second used to return every right row with `right_val <= m['k']` instead of the
+    // nearest one. The second also needs the map member pulled out of the subquery before
+    // decorrelation.
+    Seq(
+      (left.col("a"), null, "nearest", Seq(1, 6, 7)),
+      (lit(10), left.col("m")("k") >= df2.col("right_val"), "backward", Seq(1, 3, 7))).foreach {
+      case (leftAsOf, joinExprs, direction, nearestRightKeys) =>
         def asOfJoin(): DataFrame = left.joinAsOf(df2, leftAsOf, df2.col("a"), joinExprs,
-          joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward")
+          joinType = "left", tolerance = null, allowExactMatches = true, direction = direction)
         val expected = asOfJoin()
         val expectedPlan = expected.queryExecution.optimizedPlan
         val expectedAnswer = expected.collect().toSeq
         // The nearest right `a` of each left row.
-        assert(expectedAnswer.map(_.getInt(4)).sorted == Seq(1, 3, 7))
+        assert(expectedAnswer.map(_.getInt(4)).sorted == nearestRightKeys)
         withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
           val df = asOfJoin()
           comparePlans(df.queryExecution.optimizedPlan, expectedPlan)
           checkAnswer(df, expectedAnswer)
         }
+    }
+  }
+
+  test("SPARK-62239: as-of join - decorrelateInnerQuery disabled keeps the legacy plan of " +
+      "a constant left key with equality conditions") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val left = df1.withColumn("m", map(lit("k"), col("a")))
+    withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+      // The legacy decorrelation groups the right rows by `right_val` and joins them once.
+      // DecorrelateInnerQuery would join them with a domain of the left values instead, and fail
+      // on the map column in the last condition.
+      Seq(
+        left.col("a") === df2.col("right_val") + 4 && left.col("a") > 1,
+        left.col("a").isin(df2.col("right_val") + 4),
+        left.col("a") === df2.col("right_val") + size(left.col("m")) + 3).foreach { joinExprs =>
+        val df = left.joinAsOf(df2, lit(10), df2.col("a"), joinExprs,
+          joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward")
+        assert(df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.size == 1)
+        checkAnswer(df.select(left.col("a"), df2.col("a")),
+          Seq(Row(1, null), Row(5, 1), Row(10, 6)))
+      }
     }
   }
 }

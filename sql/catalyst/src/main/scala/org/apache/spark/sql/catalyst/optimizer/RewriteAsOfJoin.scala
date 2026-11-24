@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
  *   WHERE __right__ IS NOT NULL
  * }}}
  */
-object RewriteAsOfJoin extends Rule[LogicalPlan] {
+object RewriteAsOfJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithNewOutput {
       case j: AsOfJoin if !j.requiresSortMergeAsOfJoin =>
@@ -86,12 +86,25 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         val projectWithCorrelatedSubquery = Project(
           left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
           left)
-        // A streaming left side reaches here only with
-        // spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery, which keeps the previous plan
-        // so that a query restarts from its checkpoint. So it also keeps the legacy decorrelation
-        // when DecorrelateInnerQuery is disabled. The decorrelated plan would aggregate the
-        // streaming side, which streaming queries reject.
-        val projectWithScalarSubquery = if (conf.decorrelateInnerQueryEnabled || left.isStreaming) {
+        // When DecorrelateInnerQuery is disabled, two cases keep the legacy decorrelation and its
+        // previous plan:
+        // - A streaming left side reaches here only with
+        //   spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery, which keeps the previous plan
+        //   so that a query restarts from its checkpoint. The decorrelated plan would add stateful
+        //   operators on the streaming side.
+        // - With a constant left as-of key, when every correlated conjunct is an equality, a
+        //   single-value IN or reads only left columns, the legacy decorrelation groups the right
+        //   rows by the right columns these read. That is cheaper than the domain join of
+        //   DecorrelateInnerQuery when one side of an equality is an expression such as
+        //   `r.k + 1`, and right when that side maps right rows one-to-one. When it does not,
+        //   such as `r.k % 10`, the rows stay as before.
+        val keepsLegacyPlan = left.isStreaming ||
+          (!orderExpressionWithOuterReference.exists(_.isInstanceOf[OuterReference]) &&
+            splitConjunctivePredicates(conditionWithOuterReference).forall {
+              case Equality(_, _) | In(_, Seq(_)) => true
+              case e => !SubExprUtils.containsOuter(e) || !e.exists(_.isInstanceOf[Attribute])
+            })
+        val projectWithScalarSubquery = if (conf.decorrelateInnerQueryEnabled || keepsLegacyPlan) {
           projectWithCorrelatedSubquery
         } else {
           // Without DecorrelateInnerQuery, PullupCorrelatedPredicates only pulls correlated
