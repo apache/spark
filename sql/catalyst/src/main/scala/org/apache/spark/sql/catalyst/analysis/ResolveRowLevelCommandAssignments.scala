@@ -19,10 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, MetadataAttribute}
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertAction, LogicalPlan, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -51,10 +49,11 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
       validateStoreAssignmentPolicy()
       val (newTable, metadataAttrMap) = cleanAttrMetadata(u.table)
-      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
-        fromStar = false, coerceNestedTypes = false,
+      val padded = padTargetReferences(u, u.table)
+      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output,
+        padded.assignments, fromStar = false, coerceNestedTypes = false,
         ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table))
-      u.copy(table = newTable, assignments = newAssignments).rewriteAttrs(metadataAttrMap)
+      padded.copy(table = newTable, assignments = newAssignments).rewriteAttrs(metadataAttrMap)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
@@ -64,21 +63,22 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
       val castCheck = ansiStoreAssignmentCastCheck(m.targetTable)
       val (newTargetTable, metadataAttrMap) = cleanAttrMetadata(m.targetTable)
-      m.copy(
+      val padded = padTargetReferences(m, m.targetTable)
+      padded.copy(
         targetTable = newTargetTable,
-        matchedActions = alignActions(
+        matchedActions = RowLevelAssignmentResolution.alignActions(
           m.targetTable.output,
-          m.matchedActions,
+          padded.matchedActions,
           coerceNestedTypes,
           castCheck),
-        notMatchedActions = alignActions(
+        notMatchedActions = RowLevelAssignmentResolution.alignActions(
           m.targetTable.output,
-          m.notMatchedActions,
+          padded.notMatchedActions,
           coerceNestedTypes,
           castCheck),
-        notMatchedBySourceActions = alignActions(
+        notMatchedBySourceActions = RowLevelAssignmentResolution.alignActions(
           m.targetTable.output,
-          m.notMatchedBySourceActions,
+          padded.notMatchedBySourceActions,
           coerceNestedTypes,
           castCheck)).rewriteAttrs(metadataAttrMap)
 
@@ -107,17 +107,11 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
           Nil
       }
       assignmentsToCheck.iterator
-        .map(assignments => (assignments, metadataColumnAssignmentErrors(assignments)))
+        .map { assignments =>
+          (assignments, RowLevelAssignmentResolution.metadataColumnAssignmentErrors(assignments))
+        }
         .find { case (_, errors) => errors.nonEmpty }
     }
-  }
-
-  private def metadataColumnAssignmentErrors(assignments: Seq[Assignment]): Seq[String] = {
-    assignments.map(_.key).filter(_.resolved).flatMap(_.references)
-      .filter(attr => MetadataAttribute.isValid(attr.metadata))
-      .map(_.name)
-      .distinct
-      .map(name => s"Cannot assign to metadata column '$name'")
   }
 
   private def shouldAlignAssignments(m: MergeIntoTable): Boolean = {
@@ -161,55 +155,52 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     (newTable, AttributeMap(metadataAttrMapping.toSeq))
   }
 
-  private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
-    p.transformExpressions {
-      case assignment: Assignment =>
-        val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
-          AssertNotNull(assignment.value)
-        } else {
-          assignment.value
-        }
-        val casted = if (assignment.key.dataType != nullHandled.dataType) {
-          val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          cast
-        } else {
-          nullHandled
-        }
-        val rawKeyType = assignment.key.transform {
-          case a: AttributeReference =>
-            CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
-        }.dataType
-        val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
-          CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
-        } else {
-          casted
-        }
-        val cleanedKey = assignment.key.transform {
-          case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-        }
-        Assignment(cleanedKey, finalValue)
+  // A cleaned relation gets no read-side padding from ApplyCharTypePadding, which keeps carried
+  // over rows and row IDs as they are stored. The conditions and assigned values of a command must
+  // still see what any other read of the table sees, so the references in them are padded in
+  // place. This is done before alignment, which adds references to the columns that are not
+  // assigned, and after padding the comparisons, as ApplyCharTypePadding cannot match them once
+  // their references are padded.
+  private def padTargetReferences[T <: LogicalPlan](command: T, target: LogicalPlan): T = {
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    val readSidePadding = conf.charVarcharStandardSemantics ||
+      (conf.readSideCharPadding && !conf.charVarcharAsString)
+    val paddedAttrs = if (readSidePadding) {
+      AttributeMap(target.output.map(attr => attr -> CharVarcharUtils.addPaddingForScan(attr))
+        .filter { case (attr, padded) => padded != attr })
+    } else {
+      AttributeMap.empty[Expression]
+    }
+
+    def padOuterReferences(plan: LogicalPlan): LogicalPlan = plan.transformWithSubqueries {
+      case p => p.transformExpressionsUp {
+        case OuterReference(attr: AttributeReference) if paddedAttrs.contains(attr) =>
+          paddedAttrs(attr).transform {
+            case a: AttributeReference if a.semanticEquals(attr) => OuterReference(a)
+          }
+      }
+    }
+
+    def padReferences(expr: Expression): Expression = expr match {
+      case assignment: Assignment => assignment.copy(value = padReferences(assignment.value))
+      case attr: AttributeReference => paddedAttrs.getOrElse(attr, attr)
+      case subquery: SubqueryExpression => subquery.withNewPlan(padOuterReferences(subquery.plan))
+      case other => other.mapChildren(padReferences)
+    }
+
+    if (paddedAttrs.isEmpty) {
+      command
+    } else {
+      ApplyCharTypePaddingHelper.paddingForStringComparison(command, padCharCol = false)
+        .mapExpressions(padReferences).asInstanceOf[T]
     }
   }
 
-  private def alignActions(
-      attrs: Seq[Attribute],
-      actions: Seq[MergeAction],
-      coerceNestedTypes: Boolean,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[MergeAction] = {
-    actions.map {
-      case u @ UpdateAction(_, assignments, fromStar) =>
-        u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck))
-      case d: DeleteAction =>
-        d
-      case i @ InsertAction(_, assignments) =>
-        i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
-          coerceNestedTypes, ansiStoreAssignmentCastCheck))
-      case other =>
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3052",
-          messageParameters = Map("other" -> other.toString))
+  private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
+    p.transformExpressions {
+      case assignment: Assignment =>
+        RowLevelAssignmentResolution.resolveAssignment(assignment)
     }
   }
+
 }

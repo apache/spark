@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedException, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -752,12 +752,12 @@ case class Join(
 
   override lazy val maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
           if left.maxRows.isDefined && right.maxRows.isDefined =>
         val leftMaxRows = BigInt(left.maxRows.get)
         val rightMaxRows = BigInt(right.maxRows.get)
         val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
+          case LeftOuter => leftMaxRows
           case RightOuter => rightMaxRows
           case FullOuter => leftMaxRows + rightMaxRows
           case _ => BigInt(0)
@@ -769,7 +769,7 @@ case class Join(
           None
         }
 
-      case LeftSemi | LeftAnti =>
+      case LeftSemi | LeftAnti | LeftSingle =>
         left.maxRows
 
       case _ =>
@@ -848,9 +848,10 @@ case class Join(
     patterns
   }
 
-  // Ignore hint for canonicalization
+  // Ignore hint for canonicalization, and normalize the join type, see `JoinType.canonicalized`.
   protected override def doCanonicalize(): LogicalPlan =
-    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+    super.doCanonicalize().asInstanceOf[Join].copy(
+      joinType = joinType.canonicalized, hint = JoinHint.NONE)
 
   // Do not include an empty join hint in string description
   protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
@@ -1934,6 +1935,79 @@ object BinBy {
 }
 
 /**
+ * How a column in the GAP FILL `FILL` clause is filled in the rows that GAP FILL adds.
+ */
+sealed trait GapFillMethod
+
+object GapFillMethod {
+  case object Linear extends GapFillMethod
+  case object ForwardFill extends GapFillMethod
+  case object BackwardFill extends GapFillMethod
+  /** Fills with a fixed value. */
+  case class Constant(value: Expression) extends GapFillMethod
+  case object Null extends GapFillMethod
+}
+
+/**
+ * One entry of the GAP FILL `FILL` clause. It holds the column and how it is filled. For example,
+ * `FILL (status CONSTANT upper('unknown'))` gives
+ * `GapFillColumn('status, Constant('upper('unknown')))`.
+ *
+ * It is an [[Expression]] whose children are the column and the CONSTANT value, like
+ * [[Assignment]], so that plan walkers such as `QueryPlan.expressions` and
+ * `transformExpressions` reach both. A tuple or a plain case class would hide them from the
+ * analyzer.
+ */
+case class GapFillColumn(column: Expression, method: GapFillMethod)
+  extends Expression with Unevaluable {
+  override def children: Seq[Expression] = method match {
+    case GapFillMethod.Constant(value) => Seq(column, value)
+    case _ => Seq(column)
+  }
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GapFillColumn = method match {
+    case GapFillMethod.Constant(_) =>
+      copy(column = newChildren.head, method = GapFillMethod.Constant(newChildren(1)))
+    case _ => copy(column = newChildren.head)
+  }
+}
+
+/**
+ * An output column that GAP FILL adds when it is asked for with BIN_START or IS_GENERATED.
+ * `alias` is the name given with AS. `None` requests the default name, `bin_start` or
+ * `is_generated`.
+ */
+case class GapFillOutputColumn(alias: Option[String])
+
+/**
+ * Unresolved counterpart of the GAP FILL relation operator, produced by the parser.
+ * `binStart` and `isGenerated` are set only when the BIN_START or IS_GENERATED column is
+ * requested.
+ */
+case class UnresolvedGapFill(
+    partitionColumns: Seq[Expression],
+    timeColumn: Expression,
+    binWidthExpr: Expression,
+    originExpr: Option[Expression],
+    rangeStartExpr: Option[Expression],
+    rangeEndExpr: Option[Expression],
+    fillColumns: Seq[GapFillColumn],
+    maxGapExpr: Option[Expression],
+    binStart: Option[GapFillOutputColumn],
+    isGenerated: Option[GapFillOutputColumn],
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+  require(rangeStartExpr.isDefined == rangeEndExpr.isDefined,
+    "The GAP FILL range has both bounds, or neither.")
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_GAP_FILL)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedGapFill =
+    copy(child = newChild)
+}
+
+/**
  * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
@@ -2596,9 +2670,10 @@ case class LateralJoin(
    */
   override def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
   }
 
   override def childrenResolved: Boolean = left.resolved && right.resolved
@@ -2702,7 +2777,43 @@ case class AsOfJoin(
   }
 }
 
-object AsOfJoin {
+object AsOfJoin extends PredicateHelper {
+
+  /**
+   * Extract equi-join key pairs and residual (non-equi) condition
+   * from a conjunction. Only EqualTo is treated as equi-key;
+   * EqualNullSafe is excluded because the scanner implements EqualTo
+   * null semantics (left rows with any null equi-key never match and
+   * are skipped or null-padded), whereas EqualNullSafe requires null
+   * keys to match. Such predicates fall through to the residual
+   * condition, which evaluates them per candidate pair.
+   */
+  def extractEquiJoinKeys(
+      condition: Expression,
+      left: LogicalPlan,
+      right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
+    val leftKeys =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+    val rightKeys =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+    val residuals =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+
+    splitConjunctivePredicates(condition).foreach {
+      case EqualTo(l, r)
+          if l.references.subsetOf(left.outputSet) &&
+            r.references.subsetOf(right.outputSet) =>
+        leftKeys += l; rightKeys += r
+      case EqualTo(l, r)
+          if r.references.subsetOf(left.outputSet) &&
+            l.references.subsetOf(right.outputSet) =>
+        leftKeys += r; rightKeys += l
+      case other =>
+        residuals += other
+    }
+    val residual = residuals.reduceOption(And)
+    (leftKeys.toSeq, rightKeys.toSeq, residual)
+  }
 
   /**
    * Computes the output attributes of an [[AsOfJoin]] given its join type and child outputs.
@@ -3038,18 +3149,18 @@ object AsOfJoin {
           case (true, Backward) =>
             And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (false, Backward) =>
-            And(base, GreaterThan(rightAsOf, lowerBound))
+            And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (true, Forward) =>
             And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (false, Forward) =>
-            And(base, LessThan(rightAsOf, upperBound))
+            And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (true, Nearest) =>
             And(GreaterThanOrEqual(rightAsOf, lowerBound),
               LessThanOrEqual(rightAsOf, upperBound))
           case (false, Nearest) =>
             And(base,
-              And(GreaterThan(rightAsOf, lowerBound),
-                LessThan(rightAsOf, upperBound)))
+              And(GreaterThanOrEqual(rightAsOf, lowerBound),
+                LessThanOrEqual(rightAsOf, upperBound)))
         }
       case None => base
     }

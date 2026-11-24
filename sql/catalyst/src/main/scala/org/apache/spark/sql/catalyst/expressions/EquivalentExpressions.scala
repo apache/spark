@@ -157,6 +157,7 @@ class EquivalentExpressions(
   // that the peel lands on rather than about the `And`/`Or` chain above it.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
+    case t: TransformExpression if t.fallsBackToEval => Nil
     // Definitions stay lazy unless the body always reaches their references;
     // supportedExpression excludes candidates whose references would escape their binding scope.
     case withExpr: With =>

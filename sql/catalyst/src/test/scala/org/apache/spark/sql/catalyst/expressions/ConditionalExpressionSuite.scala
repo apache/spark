@@ -301,4 +301,70 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val noTrueBranch = CaseWhen(normalBranch :: Nil, Literal(1))
     assert(!noTrueBranch.nullable)
   }
+
+  test("EvalOnlyWhen evaluates like IF(cond, child, NULL)") {
+    val testcases = Seq[(java.lang.Boolean, Integer, Integer)](
+      (true, 1, 1),
+      (false, 1, null),
+      (null, 1, null),
+      (true, null, null))
+    testcases.foreach { case (cond, child, expected) =>
+      checkEvaluation(
+        EvalOnlyWhen(Literal.create(cond, BooleanType), Literal.create(child, IntegerType)),
+        expected)
+    }
+    // The result is always nullable, and its type is the child's.
+    val e = EvalOnlyWhen(TrueLiteral, Literal(1))
+    assert(e.nullable)
+    assert(e.dataType == IntegerType)
+  }
+
+  test("EvalOnlyWhen does not evaluate its child when the condition is not true") {
+    // A child that throws if evaluated; it must not be evaluated when the condition is false/null.
+    val failing = AssertTrue(FalseLiteral)
+    checkEvaluation(EvalOnlyWhen(FalseLiteral, failing), null)
+    checkEvaluation(EvalOnlyWhen(Literal.create(null, BooleanType), failing), null)
+  }
+
+  test("EvalOnlyWhen rejects a non-boolean condition") {
+    assert(EvalOnlyWhen(Literal(1), Literal(1)).checkInputDataTypes()
+      .isInstanceOf[DataTypeMismatch])
+  }
+
+  test("EvalOnlyWhen.udfConditions reports the condition each UDF needs") {
+    // A leaf "UDF" marker for the test; `udfConditions` keys UDFs by this payload.
+    case class FakeUDF(id: Int) extends LeafExpression with Unevaluable {
+      override def nullable: Boolean = true
+      override def dataType: DataType = IntegerType
+    }
+    val isUDF: Expression => Boolean = _.isInstanceOf[FakeUDF]
+    val key: Expression => Int = _.asInstanceOf[FakeUDF].id
+    val c1 = $"c1".boolean
+    val c2 = $"c2".boolean
+
+    // A UDF only inside a marker takes the marker's condition.
+    assert(EvalOnlyWhen.udfConditions(Seq(EvalOnlyWhen(c1, FakeUDF(1))), isUDF, key) ==
+      Map(1 -> Some(c1)))
+    // A UDF both inside and outside a marker gets no condition (evaluated for every row).
+    assert(EvalOnlyWhen.udfConditions(
+      Seq(EvalOnlyWhen(c1, FakeUDF(1)), Add(FakeUDF(1), Literal(1))), isUDF, key) ==
+      Map(1 -> None))
+    // No marker in the expressions at all: nothing to evaluate conditionally.
+    assert(EvalOnlyWhen.udfConditions(Seq(Add(FakeUDF(1), Literal(1))), isUDF, key).isEmpty)
+    // Nested markers combine their conditions.
+    val nested = EvalOnlyWhen(c1, EvalOnlyWhen(c2, FakeUDF(1)))
+    assert(EvalOnlyWhen.udfConditions(Seq(nested), isUDF, key) == Map(1 -> Some(And(c1, c2))))
+    // The same UDF under markers with different conditions gets no single condition.
+    val differing =
+      Seq(EvalOnlyWhen(c1, FakeUDF(1)), EvalOnlyWhen(c2, FakeUDF(1)))
+    assert(EvalOnlyWhen.udfConditions(differing, isUDF, key) == Map(1 -> None))
+    // A non-deterministic inner marker condition is dropped, falling back to the outer one
+    // (more rows, never fewer), since the operator must re-evaluate the condition.
+    val rnd = GreaterThan(new Rand(Literal(0L)), Literal(0.5))
+    assert(EvalOnlyWhen.udfConditions(
+      Seq(EvalOnlyWhen(c1, EvalOnlyWhen(rnd, FakeUDF(1)))), isUDF, key) == Map(1 -> Some(c1)))
+    // A non-deterministic top-level marker condition gives no condition at all.
+    assert(EvalOnlyWhen.udfConditions(
+      Seq(EvalOnlyWhen(rnd, FakeUDF(1))), isUDF, key) == Map(1 -> None))
+  }
 }

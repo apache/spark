@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableCatalog}
-import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
+import java.util.Collections
 
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, GenerationExpression, Identifier, InMemoryCatalog, TableCatalog}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.internal.connector.ColumnImpl
+import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
+import org.apache.spark.tags.DataSourceV2Test
+
+@DataSourceV2Test
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
 
   private def testCatalog: InMemoryCatalog =
@@ -276,6 +282,41 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
       assert(schema("id").dataType === LongType)
       assert(schema("name").dataType === StringType)
       assert(schema("score").dataType === IntegerType)
+    }
+  }
+
+  test("SPARK-61892: generation expression from the legacy getter is preserved from v2 source") {
+    // A connector can return the SQL only from the legacy getter `generationExpression()`, while
+    // `columnGenerationExpression()` returns null or only a modeled expression.
+    def legacyColumn(name: String, genExpr: GenerationExpression): Column = new ColumnImpl(
+        name = name,
+        dataType = IntegerType,
+        nullable = true,
+        comment = null,
+        defaultValue = null,
+        columnGenerationExpression = genExpr,
+        identityColumnSpec = null,
+        metadataInJSON = null) {
+      override def generationExpression(): String = "id * 2"
+    }
+    val modeled = new GeneralScalarExpression(
+      "*", Array[V2Expression](FieldReference("id"), LiteralValue(2, IntegerType)))
+    withTable("testcat.src", "testcat.dst") {
+      testCatalog.createTable(
+        Identifier.of(Array(), "src"),
+        Array(
+          Column.create("id", IntegerType),
+          legacyColumn("sql_only", null),
+          legacyColumn("with_modeled", new GenerationExpression(modeled))),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      sql("CREATE TABLE testcat.dst LIKE testcat.src")
+
+      val Array(_, sqlOnly, withModeled) = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+        .columns()
+      assert(sqlOnly.columnGenerationExpression() === new GenerationExpression("id * 2"))
+      assert(withModeled.columnGenerationExpression() ===
+        new GenerationExpression("id * 2", modeled))
     }
   }
 

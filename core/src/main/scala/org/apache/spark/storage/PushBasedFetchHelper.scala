@@ -324,8 +324,9 @@ private class PushBasedFetchHelper(
     chunkBitmaps.foreach(mergedBlockBitmap.or)
     val hasStale = staleMapIndexes.exists(id => mergedBlockBitmap.contains(id))
     if (hasStale) {
-      logWarning(s"Found stale pushed map indexes in merged block $shuffleBlockId from" +
-        s" ${address.host}:${address.port}, falling back to fetch the original blocks")
+      logWarning(log"Found stale pushed map indexes in merged block " +
+        log"${MDC(BLOCK_ID, shuffleBlockId)} from ${MDC(HOST, address.host)}:" +
+        log"${MDC(PORT, address.port)}, falling back to fetch the original blocks")
     }
     !hasStale
   }

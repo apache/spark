@@ -2,101 +2,101 @@
 RocksDB Lifecycle Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 RocksDB Lifecycle Operations:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-DB Creation                                           4              4           0          0.0     3905886.0       1.0X
-DB Close                                              0              0           0          0.0      142573.0      27.4X
+DB Creation                                           5              5           1          0.0     4606900.0       1.0X
+DB Close                                              0              0           0          0.0      278021.0      16.6X
 
 
 ================================================================================================
 Sequential Operations Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Sequential Writes:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              15             16           1          0.1       15041.4       1.0X
-No Index                                             12             12           0          0.1       11856.5       1.3X
+Indexed                                              14             15           0          0.1       13963.5       1.0X
+No Index                                             10             11           0          0.1       10010.0       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Sequential Updates:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              17             17           0          0.1       16302.2       1.0X
-No Index                                              9             10           0          0.1        9267.7       1.8X
+Indexed                                              20             20           1          0.1       19367.9       1.0X
+No Index                                             11             11           0          0.1       10412.0       1.9X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Sequential Deletes:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              10             11           1          0.1        9786.3       1.0X
-No Index                                              7              8           0          0.1        6848.6       1.4X
+Indexed                                              11             12           1          0.1       10943.3       1.0X
+No Index                                              8              8           1          0.1        7704.6       1.4X
 
 
 ================================================================================================
 Random Operations Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Random Writes:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              16             16           1          0.1       15639.7       1.0X
-No Index                                             13             13           1          0.1       12286.7       1.3X
+Indexed                                              15             15           0          0.1       14645.5       1.0X
+No Index                                             11             11           0          0.1       10389.8       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Random Updates:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              17             17           0          0.1       16211.0       1.0X
-No Index                                             10             10           0          0.1        9278.7       1.7X
+Indexed                                              20             21           1          0.1       19935.7       1.0X
+No Index                                             11             11           0          0.1       10626.5       1.9X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Random Deletes:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Indexed                                              10             11           1          0.1        9784.6       1.0X
-No Index                                              7              8           0          0.1        6903.0       1.4X
+Indexed                                              11             12           1          0.1       11128.2       1.0X
+No Index                                              8              8           0          0.1        7548.1       1.5X
 
 
 ================================================================================================
 Natural Index Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Natural Index - Create Iterator:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Ascending                                             0              0           0        999.0           1.0       1.0X
-Descending                                            0              0           0        957.9           1.0       1.0X
+Ascending                                             0              0           0       1023.0           1.0       1.0X
+Descending                                            0              0           0        929.2           1.1       0.9X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Natural Index - Iteration:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Ascending                                             1              2           0          0.7        1432.1       1.0X
-Descending                                            1              2           0          0.7        1448.5       1.0X
+Ascending                                             1              1           0          0.8        1262.9       1.0X
+Descending                                            1              2           0          0.8        1274.3       1.0X
 
 
 ================================================================================================
 Ref Index Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Ref Index - Create Iterator:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Ascending                                             0              0           0        950.8           1.1       1.0X
-Descending                                            0              0           0        914.3           1.1       1.0X
+Ascending                                             0              0           0        584.1           1.7       1.0X
+Descending                                            0              0           0        567.6           1.8       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Ref Index - Iteration:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Ascending                                             3              3           0          0.4        2816.6       1.0X
-Descending                                            3              3           0          0.4        2791.7       1.0X
+Ascending                                             3              3           0          0.4        2646.6       1.0X
+Descending                                            3              3           1          0.4        2653.1       1.0X
 
 

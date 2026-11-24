@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -33,6 +34,9 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
+  // ToNumberParser mutates its working state during parsing/formatting. Stateful fresh
+  // copies give each evaluator its own parser instead of sharing one across threads.
+  override def stateful: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -299,14 +303,27 @@ object ToCharacterBuilder extends ExpressionBuilder {
   }
 }
 
-case class ToCharacter(left: Expression, right: Expression)
+// `legacyFormatZeroAsBlank` changes results, so it is a constructor parameter: expressions
+// resolved under different values of the config must not be semantically equal, for example
+// when matching cached plans.
+case class ToCharacter(
+    left: Expression,
+    right: Expression,
+    legacyFormatZeroAsBlank: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK))
   extends BinaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
+  // ToNumberParser mutates its working state during parsing/formatting. Stateful fresh
+  // copies give each evaluator its own parser instead of sharing one across threads.
+  override def stateful: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
-      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+      new ToNumberParser(
+        value.toString.toUpperCase(Locale.ROOT),
+        errorOnFail = true,
+        legacyFormatZeroAsBlank = legacyFormatZeroAsBlank)
     } else {
       null
     }
@@ -337,6 +354,7 @@ case class ToCharacter(left: Expression, right: Expression)
   }
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def prettyName: String = "to_char"
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def nullSafeEval(decimal: Any, format: Any): Any = {
     val input = decimal.asInstanceOf[Decimal]
     numberFormatter.format(input)

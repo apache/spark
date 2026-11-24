@@ -21,12 +21,13 @@ name: Close stale PRs
 
 on:
   schedule:
-  - cron: "0 0 * * *"
+  - cron: "30 4 * * *"
 
 jobs:
   stale:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - uses: actions/stale@v11
       with:

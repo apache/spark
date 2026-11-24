@@ -17,8 +17,8 @@
 
 """Base classes and registry for the eval type handlers.
 
-This leaf module imports only ``_typing``, the serializers and ``pyspark.util``, so the
-package ``__init__`` and the concrete-handler submodules can both import it.
+This leaf module imports ``_typing``, serializers, worker metrics and ``pyspark.util``,
+so the package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
 import functools
@@ -42,6 +42,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
 )
 from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
@@ -152,6 +153,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
+    # Whether this handler implements the detailed phase measurements.
+    _supports_detailed_timing: ClassVar[bool] = False
     # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
     # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
     _fail_on_stopiteration: ClassVar[bool] = True
@@ -170,6 +173,11 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
+        self._detailed_timing_enabled = (
+            self._supports_detailed_timing
+            and runner_conf.detailed_timing_enabled
+            and not runner_conf.is_pipelined
+        )
         # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
         # single function is the pickled object itself (an incremental Aggregator) with its
         # signature. Empty for a UDTF.
@@ -191,6 +199,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             self._udf_desc: UDF = udf_descs[0]
             self._raw_func: Any = self._raw_funcs[0]
             self._func: Callable[..., Any] = self._funcs[0]
+        self._metrics = WorkerMetrics()
+        self._create_phase_timers()
 
     def _expected_udf(self) -> str:
         """What a single-UDF handler takes, as named when it is given another number of UDFs:
@@ -319,6 +329,22 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def serializer(self) -> Serializer:
         """Serializer for both the input and output streams."""
 
+    def _create_phase_timers(self) -> None:
+        """Initialize input-preparation, UDF-execution and output-preparation timers.
+
+        Serializers measure reads and writes. Exclude nested input iteration from UDF
+        time; count consumed transport batches, not groups or output batches. Framework
+        work outside the measured intervals remains unattributed.
+        """
+        if not self._detailed_timing_enabled:
+            return
+        metrics = self._metrics
+        self._input_preparation_timer = metrics.measure("pythonInputPreparationTime")
+        self._udf_execution_timer = metrics.measure("pythonUDFExecutionTime")
+        self._output_preparation_timer = metrics.measure("pythonOutputPreparationTime")
+        metrics.set("pythonNumTimingReports", 1)
+        metrics.set("pythonNumTimedBatches", 0)
+
     @abstractmethod
     def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:
         """Consume the input stream and yield the output stream; the worker calls it as
@@ -330,7 +356,11 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamSerializer(write_start_stream=True)
+        return ArrowStreamSerializer(
+            write_start_stream=True,
+            flush_per_batch=self._runner_conf.is_pipelined,
+            detailed_timing_enabled=self._detailed_timing_enabled,
+        )
 
 
 class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
@@ -338,7 +368,11 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamGroupSerializer(write_start_stream=True)
+        return ArrowStreamGroupSerializer(
+            write_start_stream=True,
+            flush_per_batch=self._runner_conf.is_pipelined,
+            detailed_timing_enabled=self._detailed_timing_enabled,
+        )
 
 
 class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
@@ -346,4 +380,8 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamCoGroupSerializer(write_start_stream=True)
+        return ArrowStreamCoGroupSerializer(
+            write_start_stream=True,
+            flush_per_batch=self._runner_conf.is_pipelined,
+            detailed_timing_enabled=self._detailed_timing_enabled,
+        )

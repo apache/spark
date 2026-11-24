@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{
+  BaseOrdering, Expression, Literal, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, MapType, StructField, StructType, UserDefinedType}
 import org.apache.spark.util.NonFateSharingCache
 
 /**
@@ -64,6 +66,11 @@ class InternalRowComparableWrapper private (
     }
     _ordering
   }
+
+  override def toString: String =
+    row.toSeq(dataTypes).zip(dataTypes)
+      .map { case (value, dataType) => InternalRowComparableWrapper.render(value, dataType) }
+      .mkString("[", ",", "]")
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,
@@ -112,6 +119,40 @@ object InternalRowComparableWrapper {
       partitionRow: InternalRow,
       partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     getInternalRowComparableWrapperFactory(partitionExpression.map(_.dataType))(partitionRow)
+  }
+
+  /**
+   * Renders a value the way a plan string shows it: by the value's type at every level. Atomic
+   * values go through the [[Literal]] constructor, whose `toString` formats dates, timestamps,
+   * decimals and binary; complex values are walked by type, because their own `toString` shows
+   * internal encodings, hex words or an object identity. The constructor is used rather than
+   * `Literal.create`, which runs the char/varchar write-side check and can reject a stored value
+   * while a plan is being printed.
+   */
+  private def render(value: Any, dataType: DataType): String = {
+    if (value == null) {
+      "null"
+    } else {
+      dataType match {
+        case s: StructType =>
+          val r = value.asInstanceOf[InternalRow]
+          s.fields.iterator.zipWithIndex
+            .map { case (field, i) => render(r.get(i, field.dataType), field.dataType) }
+            .mkString("[", ",", "]")
+        case ArrayType(elementType, _) =>
+          val a = value.asInstanceOf[ArrayData]
+          (0 until a.numElements()).map(i => render(a.get(i, elementType), elementType))
+            .mkString("[", ",", "]")
+        case MapType(keyType, valueType, _) =>
+          val m = value.asInstanceOf[MapData]
+          (0 until m.numElements()).map { i =>
+            s"${render(m.keyArray().get(i, keyType), keyType)} -> " +
+              render(m.valueArray().get(i, valueType), valueType)
+          }.mkString("{", ",", "}")
+        case udt: UserDefinedType[_] => render(value, udt.sqlType)
+        case _ => Literal(value, dataType).toString
+      }
+    }
   }
 
   /**

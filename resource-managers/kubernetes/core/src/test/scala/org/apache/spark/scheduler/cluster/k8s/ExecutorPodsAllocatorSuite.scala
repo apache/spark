@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -34,7 +34,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -364,6 +364,42 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
     }.getMessage
     assert(m.contains("Exceed the pod creation limit: 1"))
+  }
+
+  test("SPARK-58776: executor conf carries the auth secret and SparkConf SSL RPC passwords") {
+    val sslConf = confWithAuthAndSslRpc(conf)
+    val sslAllocator = new ExecutorPodsAllocator(sslConf, new SecurityManager(sslConf),
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    sslAllocator.setExecutorPodsLifecycleManager(lifecycleManager)
+    sslAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    sslAllocator.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    val captor = ArgumentCaptor.forClass(classOf[KubernetesExecutorConf])
+    verify(executorBuilder).buildFromFeatures(
+      captor.capture(), meq(kubernetesClient), any(classOf[ResourceProfile]))
+    assert(captor.getValue.authSecret === Some(TEST_AUTH_SECRET))
+    assert(captor.getValue.sslRpcPasswordEnvs ===
+      Map(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> TEST_RPC_SSL_KEY_STORE_PASSWORD))
+  }
+
+  test("SPARK-52589: Prune scheduler-known newly created executors if " +
+    "removed from scheduler backend") {
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+
+    // Executor 1 is registered with schedulerBackend
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1"))
+    snapshotsStore.notifySubscribers()
+
+    // Executor 1 is decommissioned/removed from schedulerBackend without appearing in pod snapshot
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 0))
+    snapshotsStore.notifySubscribers()
+
+    // Upscale to 1 executor; verify new executor 2 is requested
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    snapshotsStore.notifySubscribers()
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2))
   }
 
   test("Request executors in batches. Allow another batch to be requested if" +
