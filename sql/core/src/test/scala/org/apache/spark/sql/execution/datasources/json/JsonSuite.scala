@@ -4524,6 +4524,13 @@ abstract class JsonSuite
     }
   }
 
+  test("write BINARY map keys in base64") {
+    withTempPath { path =>
+      spark.sql("SELECT map(X'CAFE', 1) AS m").write.json(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("""{"m":{"yv4=":1}}"""))
+    }
+  }
+
   test("SPARK-25159: json schema inference should only trigger one job") {
     withTempPath { path =>
       // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which

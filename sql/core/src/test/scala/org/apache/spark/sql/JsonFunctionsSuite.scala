@@ -900,6 +900,19 @@ class JsonFunctionsSuite extends SharedSparkSession {
       Row("""{"a":1}""") :: Nil)
   }
 
+  test("to_json - map with BINARY keys") {
+    val cafe = Array[Byte](0xCA.toByte, 0xFE.toByte)
+    // Equal keys in different rows get the same name.
+    val df = Seq(cafe, cafe.clone()).toDF("b").select(map($"b", lit(3)).as("m"))
+    checkAnswer(df.select(to_json($"m")), Row("""{"yv4=":3}""") :: Row("""{"yv4=":3}""") :: Nil)
+    assert(df.toJSON.collect().toSeq === Seq("""{"m":{"yv4=":3}}""", """{"m":{"yv4=":3}}"""))
+    // A key is encoded in base64, like a value.
+    checkAnswer(sql("SELECT to_json(map(X'CAFE', X'CAFE'))"), Row("""{"yv4=":"yv4="}"""))
+    checkAnswer(
+      sql("SELECT to_json(map(X'FF', 3, X'00', 1, X'7F', 2), map('sortKeys', 'true'))"),
+      Row("""{"/w==":3,"AA==":1,"fw==":2}"""))
+  }
+
   test("to_json with option (timestampFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
