@@ -2093,6 +2093,43 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Set(LiteralValue(noon, TimeType(6)), LiteralValue(null, TimeType(6))))
   }
 
+  test("V2ScanRelationPushDown pushes Offset through row-order-independent Project") {
+    def roiStaticInvoke(id: Attribute): Expression = StaticInvoke(
+      classOf[java.lang.Math],
+      LongType,
+      "abs",
+      Seq(id),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+
+    // Positive: Offset pushes through ROI Project into V2 scan.
+    val (roiTable, roiRelation) = newPushdownRelation()
+    val roiId = roiRelation.output.head
+    val roiProject = Project(Seq(roiId, Alias(roiStaticInvoke(roiId), "enc")()), roiRelation)
+    val roiPushed = V2ScanRelationPushDown(Offset(Literal(5), roiProject))
+    assert(roiTable.builder.pushedOffset === Some(5))
+    assert(!roiPushed.exists(_.isInstanceOf[Offset]))
+
+    // Negative: Offset must NOT push through stateful Rand(1) Project.
+    val (randTable, randRelation) = newPushdownRelation()
+    val randId = randRelation.output.head
+    val randProject = Project(Seq(randId, Alias(Rand(1), "r")()), randRelation)
+    val randPushed = V2ScanRelationPushDown(Offset(Literal(5), randProject))
+    assert(randTable.builder.pushedOffset === None)
+    assert(randPushed.exists(_.isInstanceOf[Offset]))
+
+    // Kill-switch: disabling config blocks Offset pushdown through ROI Project.
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+      val (disabledTable, disabledRelation) = newPushdownRelation()
+      val disabledId = disabledRelation.output.head
+      val disabledProject = Project(
+        Seq(disabledId, Alias(roiStaticInvoke(disabledId), "enc")()), disabledRelation)
+      val disabledPushed = V2ScanRelationPushDown(Offset(Literal(5), disabledProject))
+      assert(disabledTable.builder.pushedOffset === None)
+      assert(disabledPushed.exists(_.isInstanceOf[Offset]))
+    }
+  }
+
   private def runtimeFilter(child: Expression, values: Array[Any]): InSubqueryExec = {
     val plan = SubqueryExec("dpp", LocalTableScanExec(Nil, Nil, None))
     InSubqueryExec(child, plan, ExprId(0), isDynamicPruning = true, resultBroadcast = null,

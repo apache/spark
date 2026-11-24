@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class FilterPushdownSuite extends PlanTest {
@@ -3071,5 +3072,688 @@ class FilterPushdownSuite extends PlanTest {
     val renamed = x.withName("X").withQualifier(Seq("t")).withNullability(false)
     assert(normalize(renamed) == NormalizeFloatingNumbers.normalize(renamed))
     unchanged($"x".double)
+  }
+
+  private def evalSimpleLogicalPlan(
+      plan: LogicalPlan,
+      inputRows: Seq[org.apache.spark.sql.catalyst.InternalRow]):
+      Seq[org.apache.spark.sql.catalyst.InternalRow] = {
+    plan match {
+      case _: LeafNode => inputRows
+      case Filter(cond, child) =>
+        val boundCond = BindReferences.bindReference(cond, child.output)
+        evalSimpleLogicalPlan(child, inputRows).filter(r => boundCond.eval(r) == true)
+      case Project(projectList, child) =>
+        val boundExprs = projectList.map(e =>
+          BindReferences.bindReference[Expression](e, child.output))
+        evalSimpleLogicalPlan(child, inputRows).map { r =>
+          org.apache.spark.sql.catalyst.InternalRow.fromSeq(boundExprs.map(_.eval(r)))
+        }
+      case Sort(orders, _, child, _) =>
+        val childRows = evalSimpleLogicalPlan(child, inputRows)
+        val boundOrders = orders.map(o => BindReferences.bindReference(o.child, child.output))
+        childRows.foreach(r => boundOrders.foreach(_.eval(r)))
+        childRows
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported node in test evaluator: $other")
+    }
+  }
+
+  test("push disjoint deterministic filter below Project with rowOrderIndependent expr") {
+    val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+    val roiExpr = RowOrderIndepTestExpr(attrB)(counter)
+    val originalQuery = testRelation
+      .select($"a", roiExpr.as("c"))
+      .where($"a" > 10)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val expected = testRelation
+      .where($"a" > 10)
+      .select($"a", roiExpr.as("c"))
+      .analyze
+    comparePlans(optimized, expected)
+
+    val rows = Seq(5, 10, 11, 20, 3).map { a =>
+      org.apache.spark.sql.catalyst.InternalRow(a, a * 10, 0)
+    }
+    val res = evalSimpleLogicalPlan(optimized, rows)
+    assert(res.map(_.getInt(0)) == Seq(11, 20))
+    assert(counter.get() == 2)
+  }
+
+  test("mixed conjuncts push disjoint filter below Project and keep alias filter above") {
+    val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+    val roiExpr = RowOrderIndepTestExpr(attrB)(counter)
+    val originalQuery = testRelation
+      .select($"a", roiExpr.as("c"))
+      .where($"c" > 0 && $"a" > 10)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val expected = testRelation
+      .where($"a" > 10)
+      .select($"a", roiExpr.as("c"))
+      .where($"c" > 0)
+      .analyze
+    comparePlans(optimized, expected)
+
+    val rows = Seq((5, 100), (11, -1), (12, 50), (15, 0), (20, 10)).map { case (a, b) =>
+      org.apache.spark.sql.catalyst.InternalRow(a, b, 0)
+    }
+    val res = evalSimpleLogicalPlan(optimized, rows)
+    assert(res.map(_.getInt(0)) == Seq(12, 20))
+    assert(counter.get() == 4)
+  }
+
+  test("legacy Nondeterministic, unsafe child, and alias predicate barriers") {
+    // N1: Nondeterministic expressions block pushdown.
+    Seq(Rand(0), MonotonicallyIncreasingID(), SparkPartitionID()).foreach { nondet =>
+      val q = testRelation.select($"a", nondet.as("c")).where($"a" > 10).analyze
+      comparePlans(Optimize.execute(q), q)
+    }
+    val customNondetQ = testRelation
+      .select($"a", CustomNondetUnaryTestExpr(attrB).as("c"))
+      .where($"a" > 10)
+      .analyze
+    comparePlans(Optimize.execute(customNondetQ), customNondetQ)
+
+    // N2: Pure combinator propagates rowOrderIndependent and allows pushdown.
+    val roiUpperQ = testStringRelation
+      .select($"a", Upper(RowOrderIndepTestExpr(attrE)()).as("u"))
+      .where($"a" > 10)
+      .analyze
+    val expectedUpper = testStringRelation
+      .where($"a" > 10)
+      .select($"a", Upper(RowOrderIndepTestExpr(attrE)()).as("u"))
+      .analyze
+    comparePlans(Optimize.execute(roiUpperQ), expectedUpper)
+
+    // N2: rowOrderIndependent wrapping MonotonicallyIncreasingID blocks pushdown.
+    val unsafeChildQ = testRelation
+      .select($"a", RowOrderIndepTestExpr(MonotonicallyIncreasingID())().as("c"))
+      .where($"a" > 10)
+      .analyze
+    comparePlans(Optimize.execute(unsafeChildQ), unsafeChildQ)
+
+    // N3: Predicate referencing !deterministic alias stays above Project.
+    val aliasPredQ = testRelation
+      .select($"a", RowOrderIndepTestExpr(attrA)().as("c"))
+      .where($"c" > 0)
+      .analyze
+    comparePlans(Optimize.execute(aliasPredQ), aliasPredQ)
+  }
+
+  test("AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF respected in " +
+    "rowOrderIndependent Project pushdown") {
+    val detPyUdf = PythonUDF("det_py_udf", null, IntegerType, Seq(attrA),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val pyProjQ = testRelation
+      .select($"a", detPyUdf.as("py"), RowOrderIndepTestExpr(attrB)().as("c"))
+      .where($"py" > 0 && $"a" > 1)
+      .analyze
+
+    withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF.key -> "true") {
+      val expected = testRelation
+        .where($"a" > 1)
+        .select($"a", detPyUdf.as("py"), RowOrderIndepTestExpr(attrB)().as("c"))
+        .where($"py" > 0)
+        .analyze
+      comparePlans(Optimize.execute(pyProjQ), expected)
+    }
+
+    withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF.key -> "false") {
+      val expected = testRelation
+        .where(detPyUdf > 0 && $"a" > 1)
+        .select($"a", detPyUdf.as("py"), RowOrderIndepTestExpr(attrB)().as("c"))
+        .analyze
+      comparePlans(Optimize.execute(pyProjQ), expected)
+    }
+  }
+
+  test("ANSI throwable, Divide, and failableOutput ordering preserved across Project, " +
+    "CombineFilters, and UnaryNode") {
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val roiExpr = RowOrderIndepTestExpr(attrB)()
+
+        // (a) Direct throwable predicate after stayed-up nondet-alias predicate must stay up
+        // in exact written order.
+        val directThrowableQ = testRelation
+          .select($"a", roiExpr.as("c"))
+          .where($"c" > 0 && ThrowableDetTestExpr(attrA) > 1)
+          .analyze
+        val Seq(cPredDirect, throwableDirect) = splitConjunctivePredicates(
+          directThrowableQ.asInstanceOf[Filter].condition)
+        val optDirect = Optimize.execute(directThrowableQ)
+        comparePlans(optDirect, directThrowableQ)
+        assertTopFilterConjuncts(optDirect, Seq(cPredDirect, throwableDirect))
+
+        // Runtime execution does not throw when a == 0 rows have c <= 0.
+        val safeRows = Seq((0, -5), (2, 10)).map { case (a, b) =>
+          org.apache.spark.sql.catalyst.InternalRow(a, b, 0)
+        }
+        val resDirect = evalSimpleLogicalPlan(optDirect, safeRows)
+        assert(resDirect.map(_.getInt(0)) == Seq(2))
+
+        // (b) Alias-resolved throwable predicate checked via replaced.throwable must stay up
+        // in exact written order.
+        val aliasThrowableQ = testRelation
+          .select($"a", ThrowableDetTestExpr(attrA).as("d"), roiExpr.as("c"))
+          .where($"c" > 0 && $"d" > 1)
+          .analyze
+        val Seq(cPredAlias, dPredAlias) = splitConjunctivePredicates(
+          aliasThrowableQ.asInstanceOf[Filter].condition)
+        val optAlias = Optimize.execute(aliasThrowableQ)
+        comparePlans(optAlias, aliasThrowableQ)
+        assertTopFilterConjuncts(optAlias, Seq(cPredAlias, dPredAlias))
+
+        // (c) Prefix before stayed-up predicate pushes in order (including throwable prefix).
+        val prefixThrowableQ = testRelation
+          .select($"a", roiExpr.as("c"))
+          .where($"a" =!= 0 && ThrowableDetTestExpr(attrA) > 1 && $"c" > 0)
+          .analyze
+        val Seq(guardPrefix, throwablePrefix, cPredPrefix) = splitConjunctivePredicates(
+          prefixThrowableQ.asInstanceOf[Filter].condition)
+        val expectedPrefix = testRelation
+          .where($"a" =!= 0 && ThrowableDetTestExpr(attrA) > 1)
+          .select($"a", roiExpr.as("c"))
+          .where($"c" > 0)
+          .analyze
+        val optPrefix = Optimize.execute(prefixThrowableQ)
+        comparePlans(optPrefix, expectedPrefix)
+        assertTopFilterConjuncts(optPrefix, Seq(cPredPrefix))
+        val bottomFilter = optPrefix.collect { case f: Filter => f }.last
+        assert(splitConjunctivePredicates(bottomFilter.condition).map(_.canonicalized) ===
+          Seq(guardPrefix, throwablePrefix).map(_.canonicalized))
+
+        // (d) Pushing deterministic guard below Project suppresses throwable UDF on filtered rows.
+        val suppressQ = testRelation
+          .select($"a", ThrowableRowOrderIndepTestExpr(attrA).as("c"))
+          .where($"a" > 0)
+          .analyze
+        val expectedSuppress = testRelation
+          .where($"a" > 0)
+          .select($"a", ThrowableRowOrderIndepTestExpr(attrA).as("c"))
+          .analyze
+        val optimizedSuppress = Optimize.execute(suppressQ)
+        comparePlans(optimizedSuppress, expectedSuppress)
+        val resSuppress = evalSimpleLogicalPlan(optimizedSuppress, safeRows)
+        assert(resSuppress.map(_.getInt(0)) == Seq(2))
+
+        // (f) CombineFilters preserves ANSI Divide (10 / a) after rowOrderIndependent guard.
+        val roiPred = RowOrderIndepTestExpr(attrB)() > 0
+        val ansiDivide = Divide(Literal(10), attrA, NumericEvalContext(EvalMode.ANSI)) > 1
+        val combineAnsiQ = testRelation
+          .where($"c" === 1)
+          .where(roiPred && ansiDivide && $"b" === 1)
+          .analyze
+        val Seq(analyzedRoiPred, analyzedAnsiDivide, _) = splitConjunctivePredicates(
+          combineAnsiQ.asInstanceOf[Filter].condition)
+        val optCombineAnsi = Optimize.execute(combineAnsiQ)
+        assertTopFilterConjuncts(optCombineAnsi, Seq(analyzedRoiPred, analyzedAnsiDivide))
+
+        // (f2) RaiseError (throwable == true) after stayed-up predicate stays up in written
+        // order across Project, while trailing NoThrow (a > 10) pushes.
+        val raiseErrPred = IsNull(RaiseError(Literal("boom")))
+        val projRaiseQ = testRelation
+          .select($"a", roiExpr.as("c"))
+          .where($"c" > 0 && raiseErrPred && $"a" > 10)
+          .analyze
+        val Seq(cRaise, raisePred, _) = splitConjunctivePredicates(
+          projRaiseQ.asInstanceOf[Filter].condition)
+        val expectedProjRaise = testRelation
+          .where($"a" > 10)
+          .select($"a", roiExpr.as("c"))
+          .where($"c" > 0 && raiseErrPred)
+          .analyze
+        val optProjRaise = Optimize.execute(projRaiseQ)
+        comparePlans(optProjRaise, expectedProjRaise)
+        assertTopFilterConjuncts(optProjRaise, Seq(cRaise, raisePred))
+        val raiseSafeRows = Seq((5, 10), (15, -5)).map { case (a, b) =>
+          org.apache.spark.sql.catalyst.InternalRow(a, b, 0)
+        }
+        assert(evalSimpleLogicalPlan(optProjRaise, raiseSafeRows).isEmpty)
+        intercept[Throwable] {
+          evalSimpleLogicalPlan(
+            optProjRaise,
+            Seq(org.apache.spark.sql.catalyst.InternalRow(20, 10, 0)))
+        }
+      }
+    }
+
+    // (g) ANSI Divide (throwable == false, !canEvaluateUnconditionally) vs NoThrow across
+    // Project and failableOutput.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val roiExpr = RowOrderIndepTestExpr(attrB)()
+      val ansiCtx = NumericEvalContext(EvalMode.ANSI)
+
+      // Post-stayUp ANSI Divide stays above Project while trailing NoThrow (a > 10) pushes!
+      val projAnsiAfterQ = testRelation
+        .select($"a", roiExpr.as("c"))
+        .where($"c" > 0 && Divide(Literal(10), $"a", ansiCtx) > 1 && $"a" > 10)
+        .analyze
+      val Seq(cAfter, divAfter, _) = splitConjunctivePredicates(
+        projAnsiAfterQ.asInstanceOf[Filter].condition)
+      val expectedProjAnsiAfter = testRelation
+        .where($"a" > 10)
+        .select($"a", roiExpr.as("c"))
+        .where($"c" > 0 && Divide(Literal(10), $"a", ansiCtx) > 1)
+        .analyze
+      val optProjAnsiAfter = Optimize.execute(projAnsiAfterQ)
+      comparePlans(optProjAnsiAfter, expectedProjAnsiAfter)
+      assertTopFilterConjuncts(optProjAnsiAfter, Seq(cAfter, divAfter))
+
+      // Runtime execution on (a = 0, b = -5) short-circuits on c > 0 without DIVIDE_BY_ZERO.
+      val zeroDivRows = Seq((0, -5), (12, -5), (15, 10)).map { case (a, b) =>
+        org.apache.spark.sql.catalyst.InternalRow(a, b, 0)
+      }
+      val projOnlyDivAfter = Optimize.execute(
+        testRelation
+          .select($"a", roiExpr.as("c"))
+          .where($"c" > 0 && Divide(Literal(10), $"a", ansiCtx) > 1)
+          .analyze)
+      val evalDivAfter = evalSimpleLogicalPlan(projOnlyDivAfter,
+        Seq((0, -5), (2, 10)).map { case (a, b) =>
+          org.apache.spark.sql.catalyst.InternalRow(a, b, 0)
+        })
+      assert(evalDivAfter.map(_.getInt(0)) == Seq(2))
+      assert(evalSimpleLogicalPlan(optProjAnsiAfter, zeroDivRows).isEmpty)
+
+      // Guarded prefix (a != 0 && 10 / a > 1) BEFORE c > 0 pushes in exact written order.
+      val projAnsiBeforeQ = testRelation
+        .select($"a", roiExpr.as("c"))
+        .where($"a" =!= 0 && Divide(Literal(10), $"a", ansiCtx) > 1 && $"c" > 0)
+        .analyze
+      val Seq(guardBefore, divBefore, cBefore) = splitConjunctivePredicates(
+        projAnsiBeforeQ.asInstanceOf[Filter].condition)
+      val expectedProjAnsiBefore = testRelation
+        .where($"a" =!= 0 && Divide(Literal(10), $"a", ansiCtx) > 1)
+        .select($"a", roiExpr.as("c"))
+        .where($"c" > 0)
+        .analyze
+      val optProjAnsiBefore = Optimize.execute(projAnsiBeforeQ)
+      comparePlans(optProjAnsiBefore, expectedProjAnsiBefore)
+      assertTopFilterConjuncts(optProjAnsiBefore, Seq(cBefore))
+      val pushedProjBottom = optProjAnsiBefore.collect { case f: Filter => f }.last
+      assert(splitConjunctivePredicates(pushedProjBottom.condition).map(_.canonicalized) ===
+        Seq(guardBefore, divBefore).map(_.canonicalized))
+
+      // Grandchild failableOutput barrier: a pass-through column backed by an ANSI Cast below
+      // Sample stays above Project after c > 0, while NoThrow (a > 10) pushes.
+      val failableGrandChild = testStringRelation
+        .select($"a", $"b", Cast($"e", IntegerType, evalMode = EvalMode.ANSI).as("i"))
+        .sample(0.0, 0.5, withReplacement = false, 1L)
+      val failableProjQ = failableGrandChild
+        .select($"a", $"i", RowOrderIndepTestExpr($"b")().as("c"))
+        .where($"c" > 0 && $"i" > 1 && $"a" > 10)
+        .analyze
+      val Seq(cFailable, iFailable, _) = splitConjunctivePredicates(
+        failableProjQ.asInstanceOf[Filter].condition)
+      val optFailableProj = Optimize.execute(failableProjQ)
+      assertTopFilterConjuncts(optFailableProj, Seq(cFailable, iFailable))
+    }
+  }
+
+  test("UnaryNode barriers stay blocked for BatchEvalPython/ArrowEvalPython/" +
+    "ExecuteExternalUDF/Limit/Expand/Generate") {
+    val roiExpr = RowOrderIndepTestExpr(attrB)()
+
+    // BatchEvalPython and ArrowEvalPython with nondeterministic PythonUDF (!rowOrderIndependent)
+    // stay blocked.
+    val nondetBatchPyUdf = PythonUDF("py_udf", null, IntegerType, Seq(attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = false)
+    val evalPyAttr = AttributeReference("pythonUDF0", IntegerType)()
+    val batchEvalQ = Filter(attrA > 10,
+      BatchEvalPython(Seq(nondetBatchPyUdf), testRelation.output, Seq(evalPyAttr), testRelation))
+    assert(batchEvalQ.resolved)
+    comparePlans(Optimize.execute(batchEvalQ), batchEvalQ, checkAnalysis = false)
+
+    val nondetArrowPyUdf = PythonUDF("py_arrow_udf", null, IntegerType, Seq(attrB),
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF, udfDeterministic = false)
+    val arrowEvalQ = Filter(attrA > 10,
+      ArrowEvalPython(Seq(nondetArrowPyUdf), testRelation.output, Seq(evalPyAttr),
+        testRelation, PythonEvalType.SQL_SCALAR_PANDAS_UDF))
+    assert(arrowEvalQ.resolved)
+    comparePlans(Optimize.execute(arrowEvalQ), arrowEvalQ, checkAnalysis = false)
+
+    // ExecuteExternalUDF with nondeterministic ExternalUserDefinedFunction (!rowOrderIndependent)
+    // stays blocked.
+    val nondetExtUdf = ExternalUserDefinedFunction(
+      name = Some("ext_nondet"),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
+      payload = Array.emptyByteArray,
+      dataType = IntegerType,
+      children = Seq(attrB),
+      udfDeterministic = false,
+      udfNullable = true)
+    assert(!nondetExtUdf.rowOrderIndependent)
+    val extAttr = AttributeReference("externalUDF0", IntegerType)()
+    val extEvalQ = Filter(attrA > 10,
+      ExecuteExternalUDF(nondetExtUdf, extAttr, testRelation))
+    assert(extEvalQ.resolved)
+    comparePlans(Optimize.execute(extEvalQ), extEvalQ, checkAnalysis = false)
+
+    // Limit / TopN over rowOrderIndependent Project must NOT push Filter below Limit.
+    val limitQ = Filter(attrA > 10,
+      GlobalLimit(5, LocalLimit(5, testRelation.select(attrA, roiExpr.as("c"))))).analyze
+    comparePlans(Optimize.execute(limitQ), limitQ)
+
+    val topNQ = Filter(attrA > 10,
+      GlobalLimit(5, LocalLimit(5,
+        Sort(Seq(SortOrder(attrA, Ascending)), global = true,
+          testRelation.select(attrA, roiExpr.as("c")))))).analyze
+    comparePlans(Optimize.execute(topNQ), topNQ)
+
+    // Expand / Generate with rowOrderIndependent expr must NOT push down.
+    val expandQ = Filter(attrA > 10,
+      Expand(
+        Seq(Seq(attrA, roiExpr)),
+        Seq(attrA, attrB),
+        testRelation))
+    assert(expandQ.resolved)
+    comparePlans(Optimize.execute(expandQ), expandQ)
+
+    val generateQ = Filter(attrA > 10,
+      Generate(
+        Explode(CreateArray(Seq(roiExpr))),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        generatorOutput = Seq($"elem".int),
+        testRelation))
+    assert(generateQ.resolved)
+    comparePlans(Optimize.execute(generateQ), generateQ)
+  }
+
+  test("SQLConf kill-switch, avoidDoubleFilterEval, and legacy deterministic Project") {
+    val roiExpr = RowOrderIndepTestExpr(attrB)()
+    val roiProjQ = testRelation.select($"a", roiExpr.as("c")).where($"a" > 10).analyze
+
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+      comparePlans(Optimize.execute(roiProjQ), roiProjQ)
+
+      // Legacy fields.forall(_.deterministic) path remains active even with kill-switch off.
+      val legacyQ = testRelation
+        .select(($"a" + 1).as("b"))
+        .where(Rand(0) > 0.5)
+        .analyze
+      val expectedLegacy = testRelation
+        .where(Rand(0) > 0.5)
+        .select(($"a" + 1).as("b"))
+        .analyze
+      comparePlans(Optimize.execute(legacyQ), expectedLegacy)
+    }
+
+    // Legacy path with kill-switch enabled too.
+    val legacyQ = testRelation
+      .select(($"a" + 1).as("b"))
+      .where(Rand(0) > 0.5)
+      .analyze
+    val expectedLegacy = testRelation
+      .where(Rand(0) > 0.5)
+      .select(($"a" + 1).as("b"))
+      .analyze
+    comparePlans(Optimize.execute(legacyQ), expectedLegacy)
+
+    // With avoidDoubleFilterEval = false, a deterministic expensive alias can be pushed past
+    // a row-order-independent Project; with default true it stays above Project.
+    val expensiveAliasQ = testStringRelation
+      .select(expensiveRLike("magic").as("f"), RowOrderIndepTestExpr($"b")().as("c"))
+      .where($"f")
+      .analyze
+    comparePlans(Optimize.execute(expensiveAliasQ), expensiveAliasQ)
+    withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> "false") {
+      val expectedPushed = testStringRelation
+        .where(expensiveRLike("magic"))
+        .select(expensiveRLike("magic").as("f"), RowOrderIndepTestExpr($"b")().as("c"))
+        .analyze
+      comparePlans(Optimize.execute(expensiveAliasQ), expectedPushed)
+    }
+  }
+
+  test("whole Catalyst SimpleTestOptimizer preserves single RowOrderIndepTestExpr instance " +
+    "and 1x invocation count") {
+    case class NonLocalTestRelation(output: Seq[Attribute]) extends LeafNode {
+      override def computeStats(): Statistics = Statistics(sizeInBytes = 1024)
+    }
+    val nonLocalRel = NonLocalTestRelation(Seq(attrA, attrE))
+
+    // (1) Single-reference projection collapse + filter pushdown across all Catalyst batches.
+    val singleRefCounter = new java.util.concurrent.atomic.AtomicInteger(0)
+    val singleRefRoi = RowOrderIndepTestExpr(attrE)(singleRefCounter)
+    val singleRefQuery = nonLocalRel
+      .select($"a", singleRefRoi.as("c"))
+      .select($"a", Coalesce(Seq(Upper($"c"), Literal(""))).as("u"))
+      .where($"a" > 10)
+      .analyze
+
+    val optSingleRef = SimpleTestOptimizer.execute(singleRefQuery)
+    val singleRefRoiCount = optSingleRef.collect {
+      case p => p.expressions.flatMap(_.collect { case e: RowOrderIndepTestExpr => e }).size
+    }.sum
+    assert(singleRefRoiCount === 1)
+    assert(optSingleRef.collect { case p: Project => p }.size === 1)
+    assert(optSingleRef.collect { case Project(_, _: Filter) => true }.size === 1)
+
+    val stringRows = Seq((5, "skip"), (10, "skip2"), (12, "keep1"), (20, "keep2")).map {
+      case (a, s) =>
+        org.apache.spark.sql.catalyst.InternalRow(
+          a, org.apache.spark.unsafe.types.UTF8String.fromString(s))
+    }
+    val singleRefRes = evalSimpleLogicalPlan(optSingleRef, stringRows)
+    assert(singleRefRes.map(_.getInt(0)) === Seq(12, 20))
+    assert(singleRefRes.map(_.getUTF8String(1).toString) === Seq("KEEP1", "KEEP2"))
+    assert(singleRefCounter.get() === 2)
+
+    // (2) Multi-reference consumer across all Catalyst batches keeps AST instance count == 1
+    // and 1x invocation count per surviving row (never duplicated).
+    val multiRefCounter = new java.util.concurrent.atomic.AtomicInteger(0)
+    val multiRefRoi = RowOrderIndepTestExpr(attrE)(multiRefCounter)
+    val multiRefQuery = nonLocalRel
+      .select($"a", multiRefRoi.as("c"))
+      .select($"a", Upper($"c").as("u1"), Lower($"c").as("u2"))
+      .where($"a" > 10)
+      .analyze
+
+    val optMultiRef = SimpleTestOptimizer.execute(multiRefQuery)
+    val multiRefRoiCount = optMultiRef.collect {
+      case p => p.expressions.flatMap(_.collect { case e: RowOrderIndepTestExpr => e }).size
+    }.sum
+    assert(multiRefRoiCount === 1)
+    assert(optMultiRef.collect { case p: Project => p }.size === 2)
+    val multiRefRes = evalSimpleLogicalPlan(optMultiRef, stringRows)
+    assert(multiRefRes.map(_.getInt(0)) === Seq(12, 20))
+    assert(multiRefRes.map(_.getUTF8String(1).toString) === Seq("KEEP1", "KEEP2"))
+    assert(multiRefRes.map(_.getUTF8String(2).toString) === Seq("keep1", "keep2"))
+    assert(multiRefCounter.get() === 2)
+  }
+
+  test("row-order-independent Project: push DPP and BloomFilter past stay-up filter") {
+    val roi = objects.StaticInvoke(
+      StaticInvokeTestHelper.getClass,
+      IntegerType,
+      "echo",
+      Seq(attrB),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+    val dim = LocalRelation($"k".int)
+    val dimKey = dim.output.head
+    val dpp = DynamicPruningSubquery(
+      pruningKey = attrA,
+      buildQuery = dim,
+      buildKeys = Seq(dimKey),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)()
+    val bloomPlan = LocalRelation($"bf".binary)
+    val bloomFilter = BloomFilterMightContain(
+      ScalarSubquery(bloomPlan),
+      new XxHash64(Seq(attrA)))
+
+    // Stacked Filter(dpp, Filter(enc IS NOT NULL, Project(roi))) merges in CombineFilters
+    // with enc IS NOT NULL first and dpp second; PushPredicateThroughNonJoin must still push dpp.
+    val dppStacked = Filter(
+      dpp,
+      Filter(
+        IsNotNull($"enc"),
+        testRelation.select($"a", roi.as("enc")))).analyze
+    val dppExpected = Filter(
+      IsNotNull($"enc"),
+      testRelation.where(dpp).select($"a", roi.as("enc"))).analyze
+    comparePlans(Optimize.execute(dppStacked), dppExpected)
+
+    // Same stacked shape with BloomFilterMightContain(ScalarSubquery(...), XxHash64(a)).
+    val bfStacked = Filter(
+      bloomFilter,
+      Filter(
+        IsNotNull($"enc"),
+        testRelation.select($"a", roi.as("enc")))).analyze
+    val bfExpected = Filter(
+      IsNotNull($"enc"),
+      testRelation.where(bloomFilter).select($"a", roi.as("enc"))).analyze
+    comparePlans(Optimize.execute(bfStacked), bfExpected)
+
+    // Negative: ordinary ScalarSubquery after stay-up enc IS NOT NULL must stay above Project.
+    val scalarSubquery = ScalarSubquery(dim.select(count(dimKey).as("cnt")).analyze)
+    val scalarQuery = Filter(
+      IsNotNull($"enc") && ($"a" > scalarSubquery),
+      testRelation.select($"a", roi.as("enc"))).analyze
+    comparePlans(Optimize.execute(scalarQuery), scalarQuery)
+
+    // Negative: DPP/Bloom over ANSI-failable key expression or failable child output must stay up.
+    val ansiCtx = NumericEvalContext(EvalMode.ANSI)
+    val failableDpp = DynamicPruningSubquery(
+      pruningKey = Cast(Divide(Literal(10), attrA, ansiCtx), IntegerType, evalMode = EvalMode.ANSI),
+      buildQuery = dim,
+      buildKeys = Seq(dimKey),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)()
+    val failableDppQuery = Filter(
+      IsNotNull($"enc") && failableDpp,
+      testRelation.select($"a", roi.as("enc"))).analyze
+    comparePlans(Optimize.execute(failableDppQuery), failableDppQuery)
+
+    val failableBf = BloomFilterMightContain(
+      ScalarSubquery(bloomPlan),
+      new XxHash64(Seq(Divide(Literal(10), attrA, ansiCtx))))
+    val failableBfQuery = Filter(
+      IsNotNull($"enc") && failableBf,
+      testRelation.select($"a", roi.as("enc"))).analyze
+    comparePlans(Optimize.execute(failableBfQuery), failableBfQuery)
+
+    val failableChild = testRelation
+      .select(Cast(Divide(Literal(10), $"a", ansiCtx), IntegerType, evalMode = EvalMode.ANSI)
+        .as("fa"), $"b")
+      .analyze
+    val faAttr = failableChild.output.head
+    val dppOnFailableCol = DynamicPruningSubquery(
+      pruningKey = faAttr,
+      buildQuery = dim,
+      buildKeys = Seq(dimKey),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)()
+    val dppOnFailableQuery = Filter(
+      IsNotNull($"enc") && dppOnFailableCol,
+      Project(Seq(faAttr, roi.as("enc")), failableChild)).analyze
+    val optFailable = PushPredicateThroughNonJoin.apply(dppOnFailableQuery)
+    comparePlans(optFailable, dppOnFailableQuery)
+  }
+
+  test("row-order-independent Aggregate: filter, DPP, and BloomFilter pushdown and barriers") {
+    val roiOnKey = objects.StaticInvoke(
+      StaticInvokeTestHelper.getClass,
+      IntegerType,
+      "echo",
+      Seq($"a"),
+      isDeterministic = false,
+      isRowOrderIndependent = true)
+    val roiOnAgg = RowOrderIndepTestExpr(Cast(sum($"b"), IntegerType))()
+    val ansiCtx = NumericEvalContext(EvalMode.ANSI)
+    val dim = LocalRelation($"k".int)
+    val dimKey = dim.output.head
+    val dpp = DynamicPruningSubquery(
+      pruningKey = attrA,
+      buildQuery = dim,
+      buildKeys = Seq(dimKey),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)()
+    val bloomPlan = LocalRelation($"bf".binary)
+    val bloomFilter = BloomFilterMightContain(
+      ScalarSubquery(bloomPlan),
+      new XxHash64(Seq(attrA)))
+
+    // Positive: disjoint deterministic filter on grouping key pushes below ROI Aggregate,
+    // while filter referencing nondeterministic alias stays above (no double eval).
+    val aggWithKeyRoi = testRelation
+      .groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s"))
+      .where($"enc_a".isNotNull && $"a" > 10)
+      .analyze
+    val expectedAggWithKeyRoi = testRelation
+      .where($"a" > 10)
+      .groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s"))
+      .where($"enc_a".isNotNull)
+      .analyze
+    comparePlans(Optimize.execute(aggWithKeyRoi), expectedAggWithKeyRoi)
+
+    // Positive: ROI wrapping aggregate expression pushes grouping-key filter below Aggregate.
+    val aggWithSumRoi = testRelation
+      .groupBy($"a")($"a", roiOnAgg.as("enc_sum"))
+      .where($"enc_sum".isNotNull && $"a" > 5)
+      .analyze
+    val expectedAggWithSumRoi = testRelation
+      .where($"a" > 5)
+      .groupBy($"a")($"a", roiOnAgg.as("enc_sum"))
+      .where($"enc_sum".isNotNull)
+      .analyze
+    comparePlans(Optimize.execute(aggWithSumRoi), expectedAggWithSumRoi)
+
+    // Positive: DPP and BloomFilter push past stay-up filter on ROI Aggregate.
+    val aggDpp = Filter(
+      dpp,
+      Filter(
+        IsNotNull($"enc_a"),
+        testRelation.groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s")))).analyze
+    val expectedAggDpp = Filter(
+      IsNotNull($"enc_a"),
+      testRelation.where(dpp)
+        .groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s"))).analyze
+    comparePlans(Optimize.execute(aggDpp), expectedAggDpp)
+
+    val aggBf = Filter(
+      bloomFilter,
+      Filter(
+        IsNotNull($"enc_a"),
+        testRelation.groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s")))).analyze
+    val expectedAggBf = Filter(
+      IsNotNull($"enc_a"),
+      testRelation.where(bloomFilter)
+        .groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s"))).analyze
+    comparePlans(Optimize.execute(aggBf), expectedAggBf)
+
+    // ANSI barrier: throwable predicate written after stay-up ROI filter stays above Aggregate.
+    val ansiAggQuery = testRelation
+      .groupBy($"a")($"a", roiOnKey.as("enc_a"), sum($"b").as("s"))
+      .where($"enc_a".isNotNull && Divide(Literal(10), $"a", ansiCtx) > 1)
+      .analyze
+    comparePlans(Optimize.execute(ansiAggQuery), ansiAggQuery)
+
+    // Negative (SPARK-46487): Aggregate with stateful Rand(1) blocks pushdown.
+    val randAggQuery = testRelation
+      .groupBy($"a")($"a", Rand(1).as("r"), sum($"b").as("s"))
+      .where($"a" > 10)
+      .analyze
+    comparePlans(Optimize.execute(randAggQuery), randAggQuery)
+
+    // Negative: Aggregate with empty groupingExpressions blocks pushdown.
+    val emptyGroupingAgg = testRelation
+      .groupBy()(roiOnAgg.as("enc_sum"))
+      .where($"enc_sum".isNotNull && Literal(true))
+      .analyze
+    comparePlans(PushPredicateThroughNonJoin.apply(emptyGroupingAgg), emptyGroupingAgg)
+
+    // Kill-switch: disabling config restores legacy barrier on ROI Aggregate.
+    withSQLConf(SQLConf.ROW_ORDER_INDEPENDENT_NONDETERMINISTIC_PUSHDOWN_ENABLED.key -> "false") {
+      comparePlans(Optimize.execute(aggWithKeyRoi), aggWithKeyRoi)
+    }
   }
 }
