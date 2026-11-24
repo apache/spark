@@ -342,11 +342,11 @@ trait PredicateHelper extends AliasHelper with Logging {
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. A conjunct over more than one of `plans`, or of the inputs of a join below one of
-   * them, also through the projections between the joins, is only evaluated where they are
-   * joined, so it is checked against the columns that can fail there (see `atJoin` of
-   * `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push the parts of a
-   * disjunction that read one side below the join. The conjuncts that may not move are returned in
-   * their written order.
+   * them, also through the operators between the joins (see `joinInputsRead`), is only evaluated
+   * where they are joined, so it is checked against the columns that can fail there (see
+   * `atJoin` of `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push the
+   * parts of a disjunction that read one side below the join. The conjuncts that may not move are
+   * returned in their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
@@ -365,17 +365,22 @@ trait PredicateHelper extends AliasHelper with Logging {
     lazy val failableAtJoin =
       AttributeSet.fromAttributeSets(plans.map(failableOutput(_, atJoin = true)))
     val (cannotFail, stayUp) = following.partition { cond =>
-      val inputs = plans.flatMap(p => joinInputsRead(cond.references.intersect(p.outputSet), p))
-      val columns = if (inputs.size > 1) failableAtJoin else failable
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(columns.contains)
+      ExprUtils.canEvaluateUnconditionally(cond) && {
+        val inputs = plans.flatMap(p => joinInputsRead(cond.references.intersect(p.outputSet), p))
+        val columns = if (inputs.size > 1) failableAtJoin else failable
+        !cond.references.exists(columns.contains)
+      }
     }
     (leading ++ cannotFail, stayUp)
   }
 
   /**
    * The inputs of the joins at the top of `plan` that `columns`, output columns of `plan`, are
-   * read from, looking through the projections between the joins, or `plan` itself if it is not a
-   * join or a projection.
+   * read from, looking through the operators between the joins, or `plan` itself if it is not a
+   * join. A projection or an aggregation passes on the columns its expressions read, the latter
+   * only its grouping keys, and another operator with one child the columns of its child that it
+   * outputs. An operator that computes a column itself is the input it is read from, and so is a
+   * union unless the columns of each of its children are read from more than one input.
    */
   private def joinInputsRead(columns: AttributeSet, plan: LogicalPlan): Seq[LogicalPlan] =
     plan match {
@@ -386,8 +391,33 @@ trait PredicateHelper extends AliasHelper with Logging {
       case Project(projectList, child) =>
         joinInputsRead(AttributeSet.fromAttributeSets(
           projectList.filter(e => columns.contains(e.toAttribute)).map(_.references)), child)
+      case agg: Aggregate =>
+        passedOn(agg, AttributeSet.fromAttributeSets(
+          agg.aggregateExpressions.filter(e => columns.contains(e.toAttribute)).map {
+            _.transform { case e: AggregateExpression => e.resultAttribute }.references
+          }))
+      case u: Union =>
+        val positions = u.output.zipWithIndex.collect { case (a, i) if columns.contains(a) => i }
+          .toSet
+        val inputs = u.children.map { c =>
+          joinInputsRead(AttributeSet(c.output.zipWithIndex.collect {
+            case (a, i) if positions.contains(i) => a
+          }), c)
+        }
+        if (inputs.forall(_.size > 1)) inputs.flatten else Seq(plan)
+      case u: UnaryNode => passedOn(u, columns)
       case _ => Seq(plan)
     }
+
+  /**
+   * [[joinInputsRead]] of `read`, the columns that some output columns of `plan` read, through its
+   * only child, with `plan` itself if it computes some of them.
+   */
+  private def passedOn(plan: LogicalPlan, read: AttributeSet): Seq[LogicalPlan] = {
+    val child = plan.children.head
+    val passed = read.intersect(child.outputSet)
+    (if (passed.size < read.size) Seq(plan) else Nil) ++ joinInputsRead(passed, child)
+  }
 
   /**
    * Returns true if `condition`, the condition of a join or a filter whose inputs are `plans`, has

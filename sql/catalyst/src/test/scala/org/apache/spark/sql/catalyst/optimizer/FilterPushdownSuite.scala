@@ -1406,6 +1406,40 @@ class FilterPushdownSuite extends PlanTest {
         .where(Rand(0) > 0.1 && $"kk" === $"bk").analyze),
       projected.where($"kk" === $"bk").join(c, LeftOuter, Some($"bx" === $"cx"))
         .where(Rand(0) > 0.1).analyze)
+    // A condition over one column of the projection reads one input of the lower join only.
+    val oneSided = projected.join(c, Inner, Some($"bx" === $"cx"))
+      .where(Rand(0) > 0.1 && $"kk" > 0).analyze
+    comparePlans(PushPredicateThroughJoin(oneSided), oneSided)
+    // So it does through a repartition, a `Generate`, an aggregation, here one whose output
+    // renames its grouping keys, or a union of such joins between the joins, but not through a
+    // union with a branch that reads one input, below whose aggregation it could be pushed on.
+    val joined = agg.join(b)
+    Seq(
+      joined.distribute($"bx")(2) -> true,
+      joined.generate(Explode(CreateArray(Seq(Literal(1), Literal(2))))) -> true,
+      joined.groupBy($"k", $"bk", $"bx")(
+        $"k".as("k"), $"bk".as("bk"), $"bx", count(Literal(1)).as("n")) -> true,
+      joined.union(agg.join(b)) -> true,
+      joined.union(agg.select($"k", $"k".as("bk"), $"k".as("bx"))) -> false
+    ).foreach { case (side, moves) =>
+      val originalQuery = side.join(c, LeftOuter, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1 && $"k" === $"bk")
+      val correctAnswer = if (moves) {
+        side.where($"k" === $"bk").join(c, LeftOuter, Some($"bx" === $"cx")).where(Rand(0) > 0.1)
+      } else {
+        originalQuery
+      }
+      comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
+    }
+    // An operator that computes a column, here a window, is the input that the column is read
+    // from, so `w = k` reads two inputs too.
+    val windowed = joined.window(
+      windowExpr(count($"bx"), windowSpec(Nil, Nil, UnspecifiedFrame)).as("w") :: Nil, Nil, Nil)
+    comparePlans(
+      PushPredicateThroughJoin(windowed.join(c, LeftOuter, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1 && $"w" === $"k").analyze),
+      windowed.where($"w" === $"k").join(c, LeftOuter, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1).analyze)
   }
 
   test("joins: push to one side after transformCondition") {
