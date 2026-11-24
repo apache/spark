@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RoundRobi
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.CartesianProductExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingGlobalLimitExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions.{array, explode, lit, udf}
@@ -138,7 +139,7 @@ class StreamingStatefulCartesianSuite extends StreamTest with StatefulCartesianE
       case c: CartesianProductExec => c.children.collectFirst { case s: ShuffleExchangeExec => s }
     }.flatten
 
-  /** Asserts the inserted shuffle has one partition per state partition (2 in these tests). */
+  /** Asserts the inserted shuffle keeps the stateful side's 2 partitions. */
   private def assertInsertedShuffle(keepsHashPartitioning: Boolean): AssertOnQuery =
     AssertOnQuery { q =>
       val plan = q.lastExecution.executedPlan
@@ -226,6 +227,30 @@ class StreamingStatefulCartesianSuite extends StreamTest with StatefulCartesianE
         AddData(input, inputValues: _*),
         CheckAnswer((for (v <- inputValues; _ <- 1 to 2; id <- staticIds) yield (v, id)): _*),
         assertInsertedShuffle(keepsHashPartitioning = false))
+    }
+  }
+
+  test("shuffle: keeps a single-partition stateful side single-partitioned") {
+    withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        shuffleEnabledKey -> "true") {
+      val input = MemoryStream[Int]
+      // A streaming global limit has one partition although its state info has two.
+      val limited = input.toDS().limit(inputValues.size)
+      val static = spark.range(staticIds.head, staticIds.last + 1, 1, numPartitions = 2)
+      testStream(limited.crossJoin(static))(
+        AddData(input, inputValues: _*),
+        CheckAnswer(expectedRows: _*),
+        AssertOnQuery { q =>
+          val plan = q.lastExecution.executedPlan
+          val shuffle = shuffleUnderCartesian(plan)
+            .getOrElse(fail(s"no shuffle under the Cartesian product:\n$plan"))
+          assert(shuffle.child.exists(_.isInstanceOf[StreamingGlobalLimitExec]), s"plan:\n$plan")
+          assert(shuffle.outputPartitioning.numPartitions == 1, s"plan:\n$plan")
+          true
+        })
     }
   }
 }

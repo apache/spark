@@ -32,9 +32,9 @@ import org.apache.spark.sql.internal.SQLConf
  * once: they wait on each other for the store, and each one reloads its state. State stores assume
  * one task per state partition per stage.
  *
- * This rule ends the stage after the stateful operator with a shuffle that keeps its partition
- * count, so each state partition is computed by exactly one task and the Cartesian product reads
- * the shuffle output instead.
+ * This rule ends the stage after the stateful operator with a shuffle that keeps the stateful
+ * side's partition count, so each state partition is computed by exactly one task and the
+ * Cartesian product reads the shuffle output instead.
  *
  * Must run after `EnsureRequirements`: an exchange it inserts between the stateful operator and the
  * Cartesian product already ends the stage, and this rule must not add a second one.
@@ -47,37 +47,33 @@ object InsertShuffleBeforeStatefulCartesianProduct extends Rule[SparkPlan] {
     }
     plan.transformUp {
       case j: CartesianProductExec =>
-        (numStatePartitionsInStage(j.left), numStatePartitionsInStage(j.right)) match {
-          case (Some(n), None) => j.withNewChildren(Seq(shuffle(j.left, n), j.right))
-          case (None, Some(n)) => j.withNewChildren(Seq(j.left, shuffle(j.right, n)))
+        (hasStatefulOperatorInStage(j.left), hasStatefulOperatorInStage(j.right)) match {
+          case (true, false) => j.withNewChildren(Seq(shuffle(j.left), j.right))
+          case (false, true) => j.withNewChildren(Seq(j.left, shuffle(j.right)))
           case _ => j
         }
     }
   }
 
   /**
-   * Reuses the child's hash partitioning when it already has one partition per state partition, so
-   * every row stays in its partition and no sort is needed; round-robin otherwise. Some operators,
-   * such as GenerateExec, forward a partitioning over attributes they no longer output, so the
-   * partitioning is reused only when the child still outputs every attribute it references.
+   * Keeps the child's partition count rather than the state partition count, which can differ: a
+   * streaming global limit has one partition. Reuses the child's hash partitioning, so every row
+   * stays in its partition and no sort is needed; round-robin otherwise. Some operators, such as
+   * GenerateExec, forward a partitioning over attributes they no longer output, so the partitioning
+   * is reused only when the child still outputs every attribute it references.
    */
-  private def shuffle(child: SparkPlan, numPartitions: Int): SparkPlan = {
+  private def shuffle(child: SparkPlan): SparkPlan = {
     val partitioning = child.outputPartitioning match {
-      case h: HashPartitioning
-          if h.numPartitions == numPartitions && h.references.subsetOf(child.outputSet) => h
-      case _ => RoundRobinPartitioning(numPartitions)
+      case h: HashPartitioning if h.references.subsetOf(child.outputSet) => h
+      case p => RoundRobinPartitioning(p.numPartitions)
     }
     ShuffleExchangeExec(partitioning, child)
   }
 
-  /**
-   * State partition count of the nearest stateful operator reachable without crossing a stage
-   * boundary.
-   */
-  private def numStatePartitionsInStage(plan: SparkPlan): Option[Int] = plan match {
-    case _: Exchange => None
-    case s: StateStoreWriter => s.stateInfo.map(_.numPartitions)
-    case _ =>
-      plan.children.iterator.map(numStatePartitionsInStage).collectFirst { case Some(n) => n }
+  /** Whether a stateful operator is reachable without crossing a stage boundary. */
+  private def hasStatefulOperatorInStage(plan: SparkPlan): Boolean = plan match {
+    case _: Exchange => false
+    case s: StateStoreWriter => s.stateInfo.isDefined
+    case _ => plan.children.exists(hasStatefulOperatorInStage)
   }
 }
