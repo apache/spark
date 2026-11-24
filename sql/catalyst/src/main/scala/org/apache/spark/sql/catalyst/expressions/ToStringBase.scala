@@ -94,7 +94,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // only its catalyst-side ops can format. Other framework types use their client-side ops, which
   // carry the cast's zone.
   private def frameworkOps(from: DataType): Option[TypeApiOps] =
-    TypeOps(from).filter(_.rowRepresentationType.isDefined).orElse(TypeApiOps(from, zoneId))
+    structBackedOps(from).orElse(TypeApiOps(from, zoneId))
+
+  // The catalyst-side ops of a framework type whose row representation is a struct.
+  private def structBackedOps(from: DataType): Option[TypeOps] =
+    TypeOps(from).filter(_.rowRepresentationType.isDefined)
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -246,12 +250,13 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   @scala.annotation.tailrec
   private def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+    val structOps = structBackedOps(from)
     from match {
-      case _ if TypeOps(from).exists(_.rowRepresentationType.isDefined) =>
+      case _ if structOps.isDefined =>
         // A type stored as a struct, such as FileType, is formatted by its catalyst-side ops, as
         // in `frameworkOps`.
         val opsRef = JavaCode.global(
-          ctx.addReferenceObj("typeOps", TypeOps(from).get, classOf[TypeApiOps].getName),
+          ctx.addReferenceObj("typeOps", structOps.get, classOf[TypeApiOps].getName),
           classOf[TypeApiOps])
         (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case BinaryType =>

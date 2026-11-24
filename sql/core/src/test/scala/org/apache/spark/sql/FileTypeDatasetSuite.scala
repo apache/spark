@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.beans.BeanProperty
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -38,6 +39,9 @@ class FileBean extends Serializable {
  */
 class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
 
   private val f1 = new FileRef("s3://bucket/dir/doc.pdf", 10L, 2048L, "application/pdf", "MD5:abc")
   private val f2 = new FileRef("/data/b.txt", null, null, null, null)
@@ -110,10 +114,52 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
 
   test("a FILE does not cast to STRING") {
     val df = Seq(FileRecord(1, f2, Seq(f2))).toDF()
-    Seq("file", "files", "named_struct('f', file)").foreach { expr =>
-      val e = intercept[AnalysisException](df.selectExpr(s"CAST($expr AS STRING)").collect())
-      assert(e.getCondition.startsWith("DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION"), expr)
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        Seq(
+          ("file", "file", "\"FILE\""),
+          ("files", "files", "\"ARRAY<FILE>\""),
+          ("named_struct('f', file)", "named_struct(f, file)", "\"STRUCT<f: FILE>\"")
+        ).foreach { case (expr, exprSql, srcType) =>
+          val cast = s"CAST($expr AS STRING)"
+          checkError(
+            exception = intercept[AnalysisException](df.selectExpr(cast).collect()),
+            condition = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+            parameters = Map(
+              "sqlExpr" -> s"\"CAST($exprSql AS STRING)\"",
+              "srcType" -> srcType,
+              "targetType" -> "\"STRING\""),
+            context = ExpectedContext(fragment = cast, start = 0, stop = cast.length - 1))
+        }
+      }
     }
+  }
+
+  test("a FILE value of any mode is written to a FILE EXTERNAL column") {
+    val records = Seq(FileRecord(1, f1, Seq(f2)), FileRecord(2, null, Seq(null)))
+    val expected = Seq(Row(1, f1, Seq(f2), Row(f1)), Row(2, null, Seq(null), Row(null)))
+    val query = records.toDS()
+      .selectExpr("id", "file AS f", "files AS fs", "named_struct('g', file) AS s")
+    // Data source V2 tables do not allow the LEGACY policy, and FileTypeOpsSuite covers its cast.
+    Seq("ANSI", "STRICT").foreach { policy =>
+      withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy) {
+        withTable("testcat.t") {
+          sql("CREATE TABLE testcat.t " +
+            "(id INT, f FILE EXTERNAL, fs ARRAY<FILE EXTERNAL>, s STRUCT<g: FILE EXTERNAL>)")
+          val schema = spark.table("testcat.t").schema
+          query.writeTo("testcat.t").append()
+          withTempView("v") {
+            query.createOrReplaceTempView("v")
+            sql("INSERT INTO testcat.t SELECT * FROM v")
+          }
+          assert(spark.table("testcat.t").schema === schema, policy)
+          checkAnswer(spark.table("testcat.t"), expected ++ expected)
+        }
+      }
+    }
+    // An explicit cast does not turn a FILE of unknown mode into a FILE EXTERNAL.
+    val e = intercept[AnalysisException](query.selectExpr("CAST(f AS FILE EXTERNAL)"))
+    assert(e.getCondition.startsWith("DATATYPE_MISMATCH.CAST_"), e)
   }
 
   test("a bean with a FileRef property") {

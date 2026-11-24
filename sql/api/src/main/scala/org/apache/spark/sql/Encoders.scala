@@ -178,7 +178,9 @@ object Encoders {
 
   /**
    * An encoder for `org.apache.spark.sql.types.FileRef`, the value of the FILE data type. It
-   * serializes to a FILE of unknown mode.
+   * serializes to a FILE of unknown mode, which can be written to a FILE EXTERNAL column of an
+   * existing table, for example with `Dataset.writeTo(table).append()` or `INSERT INTO`. A table
+   * created from the Dataset, such as by `saveAsTable`, needs a FILE EXTERNAL column instead.
    *
    * @since 4.4.0
    */

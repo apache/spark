@@ -211,7 +211,7 @@ private[columnar] object ColumnBuilder {
       case udt: UserDefinedType[_] =>
         return apply(udt.sqlType, initialSize, columnName, useCompression)
       // A framework type stored as a struct, such as FileType, is cached as its representation.
-      case other => TypeOps(other).flatMap(_.rowRepresentationType) match {
+      case other => TypeOps.rowRepresentation(other) match {
         case Some(representation) =>
           return apply(representation, initialSize, columnName, useCompression)
         case None => throw QueryExecutionErrors.notSupportTypeError(other)

@@ -291,7 +291,7 @@ private object RowToColumnConverter {
 
   private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter =
     // A framework type stored as a struct, such as FileType, is converted as its representation.
-    TypeOps(dataType).flatMap(_.rowRepresentationType).map(getConverterForType(_, nullable))
+    TypeOps.rowRepresentation(dataType).map(getConverterForType(_, nullable))
       .getOrElse(getConverterForTypeDefault(dataType, nullable))
 
   private def getConverterForTypeDefault(dataType: DataType, nullable: Boolean): TypeConverter = {

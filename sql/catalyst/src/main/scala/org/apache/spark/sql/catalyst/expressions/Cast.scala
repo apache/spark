@@ -244,6 +244,20 @@ object Cast extends QueryErrorsBase {
   val BY_TABLE_INSERTION = TreeNodeTag[Unit]("by_table_insertion")
 
   /**
+   * Whether a cast that stores a value of type `from` in a table column of type `to` is valid.
+   * Such a cast also turns a FILE of any mode into the FILE EXTERNAL of the column, which an
+   * explicit cast does not: the value does not change, and the file becomes external to the
+   * table that stores it.
+   */
+  private def canCastForTableInsertion(
+      from: DataType,
+      to: DataType,
+      canCast: (DataType, DataType) => Boolean): Boolean = {
+    canCast(from, to) || (to.existsRecursively(_.isInstanceOf[FileType]) &&
+      canCast(from, to.transformRecursively { case _: FileType => FileType() }))
+  }
+
+  /**
    * A tag to decide if a CAST is specified by user.
    */
   val USER_SPECIFIED_CAST = new TreeNodeTag[Unit]("user_specified_cast")
@@ -909,13 +923,18 @@ case class Cast(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
-    val canCast = evalMode match {
-      case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
-      case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
-      case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
+    val canCastFn: (DataType, DataType) => Boolean = evalMode match {
+      case EvalMode.LEGACY => Cast.canCast
+      case EvalMode.ANSI => Cast.canAnsiCast
+      case EvalMode.TRY => Cast.canTryCast
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3232",
         messageParameters = Map("other" -> other.toString))
+    }
+    val canCast = if (containsTag(Cast.BY_TABLE_INSERTION)) {
+      Cast.canCastForTableInsertion(child.dataType, dataType, canCastFn)
+    } else {
+      canCastFn(child.dataType, dataType)
     }
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess

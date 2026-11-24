@@ -172,7 +172,7 @@ private[sql] object ColumnAccessor {
       case map: MapType => new MapColumnAccessor(buf, map)
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
       // A framework type stored as a struct, such as FileType, is cached as its representation.
-      case other => TypeOps(other).flatMap(_.rowRepresentationType) match {
+      case other => TypeOps.rowRepresentation(other) match {
         case Some(representation) => ColumnAccessor(representation, buffer)
         case None => throw QueryExecutionErrors.notSupportTypeError(other)
       }

@@ -314,6 +314,28 @@ class FileTypeOpsSuite extends SparkFunSuite with SQLHelper {
     assert(!UpCastRule.canUpCast(FileType(), FileType.external))
     assert(!UpCastRule.canUpCast(FileType.asStruct, FileType()))
     assert(!UpCastRule.canUpCast(FileType(), FileType.asStruct))
+    // Writing to a table stores a FILE of any mode as FILE EXTERNAL, through a cast that only
+    // table insertion makes.
+    assert(DataTypeUtils.canWrite("t", FileType(), FileType.external, byName = true,
+      SQLConf.get.resolver, "f", SQLConf.StoreAssignmentPolicy.STRICT, _ => ()))
+    intercept[AnalysisException](DataTypeUtils.canWrite("t", FileType.external, FileType(),
+      byName = true, SQLConf.get.resolver, "f", SQLConf.StoreAssignmentPolicy.STRICT, _ => ()))
+    val nested = ArrayType(new StructType().add("f", FileType()))
+    Seq(FileType() -> FileType.external,
+        nested -> ArrayType(new StructType().add("f", FileType.external))).foreach {
+      case (from, to) =>
+        Seq(true, false).foreach { ansi =>
+          val insertion = Cast(Literal.create(null, from), to, None, ansiEnabled = ansi)
+          assert(insertion.checkInputDataTypes().isFailure, s"$from $ansi")
+          insertion.setTagValue(Cast.BY_TABLE_INSERTION, ())
+          assert(insertion.checkInputDataTypes().isSuccess, s"$from $ansi")
+        }
+    }
+    // A cast to STRING, which is to read the referenced bytes, is not supported yet.
+    Seq(FileType(), ArrayType(FileType()), new StructType().add("f", FileType())).foreach { dt =>
+      assert(!Cast.canCast(dt, StringType), dt)
+      assert(!Cast.canAnsiCast(dt, StringType), dt)
+    }
 
     val input = Literal.create(fileRow("/c.txt", size = 1L), FileType.external)
     val cast = Cast(input, FileType())

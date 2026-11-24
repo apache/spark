@@ -1107,7 +1107,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     this.defaultCapacity = capacity;
     this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
     this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
-    this.isStruct = TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType;
+    DataType representation = TypeOps$.MODULE$.rowRepresentationOrSelf(type);
+    this.isStruct = representation instanceof StructType;
 
     if (isArray()) {
       DataType childType;
@@ -1120,8 +1121,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
-    } else if (isStruct) {
-      StructType st = (StructType) TypeOps$.MODULE$.rowRepresentationOrSelf(type);
+    } else if (representation instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewInternalColumn(capacity, st.fields()[i].dataType());

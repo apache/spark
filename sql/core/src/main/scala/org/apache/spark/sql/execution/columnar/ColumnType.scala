@@ -953,7 +953,7 @@ private[columnar] object ColumnType {
       case struct: StructType => STRUCT(PhysicalStructType(struct.fields))
       case udt: UserDefinedType[_] => ColumnType(udt.sqlType)
       // A framework type stored as a struct, such as FileType, is cached as its representation.
-      case _ => TypeOps(dataType).flatMap(_.rowRepresentationType) match {
+      case _ => TypeOps.rowRepresentation(dataType) match {
         case Some(representation) => ColumnType(representation)
         case None => throw ExecutionErrors.unsupportedDataTypeError(dataType)
       }

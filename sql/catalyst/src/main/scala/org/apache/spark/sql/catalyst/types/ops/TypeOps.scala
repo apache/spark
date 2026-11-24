@@ -336,11 +336,17 @@ object TypeOps {
   }
 
   /**
+   * Returns the row representation of `dt` (see [[TypeOps.rowRepresentationType]]), or None
+   * when `dt` is not a framework type or has none.
+   */
+  def rowRepresentation(dt: DataType): Option[DataType] =
+    apply(dt).flatMap(_.rowRepresentationType)
+
+  /**
    * Returns the row representation of `dt` (see [[TypeOps.rowRepresentationType]]), or `dt`
    * itself when it has none. For callers in Java, such as the column vectors.
    */
-  def rowRepresentationOrSelf(dt: DataType): DataType =
-    apply(dt).flatMap(_.rowRepresentationType).getOrElse(dt)
+  def rowRepresentationOrSelf(dt: DataType): DataType = rowRepresentation(dt).getOrElse(dt)
 }
 
 /**

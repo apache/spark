@@ -56,7 +56,9 @@ import org.apache.spark.annotation.Unstable
  * deduplicate or hash their input, such as `count(DISTINCT f)`, `collect_set`,
  * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE in
  * SQL, such as `uri`, is planned. A FILE casts only to a FILE of unknown mode: a cast to STRING
- * or BINARY, which reads the referenced bytes, is planned as well.
+ * or BINARY, which reads the referenced bytes, is planned as well. A FILE of any mode can be
+ * written to a FILE EXTERNAL column of a table, as the file is external to the table that stores
+ * it.
  *
  * @param mode
  *   the mode for this FileType column
