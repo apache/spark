@@ -111,10 +111,6 @@ def run_java_style_checks(build_profiles):
     run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
-def run_python_style_checks():
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
-
-
 def run_sparkr_style_checks():
     if which("R"):
         # R style check should be executed after `install-dev.sh`.
@@ -600,12 +596,6 @@ def main():
         ):
             # Run SBT Checkstyle after the build to prevent a side-effect to the build.
             should_run_java_style_checks = True
-        if not changed_files or any(
-            f.endswith("lint-python") or f.endswith("pyproject.toml") or f.endswith(".py")
-            for f in changed_files
-        ):
-            with titled_block("Running Python style checks"):
-                run_python_style_checks()
         if not changed_files or any(
             f.endswith(".R") or f.endswith("lint-r") or f.endswith(".lintr") for f in changed_files
         ):

@@ -91,47 +91,36 @@ ignored_file_patterns = (
     "/.github/workflows/update_build_status.yml",
     # Linters, formatters, and their configs. These are typically triggered by
     # the `precondition` job regardless of modifications to these files.
+    # Python files that dev/lint-python checks are claimed by lint-python.
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
-    "/dev/agent_docs_lint.py",
-    "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
-    "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
     "/dev/java-file-header",
     "/dev/lint-java",
-    "/dev/lint-python",
     "/dev/lint-r*",
     "/dev/lint-scala",
     "/dev/mima",
+    # dev/lint-python does not read this formatter.
     "/dev/reformat-python",
     "/dev/sbt-checkstyle",
     "/dev/scalafmt",
     "/dev/scalastyle",
-    "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
-    # Maintainer tools.
+    # Maintainer tools. Python files under dev/ are claimed by lint-python.
     "/dev/*gen-protos.sh",
     "/dev/change-scala-version.sh",
-    "/dev/create_jira_and_branch.py",
-    "/dev/create_spark_jira.py",
-    "/dev/create-release/",
-    "/dev/generate_srs_registry.py",
+    "/dev/create-release/*.sh",
+    "/dev/create-release/*.tmpl",
+    "/dev/create-release/spark-rm/",
     "/dev/make-distribution.sh",
-    "/dev/merge_spark_pr.py",
-    "/dev/next_version_candidates.py",
-    "/dev/pr_merge_status.py",
     "/dev/protobuf-breaking-changes-check.sh",
     "/dev/py-cleanup",
     "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml
-    "/dev/spark_jira_utils.py",
-    "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/connect-gen-protos/",
-    # Always run by the `precondition` job in build_and_test.yml.
-    "/dev/sparktestsupport/tests/",
     "/sql/create-docs.sh",
     # CLI wrappers and other user executables.
     "/bin/beeline*",
@@ -1979,6 +1968,22 @@ lint_js = Module(
     shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
 )
 
+lint_python = Module(
+    name="lint-python",
+    dependencies=[],
+    source_file_regexes=[
+        # Every Python file, including ones that root also claims.
+        r".*\.pyi?$",
+        # YAML inputs to the mypy typing tests that dev/lint-python runs through pytest.
+        r".*/tests/typing/",
+        r"pyproject\.toml$",
+        r"python/mypy\.ini$",
+        r"dev/lint-python$",
+        r"dev/spark-test-image/lint/",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-python")],
+)
+
 yarn = Module(
     name="yarn",
     dependencies=[],
@@ -2036,7 +2041,21 @@ docker_integration_tests = Module(
 root = Module(
     name="root",
     dependencies=[build, core],  # Changes to build should trigger all tests.
-    source_file_regexes=[],
+    source_file_regexes=[
+        # The test infrastructure itself. A bug here can break or silently skip tests in
+        # every job, and only a full run exercises it. Files that no module claims also
+        # select root, so this list only matters for files another module claims too,
+        # such as the .py files that lint-python claims.
+        r"dev/run-tests\.py$",
+        r"dev/is-changed\.py$",
+        # These belong to a PySpark packaging module and to docs respectively. They stay on
+        # root, as they were before lint-python claimed every .py file, until a module owns
+        # them.
+        r"dev/pip-sanity-check\.py$",
+        r"sql/gen-sql-[^/]*\.py$",
+        # The unit tests in tests/ run in every `precondition` job, so they do not need root.
+        r"dev/sparktestsupport/(?!tests/)",
+    ],
     # In order to run all of the tests, enable every test profile:
     build_profile_flags=list(
         set(itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))
