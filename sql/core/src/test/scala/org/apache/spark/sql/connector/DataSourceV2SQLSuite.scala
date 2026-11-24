@@ -4581,9 +4581,18 @@ class DataSourceV2SQLSuiteV1Filter
       val asOfCutoff = "TIMESTAMP AS OF (SELECT ts FROM cutoff)"
 
       checkAnswer(sql(s"WITH $cutoff SELECT * FROM t $asOfCutoff"), rowsAsOfTs2)
-      // The CTE reads another CTE.
+      // The subquery reads the CTE in a subquery of its own.
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT ts FROM cutoff))"),
+        rowsAsOfTs2)
+      // The CTE reads another CTE, also in a subquery.
       checkAnswer(
         sql(s"WITH base AS (SELECT $ts2Literal AS ts), cutoff AS (SELECT ts FROM base) " +
+          s"SELECT * FROM t $asOfCutoff"),
+        rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts), " +
+          "cutoff AS (SELECT (SELECT ts FROM base) AS ts) " +
           s"SELECT * FROM t $asOfCutoff"),
         rowsAsOfTs2)
       // A CTE of the subquery reads a CTE of the enclosing query.
@@ -4652,6 +4661,12 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH $cutoff SELECT v.x, l.id FROM VALUES (1) AS v(x), " +
           s"LATERAL (SELECT id FROM t $asOfCutoff) AS l"),
         Seq(Row(1, 7), Row(1, 8)))
+      // The timestamp has two subqueries, and only one of them reads the CTE.
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
+          "(SELECT 1 FROM t TIMESTAMP AS OF greatest((SELECT ts FROM cutoff), " +
+          s"(SELECT $ts1Literal)) AS tt WHERE tt.id = v.id)"),
+        Row(7))
       // The CTE is defined in the subquery expression, and can read a CTE of the query around it.
       checkAnswer(
         sql("SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
@@ -4660,6 +4675,13 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(
         sql(s"WITH base AS (SELECT $ts2Literal AS ts) SELECT id FROM VALUES (6), (7) AS v(id) " +
           "WHERE EXISTS (WITH cutoff AS (SELECT ts FROM base) " +
+          s"SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      // A CTE of the subquery expression that the timestamp does not read is not evaluated with
+      // it, even if it reads a CTE of the query around it.
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts1Literal AS ts) SELECT id FROM VALUES (6), (7) AS v(id) " +
+          s"WHERE EXISTS (WITH $cutoff, unread AS (SELECT ts FROM base) " +
           s"SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
         Row(7))
       // The CTE is defined in the query around nested subquery expressions.
