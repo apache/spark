@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Objects
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, RowToColumnarTransition, SparkPlan}
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan}
 import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
@@ -166,14 +164,16 @@ case class BatchScanExec(
 
   override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
-  // The storage filters ANDed into one, which the readers of every task get when the scan reads
-  // without per-partition bloom filters. A runtime bloom arrives as a ScalarSubquery over the
-  // build side, which SparkPlan has computed by the time this is forced. The readers get its
-  // result, so the task does not carry the subquery's plan.
+  // The storage filters ANDed into one. A runtime bloom arrives as a ScalarSubquery over the build
+  // side, which SparkPlan has computed by the time this is forced. The readers get its result, so
+  // the task does not carry the subquery's plan.
+  @transient private lazy val storageFilterCondition: Option[Expression] =
+    storageFilters.map(StorageFilterPlanning.withSubqueryResults).reduceOption(And)
+
+  // What the readers of every task get when the scan reads without per-partition bloom filters.
   @transient private lazy val storageFilterRequest: Option[StorageFilterRequest] =
-    storageFilters.map(StorageFilterPlanning.withSubqueryResults)
-      .reduceOption(And)
-      .map(c => StorageFilterRequestImpl(StorageFilterImpl(c, scanOutput), appendsCheckedColumn))
+    storageFilterCondition.map(c =>
+      StorageFilterRequestImpl(StorageFilterImpl(c, scanOutput), appendsCheckedColumn))
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
@@ -204,22 +204,12 @@ case class BatchScanExec(
           val partitionsByKey = bloomKeys.zipWithIndex.groupMap(_._1)(_._2)
           val bloomPartitions =
             splitKeys.map(k => partitionsByKey.getOrElse(k, Nil).toArray).toArray
-          // The child of a columnar scan gets a transition to columnar, which this reads around.
-          // The aggregate has a row for each group, and each run of the transition would keep a
-          // batch of vectors until the task ends.
-          val blooms = aggregate match {
-            case t: RowToColumnarTransition => t.child.execute()
-            case a if a.supportsColumnar =>
-              // The RDD reads each row's bloom filter bytes before it moves to the next row.
-              a.executeColumnar().mapPartitionsInternal(_.flatMap(_.rowIterator().asScala))
-            case a => a.execute()
-          }
-          val condition = (storageFilters.map(StorageFilterPlanning.withSubqueryResults) :+
-            filter.check).reduce(And)
+          // `ApplyColumnarRulesAndInsertTransitions` keeps the aggregate row-based.
           Some(new PerPartitionStorageFilterRDD(
             sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
-            checkedOutputWidth, blooms, bloomPartitions,
-            aggregate.output.indexWhere(_.exprId == filter.bloomFilter.exprId), condition,
+            checkedOutputWidth, aggregate.execute(), bloomPartitions,
+            aggregate.output.indexWhere(_.exprId == filter.bloomFilter.exprId),
+            (storageFilterCondition.toSeq :+ filter.check).reduce(And),
             filter.bloomFilter, scanOutput, longMetric("numSkippedSplits")))
         case _ if filteredPartitions.isEmpty => None
         case _ =>
@@ -299,7 +289,9 @@ case class BatchScanExec(
  * The per-partition runtime bloom filter of a [[BatchScanExec]].
  *
  * @param check the check of each row of the scan, `might_contain` over the bloom filter column of
- *              the scan's `bloomFilterAggregate` and the hash of a key over the scan's columns
+ *              the scan's `bloomFilterAggregate` and the hash of a key over the scan's columns.
+ *              Each task puts a split's bloom filter in place of the column, so `check` is not
+ *              evaluated as it is.
  * @param sizing the sizing of the bloom filters, for the whole creation side
  */
 case class PerPartitionBloomFilter(check: Expression, sizing: PerPartitionSizing) {

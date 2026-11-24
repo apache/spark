@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity, sort}
 import org.apache.spark.sql.connector.read.{Scan, SupportsStorageFilters}
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable}
-import org.apache.spark.sql.execution.{FormattedMode, ProjectExec, RowToColumnarExec, ScalarSubquery => ExecScalarSubquery, SparkPlan}
+import org.apache.spark.sql.execution.{FormattedMode, ProjectExec, ScalarSubquery => ExecScalarSubquery, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -343,9 +343,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             assert(executedShuffles(plan).isEmpty, plan)
             val scans = storageFilterScans(plan)
             assert(scans.map(tableOf) == Seq("fact"), plan)
-            // The aggregate below a columnar scan gets a transition to columnar.
-            assert(scans.forall(s => s.supportsColumnar == columnar &&
-              s.bloomFilterAggregate.forall(_.supportsColumnar == columnar)), s"test setup:\n$plan")
+            assert(scans.forall(_.supportsColumnar == columnar), s"test setup:\n$plan")
+            // The aggregate stays row-based below a columnar scan.
+            assert(scans.forall(_.bloomFilterAggregate.forall(!_.supportsColumnar)), plan)
             // The scan reads its columns, which its child does not give it.
             assert(scans.forall(_.missingInput.isEmpty), plan)
             // Bucket 2 has no row of `dim` with `flag = 1`, so no reader opens a split of it. The
@@ -361,13 +361,6 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             val skipped = storageFilterScans(measured.queryExecution.executedPlan)
               .map(_.metrics("numSkippedSplits").value)
             assert(skipped == Seq(4L), s"the 4 splits of bucket 2 are skipped: $skipped")
-            // The scan reads its aggregate around that transition, which makes no batch.
-            val transitions = collect(measured.queryExecution.executedPlan) {
-              case t: RowToColumnarExec => t
-            }
-            assert(transitions.nonEmpty == columnar &&
-              transitions.forall(_.metrics("numOutputBatches").value == 0),
-              measured.queryExecution.executedPlan)
           }
         }
       }
@@ -1255,8 +1248,8 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
           s"(AQE $adaptive, columnar $columnar)") {
         // This `bucket` returns null for the key 5, which is not null. The aggregate puts the key
         // in a group of its own, in the partition of `dim` that holds it. The split of `fact` with
-        // the same partition key gets that group's bloom filter too, so the join still matches its
-        // row. Over a columnar scan, the two groups of that partition come in one batch.
+        // the same partition key gets that group's bloom filter too, so the join still matches
+        // its row.
         createBucketFunction() { input =>
           if (input.getLong(1) == 5L) null else BucketFunction.produceResult(input)
         }

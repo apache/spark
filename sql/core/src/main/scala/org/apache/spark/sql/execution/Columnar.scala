@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
-import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -580,7 +580,13 @@ case class ApplyColumnarRulesAndInsertTransitions(
       // Columnar Processing will start here, so transition from row to columnar
       RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+      plan match {
+        // A scan reads the aggregate of its per-partition bloom filter as rows, one for each
+        // group. A transition to columnar there would keep a batch of vectors for each key a task
+        // reads, until the task ends.
+        case scan: BatchScanExec => scan.withNewChildren(scan.children.map(ensureOutputsRowBased))
+        case _ => plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+      }
     } else {
       plan
     }
