@@ -41,6 +41,9 @@ import org.apache.spark.network.util.TransportConf;
  * Wraps another BlockFetcher or BlockPusher with the ability to automatically retry block
  * transfers which fail due to IOExceptions, which we hope are due to transient network conditions.
  *
+ * It is also used to retry an idempotent RPC modeled as a single logical block, such as
+ * {@link BlockStoreClient#getHostLocalDirs}.
+ *
  * This transferor provides stronger guarantees regarding the parent BlockTransferListener. In
  * particular, the listener will be invoked exactly once per blockId, with a success or failure.
  */

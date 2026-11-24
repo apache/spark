@@ -22,11 +22,16 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,8 +42,17 @@ import org.mockito.stubbing.Stubber;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.sasl.SaslTimeoutException;
@@ -46,7 +60,8 @@ import static org.apache.spark.network.shuffle.RetryingBlockTransferor.BlockTran
 
 /**
  * Tests retry logic by throwing IOExceptions and ensuring that subsequent attempts are made to
- * fetch the lost blocks.
+ * fetch the lost blocks. Also covers the host local dirs RPC, which reuses this retry logic with
+ * a single logical block.
  */
 public class RetryingBlockTransferorSuite {
 
@@ -394,6 +409,409 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b0"), any());
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
     verifyNoMoreInteractions(listener);
+  }
+
+  // The host local dirs RPC is idempotent and is retried through RetryingBlockTransferor as a
+  // single logical block.
+
+  private static final String HOST = "host";
+  private static final int PORT = 7337;
+  private static final String EXEC_ID = "1";
+
+  private static final Map<String, String[]> LOCAL_DIRS =
+    Collections.singletonMap(EXEC_ID, new String[] {"/tmp/dir0"});
+
+  // Keep retries fast: the default `spark.shuffle.io.retryWait` is 5s.
+  private static final Map<String, String> FAST_RETRY_CONF =
+    Map.of("spark.shuffle.io.retryWait", "0s");
+
+  private static class TestBlockStoreClient extends BlockStoreClient {
+    TestBlockStoreClient(TransportClientFactory clientFactory, TransportConf transportConf) {
+      this.appId = "test-app";
+      this.clientFactory = clientFactory;
+      this.transportConf = transportConf;
+    }
+
+    @Override
+    public void fetchBlocks(
+        String host,
+        int port,
+        String execId,
+        String[] blockIds,
+        BlockFetchingListener listener,
+        DownloadFileManager downloadFileManager) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void close() {
+    }
+  }
+
+  private static TransportClient clientFailingWith(Throwable error) {
+    TransportClient client = mock(TransportClient.class);
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = invocation.getArgument(1);
+      callback.onFailure(error);
+      return 0L;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    return client;
+  }
+
+  private static TransportClient clientReturning(Map<String, String[]> localDirs) {
+    TransportClient client = mock(TransportClient.class);
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = invocation.getArgument(1);
+      callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
+      return 0L;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    return client;
+  }
+
+  private static CompletableFuture<Map<String, String[]>> fetchHostLocalDirs(
+      TransportClientFactory clientFactory) {
+    return fetchHostLocalDirs(clientFactory, FAST_RETRY_CONF);
+  }
+
+  private static CompletableFuture<Map<String, String[]>> fetchHostLocalDirs(
+      TransportClientFactory clientFactory, Map<String, String> conf) {
+    TransportConf transportConf = new TransportConf("shuffle", new MapConfigProvider(conf));
+    TestBlockStoreClient client = new TestBlockStoreClient(clientFactory, transportConf);
+    CompletableFuture<Map<String, String[]>> future = new CompletableFuture<>();
+    client.getHostLocalDirs(HOST, PORT, new String[] {EXEC_ID}, future);
+    return future;
+  }
+
+  @Test
+  public void testGetHostLocalDirsRetriesOnConnectionLevelFailure() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient =
+      clientFailingWith(new IOException("Connection from localhost/127.0.0.1:12345 closed"));
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenReturn(failingClient)
+      .thenReturn(succeedingClient);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsRetriesOnWrappedConnectionLevelFailure() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient =
+      clientFailingWith(new RuntimeException(new IOException("Connection reset by peer")));
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenReturn(failingClient)
+      .thenReturn(succeedingClient);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsRetriesOnCreateClientFailure() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenThrow(new IOException("Connection reset by peer"))
+      .thenReturn(succeedingClient);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetryServerSideFailure() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient =
+      clientFailingWith(new RuntimeException("Executor is not registered"));
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(failingClient);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+
+    assertTrue(error.getCause() instanceof RuntimeException);
+    assertEquals("Executor is not registered", error.getCause().getMessage());
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsGivesUpAfterMaxRetries() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient firstClient =
+      clientFailingWith(new IOException("Connection reset by peer (1)"));
+    TransportClient secondClient =
+      clientFailingWith(new IOException("Connection reset by peer (2)"));
+    TransportClient thirdClient =
+      clientFailingWith(new IOException("Connection reset by peer (3)"));
+    when(clientFactory.createClient(HOST, PORT))
+      .thenReturn(firstClient)
+      .thenReturn(secondClient)
+      .thenReturn(thirdClient);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory,
+      Map.of(
+        "spark.shuffle.io.maxRetries", "2",
+        "spark.shuffle.io.retryWait", "0s"));
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+
+    assertTrue(error.getCause() instanceof IOException);
+    assertEquals("Connection reset by peer (3)", error.getCause().getMessage());
+    // The initial attempt plus two retries.
+    verify(clientFactory, times(3)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetryWhenMaxRetriesIsZero() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient = clientFailingWith(new IOException("Connection reset by peer"));
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(failingClient);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(
+      clientFactory, Map.of("spark.shuffle.io.maxRetries", "0"));
+    assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetryWhenDisabled() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient = clientFailingWith(new IOException("Connection reset by peer"));
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(failingClient);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory,
+      Map.of("spark.shuffle.io.hostLocalDirsRetry.enabled", "false"));
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    assertTrue(error.getCause() instanceof IOException);
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsWhenDisabledSucceeds() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient client = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(client);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory,
+      Map.of("spark.shuffle.io.hostLocalDirsRetry.enabled", "false"))
+      .get(5, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsWhenDisabledFailsOnCreateClient() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenThrow(new IOException("Connection reset by peer"));
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory,
+      Map.of("spark.shuffle.io.hostLocalDirsRetry.enabled", "false"));
+    assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsHonorsConfiguredRetryWait() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient failingClient = clientFailingWith(new IOException("Connection reset by peer"));
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenReturn(failingClient)
+      .thenReturn(succeedingClient);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory,
+      Map.of(
+        "spark.shuffle.io.maxRetries", "1",
+        "spark.shuffle.io.retryWait", "1s"));
+
+    long startNs = System.nanoTime();
+    Map<String, String[]> result = future.get(30, TimeUnit.SECONDS);
+    long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    assertTrue(elapsedMs >= 800, "retry wait was not honored: " + elapsedMs + " ms");
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetrySaslTimeoutByDefault() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    SaslTimeoutException saslTimeout =
+      new SaslTimeoutException(new TimeoutException("SASL handshake timed out"));
+    when(clientFactory.createClient(HOST, PORT)).thenThrow(saslTimeout);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    assertSame(saslTimeout, error.getCause());
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsRetriesSaslTimeoutWhenEnabled() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenThrow(new SaslTimeoutException(
+        new TimeoutException("SASL handshake timed out")))
+      .thenReturn(succeedingClient);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory, Map.of(
+      "spark.shuffle.sasl.enableRetries", "true",
+      "spark.shuffle.io.maxRetries", "1",
+      "spark.shuffle.io.retryWait", "0s")).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetryInterruptedException() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenThrow(new InterruptedException("cancelled"));
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
+    // The initial attempt runs on the caller thread and restores the interrupt flag.
+    assertTrue(Thread.interrupted());
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    assertTrue(error.getCause() instanceof InterruptedException);
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsDoesNotRetryResponseDecodeFailure() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient client = mock(TransportClient.class);
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = invocation.getArgument(1);
+      // An unknown message type byte cannot be decoded; reconnecting cannot help.
+      callback.onSuccess(ByteBuffer.wrap(new byte[] {99}));
+      return 0L;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(client);
+
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
+    assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsIgnoresDuplicateFailureCallbacks() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient firstClient = mock(TransportClient.class);
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = invocation.getArgument(1);
+      callback.onFailure(new IOException("Connection reset by peer"));
+      // The transport may fail the same request twice (write listener + channelInactive).
+      callback.onFailure(new IOException("Connection reset by peer (duplicate)"));
+      return 0L;
+    }).when(firstClient).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
+    when(clientFactory.createClient(HOST, PORT))
+      .thenReturn(firstClient)
+      .thenReturn(succeedingClient);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    // The duplicate failure must not schedule a second retry.
+    verify(clientFactory, times(2)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsIgnoresFailureAfterSuccess() throws Exception {
+    TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+    TransportClient client = mock(TransportClient.class);
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = invocation.getArgument(1);
+      callback.onSuccess(new LocalDirsForExecutors(LOCAL_DIRS).toByteBuffer());
+      // A duplicate failure after the success must not schedule a retry.
+      callback.onFailure(new IOException("Connection reset by peer"));
+      return 0L;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    when(clientFactory.createClient(HOST, PORT)).thenReturn(client);
+
+    Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
+
+    assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+    verify(clientFactory, times(1)).createClient(HOST, PORT);
+  }
+
+  @Test
+  public void testGetHostLocalDirsCompletesExceptionallyWhenClientIsClosed() throws Exception {
+    CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(null);
+
+    ExecutionException error =
+      assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+    assertTrue(error.getCause() instanceof IllegalStateException);
+  }
+
+  @Test
+  public void testGetHostLocalDirsRetriesWithAFreshConnectionWhenTheServerClosesIt()
+      throws Exception {
+    TransportConf transportConf = new TransportConf("shuffle", new MapConfigProvider(
+      Map.of("spark.shuffle.io.retryWait", "0s")));
+    AtomicInteger requests = new AtomicInteger();
+    RpcHandler handler = new RpcHandler() {
+      @Override
+      public void receive(
+          TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+        if (requests.incrementAndGet() == 1) {
+          // Drop the connection without answering, like a pooled connection the server closed
+          // while it was idle.
+          client.close();
+        } else {
+          callback.onSuccess(new LocalDirsForExecutors(
+            Collections.singletonMap(EXEC_ID, new String[] {"/tmp/dir0"})).toByteBuffer());
+        }
+      }
+
+      @Override
+      public StreamManager getStreamManager() {
+        return new OneForOneStreamManager();
+      }
+    };
+
+    TransportContext context = new TransportContext(transportConf, handler);
+    try (TransportServer server = context.createServer()) {
+      ExternalBlockStoreClient client =
+        new ExternalBlockStoreClient(transportConf, null, false, 5000);
+      client.init("test-app");
+      try {
+        CompletableFuture<Map<String, String[]>> future = new CompletableFuture<>();
+        client.getHostLocalDirs("localhost", server.getPort(), new String[] {EXEC_ID}, future);
+
+        Map<String, String[]> result = future.get(30, TimeUnit.SECONDS);
+
+        assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
+        // The retry opened a new connection instead of reusing the one the server closed.
+        assertEquals(2, requests.get());
+      } finally {
+        client.close();
+      }
+    }
   }
 
   /**

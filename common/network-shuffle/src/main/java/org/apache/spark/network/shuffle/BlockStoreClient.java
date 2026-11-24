@@ -18,7 +18,6 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,6 +31,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -51,6 +51,12 @@ public abstract class BlockStoreClient implements Closeable {
   // Store the application attemptId
   private String appAttemptId;
   protected TransportConf transportConf;
+
+  /**
+   * Logical block id used to drive a {@link RetryingBlockTransferor} for the host local dirs
+   * request, which is a single idempotent RPC rather than a real block fetch.
+   */
+  private static final String HOST_LOCAL_DIRS_BLOCK_ID = "GetLocalDirsForExecutors";
 
   /**
    * Send the diagnosis request for the corrupted shuffle block to the server.
@@ -153,7 +159,12 @@ public abstract class BlockStoreClient implements Closeable {
    *                NettyBlockTransferService.
    * @param hostLocalDirsCompletable a CompletableFuture which contains a map from executor Id
    *                                 to its local directories if the request handler replies
-   *                                 successfully. Otherwise, it contains a specific error.
+   *                                 successfully. Otherwise, it contains a specific error. When
+   *                                 `spark.shuffle.io.hostLocalDirsRetry.enabled` is true and
+   *                                 `spark.shuffle.io.maxRetries` is positive, a connection level
+   *                                 failure is retried on a new connection according to
+   *                                 `spark.shuffle.io.maxRetries`, like a block fetch, because the
+   *                                 request is idempotent and a pooled connection may be stale.
    */
   public void getHostLocalDirs(
       String host,
@@ -162,31 +173,129 @@ public abstract class BlockStoreClient implements Closeable {
       CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     checkInit();
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
+    if (!transportConf.hostLocalDirsRetryEnabled() ||
+        transportConf.maxIORetries() <= 0) {
+      requestHostLocalDirs(host, port, getLocalDirsMessage, execIds, hostLocalDirsCompletable);
+      return;
+    }
+    // The request is idempotent, so reuse RetryingBlockTransferor to retry a connection level
+    // failure on a new connection (for example a pooled connection the server closed while it
+    // was idle). It models the lookup as a single logical block, giving it the same retry policy
+    // as a block fetch: spark.shuffle.io.maxRetries / retryWait, and SASL retries gated by
+    // spark.shuffle.sasl.enableRetries.
+    BlockFetchingListener hostLocalDirsListener = new BlockFetchingListener() {
+      @Override
+      public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+        try {
+          completeHostLocalDirs(data.nioByteBuffer(), hostLocalDirsCompletable, execIds);
+        } catch (Throwable t) {
+          completeHostLocalDirsExceptionally(hostLocalDirsCompletable, t, execIds);
+        }
+      }
+
+      @Override
+      public void onBlockFetchFailure(String blockId, Throwable exception) {
+        completeHostLocalDirsExceptionally(hostLocalDirsCompletable, exception, execIds);
+      }
+
+      @Override
+      public String getTransferType() {
+        return "getHostLocalDirs";
+      }
+    };
+
+    new RetryingBlockTransferor(
+      transportConf, createHostLocalDirsStarter(host, port, getLocalDirsMessage),
+      new String[] {HOST_LOCAL_DIRS_BLOCK_ID}, hostLocalDirsListener).start();
+  }
+
+  /**
+   * Creates the starter which sends one host local dirs request. Subclasses may wrap it to adapt
+   * a connection failure, for example to stop retrying a dead peer.
+   */
+  protected RetryingBlockTransferor.BlockTransferStarter createHostLocalDirsStarter(
+      String host,
+      int port,
+      GetLocalDirsForExecutors getLocalDirsMessage) {
+    return (blockIds, listener) -> {
+      BlockFetchingListener fetchingListener = (BlockFetchingListener) listener;
+      TransportClientFactory factory = clientFactory;
+      if (factory == null) {
+        // The client has been closed; a non-IOException is not retried and completes the future.
+        throw new IllegalStateException("BlockStoreClient has been closed");
+      }
+      // Ask the factory for a client on every attempt: it opens a new connection when the
+      // pooled one is no longer active, which is what a retry needs. The block fetch starters'
+      // fastFail flag is omitted: a stale pooled connection is an RPC failure (not a
+      // createClient failure), and a retry sleeps the full retryWait, outlasting the window.
+      try {
+        TransportClient client = factory.createClient(host, port);
+        client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
+          @Override
+          public void onSuccess(ByteBuffer response) {
+            fetchingListener.onBlockFetchSuccess(
+              HOST_LOCAL_DIRS_BLOCK_ID, new NioManagedBuffer(response));
+          }
+
+          @Override
+          public void onFailure(Throwable t) {
+            fetchingListener.onBlockFetchFailure(HOST_LOCAL_DIRS_BLOCK_ID, t);
+          }
+        });
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw e;
+      }
+    };
+  }
+
+  private void requestHostLocalDirs(
+      String host,
+      int port,
+      GetLocalDirsForExecutors getLocalDirsMessage,
+      String[] execIds,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
-          try {
-            BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-            hostLocalDirsCompletable.complete(
-              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
-          } catch (Throwable t) {
-            logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
-              MDC.of(LogKeys.EXECUTOR_IDS, Arrays.toString(getLocalDirsMessage.execIds)));
-            hostLocalDirsCompletable.completeExceptionally(t);
-          }
+          completeHostLocalDirs(response, hostLocalDirsCompletable, execIds);
         }
 
         @Override
         public void onFailure(Throwable t) {
-          logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
-            MDC.of(LogKeys.EXECUTOR_IDS, Arrays.toString(getLocalDirsMessage.execIds)));
-          hostLocalDirsCompletable.completeExceptionally(t);
+          completeHostLocalDirsExceptionally(hostLocalDirsCompletable, t, execIds);
         }
       });
-    } catch (IOException | InterruptedException e) {
-      hostLocalDirsCompletable.completeExceptionally(e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      completeHostLocalDirsExceptionally(hostLocalDirsCompletable, e, execIds);
+    } catch (Exception e) {
+      completeHostLocalDirsExceptionally(hostLocalDirsCompletable, e, execIds);
+    }
+  }
+
+  private void completeHostLocalDirs(
+      ByteBuffer response,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable,
+      String[] execIds) {
+    try {
+      BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
+      hostLocalDirsCompletable.complete(
+        ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
+    } catch (Throwable t) {
+      completeHostLocalDirsExceptionally(hostLocalDirsCompletable, t, execIds);
+    }
+  }
+
+  private void completeHostLocalDirsExceptionally(
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable,
+      Throwable error,
+      String[] execIds) {
+    if (hostLocalDirsCompletable.completeExceptionally(error)) {
+      logger.warn("Error while trying to get the host local dirs for {}", error,
+        MDC.of(LogKeys.EXECUTOR_IDS, Arrays.toString(execIds)));
     }
   }
 

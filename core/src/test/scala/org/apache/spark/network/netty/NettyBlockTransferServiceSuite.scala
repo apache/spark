@@ -18,20 +18,23 @@
 package org.apache.spark.network.netty
 
 import java.io.IOException
+import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{ExecutorDeadException, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.BlockDataManager
-import org.apache.spark.network.client.{TransportClient, TransportClientFactory}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientFactory}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
+import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 
@@ -87,19 +90,10 @@ class NettyBlockTransferServiceSuite
   }
 
   test("SPARK-27637: test fetch block with executor dead") {
-    implicit val executionContext = ExecutionContext.global
     val port = 17634 + Random.nextInt(10000)
     logInfo("random port for test: " + port)
 
-    val driverEndpointRef = new RpcEndpointRef(new SparkConf()) {
-      override def address: RpcAddress = null
-      override def name: String = "test"
-      override def send(message: Any): Unit = {}
-      // This rpcEndPointRef always return false for unit test to touch ExecutorDeadException.
-      override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-        Future{false.asInstanceOf[T]}
-      }
-    }
+    val driverEndpointRef = createDriverEndpointRef(alive = false)
 
     val clientFactory = mock(classOf[TransportClientFactory])
     val client = mock(classOf[TransportClient])
@@ -117,15 +111,115 @@ class NettyBlockTransferServiceSuite
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)
-    val clientFactoryField = service0.getClass
-      .getSuperclass.getSuperclass.getDeclaredField("clientFactory")
-    clientFactoryField.setAccessible(true)
-    clientFactoryField.set(service0, clientFactory)
+    injectClientFactory(service0, clientFactory)
 
     service0.fetchBlocks("localhost", port, "exec1",
       Array("block1"), listener, mock(classOf[DownloadFileManager]))
     assert(createClientCount === 1)
     assert(hitExecutorDeadException)
+  }
+
+  test("SPARK-62324: get host local dirs does not retry a dead executor") {
+    val port = 17634 + Random.nextInt(10000)
+    logInfo("random port for test: " + port)
+
+    val driverEndpointRef = createDriverEndpointRef(alive = false)
+
+    val clientFactory = mock(classOf[TransportClientFactory])
+    var createClientCount = 0
+    when(clientFactory.createClient(any[String](), anyInt())).thenAnswer(_ => {
+      createClientCount += 1
+      throw new IOException()
+    })
+
+    service0 = createService(port, driverEndpointRef, retryWait = "0s")
+    injectClientFactory(service0, clientFactory)
+
+    val future = new CompletableFuture[java.util.Map[String, Array[String]]]()
+    service0.getHostLocalDirs("localhost", port, Array("exec1"), future)
+    val error = intercept[ExecutionException] {
+      future.get(30, TimeUnit.SECONDS)
+    }
+    assert(error.getCause.isInstanceOf[ExecutorDeadException])
+    assert(createClientCount === 1)
+  }
+
+  test("SPARK-62324: get host local dirs retries when the executor is alive") {
+    val port = 17634 + Random.nextInt(10000)
+    logInfo("random port for test: " + port)
+
+    val response = new LocalDirsForExecutors(
+      Map("exec1" -> Array("/tmp/dir0")).asJava).toByteBuffer
+    val client = mock(classOf[TransportClient])
+    when(client.sendRpc(any(), any())).thenAnswer(invocation => {
+      invocation.getArgument(1).asInstanceOf[RpcResponseCallback].onSuccess(response)
+      0L
+    })
+    val clientFactory = mock(classOf[TransportClientFactory])
+    var createClientCount = 0
+    when(clientFactory.createClient(any[String](), anyInt())).thenAnswer(_ => {
+      createClientCount += 1
+      if (createClientCount == 1) {
+        throw new IOException()
+      }
+      client
+    })
+
+    service0 = createService(port, createDriverEndpointRef(alive = true), retryWait = "0s")
+    injectClientFactory(service0, clientFactory)
+
+    val future = new CompletableFuture[java.util.Map[String, Array[String]]]()
+    service0.getHostLocalDirs("localhost", port, Array("exec1"), future)
+    val result = future.get(30, TimeUnit.SECONDS)
+    assert(result.get("exec1").toSeq === Seq("/tmp/dir0"))
+    assert(createClientCount === 2)
+  }
+
+  test("SPARK-62324: get host local dirs skips the aliveness check when retries are disabled") {
+    val port = 17634 + Random.nextInt(10000)
+    logInfo("random port for test: " + port)
+
+    val clientFactory = mock(classOf[TransportClientFactory])
+    var createClientCount = 0
+    when(clientFactory.createClient(any[String](), anyInt())).thenAnswer(_ => {
+      createClientCount += 1
+      throw new IOException()
+    })
+
+    service0 = createService(port, createDriverEndpointRef(alive = false),
+      retryWait = "0s", maxRetries = "0")
+    injectClientFactory(service0, clientFactory)
+
+    val future = new CompletableFuture[java.util.Map[String, Array[String]]]()
+    service0.getHostLocalDirs("localhost", port, Array("exec1"), future)
+    val error = intercept[ExecutionException] {
+      future.get(30, TimeUnit.SECONDS)
+    }
+    assert(error.getCause.isInstanceOf[IOException])
+    assert(createClientCount === 1)
+  }
+
+  private def createDriverEndpointRef(alive: Boolean): RpcEndpointRef = {
+    new RpcEndpointRef(new SparkConf()) {
+      override def address: RpcAddress = null
+      override def name: String = "test"
+      override def send(message: Any): Unit = {}
+      override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+        Future.successful(alive.asInstanceOf[T])
+      }
+    }
+  }
+
+  private def injectClientFactory(
+      service: NettyBlockTransferService,
+      clientFactory: TransportClientFactory): Unit = {
+    val clientFactoryField = service.getClass
+      .getSuperclass.getSuperclass.getDeclaredField("clientFactory")
+    clientFactoryField.setAccessible(true)
+    // Close the factory created by init() so its event loop group does not leak.
+    Option(clientFactoryField.get(service).asInstanceOf[TransportClientFactory])
+      .foreach(_.close())
+    clientFactoryField.set(service, clientFactory)
   }
 
   private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
@@ -138,9 +232,13 @@ class NettyBlockTransferServiceSuite
 
   private def createService(
       port: Int,
-      rpcEndpointRef: RpcEndpointRef = null): NettyBlockTransferService = {
+      rpcEndpointRef: RpcEndpointRef = null,
+      retryWait: String = "5s",
+      maxRetries: String = "3"): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
+      .set("spark.shuffle.io.retryWait", retryWait)
+      .set("spark.shuffle.io.maxRetries", maxRetries)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])

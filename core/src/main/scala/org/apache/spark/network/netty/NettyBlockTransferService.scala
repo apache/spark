@@ -37,7 +37,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBoot
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockTransferor}
-import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
+import org.apache.spark.network.shuffle.protocol.{GetLocalDirsForExecutors, UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.serializer.SerializerManager
@@ -162,6 +162,38 @@ private[spark] class NettyBlockTransferService(
       case e: Exception =>
         logger.error("Exception while beginning fetchBlocks", e)
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
+    }
+  }
+
+  /**
+   * Stop retrying a synchronous connection-creation failure when the driver reports the executor
+   * dead, matching fetchBlocks. Async RPC failures never reach this check and are retried by the
+   * transferor.
+   */
+  override protected def createHostLocalDirsStarter(
+      host: String,
+      port: Int,
+      message: GetLocalDirsForExecutors): RetryingBlockTransferor.BlockTransferStarter = {
+    val starter = super.createHostLocalDirsStarter(host, port, message)
+    new RetryingBlockTransferor.BlockTransferStarter {
+      override def createAndStart(
+          blockIds: Array[String],
+          listener: BlockTransferListener): Unit = {
+        try {
+          starter.createAndStart(blockIds, listener)
+        } catch {
+          case e: IOException =>
+            Try {
+              driverEndPointRef.askSync[Boolean](IsExecutorAlive(message.execIds.head))
+            } match {
+              case Success(v) if v == false =>
+                throw ExecutorDeadException(
+                  s"The relative remote executor(Id: ${message.execIds.head})," +
+                    " which maintains the block data to fetch is dead.")
+              case _ => throw e
+            }
+        }
+      }
     }
   }
 
