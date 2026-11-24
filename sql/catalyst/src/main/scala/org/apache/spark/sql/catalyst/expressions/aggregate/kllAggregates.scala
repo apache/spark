@@ -498,7 +498,7 @@ case class KllSketchAggDouble(
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  * @param lowestCompactingK
- *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
+ *   the value of [[SQLConf.KLL_MERGE_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -534,7 +534,7 @@ case class KllMergeAggBigint(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeLowestCompactingK)
     extends KllMergeAggBase[KllLongsSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
@@ -589,7 +589,7 @@ case class KllMergeAggBigint(
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  * @param lowestCompactingK
- *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
+ *   the value of [[SQLConf.KLL_MERGE_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -625,7 +625,7 @@ case class KllMergeAggFloat(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeLowestCompactingK)
     extends KllMergeAggBase[KllFloatsSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
@@ -680,7 +680,7 @@ case class KllMergeAggFloat(
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  * @param lowestCompactingK
- *   the value of [[SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K]] when the function is resolved
+ *   the value of [[SQLConf.KLL_MERGE_LOWEST_COMPACTING_K]] when the function is resolved
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -716,7 +716,7 @@ case class KllMergeAggDouble(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    lowestCompactingK: Boolean = SQLConf.get.kllMergeAggLowestCompactingK)
+    lowestCompactingK: Boolean = SQLConf.get.kllMergeLowestCompactingK)
     extends KllMergeAggBase[KllDoublesSketch] {
   def this(child: Expression) = this(child, None, 0, 0)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)

@@ -4490,7 +4490,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
   }
 
   private object KllMergeAggKRule {
-    val confKey = SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key
+    val confKey = SQLConf.KLL_MERGE_LOWEST_COMPACTING_K.key
     val types = Seq("bigint", "float", "double")
     // An input with c items compacts for every k that the tests use with c.
     val c = 10000

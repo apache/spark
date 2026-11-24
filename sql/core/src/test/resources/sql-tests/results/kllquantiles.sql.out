@@ -565,11 +565,11 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
-SET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled=false
+SET spark.sql.function.kllMerge.lowestCompactingK.enabled=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.function.kllMergeAgg.lowestCompactingK.enabled	false
+spark.sql.function.kllMerge.lowestCompactingK.enabled	false
 
 
 -- !query
@@ -597,7 +597,7 @@ struct<k:string>
 
 
 -- !query
-RESET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+RESET spark.sql.function.kllMerge.lowestCompactingK.enabled
 -- !query schema
 struct<>
 -- !query output

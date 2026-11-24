@@ -659,9 +659,9 @@ Aggregate [kll_merge_agg_bigint(s#x, None, 0, 0) AS incompatible_merge_lower_k#x
 
 
 -- !query
-SET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled=false
+SET spark.sql.function.kllMerge.lowestCompactingK.enabled=false
 -- !query analysis
-SetCommand (spark.sql.function.kllMergeAgg.lowestCompactingK.enabled,Some(false))
+SetCommand (spark.sql.function.kllMerge.lowestCompactingK.enabled,Some(false))
 
 
 -- !query
@@ -703,9 +703,9 @@ Aggregate [regexp_extract(kll_sketch_to_string_bigint(kll_merge_agg_bigint(s#x, 
 
 
 -- !query
-RESET spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+RESET spark.sql.function.kllMerge.lowestCompactingK.enabled
 -- !query analysis
-ResetCommand spark.sql.function.kllMergeAgg.lowestCompactingK.enabled
+ResetCommand spark.sql.function.kllMerge.lowestCompactingK.enabled
 
 
 -- !query

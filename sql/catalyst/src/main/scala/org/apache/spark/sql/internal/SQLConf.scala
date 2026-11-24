@@ -6227,25 +6227,25 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val KLL_MERGE_LOWEST_COMPACTING_K =
+    buildConf("spark.sql.function.kllMerge.lowestCompactingK.enabled")
+      .internal()
+      .doc("When true, kll_merge_agg_{bigint,float,double} without k and " +
+        "kll_sketch_merge_{bigint,float,double} return a sketch with the lowest k among the " +
+        "first non-empty input sketch and the input sketches that have started compacting " +
+        "(estimation mode). If every input sketch is empty, the result has the k of the first " +
+        "one. When false, the result has the k of the first input sketch.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
       "an output as binary. Otherwise, it returns as a string.")
     .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
-
-  val KLL_MERGE_AGG_LOWEST_COMPACTING_K =
-    buildConf("spark.sql.function.kllMergeAgg.lowestCompactingK.enabled")
-      .internal()
-      .doc("When true, kll_merge_agg_* without k returns a sketch with the lowest k among its " +
-        "first non-empty input sketch and the input sketches that have started compacting " +
-        "(estimation mode). If every input sketch is empty, it takes the k of the first one, and " +
-        "without input sketches the default k (200). When false, it takes the k of its first " +
-        "input sketch.")
-      .version("4.5.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(true)
 
   val VALIDATE_PARTITION_COLUMNS =
     buildConf("spark.sql.sources.validatePartitionColumns")
@@ -10359,9 +10359,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
 
-  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+  def kllMergeLowestCompactingK: Boolean = getConf(KLL_MERGE_LOWEST_COMPACTING_K)
 
-  def kllMergeAggLowestCompactingK: Boolean = getConf(KLL_MERGE_AGG_LOWEST_COMPACTING_K)
+  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
