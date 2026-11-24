@@ -1039,7 +1039,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
   }
 
   test("SPARK-60756: onJobStart should not force a kvstore write during history replay") {
-    val store = new ElementTrackingStore(new InMemoryStore, sparkContext.conf)
+    val inMemoryStore = new InMemoryStore
+    val store = new ElementTrackingStore(inMemoryStore, sparkContext.conf)
     val replayListener = new SQLAppStatusListener(sparkContext.conf, store, live = false)
     val executionId = 1L
     val df = createTestDataFrame
@@ -1062,7 +1063,13 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     intercept[NoSuchElementException] {
       store.read(classOf[SQLExecutionUIData], executionId)
     }
-    store.close()
+
+    // Run the onFlush hook as the History Server does after replay, keeping the store readable.
+    store.close(false)
+    val flushed = store.read(classOf[SQLExecutionUIData], executionId)
+    assertJobs(Some(flushed), running = Seq(0))
+    assert(flushed.completionTime.isEmpty)
+    inMemoryStore.close()
   }
 }
 
