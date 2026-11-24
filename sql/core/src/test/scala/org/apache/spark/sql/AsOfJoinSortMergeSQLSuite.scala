@@ -2818,8 +2818,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
 
   test("cursor scan: a NULL left key or a new group does not reuse the left key of the row " +
       "before") {
-    // Trade 3 has a NULL key after trade 2 of group 1, group 3 has no quotes, and each other
-    // first trade of a group matches another quote than the last trade before it would.
+    // Trade 3 has a NULL key after trade 2 of group 1. Group 3 has no quotes, so the cursor
+    // never reads trade 5's key. Trades 4 and 6 each match another quote than the last key the
+    // cursor read before them would: trade 2's 'k' and trade 4's 'd'.
     val trades = "(1, 1, 'c'), (2, 1, 'k'), (3, 2, NULL), (4, 2, 'd'), (5, 3, 'm'), (6, 4, 'p')"
     val quotes = "(1, 'b'), (1, 'j'), (2, 'a'), (2, 'f'), (4, 'c'), (4, 'h'), (4, 'q')"
     Seq(
