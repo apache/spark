@@ -96,13 +96,32 @@ class CatalogSuite extends AnalysisTest {
       val catalogManager = getAnalyzer.catalogManager
       val other = catalogManager.catalog("other")
       assert(catalogManager.currentCatalog != other)
+      val resolution = new CatalogIdentifierResolution(catalogManager)
       val resolveCatalogs = new ResolveCatalogs(catalogManager) {
         override def currentCatalog: CatalogPlugin = other
       }
 
-      assert(resolveCatalogs(UnresolvedNamespace(Nil)) == ResolvedNamespace(other, Nil))
-      assert(resolveCatalogs(UnresolvedNamespace(Seq("unknown", "nested"))) ==
-        ResolvedNamespace(other, Seq("unknown", "nested")))
+      val currentNamespace = ResolvedNamespace(other, catalogManager.currentNamespace.toSeq)
+      assert(resolveCatalogs(CurrentNamespace) == currentNamespace)
+      assert(resolution.resolveCurrentNamespace(lookupCatalog = resolveCatalogs) ==
+        currentNamespace)
+      assert(resolution.resolveCurrentNamespace().catalog == catalogManager.currentCatalog)
+
+      Seq(Nil, Seq("unknown", "nested")).foreach { namespace =>
+        val unresolved = UnresolvedNamespace(namespace)
+        val expected = ResolvedNamespace(other, namespace)
+        assert(resolveCatalogs(unresolved) == expected)
+        assert(resolution.resolveUnresolvedNamespace(
+          unresolved, lookupCatalog = resolveCatalogs) == expected)
+        assert(resolution.resolveUnresolvedNamespace(unresolved).catalog ==
+          catalogManager.currentCatalog)
+      }
+
+      val qualified = UnresolvedNamespace(Seq(catalogManager.currentCatalog.name(), "ns"))
+      val expected = ResolvedNamespace(catalogManager.currentCatalog, Seq("ns"))
+      assert(resolveCatalogs(qualified) == expected)
+      assert(resolution.resolveUnresolvedNamespace(
+        qualified, lookupCatalog = resolveCatalogs) == expected)
     }
   }
 
@@ -117,16 +136,17 @@ class CatalogSuite extends AnalysisTest {
       val unresolved = UnresolvedNamespace(Seq("test", "ns"), fetchMetadata = true)
       val expected = ResolvedNamespace(catalog, Seq("ns"), metadata)
 
-      assert(resolution.resolveNamespace(catalog, Seq("ns"), fetchMetadata = true) == expected)
-      assert(resolution.resolveNamespace(catalog, Seq("ns"), fetchMetadata = false) ==
+      assert(resolution.resolveUnresolvedNamespace(unresolved) == expected)
+      assert(resolution.resolveUnresolvedNamespace(unresolved.copy(fetchMetadata = false)) ==
         ResolvedNamespace(catalog, Seq("ns")))
       assert(resolveCatalogs(unresolved) == expected)
 
-      assert(resolution.resolveNamespace(catalog, Seq("missing"), fetchMetadata = false) ==
+      val missing = UnresolvedNamespace(Seq("test", "missing"))
+      assert(resolution.resolveUnresolvedNamespace(missing) ==
         ResolvedNamespace(catalog, Seq("missing")))
       checkError(
         exception = intercept[NoSuchNamespaceException] {
-          resolution.resolveNamespace(catalog, Seq("missing"), fetchMetadata = true)
+          resolution.resolveUnresolvedNamespace(missing.copy(fetchMetadata = true))
         },
         condition = "SCHEMA_NOT_FOUND",
         parameters = Map("schemaName" -> "`test`.`missing`"))

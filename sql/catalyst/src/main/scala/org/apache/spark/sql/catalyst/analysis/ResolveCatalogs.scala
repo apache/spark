@@ -29,7 +29,6 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Resolves the catalog of the name parts for table/view/function/namespace.
@@ -146,11 +145,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       catalogIdentifierResolution.resolveUnresolvedIdentifier(unresolvedIdentifier)
 
     case CurrentNamespace =>
-      ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
-    case UnresolvedNamespace(Seq(), fetchMetadata) =>
-      catalogIdentifierResolution.resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
-    case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
-      catalogIdentifierResolution.resolveNamespace(catalog, ns, fetchMetadata)
+      catalogIdentifierResolution.resolveCurrentNamespace(lookupCatalog = ResolveCatalogs.this)
+    case unresolvedNamespace: UnresolvedNamespace =>
+      catalogIdentifierResolution.resolveUnresolvedNamespace(
+        unresolvedNamespace, lookupCatalog = ResolveCatalogs.this)
   }
 
   private def resolveIdentifier(
