@@ -355,8 +355,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
 
   /**
-   * The ordinal of the input column that a value predicate tests. State format version 4 orders
-   * the state of the input by this column.
+   * The ordinal of the input column that a value predicate tests, which for a column cast to
+   * TIMESTAMP is the cast's source column. State format version 4 orders the state of the input
+   * by this column, or by the value of the cast.
    */
   def stateValueWatermarkColumnOrdinal(
       predicate: Option[JoinStateWatermarkPredicate],

@@ -191,7 +191,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
   // A cast that can fail is not picked, so eviction never evaluates it, and the input keeps the
   // eviction by its event time: a cast from STRING or DOUBLE in ANSI mode, and one from VARIANT
   // in any mode but TRY. By default the optimizer moves a VARIANT cast below the join, where it
-  // is evaluated on every row on the base branch too, so these cases keep it in the condition.
+  // is evaluated on every row whatever eviction does, so these cases keep it in the condition.
   for {
     version <- Seq(2, 4)
     (source, ansi) <- Seq(("string", true), ("double", true), ("variant", true),

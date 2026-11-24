@@ -180,8 +180,8 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
  * This trait is for state manager implementations that support eviction by timestamp. This is for
  * the state manager implementations which maintain the state with a timestamp and can efficiently
  * scan the keys with a timestamp smaller than the given one for eviction. The timestamp is the
- * watermarked join key when the keys carry the watermark, else the column that the value
- * predicate of the side tests, else the event time.
+ * watermarked join key when the keys carry the watermark, else the column, or the value of a
+ * column cast to TIMESTAMP, that the value predicate of the side tests, else the event time.
  */
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
@@ -217,9 +217,9 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
  * the eviction with watermark. Previous versions require full scan to find the keys to evict,
  * while this version only scans the keys with a timestamp smaller than the cutoff. The timestamp
  * is the watermarked join key, such as the window of a join on windows, when the keys carry the
- * watermark. Otherwise it is the column that the value predicate of the side tests, the event time
- * or another TIMESTAMP column that the join condition bounds, and for a side without one, its
- * event time, or a random bucket when it has none.
+ * watermark. Otherwise it is what the value predicate of the side tests: the event time, another
+ * TIMESTAMP column that the join condition bounds, or the value of a column cast to TIMESTAMP.
+ * For a side without one, it is its event time, or a random bucket when it has none.
  *
  * In this implementation, we no longer build a logical array of values; instead, we store the
  * (key, timestamp) -> values in the primary store, and maintain a secondary index of
