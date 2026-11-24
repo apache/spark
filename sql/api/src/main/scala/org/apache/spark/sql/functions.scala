@@ -4728,8 +4728,7 @@ object functions {
 
   /**
    * Returns the absolute value of `e` and the result is null on overflow or when a string
-   * argument cannot be cast to a number. The acceptable input types are the same as for
-   * `abs`.
+   * argument cannot be cast to a number. The acceptable input types are the same as for `abs`.
    *
    * @param e
    *   a column that evaluates to a numeric or interval.
@@ -4813,9 +4812,8 @@ object functions {
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
 
   /**
-   * Returns the negated value of `e` and the result is null on overflow or when a string
-   * argument cannot be cast to a number. The acceptable input types are the same as for
-   * `negative`.
+   * Returns the negated value of `e` and the result is null on overflow or when a string argument
+   * cannot be cast to a number. The acceptable input types are the same as for `negative`.
    *
    * @param e
    *   a column that evaluates to a numeric or interval.
