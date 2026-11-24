@@ -880,7 +880,7 @@ class Dataset[T] private[sql](
     def createAsOfJoinPlan(joinPlan: Join): AsOfJoin = {
       val leftAsOfExpr = moveToJoinInput(leftAsOf.expr, logicalPlan, joinPlan.left)
       val rightAsOfExpr = moveToJoinInput(rightAsOf.expr, other.logicalPlan, joinPlan.right)
-      AsOfJoin(
+      val asOfJoin = AsOfJoin(
         joinPlan.left, joinPlan.right,
         leftAsOfExpr, rightAsOfExpr,
         joinPlan.condition,
@@ -889,6 +889,7 @@ class Dataset[T] private[sql](
         allowExactMatches,
         AsOfJoinDirection(direction)
       )
+      OptionalReferences.withResolvedNullReferenceOf(asOfJoin, joinPlan)
     }
 
     resolveSelfJoinCondition(other, Option(joinExprs), joinType) match {
@@ -1265,22 +1266,28 @@ class Dataset[T] private[sql](
 
   private def flattenUnion(u: Union, isUnionDistinct: Boolean): Union = {
     var changed = false
+    // The nodes that the flattening removes.
+    val removed = ArrayBuffer.empty[LogicalPlan]
     // We only need to look at the direct children of Union, as the nested adjacent Unions should
     // have been combined already by previous `Dataset#union` transformations.
     val newChildren = u.children.flatMap {
-      case Distinct(Union(children, byName, allowMissingCol))
+      case distinct @ Distinct(child @ Union(children, byName, allowMissingCol))
           if isUnionDistinct && byName == u.byName && allowMissingCol == u.allowMissingCol =>
         changed = true
+        removed ++= Seq(distinct, child)
         children
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol), _)
+      case deduplicate @ Deduplicate(
+            keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol), _)
           if AttributeSet(keys) == child.outputSet && isUnionDistinct && byName == u.byName &&
             allowMissingCol == u.allowMissingCol =>
         changed = true
+        removed ++= Seq(deduplicate, child)
         children
-      case Union(children, byName, allowMissingCol)
+      case child @ Union(children, byName, allowMissingCol)
           if !isUnionDistinct && byName == u.byName && allowMissingCol == u.allowMissingCol =>
         changed = true
+        removed += child
         children
       case other =>
         Seq(other)
@@ -1288,7 +1295,9 @@ class Dataset[T] private[sql](
     if (changed) {
       val newUnion = Union(newChildren)
       newUnion.copyTagsFrom(u)
-      newUnion
+      // A removed node can be the analyzed plan of a Dataset whose analysis resolved an optional
+      // reference to NULL.
+      OptionalReferences.withResolvedNullReferenceOf(newUnion, removed.toSeq: _*)
     } else {
       u
     }

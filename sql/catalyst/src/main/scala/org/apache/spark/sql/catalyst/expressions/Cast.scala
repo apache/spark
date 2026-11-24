@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.optimizer.SpecialDatetimeValues
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
@@ -878,8 +879,16 @@ case class Cast(
   }
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType) &&
+      specialDatetimeValue.isEmpty
   }
+
+  /**
+   * The special value that this casts, such as 'today' or 'epoch', which `SpecialDatetimeValues`
+   * replaces with its value. Evaluating the cast does not give that value.
+   */
+  private[sql] lazy val specialDatetimeValue: Option[UTF8String] =
+    SpecialDatetimeValues.specialValueOf(this)
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
@@ -1413,6 +1422,8 @@ case class Cast(
       b => CastUtils.floatToShortExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToShortExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToShort()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1479,6 +1490,8 @@ case class Cast(
       b => CastUtils.floatToByteExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToByteExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToByte()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
