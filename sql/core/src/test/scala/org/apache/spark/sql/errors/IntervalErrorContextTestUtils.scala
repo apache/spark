@@ -29,6 +29,17 @@ trait IntervalErrorContextTestUtils extends CheckErrorHelper { self: Suite =>
   protected val ymDivide = "CAST(CAST(id - 2147483648 AS INT) AS INTERVAL MONTH) / -1"
   protected val dtDivide = "CAST(id + 1 AS INTERVAL DAY) / CAST(id AS INT)"
 
+  /**
+   * The error of `ymDivide` in generated code. On this branch, generated code raises
+   * ARITHMETIC_OVERFLOW for an integral divisor, while the interpreted path raises
+   * INTERVAL_ARITHMETIC_OVERFLOW (SPARK-60746 makes both raise the latter).
+   */
+  protected val ymDivideError: (String, String, Map[String, String]) = (
+    "ARITHMETIC_OVERFLOW", "22003", Map(
+      "message" -> "Overflow in integral divide",
+      "alternative" -> " Use 'try_divide' to tolerate overflow and return NULL instead.",
+      "config" -> "\"spark.sql.ansi.enabled\""))
+
   /** The context of `fragment` in `SELECT $query FROM range(1)`. */
   protected def expectedContext(query: String, fragment: String): ExpectedContext = {
     val start = "SELECT ".length + query.indexOf(fragment)

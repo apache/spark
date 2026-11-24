@@ -127,8 +127,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
         Seq(
           (withSameTypeCasts(ymDivide, "INTERVAL YEAR TO MONTH"),
-            "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION", "22015",
-            Map("functionName" -> "`try_divide`")),
+            ymDivideError._1, ymDivideError._2, ymDivideError._3),
           (withSameTypeCasts(dtDivide, "INTERVAL DAY TO SECOND"),
             "INTERVAL_DIVIDED_BY_ZERO", "22012", Map.empty[String, String])
         ).foreach { case (queries, condition, sqlState, parameters) =>
