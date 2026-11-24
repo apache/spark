@@ -40,11 +40,6 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   // more than `aliasCandidateLimit` attributes for an expression. In those cases the old logic
   // handled only the last alias so we need to make sure that we give precedence to that.
   // If the `outputExpressions` contain simple attributes we need to add those too to the map.
-  // A foldable child is mapped too. `projectExpression` keeps the original expression as an
-  // alternative, so the projection advertises both the alias spelling (`a + one`) and the
-  // constant spelling (`a + 1`): FoldablePropagation rewrites the alias spelling to the constant
-  // only through a subset of operators (e.g. not across CollectMetrics or a checkpoint), and
-  // nothing rewrites the constant spelling back.
   @transient
   private lazy val aliasMap = {
     val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
@@ -69,17 +64,34 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
+  private lazy val hasFoldableAlias = aliasMap.keys.exists(_.foldable)
+
   /**
    * Return a stream of expressions in which the original expression is projected with `aliasMap`.
+   * When an alias child is foldable, also return the spelling that keeps the literal: a requirement
+   * can keep that spelling where FoldablePropagation does not rewrite it (for example across
+   * CollectMetrics or a checkpoint). Projecting twice adds at most one constant spelling per
+   * candidate, instead of forking every occurrence of a literal into 2^k candidates.
    */
   protected def projectExpression(expr: Expression): LazyList[Expression] = {
+    if (hasFoldableAlias) {
+      projectExpression(expr, keepFoldable = false) #:::
+        projectExpression(expr, keepFoldable = true)
+    } else {
+      projectExpression(expr, keepFoldable = false)
+    }
+  }
+
+  private def projectExpression(expr: Expression, keepFoldable: Boolean): LazyList[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
     expr.multiTransformDown {
-      // Mapping with aliases. A foldable expression stays an alternative because a requirement can
-      // keep the alias spelling where FoldablePropagation does not rewrite it.
+      // The second pass leaves a matched foldable leaf in place: the constant spelling.
+      case e: Expression if keepFoldable && e.foldable && aliasMap.contains(e.canonicalized) =>
+        Seq(e)
+
+      // Mapping with aliases
       case e: Expression if aliasMap.contains(e.canonicalized) =>
-        aliasMap(e.canonicalized).toSeq ++
-          (if (e.containsChild.nonEmpty || e.foldable) Seq(e) else Seq.empty)
+        aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.
       // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`

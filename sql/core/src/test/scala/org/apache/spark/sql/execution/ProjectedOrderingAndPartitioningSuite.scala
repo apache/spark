@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Hash
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.functions.{count, lit}
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{col, count, lit, row_number}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, TimestampType}
@@ -983,25 +984,18 @@ class ProjectedOrderingAndPartitioningSuite
     val a = AttributeReference("a", IntegerType)()
     val child = DummyLeafExecWithPartitioning(Seq(a), HashPartitioning(Seq(Add(a, Literal(1))), 4))
     val one = Alias(Literal(1), "one")()
-    def check(): Unit = {
-      val plan = ProjectExec(Seq(a, one), child)
-      // Both spellings are advertised, whichever one a requirement keeps.
-      assert(plan.outputPartitioning.satisfies(
-        ClusteredDistribution(Seq(Add(a, Literal(1))))))
-      assert(plan.outputPartitioning.satisfies(
-        ClusteredDistribution(Seq(Add(a, one.toAttribute)))))
-    }
-    check()
-    withSQLConf("spark.sql.optimizer.excludedRules" ->
-        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
-      check()
-    }
+    val plan = ProjectExec(Seq(a, one), child)
+    // Both spellings are advertised, whichever one a requirement keeps.
+    assert(plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, Literal(1))))))
+    assert(plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, one.toAttribute)))))
   }
 
   test("SPARK-62263: a foldable alias must not force a redundant shuffle") {
     withSQLConf(
-      "spark.sql.adaptive.enabled" -> "false",
-      "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val base = spark.range(10).selectExpr("cast(id as int) as a")
       val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
       val right = base.selectExpr("a as k")
@@ -1021,18 +1015,15 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
-  test("SPARK-62263: the constant spelling is kept when FoldablePropagation is excluded") {
+  test("SPARK-62263: an alias-spelled requirement right above the projection") {
     withSQLConf(
-      "spark.sql.adaptive.enabled" -> "false",
-      "spark.sql.autoBroadcastJoinThreshold" -> "-1",
-      "spark.sql.optimizer.excludedRules" ->
-        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
-      // Excluding the rule stops it rewriting `a + one` to `a + 1`, but a requirement written
-      // with the constant must still match.
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // FoldablePropagation rewrites `a + one` to `a + 1` here, so master plans 3 shuffles.
       val base = spark.range(10).selectExpr("cast(id as int) as a")
       val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
       val right = base.selectExpr("a as k")
-      val df = left.join(right, left("a") + 1 === right("k"))
+      val df = left.join(right, left("a") + left("one") === right("k"))
       val plan = df.queryExecution.executedPlan
       val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
       assert(shuffles.size == 2,
@@ -1043,8 +1034,8 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-62263: an alias-spelled requirement across CollectMetrics") {
     withSQLConf(
-      "spark.sql.adaptive.enabled" -> "false",
-      "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // CollectMetrics stops FoldablePropagation, so the join keeps the alias spelling.
       val base = spark.range(10).selectExpr("cast(id as int) as a")
       val right = base.selectExpr("a as k")
@@ -1062,8 +1053,8 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-62263: an alias-spelled requirement over a local checkpoint") {
     withSQLConf(
-      "spark.sql.adaptive.enabled" -> "false",
-      "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // A checkpoint records only the first advertised partitioning, so the alias spelling must
       // stay first.
       val base = spark.range(10).selectExpr("cast(id as int) as a")
@@ -1082,36 +1073,44 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
-  test("SPARK-62263: a foldable alias does not lose partitioning when the alias map is non-empty") {
-    def hashExpressions(): Seq[Seq[String]] = {
+  test("SPARK-62263: both spellings survive an attribute rename") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val base = spark.range(10).selectExpr("cast(id as int) as a")
       val df = base.repartition($"a" + 1).selectExpr("a as x", "1 as one")
       val partitionings = df.queryExecution.executedPlan.outputPartitioning match {
         case c: PartitioningCollection => c.partitionings
         case p => Seq(p)
       }
-      partitionings.collect { case h: HashPartitioning => h.expressions.map(_.sql) }
-    }
-
-    def check(): Unit = {
-      val hashes = hashExpressions()
+      val hashes = partitionings.collect { case h: HashPartitioning => h.expressions.map(_.sql) }
       assert(hashes.contains(Seq("(x + one)")), hashes)
       assert(hashes.contains(Seq("(x + 1)")), hashes)
     }
+  }
 
-    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
-      check()
-    }
+  test("SPARK-62263: a multi-key partitioning is not crowded out by the alternatives") {
     withSQLConf(
-      "spark.sql.adaptive.enabled" -> "false",
-      "spark.sql.optimizer.excludedRules" ->
-        "org.apache.spark.sql.catalyst.optimizer.FoldablePropagation") {
-      check()
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Forking each of seven aliased literals into an alias and a literal would fill
+      // `EXPRESSION_PROJECTION_CANDIDATE_LIMIT` from the first collection member and drop the
+      // join's `hashpartitioning(b1..b7)`, so the window would shuffle again.
+      val l = spark.range(20).selectExpr((1 to 7).map(i => s"cast(id as int) as a$i"): _*)
+      val r = spark.range(20).selectExpr((1 to 7).map(i => s"cast(id as int) as b$i"): _*)
+      val w = Window.partitionBy((1 to 7).map(i => col(s"b$i")): _*).orderBy("a1")
+      val df = l.join(r, (1 to 7).map(i => l(s"a$i") + 1 === r(s"b$i")).reduce(_ && _))
+        .selectExpr("*", "1 as one")
+        .observe("m", count(lit(1))) // keeps FoldablePropagation from lifting `one`
+        .withColumn("rn", row_number().over(w))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
     }
   }
 
   test("SPARK-62263: a foldable alias advertises both ordering spellings") {
-    withSQLConf("spark.sql.adaptive.enabled" -> "false") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val base = spark.range(10).selectExpr("cast(id as int) as a")
       val df = base.sortWithinPartitions($"a" + 1).selectExpr("a", "1 as one")
       df.collect()
