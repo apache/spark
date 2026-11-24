@@ -17,6 +17,7 @@
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -24,6 +25,7 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf, SparkContext, SparkFiles
+from pyspark.errors import PySparkRuntimeError
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase
 
@@ -176,6 +178,47 @@ class ContextTests(unittest.TestCase):
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
+
+    def test_init_arguments_and_errors(self):
+        # SparkContext and addPyFile prepend to sys.path.
+        sys_path = list(sys.path)
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                py_file = os.path.join(d, "dep_for_init_test.py")
+                with open(py_file, "w") as f:
+                    f.write("X = 1\n")
+                with SparkContext(
+                    "local",
+                    "test_init_arguments_and_errors",
+                    sparkHome=d,
+                    pyFiles=[py_file],
+                    environment={"TEST_ENV_VAR": "v"},
+                ) as sc:
+                    self.assertEqual(sc.getConf().get("spark.home"), d)
+                    self.assertEqual(sc.getConf().get("spark.executorEnv.TEST_ENV_VAR"), "v")
+                    self.assertTrue(os.path.exists(SparkFiles.get("dep_for_init_test.py")))
+
+                # The JVM is up now, so the contexts below reuse it instead of launching it
+                # through spark-submit, which would try to ship spark.submit.pyFiles itself.
+                # loadDefaults=False drops the master and app name that spark-submit set.
+                conf = SparkConf(loadDefaults=False)
+                with self.assertRaises(PySparkRuntimeError) as pe:
+                    SparkContext(conf=conf)
+                self.assertEqual(pe.exception.getCondition(), "MASTER_URL_NOT_SET")
+                with self.assertRaises(PySparkRuntimeError) as pe:
+                    SparkContext(conf=conf.setMaster("local"))
+                self.assertEqual(pe.exception.getCondition(), "APPLICATION_NAME_NOT_SET")
+
+                conf = (
+                    SparkConf()
+                    .setMaster("local")
+                    .setAppName("test_init_arguments_and_errors")
+                    .set("spark.submit.pyFiles", os.path.join(d, "missing.py"))
+                )
+                with self.assertWarnsRegex(RuntimeWarning, "Failed to add file"):
+                    SparkContext(conf=conf).stop()
+        finally:
+            sys.path[:] = sys_path
 
     def test_get_or_create(self):
         with SparkContext.getOrCreate() as sc:
