@@ -50,7 +50,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   example `la = ra AND lb = rb` with watermarks on `la` and `rb`, evicts the state of each input by
   the key that the opposite input's watermark bounds. Earlier versions evicted both by the same key
   and could lose matches. In append mode, a new query fails when an operator that drops late rows,
-  by an event time that can come from an input evicted by a key other than its event time, follows
+  by an event time that can come from an input evicted by neither the key that earlier versions
+  evicted both inputs by nor its own event time, such as the left input of this example, follows
   such a join, because the state of that input keeps rows of any event time. Add a watermark on the
   same join key of both inputs to run such a query. A row whose new eviction key is NULL, such as a
   left row with a NULL `lb`, can never match: an outer join now emits it when it arrives. A NULL in
@@ -71,8 +72,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   to that operator's own check. When the join has such an input, it also fails a query whose
   path to the join passes another stateful operator, such as flatMapGroupsWithState without an
   event-time timeout, or an operator none of whose inputs outputs all the columns it follows.
-  Add a watermark in the join
-  keys, or a range condition that bounds that input by the other input's watermark. Setting
+  Add a range condition that bounds the event time of that input by the other input's watermark,
+  or a watermark on the same join key of both inputs. Setting
   `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
   a warning, and also turns the existing check of chained stateful operators into a warning.
   Queries restarted from checkpoints written before Spark 4.5 only log a warning.

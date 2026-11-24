@@ -164,7 +164,8 @@ object UnsupportedOperationChecker extends Logging {
    * takes the optimized plan, whose join conditions eviction uses, and in which the optimizer has
    * replaced every CTE reference, MATERIALIZED ones included. A query from a checkpoint without
    * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning, and its join keeps
-   * evicting by the event time an input that would otherwise be evicted by another column.
+   * evicting by the event time an input that would otherwise be evicted by another column, and
+   * both inputs by the equality key that earlier versions evicted both by.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     // TODO: Update mode is not checked, although its aggregations also drop late rows.
