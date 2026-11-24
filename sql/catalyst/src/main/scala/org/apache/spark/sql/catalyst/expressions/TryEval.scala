@@ -55,8 +55,9 @@ case class TryEval(child: Expression) extends UnaryExpression {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of `expr`, and NULL on overflow. " +
-    "The acceptable input types are the same as for `abs`.",
+  usage = "_FUNC_(expr) - Returns the absolute value of `expr`, and NULL on overflow or " +
+    "when a string argument cannot be cast to a number. The acceptable input types are the " +
+    "same as for `abs`.",
   arguments = """
     Arguments:
       * expr - The numeric or interval value to take the absolute value of.
@@ -93,8 +94,9 @@ case class TryAbs(expr: Expression, replacement: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the negated value of `expr`, and NULL on overflow. " +
-    "The acceptable input types are the same as for `negative`.",
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`, and NULL on overflow or " +
+    "when a string argument cannot be cast to a number. The acceptable input types are the " +
+    "same as for `negative`.",
   arguments = """
     Arguments:
       * expr - The expression to negate.

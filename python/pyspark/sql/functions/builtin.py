@@ -567,8 +567,9 @@ def sqrt(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_abs(col: "ColumnOrName") -> Column:
     """
-    Returns the absolute value of `col` and the result is null on overflow. The acceptable
-    input types are the same as for :meth:`abs`.
+    Returns the absolute value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`abs`.
 
     .. versionadded:: 4.5.0
 
@@ -941,8 +942,9 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_negative(col: "ColumnOrName") -> Column:
     """
-    Returns the negated value of `col` and the result is null on overflow. The acceptable
-    input types are the same as for :meth:`negative`.
+    Returns the negated value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`negative`.
 
     .. versionadded:: 4.5.0
 

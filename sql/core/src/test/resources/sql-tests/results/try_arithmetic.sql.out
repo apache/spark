@@ -1140,11 +1140,29 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT try_negative('abc')
+SELECT try_negative(true)
 -- !query schema
-struct<try_negative(abc):double>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "try_negative(true)"
+  } ]
+}
 
 
 -- !query

@@ -155,6 +155,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
           (Literal.create(null, DoubleType), null, null)
         ).foreach { case (input, abs, negated) =>
           assert(!new TryAbs(input).replacement.isInstanceOf[UnaryArithmeticOrNull])
+          assert(!new TryNegative(input).replacement.isInstanceOf[UnaryArithmeticOrNull])
           checkEvaluation(new TryAbs(input).replacement, abs)
           checkEvaluation(new TryNegative(input).replacement, negated)
         }

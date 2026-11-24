@@ -142,5 +142,5 @@ SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-1789
 
 -- Invalid input types
 SELECT try_abs(true);
-SELECT try_negative('abc');
+SELECT try_negative(true);
 SELECT try_abs(make_interval(0, 1));
