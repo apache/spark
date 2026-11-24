@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FileTypeColumnUsage, ParseMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -1580,7 +1580,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRetrieveTableOrViewNotInSameDatabaseError(
       qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1072",
+      errorClass = "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE",
       messageParameters = Map("qualifiedTableNames" -> qualifiedTableNames.toString()))
   }
 
@@ -4785,6 +4785,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin)
   }
 
+  def optionalReferenceInDmlNotSupportedError(statement: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+      messageParameters = Map("context" -> toSQLStmt(statement)),
+      origin = origin)
+  }
+
+  def optionalReferenceInDdlNotSupportedError(clause: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
+      messageParameters = Map("context" -> toSQLStmt(clause)),
+      origin = origin)
+  }
+
+  def unusedSqlParameterValuesError(numMarkers: Int, numValues: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "UNUSED_SQL_PARAMETER_VALUES",
+      messageParameters = Map(
+        "numMarkers" -> numMarkers.toString,
+        "numValues" -> numValues.toString))
+  }
+
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
@@ -5423,34 +5445,37 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def fileTypeUnknownWriteError(colNames: Seq[Seq[String]]): Throwable = {
+  def fileTypeMissingQualifierError(colPath: Seq[String], dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_MISSING_QUALIFIER",
+      messageParameters = Map("colName" -> toSQLId(colPath), "dataType" -> toSQLType(dataType)))
+  }
+
+  def fileTypeUnknownWriteError(colPaths: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_UNKNOWN_WRITE",
-      messageParameters = Map("colNames" -> colNames.map(toSQLId).mkString("[", ", ", "]")))
+      messageParameters = Map("colNames" -> colPaths.map(toSQLId).mkString("[", ", ", "]")))
   }
 
-  def fileTypeUnsupportedColumnUsageError(field: StructField, usage: String): Throwable = {
+  def fileTypeUnsupportedColumnUsageError(
+      colPath: Seq[String],
+      dataType: DataType,
+      usage: FileTypeColumnUsage): Throwable = {
     new AnalysisException(
-      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
-      messageParameters = Map(
-        "colName" -> toSQLId(field.name),
-        "dataType" -> toSQLType(field.dataType)))
+      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.${usage.errorSubClass}",
+      messageParameters = Map("colName" -> toSQLId(colPath), "dataType" -> toSQLType(dataType)))
   }
 
-  def fileTypeInRoutineSignatureUnsupportedQualifierError(
-      routineType: String,
-      routineName: String): Throwable = {
+  def fileTypeInRoutineSignatureUnsupportedQualifierError(routineName: String): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+      messageParameters = Map("routineName" -> routineName))
   }
 
-  def fileTypeInRoutineSignatureUnsupportedMapKeyError(
-      routineType: String,
-      routineName: String): Throwable = {
+  def fileTypeInRoutineSignatureUnsupportedMapKeyError(routineName: String): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+      messageParameters = Map("routineName" -> routineName))
   }
 
   def unsupportedTimeTypeError(): Throwable = {

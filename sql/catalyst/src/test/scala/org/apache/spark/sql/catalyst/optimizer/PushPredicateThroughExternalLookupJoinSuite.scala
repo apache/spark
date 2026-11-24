@@ -283,6 +283,28 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
       expectedJoin(inner, conjuncts = Seq(keysEqual, bothSidesConjunct)).where(throwing))
   }
 
+  test("SPARK-62137: keep a filter conjunct that can fail above an inner, left semi or left " +
+    "anti join after a throwing conjunct of its condition") {
+    // The condition of an inner, left semi or left anti join decides which stream rows reach the
+    // filter above it, so after its throwing conjunct, a filter conjunct that can fail, as an
+    // addition in ANSI mode can, stays above the join, while one that cannot fail moves. A left
+    // outer join keeps every stream row, so both move below it.
+    val throwing =
+      If(streamKey < 0, Cast(new RaiseError(Literal("bad")), BooleanType), streamKey =!= 2)
+    val canFail = Add(streamKey, Literal(1), NumericEvalContext(EvalMode.ANSI)) > 0
+    lookupJoinTypes.foreach { joinType =>
+      val join = lookupJoin(joinType, keysEqual, throwing)
+      val expected = if (joinType == LeftOuter) {
+        expectedJoin(join, stream.where(canFail && streamKey > 1),
+          conjuncts = Seq(keysEqual, throwing))
+      } else {
+        expectedJoin(join, stream.where(streamKey > 1), conjuncts = Seq(keysEqual, throwing))
+          .where(canFail)
+      }
+      comparePlans(Optimize.execute(join.where(canFail && streamKey > 1)), expected)
+    }
+  }
+
   test("a filter that rejects null lookup columns turns a left outer lookup join into inner") {
     // The filter is false or null on the null lookup columns of a stream row without a match, so
     // it removes every row that the left outer join adds. The join becomes inner, as a join does,

@@ -288,6 +288,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statementType, colName, defaultSQL)
     }
+    // A DEFAULT clause of SQL text cannot have optional references, see
+    // `OptionalReferenceValidation`, and neither can a default from metadata.
+    OptionalReferences.unresolvedOptionalReference(defaultExpr).foreach { reference =>
+      throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(
+        "DEFAULT", reference.origin)
+    }
 
     // Analyze the parse result.
     val plan = try {
@@ -489,27 +495,27 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](existenceDefaultValues(schema).length)(true)
+    Array.fill[Boolean](schema.length)(true)
   }
 
   /**
-   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above.
+   * Resets the elements of the array initially returned from [[getExistenceDefaultsBitmask]] above,
+   * given the result of [[existenceDefaultValues]] for the schema as `defaultValues`.
    * Afterwards, set element(s) to false before calling [[applyExistenceDefaultValuesToRow]] below.
    */
-  def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
-    val defaultValues = existenceDefaultValues(schema)
+  def resetExistenceDefaultsBitmask(defaultValues: Array[Any], bitmask: Array[Boolean]): Unit = {
     for (i <- 0 until defaultValues.length) {
       bitmask(i) = (defaultValues(i) != null)
     }
   }
 
   /**
-   * Updates a subset of columns in the row with default values from the metadata in the schema.
+   * Updates a subset of columns in the row with default values from the metadata in the schema,
+   * given the result of [[existenceDefaultValues]] for the schema as `existingValues`.
    */
-  def applyExistenceDefaultValuesToRow(schema: StructType, row: InternalRow,
+  def applyExistenceDefaultValuesToRow(existingValues: Array[Any], row: InternalRow,
       bitmask: Array[Boolean]): Unit = {
-    val existingValues = existenceDefaultValues(schema)
-    if (hasExistenceDefaultValues(schema)) {
+    if (existingValues.exists(_ != null)) {
       for (i <- 0 until existingValues.length) {
         if (bitmask(i)) {
           row.update(i, existingValues(i))
@@ -549,8 +555,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
     getExistenceDefaultValues(schema)
   def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =
     getExistenceDefaultsBitmask(schema)
-  def hasExistenceDefaultValues(schema: StructType): Boolean =
-    existenceDefaultValues(schema).exists(_ != null)
 
   // Called to check default value expressions in the analyzed plan.
   def validateDefaultValueExpr(

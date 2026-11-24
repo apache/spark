@@ -633,6 +633,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableOptionalReferenceResolution")
+      .internal()
+      .doc("When true, enables resolution of optional column, field, and variable references " +
+        "(for example `col?`) in single-pass analyzer. Otherwise, resolution falls back to " +
+        "fixed-point analyzer.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -993,7 +1004,8 @@ object SQLConf {
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
-        "query. This is to prevent driver OOMs with too many Bloom filters.")
+        "query. This is to prevent driver OOMs with too many Bloom filters. Per-partition " +
+        "runtime bloom filters count apart, under a limit of the same value.")
       .version("3.3.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
@@ -1008,11 +1020,38 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
+      .doc("When true, a runtime bloom filter can be built per partition, for a creation side " +
+        "too big for a bloom filter of all its keys. This needs the join key of each side of a " +
+        "join to come from a V2 scan, and both scans to report a keyed partitioning by the same " +
+        "partition transform of that key (other than identity), with " +
+        "spark.sql.sources.v2.bucketing.enabled and " +
+        s"${RUNTIME_BLOOM_FILTER_ENABLED.key} both true. Each partition of the " +
+        "application side is then checked against the bloom filter of the matching partition " +
+        "of the creation side, in a semi join. The semi join calls the function of the " +
+        "partition transform on each row of both sides, so that function must implement " +
+        "`produceResult` or `invoke`. That semi join is dropped when it adds a shuffle or cuts " +
+        "the tasks that read the application side, or when it would sit in more than one " +
+        "place, as below a union. To check the shuffles and the tasks, Spark plans the query " +
+        "once more, and up to once more for each semi join. Adaptive query execution does that " +
+        "again on each re-planning before the semi join runs. Each bloom filter is sized for an " +
+        "even share of the creation side over its partition keys. The semi join is also dropped " +
+        "when that share is over spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
+        "The number of per-partition bloom filters has a limit of its own, the value of " +
+        s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
+        "limit, no per-partition one is added either.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. A per-partition bloom filter needs only an " +
+        "even share of the creation side over its partition keys to be under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
@@ -4286,8 +4325,11 @@ object SQLConf {
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
-      .doc("When true, Spark will validate if renamed checkpoint file exists.")
-      .internal()
+      .doc("When true, after renaming a checkpoint file from its temporary file, Spark " +
+        "verifies that the renamed file exists and fails the write if it does not, instead " +
+        "of committing a batch whose checkpoint file is missing. This adds one existence " +
+        "check per checkpoint file written. Consider enabling it when the checkpoint " +
+        "location is on an object store whose rename is not guaranteed to be atomic.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4383,6 +4425,21 @@ object SQLConf {
     .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS =
+    buildConf("spark.sql.streaming.join.preserveEventTimeColumns.enabled")
+      .internal()
+      .doc("When true, column pruning preserves an unambiguous watermark timestamp for " +
+        "late-event filtering in plans without unexpanded CTE references whose only stateful " +
+        "operator is a stream-stream join with no residual condition after predicate pushdown. " +
+        "Other plan shapes keep legacy pruning even when this value is true. The timestamp " +
+        "is stored in the ordinary input row. The checkpoint pins the value across restarts. " +
+        "Existing checkpoints without this setting use false to preserve their " +
+        "state schemas and pruning behavior.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
@@ -4722,6 +4779,15 @@ object SQLConf {
     buildConf("spark.sql.codegen.join.sortMergeAsOfJoin.enabled")
       .internal()
       .doc("When true, enable code-gen for backward and forward sort-merge AS-OF join.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -5675,9 +5741,7 @@ object SQLConf {
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
-        "or a NumPy ndarray. " +
-        "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "or a NumPy ndarray.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -6151,23 +6215,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PYTHON_UDF_IN_PROCESS_FULL_VALIDATION =
-    buildConf("spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled")
-      .doc("When true, in-process Python UDFs fully validate the Arrow structure of each " +
-        "result, including every offset of variable-width and nested values, before the JVM " +
-        "reads it. The JVM reads result buffers without bounds checks, so a malformed result, " +
-        "such as one built from raw buffers, can produce wrong values or crash the executor. " +
-        "String values are not checked for valid UTF-8. When false, only constant-time Arrow " +
-        "validation is performed. Worker-based Arrow UDFs do not validate their results.")
-      .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(true)
-
   val PYTHON_UDF_DETAILED_TIMING_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
       .internal()
-      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .doc("When true, collect detailed timing metrics for supported Python UDFs. " +
+        "Detailed timing is not collected when spark.python.udf.pipelined.enabled is true.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -6661,7 +6713,7 @@ object SQLConf {
         "until the physical operator is added, a query that passes analysis is rejected when " +
         "it is planned, unless the optimizer removes the GAP FILL, as it does under LIMIT 0.")
       .internal()
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -7006,6 +7058,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.evalCountBugUdfConditionally.enabled")
+      .internal()
+      .doc("When true, a Python or external UDF in the zero-row result of a COUNT-bug rewrite " +
+        "in DecorrelateInnerQuery is evaluated only for the outer rows that take that branch, " +
+        "so such a UDF no longer runs (and possibly fails) on rows that have matching inner " +
+        "rows. When false, revert to evaluating the UDF for every row, which can fail a query " +
+        "that references the UDF's result only for rows without matching inner rows. Only " +
+        "effective for the subqueries whose COUNT bug DecorrelateInnerQuery handles, which needs " +
+        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG =
     buildConf("spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled")
       .internal()
@@ -7161,6 +7228,18 @@ object SQLConf {
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
         "be applied only when any artifact is added to the session.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_LIST_ALL_SESSIONS_RESOURCES =
+    buildConf("spark.sql.legacy.listAllSessionsResources")
+      .internal()
+      .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
+        "of every session, as before Spark 4.5, also in a session whose artifacts are isolated. " +
+        "When false, such a session lists those added to it and those added to the SparkContext " +
+        "outside of any session.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -8715,6 +8794,33 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIONAL_REFERENCES_ENABLED =
+    buildConf("spark.sql.optionalReferences.enabled")
+      .internal()
+      .doc("When true, a `?` after an identifier of a column, field, or variable reference, or " +
+        "after a named parameter marker, makes that identifier optional: when no name matches " +
+        "the identifier, the reference evaluates to a NULL of type VOID instead of raising a " +
+        "not-found error. Ambiguous references and type errors are still raised. UPDATE, " +
+        "DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
+        "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
+        "and OPTIONS clauses of table and function definitions reject optional references.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES =
+    buildConf("spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences")
+      .internal()
+      .doc("When true (legacy behavior), the body of a SQL function that is called in a " +
+        "subquery resolves names that are neither its parameters nor its own columns as " +
+        "columns of the query around the subquery, before session variables. When false (the " +
+        "default), the body does not reference the calling query, like the body of a view.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
     buildConf("spark.sql.stableDerivedColumnAlias.enabled")
       .internal()
@@ -9464,6 +9570,20 @@ object SQLConf {
       .createWithDefault(1000)
   }
 
+  val LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA = {
+    buildConf("spark.sql.legacy.pipelines.streamingTable.keepExistingColumnMetadata")
+      .internal()
+      .doc("When true, an incremental update of a Declarative Pipelines streaming table keeps " +
+        "the column comments and other column metadata the table already has on the columns " +
+        "it shares with the pipeline's declared or inferred schema, as Spark 4.4 does. When " +
+        "false (default), those columns take their metadata from the pipeline's schema, as a " +
+        "full refresh and an update of a materialized view do.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   val HADOOP_LINE_RECORD_READER_ENABLED =
     buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
@@ -9509,6 +9629,19 @@ object SQLConf {
         "According to the description of the split function, this should be set to false by " +
         "default. See SPARK-49968 for details.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
+    buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
+      .internal()
+      .doc("When set to true, to_char restores the results of Spark 4.3 and earlier, which " +
+        "leave out the ones digit of a zero value for some format strings with no digits after " +
+        "the decimal point. For example: SELECT to_char(0, '999') returns '   ' and " +
+        "SELECT to_char(0, '999S') returns '+   '. When set to false, the ones digit is kept: " +
+        "they return '  0' and '  0+'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -9825,6 +9958,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
 
+  override def optionalReferencesEnabled: Boolean = getConf(OPTIONAL_REFERENCES_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
@@ -9851,6 +9986,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
+
+  def runtimeBloomFilterPerPartitionEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
@@ -11129,6 +11267,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def legacyPipelinesKeepStreamingTableColumnMetadata: Boolean =
+    getConf(SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 

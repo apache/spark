@@ -31,13 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrd
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
+import org.apache.spark.sql.functions.{lit, raise_error, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -2028,6 +2029,164 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       }.isEmpty, df.queryExecution)
     } finally {
       cached.unpersist()
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a throwable condition into " +
+    "a lower join") {
+    withTable("s") {
+      Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it,
+      // whether the CASE WHEN is in the WHERE clause or in the ON clause of the join with w.
+      val df = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+      val onClause = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |  AND CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(onClause, Row(1))
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a condition that can fail ahead of " +
+    "a non-deterministic or throwable one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `rand(10) * 10 > 100` is false on every row, so the `AND` short-circuit keeps the
+      // division by zero on t.id = 3 from being evaluated.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id
+            |WHERE rand(10) * 10 > 100 AND 10L / (t.id - 3) > 0
+            |""".stripMargin),
+        Nil)
+      // The CASE WHEN removes the row whose id is 3, the only one where the division is by zero.
+      // The division follows the throwable CASE WHEN, so it stays above it.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t
+            |JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |  AND CASE WHEN t.id = 3 THEN false WHEN t.id < 0 THEN raise_error('neg') ELSE true END
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id AND 10L / (t.id + s.id - 6) > 0
+            |""".stripMargin),
+        (4L to 9L).map(i => Row(i, i, i)))
+    }
+  }
+
+  test("SPARK-62069: do not evaluate a join or filter condition on the rows that a lower inner " +
+    "join removes") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("tb1", "tb2", "tb3") {
+        Seq((1, 1, 5), (2, 2, 5)).toDF("k", "v", "f").write.saveAsTable("tb1")
+        Seq[(Int, Option[Int])]((1, None), (2, Some(1))).toDF("k", "g").write.saveAsTable("tb2")
+        Seq((1, 1), (2, 0)).toDF("v", "w").write.saveAsTable("tb3")
+        // The CASE WHEN is NULL on the row whose k is 1, so the join with t2 removes it, and the
+        // division by zero is not evaluated on it, in the ON clause or in the WHERE clause.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v AND 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |JOIN tb3 t3 ON t1.v = t3.v WHERE 10 / (t1.k - t3.w) > 0
+              |""".stripMargin),
+          Row(2))
+        // The join with t3 removes the row whose k is 1, so the WHERE clause, which stays above
+        // the join for its subquery, is not evaluated on it.
+        checkAnswer(
+          sql(
+            """SELECT t1.k FROM tb1 t1 JOIN tb2 t2 ON t1.k = t2.k
+              |JOIN tb3 t3 ON t1.v = t3.v AND
+              |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END
+              |WHERE 10 / (t1.k - t3.w) > (SELECT max(x.k) FROM tb2 x WHERE x.k = t1.k) - 5
+              |""".stripMargin),
+          Row(2))
+      }
+    }
+  }
+
+  test("SPARK-62241: do not compute an equality that can fail after a throwable join " +
+    "condition as a join key") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("c1", "c3") {
+        Seq((5, "abc"), (1, "7")).toDF("x", "s").write.saveAsTable("c1")
+        Seq(7).toDF("z").write.saveAsTable("c3")
+        // The CASE WHEN is false on the row whose s is 'abc', so the cast, which fails on it, is
+        // not evaluated on it. A join key would be computed on every row.
+        val condition =
+          """CASE WHEN c1.x > 3 THEN false WHEN c1.x >= 0 THEN true ELSE raise_error('k') END
+            |  AND CAST(c1.s AS INT) = c3.z""".stripMargin
+        Seq("-1", "10MB").foreach { threshold =>
+          withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold) {
+            checkAnswer(
+              sql(s"SELECT c1.x, c3.z FROM c1 JOIN c3 ON $condition"),
+              Row(1, 7))
+            checkAnswer(
+              sql(s"SELECT c1.x, c3.z FROM c1 LEFT JOIN c3 ON $condition"),
+              Seq(Row(1, 7), Row(5, null)))
+            checkAnswer(
+              sql(s"SELECT c1.x FROM c1 LEFT ANTI JOIN c3 ON $condition"),
+              Row(5))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-62241: AQE keeps the join keys after a throwable join condition") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      withTable("c1", "c3") {
+        Seq((1, "7"), (3, "-0")).toDF("x", "s").write.saveAsTable("c1")
+        Seq((7, 1), (0, 3)).toDF("z", "w").write.saveAsTable("c3")
+        // AQE plans the sort-merge join again as a broadcast hash join once its inputs are query
+        // stages. The equality on `q`, a cast computed below the join, must have the same role
+        // there: as a key that `NormalizeFloatingNumbers` did not normalize, -0.0 would not
+        // match 0.0.
+        val df = sql(
+          """SELECT b.x, c3.z FROM (SELECT x, CAST(s AS DOUBLE) AS q FROM c1) b JOIN c3
+            |ON CASE WHEN c3.z > 100 THEN raise_error('big') ELSE true END
+            |  AND b.q = CAST(c3.z AS DOUBLE) AND b.x = c3.w
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 7), Row(3, 0)))
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(collect(adaptivePlan.initialPlan) { case j: SortMergeJoinExec => j }.nonEmpty)
+        assert(collect(adaptivePlan) { case j: BroadcastHashJoinExec => j }.nonEmpty)
+      }
+    }
+  }
+
+  test("SPARK-62241: normalize a DOUBLE equality after a throwable join condition that a " +
+    "Python UDF makes a join key") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+    // With ANSI mode off, the cast of the UDF result to DOUBLE can not fail. The equality is not
+    // a key while it has the UDF, so it is normalized where it is written: `ExtractPythonUDFs`
+    // then replaces the UDF with a column of a node below the join, and the equality becomes a
+    // key, on which -0.0 must match 0.0.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val pythonTestUDF = TestPythonUDF(name = "udf", returnType = Some(DoubleType))
+      val left = Seq((1, -0.0)).toDF("a", "d")
+      val right = Seq((1, 0.0)).toDF("b", "e")
+      val condition = when(right("b") < 0, raise_error(lit("neg"))).otherwise(true) &&
+        pythonTestUDF(left("d")) === right("e")
+      checkAnswer(left.join(right, condition), Row(1, -0.0, 1, 0.0))
     }
   }
 }
