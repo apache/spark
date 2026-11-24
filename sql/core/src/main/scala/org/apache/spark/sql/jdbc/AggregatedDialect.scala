@@ -50,8 +50,13 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   // Truncating explicitly is harmless where the cast already truncates, so any dialect that
   // truncates explicitly wins.
-  override def truncateFractionalValue(expr: String): String =
-    dialects.iterator.map(_.truncateFractionalValue(expr)).find(_ != expr).getOrElse(expr)
+  override def truncateFractionalValue(expr: String): Option[String] = {
+    val values = dialects.flatMap(_.truncateFractionalValue(expr))
+    values.find(_ != expr).orElse(values.headOption)
+  }
+
+  override def castsDatetimeToNumericLikeSpark: Boolean =
+    dialects.exists(_.castsDatetimeToNumericLikeSpark)
 
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)

@@ -1367,7 +1367,7 @@ private[v2] trait V2JDBCTest
   // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
   protected def roundsIntegralCast: Boolean = false
 
-  // Whether a cast of `col` to `target` is pushed down. MySQL can only cast to 64-bit SIGNED.
+  // Whether a cast of `col` to `target` is pushed down.
   protected def pushesIntegralCast(col: String, target: String): Boolean = true
 
   // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.

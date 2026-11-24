@@ -57,7 +57,7 @@ private case class PostgresDialect()
 
   // Postgres rounds when casting to an integral type (float8 half to even, numeric half away from
   // zero).
-  override def truncateFractionalValue(expr: String): String = s"TRUNC($expr)"
+  override def truncateFractionalValue(expr: String): Option[String] = Some(s"TRUNC($expr)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getSQLState == "42P01" ||

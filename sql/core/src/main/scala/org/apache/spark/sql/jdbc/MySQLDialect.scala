@@ -53,7 +53,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // MySQL rounds when casting to an integral type. It has no single argument TRUNCATE, so the
   // number of decimal places to keep is passed explicitly.
-  override def truncateFractionalValue(expr: String): String = s"TRUNCATE($expr, 0)"
+  override def truncateFractionalValue(expr: String): Option[String] = Some(s"TRUNCATE($expr, 0)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getErrorCode == 1146
@@ -127,21 +127,28 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       lazy val fractionalToIntegral = !JdbcUtils.legacyIntegralCastPushdown &&
         isFractionalToIntegral(exprDataType, dataType)
-      dataType match {
-        case DoubleType =>
+      (exprDataType, dataType) match {
+        case (_, DoubleType) =>
           // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
           // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
           throw new UnsupportedOperationException("Cannot cast to double type")
-        // MySQL's only integral CAST target is 64-bit SIGNED, and MariaDB clamps values out of its
-        // range, so of the fractional casts only BIGINT from a DECIMAL that always fits is pushed.
-        case LongType if fractionalToIntegral && (exprDataType match {
-          case d: DecimalType => d.precision - d.scale <= Decimal.MAX_LONG_DIGITS
-          case _ => false
-        }) =>
-          s"CAST(${truncateFraction(expr, exprDataType)} AS SIGNED)"
-        case _: IntegralType if fractionalToIntegral => cannotPushCast(exprDataType, dataType)
+        // MySQL's only signed integral CAST target is 64-bit SIGNED, and MariaDB clamps values out
+        // of range, so only casts from DECIMALs whose every value fits the target are pushed.
+        case (d: DecimalType, t: IntegralType)
+            if fractionalToIntegral && d.precision - d.scale <= maxIntegerDigits(t) =>
+          val value = truncateFraction(expr, d).getOrElse(cannotPushCast(d, t))
+          s"CAST($value AS SIGNED)"
+        case (_, _: IntegralType) if fractionalToIntegral => cannotPushCast(exprDataType, dataType)
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
+    }
+
+    // The most integer digits a DECIMAL can have so that all its values fit `t`.
+    private def maxIntegerDigits(t: IntegralType): Int = t match {
+      case ByteType => 2
+      case ShortType => 4
+      case IntegerType => Decimal.MAX_INT_DIGITS
+      case _ => Decimal.MAX_LONG_DIGITS
     }
   }
 

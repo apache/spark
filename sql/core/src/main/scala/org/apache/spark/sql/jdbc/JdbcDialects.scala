@@ -462,8 +462,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
       val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
       if (!legacyIntegralCastPushdown && exprDataType.isInstanceOf[DatetimeType] &&
-          dataType.isInstanceOf[IntegralType]) {
-        // Spark and databases convert datetimes to numbers differently.
+          dataType.isInstanceOf[NumericType] && !castsDatetimeToNumericLikeSpark) {
         cannotPushCast(exprDataType, dataType)
       }
       if (!legacyIntegralCastPushdown && isFractionalToIntegral(exprDataType, dataType)) {
@@ -475,8 +474,12 @@ abstract class JdbcDialect extends Serializable with Logging {
           case LongType => "BIGINT"
           case _ => dataType.typeName
         })
-        s"CAST(${truncateFraction(expr, exprDataType)} AS $databaseTypeDefinition)"
+        val value = truncateFraction(expr, exprDataType)
+          .getOrElse(cannotPushCast(exprDataType, dataType))
+        s"CAST($value AS $databaseTypeDefinition)"
       } else {
+        // TODO(SPARK-62090): casts from other types still spell unmapped targets with Spark's
+        // `short` and `long`, which most databases reject.
         s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
       }
     }
@@ -484,10 +487,10 @@ abstract class JdbcDialect extends Serializable with Logging {
     protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
       from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
 
-    // `expr`, of fractional type `from`, truncated toward zero for a cast to an integral type.
-    // Spark truncates the fraction, but many databases round.
-    protected def truncateFraction(expr: String, from: DataType): String = from match {
-      case d: DecimalType if d.scale == 0 => expr
+    // `expr`, of fractional type `from`, truncated toward zero for a cast to an integral type, or
+    // None if the database can't truncate it. Spark truncates, but many databases round.
+    protected def truncateFraction(expr: String, from: DataType): Option[String] = from match {
+      case d: DecimalType if d.scale == 0 => Some(expr)
       case _ => truncateFractionalValue(expr)
     }
 
@@ -578,13 +581,22 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Truncates `expr` toward zero, so that a cast from a fractional type to an integral type that
    * is pushed down matches Spark, which truncates rather than rounds. Dialects for databases that
-   * round such casts override this with the database's truncating function. The default returns
-   * `expr` unchanged, for databases whose cast already truncates like Spark.
+   * round such casts return the database's truncating function, and dialects for databases whose
+   * cast already truncates return `expr` unchanged. The default returns `None`, so Spark evaluates
+   * casts that drop a fraction instead of pushing them down.
    * @param expr The SQL string of the value being cast.
-   * @return The SQL string to cast instead of `expr`.
+   * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
    */
   @Since("4.4.0")
-  def truncateFractionalValue(expr: String): String = expr
+  def truncateFractionalValue(expr: String): Option[String] = None
+
+  /**
+   * Whether the database converts TIMESTAMP and TIME values to numbers as Spark does, for example
+   * a TIMESTAMP to seconds since the epoch. Spark pushes down a cast of such a value to a numeric
+   * type only when this is true; the default is false.
+   */
+  @Since("4.4.0")
+  def castsDatetimeToNumericLikeSpark: Boolean = false
 
   /**
    * Returns whether the database supports function.

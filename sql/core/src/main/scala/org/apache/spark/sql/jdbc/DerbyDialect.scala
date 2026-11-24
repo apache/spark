@@ -38,6 +38,9 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // Derby's casts to integral types already truncate.
+  override def truncateFractionalValue(expr: String): Option[String] = Some(expr)
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getSQLState.equalsIgnoreCase("42Y07") ||
       e.getSQLState.equalsIgnoreCase("42X05") ||

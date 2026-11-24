@@ -65,7 +65,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     supportedFunctions.contains(funcName)
 
   // H2 rounds when casting to an integral type.
-  override def truncateFractionalValue(expr: String): String = s"TRUNC($expr)"
+  override def truncateFractionalValue(expr: String): Option[String] = Some(s"TRUNC($expr)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     Set(42102, 42103, 42104, 90079).contains(e.getErrorCode)
