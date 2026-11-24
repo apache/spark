@@ -212,16 +212,29 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
       assert(optimized.collectFirst { case j: Join => j }.isEmpty)
       // Attribute equality covers name, data type, nullability, metadata, exprId and qualifier.
-      // Nullability is left out for a full outer join with an empty side, as the side that is
-      // kept is not padded and so stays non-nullable.
+      // For a full outer join with an empty side, the side that is kept is not padded and so
+      // keeps its own nullability, while the padded side is nullable.
       val clue = s"$joinType, emptyLeft=$emptyLeft, emptyRight=$emptyRight, ${left.output}"
-      if (joinType == FullOuter && condition.isEmpty) {
-        assert(optimized.output.map(_.withNullability(true)) ===
-          query.output.map(_.withNullability(true)), clue)
+      val expected = if (joinType == FullOuter && condition.isEmpty) {
+        val keptFromLeft = emptyRight
+        query.output.zip(left.output ++ right.output).zipWithIndex.map { case ((q, orig), i) =>
+          if ((i < left.output.size) == keptFromLeft) q.withNullability(orig.nullable) else q
+        }
       } else {
-        assert(optimized.output === query.output, clue)
+        query.output
       }
+      assert(optimized.output === expected, clue)
     }
+  }
+
+  test("SPARK-53618: full outer join with a false condition and a side repeating an " +
+    "attribute is not rewritten") {
+    val query = testRelation1.select($"a", $"a")
+      .join(testRelation2, FullOuter, Some(FalseLiteral))
+      .analyze
+    val optimized = Optimize.execute(query)
+    assert(optimized.collectFirst { case j: Join => j }.isDefined)
+    assert(optimized.collectFirst { case u: Union => u }.isEmpty)
   }
 
   test("propagate empty relation through UnaryNode") {

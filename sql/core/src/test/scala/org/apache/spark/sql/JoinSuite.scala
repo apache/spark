@@ -2045,7 +2045,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
     // `range` produces a non-nullable column, but a full outer join makes both sides
     // nullable and the union has to keep it that way
-    assert(df.schema.fields.forall(_.nullable))
+    assert(optimized.output.forall(_.nullable))
 
     checkAnswer(df, Row(0, null) :: Row(1, null) :: Row(null, 10) :: Row(null, 11) :: Nil)
 
@@ -2053,6 +2053,19 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val executed = df.queryExecution.executedPlan
     assert(find(executed)(_.isInstanceOf[UnionExec]).isDefined)
     assert(find(executed)(_.isInstanceOf[BroadcastNestedLoopJoinExec]).isEmpty)
+  }
+
+  test("SPARK-53618: full outer join with a false condition and a side repeating a column") {
+    // A union branch may not repeat an attribute, so the join must not be rewritten here
+    val df = sql(
+      """
+        |SELECT * FROM (SELECT a, a FROM (SELECT id AS a FROM range(1, 3))) s
+        |FULL OUTER JOIN (SELECT id AS b FROM range(10, 11)) u ON false
+        |""".stripMargin)
+
+    checkAnswer(df,
+      Row(1, 1, null) :: Row(2, 2, null) :: Row(null, null, 10) :: Nil)
+    assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
   }
 
   test("SPARK-61930: reordering inner joins does not move a throwable condition into " +

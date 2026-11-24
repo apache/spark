@@ -131,9 +131,12 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           case RightOuter if isFalseCondition && canExecuteWithoutJoin(p.right) =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
           // No row of either side can find a match, so the join degenerates into both sides
-          // padded with nulls and concatenated.
+          // padded with nulls and concatenated. A join side may repeat an attribute, but a union
+          // branch may not, so the rewrite is skipped in that case.
           case FullOuter if isFalseCondition && canExecuteWithoutJoin(p.left) &&
-              canExecuteWithoutJoin(p.right) =>
+              canExecuteWithoutJoin(p.right) &&
+              p.left.outputSet.size == p.left.output.size &&
+              p.right.outputSet.size == p.right.output.size =>
             Union(
               Project(p.left.output ++ nullValueProjectList(p.right), p.left),
               Project(nullValueProjectList(p.left) ++ p.right.output, p.right))
