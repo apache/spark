@@ -4426,6 +4426,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS =
+    buildConf("spark.sql.streaming.join.preserveEventTimeColumns.enabled")
+      .internal()
+      .doc("When true, column pruning preserves an unambiguous watermark timestamp for " +
+        "late-event filtering in plans without unexpanded CTE references whose only stateful " +
+        "operator is a stream-stream join with no residual condition after predicate pushdown. " +
+        "Other plan shapes keep legacy pruning even when this value is true. The timestamp " +
+        "is stored in the ordinary input row. The checkpoint pins the value across restarts. " +
+        "Existing checkpoints without this setting use false to preserve their " +
+        "state schemas and pruning behavior.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()
@@ -9569,6 +9584,20 @@ object SQLConf {
       .createWithDefault(1000)
   }
 
+  val LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA = {
+    buildConf("spark.sql.legacy.pipelines.streamingTable.keepExistingColumnMetadata")
+      .internal()
+      .doc("When true, an incremental update of a Declarative Pipelines streaming table keeps " +
+        "the column comments and other column metadata the table already has on the columns " +
+        "it shares with the pipeline's declared or inferred schema, as Spark 4.4 does. When " +
+        "false (default), those columns take their metadata from the pipeline's schema, as a " +
+        "full refresh and an update of a materialized view do.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   val HADOOP_LINE_RECORD_READER_ENABLED =
     buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
@@ -9614,6 +9643,19 @@ object SQLConf {
         "According to the description of the split function, this should be set to false by " +
         "default. See SPARK-49968 for details.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
+    buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
+      .internal()
+      .doc("When set to true, to_char restores the results of Spark 4.3 and earlier, which " +
+        "leave out the ones digit of a zero value for some format strings with no digits after " +
+        "the decimal point. For example: SELECT to_char(0, '999') returns '   ' and " +
+        "SELECT to_char(0, '999S') returns '+   '. When set to false, the ones digit is kept: " +
+        "they return '  0' and '  0+'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -11239,6 +11281,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def legacyPipelinesKeepStreamingTableColumnMetadata: Boolean =
+    getConf(SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
