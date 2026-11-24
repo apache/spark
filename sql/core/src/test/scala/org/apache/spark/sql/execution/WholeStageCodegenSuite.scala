@@ -3571,7 +3571,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
   // A Parquet table, so that the filter is not evaluated by the optimizer on a local relation.
   // On the first row `NOT (a > 0 AND b > 0)` is NULL, and no `isnotnull(a)` is inferred from it.
   // The second row passes every condition of the tests below, except `b < 0`, `(a > 0 OR b < 0)`
-  // and `coalesce(b, cast(s AS INT)) < 0`. The rows can be
+  // and `coalesce(b, cast(s AS INT)) < 0`. `st` is `named_struct('x', x)`, so on the first row
+  // `st` is not NULL while `st.x` is. The rows can be
   // written to different files, so the filter is not pushed down, which would skip the first
   // row's file by its statistics.
   private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
@@ -3586,7 +3587,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   private val nullConjunctCSEQuery =
     "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1"
 
-  private def checkArithmeticOverflow(query: String): Unit = {
+  private def checkArithmeticOverflow(query: String, fragment: String = "y + 1"): Unit = {
     checkError(
       exception = intercept[SparkArithmeticException] {
         sql(query).collect()
@@ -3597,9 +3598,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
         "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead.",
         "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = ExpectedContext(
-        fragment = "y + 1",
-        start = query.indexOf("y + 1"),
-        stop = query.indexOf("y + 1") + 4))
+        fragment = fragment,
+        start = query.indexOf(fragment),
+        stop = query.indexOf(fragment) + fragment.length - 1))
   }
 
   private def checkCastInvalidInput(query: String): Unit = {
@@ -3971,6 +3972,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
               // overflowing conjunct, with codegen on and off.
               checkAnswer(sql("SELECT a FROM t WHERE upper(s) IS NOT NULL AND x IS NOT NULL AND " +
                 "y + 1 > 0"), Row(0))
+              // The inferred `isnotnull(x)` is placed just before `x > 0` in the plan, after
+              // `coalesce(x, 1) + y > 0`, which overflows on the first row with codegen off. With
+              // codegen on, the check on `x` is still generated before the first conjunct that
+              // references `x`, which is bound with `x` non-nullable, so it drops the row first.
+              val coalesced = "SELECT a FROM t WHERE coalesce(x, 1) + y > 0 AND x > 0"
+              if (codegen) {
+                checkAnswer(sql(coalesced), Row(0))
+              } else {
+                checkArithmeticOverflow(coalesced, fragment = "coalesce(x, 1) + y")
+              }
             }
           }
         }

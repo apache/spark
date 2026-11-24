@@ -2451,13 +2451,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct at
    * which the conjuncts so far, with the constraints of `child`, imply it, so that evaluating the
    * condition in its order does not evaluate it before the conjuncts that precede that one, whose
-   * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`, or in
-   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints are assumed to only grow with the
-   * prefix, so the first implying prefix of each predicate is found by a search that doubles the
-   * prefix until it implies the predicate, then halves the last range; the constraints of each
+   * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`. With
+   * whole-stage codegen, a check is still generated before the first conjunct that references its
+   * column, see `GeneratePredicateHelper.precedingNotNullChecks`, so for `coalesce(x, 1) + y > 0
+   * AND x > 0` only the order of the plan changes. The constraints are assumed to only grow with
+   * the prefix, so the first implying prefix of each predicate is found by a search that doubles
+   * the prefix until it implies the predicate, then halves the last range; the constraints of each
    * prefix are computed once. If a longer prefix lost a constraint, a predicate would only be
-   * placed later. The prefixes and the condition are built as balanced trees, as the parser
-   * builds a long chain of `AND`.
+   * placed later. The prefixes and the condition are built as balanced trees, as the parser builds
+   * a long chain of `AND`.
    */
   private def withInferredPredicates(
       inferred: Seq[Expression],

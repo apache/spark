@@ -131,6 +131,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
+/**
+ * The placement of the IsNotNull checks with `spark.sql.optimizer.evaluateNotNullChecksInOrder`
+ * (SPARK-60329): for each of `notNullPreds`, whether it can be generated at its position in the
+ * condition, and for each of `otherPreds`, whether the checks that precede it are generated
+ * before it, see `GeneratePredicateHelper.notNullCheckPlacement`. Both are indexed by position.
+ */
+private[execution] case class NotNullCheckPlacement(
+    atPosition: IndexedSeq[Boolean],
+    movesChecks: IndexedSeq[Boolean])
+
 trait GeneratePredicateHelper extends PredicateHelper {
   self: CodegenSupport =>
 
@@ -179,14 +189,6 @@ trait GeneratePredicateHelper extends PredicateHelper {
   protected def mayRaise(e: Expression): Boolean = !ExprUtils.canEvaluateUnconditionally(e)
 
   /**
-   * The placement of the IsNotNull checks with `spark.sql.optimizer.evaluateNotNullChecksInOrder`
-   * (SPARK-60329): for each of `notNullPreds`, whether it can be generated at its position in the
-   * condition, and for each of `otherPreds`, whether the checks that precede it are generated
-   * before it, see `notNullCheckPlacement`.
-   */
-  protected case class NotNullCheckPlacement(atPosition: Seq[Boolean], movesChecks: Seq[Boolean])
-
-  /**
    * The columns of `inputAttrs` whose variables in `inputExprCode` are evaluated on demand, that
    * is, whose code is not empty. The aggregate `FILTER` clause passes the attributes of the
    * aggregation buffers before those of its input, with the variables of its input only, so the
@@ -224,8 +226,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
         deferred.contains(a) && raisingDeferred.getOrElseUpdate(a, deferredMayRaise(a))
       }
       Some(NotNullCheckPlacement(
-        notNullPreds.map(p => !mayRaise(p) && !computesRaising(p)),
-        otherPreds.map(c => mayRaise(c) || computesRaising(c))))
+        notNullPreds.map(p => !mayRaise(p) && !computesRaising(p)).toIndexedSeq,
+        otherPreds.map(c => mayRaise(c) || computesRaising(c)).toIndexedSeq))
     } else {
       None
     }
@@ -386,8 +388,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
     lazy val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
       case (_, idx) => generated(idx)
     }
-    // Without the config, only the NULL-conjunct flag moves the checks.
-    val positioned = if ((!afterNullable && placement.isEmpty) || pending.isEmpty) {
+    // Without the config, only the NULL-conjunct flag moves the checks, and with it, only a
+    // conjunct that `placement` moves the checks before. `pending` is built only then.
+    val positioned = if ((!afterNullable && !placement.exists(_.movesChecks(k))) ||
+        pending.isEmpty) {
       Nil
     } else if (afterNullable && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
       pending

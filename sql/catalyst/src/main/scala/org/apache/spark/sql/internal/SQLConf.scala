@@ -1924,7 +1924,10 @@ object SQLConf {
         "not computed yet, by an expression that can raise, keeps the latter placement, except " +
         "after a conjunct that can be NULL, as when false. So does a check that can raise an " +
         "error itself, so a check after it can drop a row on which the interpreted evaluation " +
-        "raises the error of that check. A predicate that the optimizer " +
+        "raises the error of that check. Also, a check on a column is still evaluated before " +
+        "the first conjunct that references the column, even when it is written after it, " +
+        "for example `isnotnull(x)` before `coalesce(x, 1) + y > 0` in " +
+        "`coalesce(x, 1) + y > 0 AND x > 0`. A predicate that the optimizer " +
         "infers from the condition is placed just before the first conjunct at which the " +
         "conjuncts so far imply it, instead of at the front of the condition, so with " +
         "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
