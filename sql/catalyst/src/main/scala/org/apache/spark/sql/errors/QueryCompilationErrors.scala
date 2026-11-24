@@ -1197,9 +1197,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_SET_PARTITION_LOCATION",
-      messageParameters = Map.empty)
+    notSupportedForV2TablesError("ALTER TABLE ... PARTITION ... SET LOCATION")
   }
 
   def joinStrategyHintParameterNotSupportedError(

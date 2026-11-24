@@ -9827,11 +9827,6 @@
           "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
         ]
       },
-      "ALTER_TABLE_SET_PARTITION_LOCATION" : {
-        "message" : [
-          "ALTER TABLE ... PARTITION ... SET LOCATION for v2 tables."
-        ]
-      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."

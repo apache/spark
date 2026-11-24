@@ -62,9 +62,9 @@ class AlterTableSetLocationSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
         },
-        condition = "UNSUPPORTED_FEATURE.ALTER_TABLE_SET_PARTITION_LOCATION",
+        condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
         sqlState = "0A000",
-        parameters = Map.empty
+        parameters = Map("cmd" -> "ALTER TABLE ... PARTITION ... SET LOCATION")
       )
     }
   }
