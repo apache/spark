@@ -2271,10 +2271,9 @@ case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
       name -> literal.sql
     }
 
-    val (substituted, _, _) = paramSubstitutor.substitute(
+    paramSubstitutor.substitute(
       sql,
-      namedParams = namedParams)
-    substituted
+      namedParams = namedParams).sqlText
   }
 }
 
@@ -2296,9 +2295,8 @@ case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
     // Convert Literal args to String values for substitution
     val positionalParams = args.map(_.sql).toList
 
-    val (substituted, _, _) = paramSubstitutor.substitute(
+    paramSubstitutor.substitute(
       sql,
-      positionalParams = positionalParams)
-    substituted
+      positionalParams = positionalParams).sqlText
   }
 }
