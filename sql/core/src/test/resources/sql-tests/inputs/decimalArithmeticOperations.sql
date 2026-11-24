@@ -84,6 +84,19 @@ SELECT CAST(20 AS DECIMAL(4, 1))
 UNION ALL
 SELECT CAST(10 AS DECIMAL(10, 2)) div CAST(3 AS DECIMAL(5, 1));
 
+-- with ANSI mode off, a step that overflows returns NULL on its own, so differently grouped
+-- chains are different expressions
+create table decimal_chains(a decimal(38,0), b decimal(38,0), c decimal(38,0)) using parquet;
+insert into decimal_chains values (99999999999999999999999999999999999999, 1, -5),
+  (10000000000000000000, 10000000000000000000, 0);
+select (a + b) + c, (a + c) + b from decimal_chains where c = -5;
+select (a + c) + b from decimal_chains where c = -5 group by (a + b) + c;
+select (a * b) * c, (a * c) * b from decimal_chains where c = 0;
+drop table decimal_chains;
+
+-- chains whose steps cannot overflow or round are still regrouped
+select (x + z) + y from values (1.25, 2.5, 3.75) as t(x, y, z) group by (x + y) + z;
+
 -- return NULL instead of rounding, according to old Spark versions' behavior
 set spark.sql.decimalOperations.allowPrecisionLoss=false;
 

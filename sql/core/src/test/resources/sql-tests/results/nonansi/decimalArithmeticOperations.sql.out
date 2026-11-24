@@ -260,6 +260,71 @@ struct<CAST(20 AS DECIMAL(4,1)):decimal(21,1)>
 
 
 -- !query
+create table decimal_chains(a decimal(38,0), b decimal(38,0), c decimal(38,0)) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into decimal_chains values (99999999999999999999999999999999999999, 1, -5),
+  (10000000000000000000, 10000000000000000000, 0)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select (a + b) + c, (a + c) + b from decimal_chains where c = -5
+-- !query schema
+struct<((a + b) + c):decimal(38,0),((a + c) + b):decimal(38,0)>
+-- !query output
+NULL	99999999999999999999999999999999999995
+
+
+-- !query
+select (a + c) + b from decimal_chains where c = -5 group by (a + b) + c
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
+select (a * b) * c, (a * c) * b from decimal_chains where c = 0
+-- !query schema
+struct<((a * b) * c):decimal(38,0),((a * c) * b):decimal(38,0)>
+-- !query output
+NULL	0
+
+
+-- !query
+drop table decimal_chains
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select (x + z) + y from values (1.25, 2.5, 3.75) as t(x, y, z) group by (x + y) + z
+-- !query schema
+struct<((x + z) + y):decimal(5,2)>
+-- !query output
+7.50
+
+
+-- !query
 set spark.sql.decimalOperations.allowPrecisionLoss=false
 -- !query schema
 struct<key:string,value:string>

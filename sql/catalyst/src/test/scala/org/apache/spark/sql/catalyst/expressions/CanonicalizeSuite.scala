@@ -480,6 +480,85 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
+  test("TRY-mode Add and Multiply chains keep their nesting in canonicalization") {
+    val a = $"a".int
+    val b = $"b".int
+    def tryAdd(l: Expression, r: Expression): Expression = Add(l, r, EvalMode.TRY)
+    def tryMultiply(l: Expression, r: Expression): Expression = Multiply(l, r, EvalMode.TRY)
+
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    Seq(2, 100).foreach { threshold =>
+      SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, threshold.toString)
+      try {
+        // Regrouping changes which TRY step can overflow, so these are not equivalent.
+        assert(!tryAdd(tryAdd(a, -5), b).semanticEquals(tryAdd(tryAdd(a, b), -5)))
+        assert(!tryMultiply(tryMultiply(a, -1), b).semanticEquals(
+          tryMultiply(tryMultiply(a, b), -1)))
+        assert(!new TryAdd(new TryAdd(a, -5), b).semanticEquals(new TryAdd(new TryAdd(a, b), -5)))
+        assert(!new TryMultiply(new TryMultiply(a, -1), b).semanticEquals(
+          new TryMultiply(new TryMultiply(a, b), -1)))
+
+        // Swapping the operands of each step is still allowed.
+        assert(tryAdd(a, b).semanticEquals(tryAdd(b, a)))
+        assert(tryAdd(tryAdd(a, -5), b).semanticEquals(tryAdd(b, tryAdd(-5, a))))
+        assert(tryMultiply(tryMultiply(a, -1), b).semanticEquals(
+          tryMultiply(b, tryMultiply(-1, a))))
+        assert(new TryAdd(a, b).semanticEquals(new TryAdd(b, a)))
+
+        // ANSI and LEGACY chains are still treated as associative.
+        Seq(EvalMode.ANSI, EvalMode.LEGACY).foreach { mode =>
+          assert(Add(Add(a, -5, mode), b, mode).semanticEquals(Add(Add(a, b, mode), -5, mode)))
+          assert(Multiply(Multiply(a, -1, mode), b, mode).semanticEquals(
+            Multiply(Multiply(a, b, mode), -1, mode)))
+        }
+      } finally {
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+      }
+    }
+  }
+
+  test("Non-ANSI decimal Add and Multiply steps that can overflow keep their nesting") {
+    def add(l: Expression, r: Expression): Expression = Add(l, r, EvalMode.LEGACY)
+    def multiply(l: Expression, r: Expression): Expression = Multiply(l, r, EvalMode.LEGACY)
+    val a = $"a".decimal(38, 0)
+    val b = $"b".decimal(38, 0)
+    val c = $"c".decimal(38, 0)
+
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    Seq(2, 100).foreach { threshold =>
+      SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, threshold.toString)
+      try {
+        // A non-ANSI decimal step whose result type is bounded by the maximum precision returns
+        // NULL on its own overflow, so regrouping it changes which step overflows.
+        assert(!add(add(a, b), c).semanticEquals(add(add(a, c), b)))
+        assert(!multiply(multiply(a, b), c).semanticEquals(multiply(multiply(a, c), b)))
+
+        // Swapping the operands of each step is still allowed.
+        assert(add(add(a, b), c).semanticEquals(add(c, add(b, a))))
+        assert(multiply(multiply(a, b), c).semanticEquals(multiply(c, multiply(b, a))))
+
+        // Steps whose result type holds every exact result, up to the maximum precision, are
+        // still regrouped.
+        val p = $"p".decimal(37, 0)
+        val q = $"q".decimal(37, 0)
+        val r = $"r".decimal(37, 0)
+        assert(add(add(p, q), r).semanticEquals(add(add(p, r), q)))
+        val m = $"m".decimal(18, 0)
+        val n = $"n".decimal(19, 0)
+        val o = $"o".decimal(19, 0)
+        assert(multiply(multiply(m, n), o).semanticEquals(multiply(multiply(m, o), n)))
+
+        // ANSI chains raise on overflow and are still treated as associative.
+        assert(Add(Add(a, b, EvalMode.ANSI), c, EvalMode.ANSI).semanticEquals(
+          Add(Add(a, c, EvalMode.ANSI), b, EvalMode.ANSI)))
+        assert(Multiply(Multiply(a, b, EvalMode.ANSI), c, EvalMode.ANSI).semanticEquals(
+          Multiply(Multiply(a, c, EvalMode.ANSI), b, EvalMode.ANSI)))
+      } finally {
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+      }
+    }
+  }
+
   test("unit test for gatherCommutative()") {
     val addExpression = Add(
       Literal(1),
