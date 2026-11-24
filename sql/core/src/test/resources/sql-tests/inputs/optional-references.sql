@@ -677,8 +677,7 @@ SELECT * FROM people_v ORDER BY id;
 SELECT captured_fn();
 SELECT * FROM captured_table_fn();
 
--- A session that does not set the config can still query a view or call a SQL function that was
--- created while optional references were enabled, because they capture the config.
+-- Optional references are enabled by default.
 RESET spark.sql.optionalReferences.enabled;
 SELECT id? FROM people;
 SELECT * FROM people_v ORDER BY id;

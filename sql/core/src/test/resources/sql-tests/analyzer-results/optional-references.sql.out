@@ -4652,15 +4652,13 @@ ResetCommand spark.sql.optionalReferences.enabled
 -- !query
 SELECT id? FROM people
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
-}
+Project [id#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
 
 
 -- !query

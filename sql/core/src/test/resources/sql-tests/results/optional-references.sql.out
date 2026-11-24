@@ -4184,17 +4184,10 @@ struct<>
 -- !query
 SELECT id? FROM people
 -- !query schema
-struct<>
+struct<id:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
-}
+1
+2
 
 
 -- !query

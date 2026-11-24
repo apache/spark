@@ -8795,7 +8795,7 @@ object SQLConf {
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES =
     buildConf("spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences")

@@ -305,9 +305,20 @@ class OptionalReferencesParserSuite extends PlanTest {
     }
   }
 
-  test("optional references are disabled by default") {
-    checkUnexpectedMarker("x?", position = 1)(parseExpression)
+  test("optional references are enabled by default") {
+    assert(SQLConf.get.optionalReferencesEnabled)
+    assertMultipartName(parseExpression("x?"), Seq("x"), Set(0))
     checkUnexpectedMarker("SELECT a, b ? FROM t", position = 12)(CatalystSqlParser.parsePlan)
+  }
+
+  test("the markers are found as the statement is lexed") {
+    // The parser changes the state of the lexer at `STRUCT<>`, so that the later `>>` is a shift.
+    val plan = parsePlan("SELECT CAST(NULL AS STRUCT<>), x? >> 1, ?", optionalReferences = true)
+    assert(plan.expressions.exists(_.exists {
+      case a: UnresolvedAttribute => OptionalReferences.optionalNamePartIndices(a) == Set(0)
+      case _ => false
+    }))
+    assert(positionalParameters(plan).size == 1)
   }
 
   test("? is a syntax error after anything other than a reference") {

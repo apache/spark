@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
 import org.antlr.v4.runtime.dfa.DFA
-import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
+import org.antlr.v4.runtime.misc.{Interval, Pair, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
@@ -556,20 +556,59 @@ object AbstractParser extends Logging {
       parser: SqlBaseParser,
       tokenStream: CommonTokenStream): Unit = {
     if (parser.optional_references_enabled) {
-      tokenStream.fill()
       val tokens = tokenStream.getTokens
       var index = 1
       while (index < tokens.size) {
-        val token = tokens.get(index)
-        if (token.getType == SqlBaseParser.QUESTION &&
-          tokens.get(index - 1).getStopIndex + 1 == token.getStartIndex &&
-          isNameBeforeOptionalMarker(parser, tokens, index - 1)) {
-          token
-            .asInstanceOf[WritableToken]
-            .setType(SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
-        }
+        markIfOptionalReferenceMarker(parser, tokens, index - 1, tokens.get(index))
         index += 1
       }
+      // The tokens that are not lexed yet are marked as the lexer creates them, because the
+      // parser changes the state of the lexer as it goes (see `complex_type_level_counter`), so
+      // that lexing the whole statement first could give other tokens.
+      tokenStream.getTokenSource match {
+        case lexer: Lexer =>
+          lexer.setTokenFactory(new CommonTokenFactory {
+            override def create(
+                source: Pair[TokenSource, CharStream],
+                tokenType: Int,
+                text: String,
+                channel: Int,
+                start: Int,
+                stop: Int,
+                line: Int,
+                charPositionInLine: Int): CommonToken = {
+              val token =
+                super
+                  .create(source, tokenType, text, channel, start, stop, line, charPositionInLine)
+              // The stream buffers each token before it asks the lexer for the next one.
+              if (!tokens.isEmpty) {
+                markIfOptionalReferenceMarker(parser, tokens, tokens.size - 1, token)
+              }
+              token
+            }
+          })
+        case _ =>
+          tokenStream.fill()
+          while (index < tokens.size) {
+            markIfOptionalReferenceMarker(parser, tokens, index - 1, tokens.get(index))
+            index += 1
+          }
+      }
+    }
+  }
+
+  /** Marks `token` if it is a `?` directly after the name that ends at `tokens(previous)`. */
+  private def markIfOptionalReferenceMarker(
+      parser: SqlBaseParser,
+      tokens: java.util.List[Token],
+      previous: Int,
+      token: Token): Unit = {
+    if (token.getType == SqlBaseParser.QUESTION &&
+      tokens.get(previous).getStopIndex + 1 == token.getStartIndex &&
+      isNameBeforeOptionalMarker(parser, tokens, previous)) {
+      token
+        .asInstanceOf[WritableToken]
+        .setType(SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
     }
   }
 
