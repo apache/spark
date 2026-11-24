@@ -23,13 +23,14 @@ import org.dmg.pmml.PMML
 import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -68,6 +69,41 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+  }
+
+  test("SPARK-62121: auto solver prefers block solver for dense input") {
+    val schema = StructType(Array(StructField("features", new VectorUDT)))
+    val denseRows = spark.sparkContext.parallelize(
+      Seq.fill(100)(Row(Vectors.dense(Array.fill(10)(1.0)))))
+    val sparseRows = spark.sparkContext.parallelize(
+      Seq.fill(100)(Row(Vectors.sparse(10, Array(0), Array(1.0)))))
+    val dense = spark.createDataFrame(denseRows, schema)
+    val sparse = spark.createDataFrame(sparseRows, schema)
+
+    // Dense data has 1,000 non-zero entries (100 rows x 10 features), which is above
+    // the 50% density threshold of 500, so the block solver is preferred. Sparse data
+    // has only 100 non-zero entries, below the threshold, so the row solver is preferred.
+    val kmeans = new KMeans().setK(2)
+    assert(kmeans.preferBlockSolver(dense))
+    assert(!kmeans.preferBlockSolver(sparse))
+
+    // Explicit solver settings always win.
+    assert(!kmeans.setSolver(KMeans.ROW).preferBlockSolver(dense))
+    assert(kmeans.setSolver(KMeans.BLOCK).preferBlockSolver(sparse))
+  }
+
+  test("SPARK-62121: block solver handles fewer distinct points than k") {
+    val schema = StructType(Array(StructField("features", new VectorUDT)))
+    val rows = spark.sparkContext.parallelize(
+      Seq.fill(10)(Row(Vectors.dense(1.0, 2.0))))
+    val data = spark.createDataFrame(rows, schema)
+
+    // K-means initialization deduplicates centers, so a dataset with fewer distinct
+    // points than k yields fewer than k centers. The block solver must cope with that
+    // the same way the row solver does.
+    val blockModel = new KMeans().setK(3).setSolver(KMeans.BLOCK).fit(data)
+    val rowModel = new KMeans().setK(3).setSolver(KMeans.ROW).fit(data)
+    assert(blockModel.clusterCenters.length === rowModel.clusterCenters.length)
   }
 
   test("KMeansModel estimated size") {

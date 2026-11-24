@@ -89,11 +89,25 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case u @ UnresolvedNamedLambdaVariable(name +: nestedFields) =>
       parentLambdaMap.get(conf.canonicalize(name)) match {
         case Some(lambda) =>
-          nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
-            ExtractValue(expr, Literal(fieldName), conf.resolver)
+          val optionalNamePartIndices = OptionalReferences.optionalNamePartIndices(u)
+          if (optionalNamePartIndices.nonEmpty) {
+            OptionalReferences.extractNestedFields(
+              base = lambda,
+              nestedFields = nestedFields,
+              firstNestedFieldIndex = 1,
+              optionalNamePartIndices = optionalNamePartIndices,
+              resolver = conf.resolver,
+              voidBaseIsNull = false)
+          } else {
+            nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
+              ExtractValue(expr, Literal(fieldName), conf.resolver)
+            }
           }
         case None =>
-          UnresolvedAttribute(u.nameParts)
+          // Keep the tags, such as the optional name parts of the reference.
+          val unresolvedAttribute = UnresolvedAttribute(u.nameParts)
+          unresolvedAttribute.copyTagsFrom(u)
+          unresolvedAttribute
       }
 
     case _ =>
