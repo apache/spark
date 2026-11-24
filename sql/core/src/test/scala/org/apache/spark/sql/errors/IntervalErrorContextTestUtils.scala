@@ -16,16 +16,14 @@
  */
 package org.apache.spark.sql.errors
 
-import org.scalatest.Suite
-
-import org.apache.spark.CheckErrorHelper
+import org.apache.spark.SparkTestSuite
 
 /**
  * The interval divisions that raise in every mode, shared by the suites that check their query
  * context with and without ANSI mode (SPARK-61352). They read a column, so that they are not
  * constant-folded on the driver.
  */
-trait IntervalErrorContextTestUtils extends CheckErrorHelper { self: Suite =>
+trait IntervalErrorContextTestUtils { self: SparkTestSuite =>
   protected val ymDivide = "CAST(CAST(id - 2147483648 AS INT) AS INTERVAL MONTH) / -1"
   protected val dtDivide = "CAST(id + 1 AS INTERVAL DAY) / CAST(id AS INT)"
 
