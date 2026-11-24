@@ -1730,7 +1730,9 @@ class Analyzer(
           if (u.allChildrenCompatible &&
           conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) &&
           children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
-        DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
+        // Nothing above the union is resolved yet, so its output needs no mapping.
+        SetOperationCharPadding.padResolved(
+          DeduplicateUnionChildOutput.deduplicateOutputPerChild(u))._1
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.

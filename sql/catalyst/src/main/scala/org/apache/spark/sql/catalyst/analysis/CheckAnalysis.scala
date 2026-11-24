@@ -338,6 +338,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
+    // A check is not part of the analysis phase, see AnalysisHelper.isInAnalyzer. So a set
+    // operation that the check copies, such as by inlining a CTE, is resolved without the CHAR
+    // lengths of its children, which the analysis of a view body can leave unpadded under the
+    // configs the view captured, see SetOperationCharPadding.
+    AnalysisHelper.markOutsideAnalyzer(checkAnalysisOutsideAnalyzer(plan))
+  }
+
+  private def checkAnalysisOutsideAnalyzer(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
     // in the original `WithCTE` node, as we need to perform analysis check for them as well.

@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
   Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
@@ -34,9 +34,9 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate, Filter, LogicalPlan, OneRowRelation, Project
+  Aggregate, Filter, LogicalPlan, OneRowRelation, Project, Union
 }
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
@@ -831,17 +831,16 @@ trait CharVarcharTestSuite extends QueryTest {
         checkAnswer(df, expected)
         df.schema.foreach(field => checkColType(field, CharType(5)))
       }
-      // The positions of a column that INTERSECT or EXCEPT outputs twice have the widest length of
-      // all of them. A Union gives the positions of a repeated column their own expression IDs
-      // first (DeduplicateUnionChildOutput), so they keep their own lengths.
+      // Each position of a column that a child outputs twice has the widest length of the children
+      // at that position.
       Seq(
         "UNION ALL" -> Seq(Row("a  ", padded), Row("a  ", padded)),
-        "INTERSECT" -> Seq(Row(padded, padded)),
+        "INTERSECT" -> Seq(Row("a  ", padded)),
         "EXCEPT" -> Nil).foreach { case (op, expected) =>
         val df = sql(s"SELECT * FROM (SELECT c, c FROM t3 $op SELECT c3, c5 FROM t35) s(p, q)")
         checkAnswer(df, expected)
         checkAnswer(df.where("p = 'a'"), expected)
-        checkColType(df.schema(0), CharType(if (op == "UNION ALL") 3 else 5))
+        checkColType(df.schema(0), CharType(3))
         checkColType(df.schema(1), CharType(5))
       }
       Seq("SELECT c FROM t3 EXCEPT SELECT c FROM t5", s"SELECT c FROM t3 EXCEPT ($union)",
@@ -850,14 +849,23 @@ trait CharVarcharTestSuite extends QueryTest {
         checkColType(sql(query).schema(0), CharType(5))
       }
 
-      // A position is padded on its own when the positions that share a column can't have one raw
-      // type, as long as it doesn't pad the shared column.
-      withTable("t3s") {
+      // A position of a repeated column is padded on its own also when another position of it has
+      // a child without a raw type, which leaves that position as it is.
+      withTable("t3s", "t5s") {
         sql(s"CREATE TABLE t3s(c3 CHAR(3), s STRING) USING $format")
         sql("INSERT INTO t3s VALUES ('a', 'a    ')")
         val shared = sql("SELECT c, c FROM t5 INTERSECT SELECT c3, s FROM t3s")
         checkAnswer(shared, Row(padded, padded))
         checkColType(shared.schema(0), CharType(5))
+        sql(s"CREATE TABLE t5s(c5 CHAR(5), s STRING) USING $format")
+        sql("INSERT INTO t5s VALUES ('a', 'a  ')")
+        Seq("INTERSECT" -> Seq(Row(padded, "a  ")), "EXCEPT" -> Nil).foreach {
+          case (op, expected) =>
+            val df = sql(s"SELECT c, c FROM t3 $op SELECT c5, s FROM t5s")
+            checkAnswer(df, expected)
+            checkColType(df.schema(0), CharType(5))
+            checkColType(df.schema(1), CharType(3))
+        }
       }
       // A repeated column of a UNION ALL keeps its own lengths when another column needs its
       // type widened too, as the output is deduplicated before the padding.
@@ -994,6 +1002,230 @@ trait CharVarcharTestSuite extends QueryTest {
         case CharVarcharUtils.ReadSidePadding(_: Attribute, 5) => true
         case _ => false
       })
+    }
+  }
+
+  test("SPARK-61972: chains of set operations that need padding resolve in one iteration") {
+    withTable("a5", "a3", "b5", "x3", "x5") {
+      sql(s"CREATE TABLE a5(c CHAR(5), b BIGINT) USING $format")
+      sql(s"CREATE TABLE a3(c CHAR(3), i INT) USING $format")
+      sql(s"CREATE TABLE b5(a CHAR(5), b CHAR(5)) USING $format")
+      sql(s"CREATE TABLE x3(c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE x5(c CHAR(5)) USING $format")
+      sql("INSERT INTO a5 VALUES ('a', 1)")
+      sql("INSERT INTO a3 VALUES ('a', 2)")
+      sql("INSERT INTO b5 VALUES ('a', 'a')")
+      sql("INSERT INTO x3 VALUES ('a')")
+      sql("INSERT INTO x5 VALUES ('a')")
+      def chain(first: String, rest: String): String =
+        (first +: Seq.fill(150)(rest)).mkString(" UNION ALL ")
+      // Each level has its types widened and its CHAR lengths padded.
+      val widened = sql(chain("SELECT c, b FROM a5", "SELECT c, i FROM a3"))
+      checkColType(widened.schema(0), CharType(5))
+      checkAnswer(widened.where("c = 'a'").selectExpr("count(*)"), Row(151))
+      // Each level outputs a column twice, which is deduplicated before it is padded.
+      val repeated = sql(chain("SELECT a, b FROM b5", "SELECT c, c FROM x3"))
+      checkAnswer(repeated.where("a = 'a' AND b = 'a'").selectExpr("count(*)"), Row(151))
+      // Nested by-name unions, as Spark Connect builds them for a reduce of unionByName.
+      val byName = (1 to 150).foldLeft[LogicalPlan](UnresolvedRelation(Seq("x3"))) {
+        case (left, i) =>
+          val right = UnresolvedRelation(Seq(if (i % 2 == 0) "x3" else "x5"))
+          Union(Seq(left, right), byName = true, allowMissingCol = false)
+      }
+      val byNameDf = Dataset.ofRows(spark.asInstanceOf[classic.SparkSession], byName)
+      checkColType(byNameDf.schema(0), CharType(5))
+      checkAnswer(byNameDf.where("c = 'a'").selectExpr("count(*)"), Row(151))
+    }
+  }
+
+  test("SPARK-61972: set operations of char arrays and of structs with other field names") {
+    withTable("r3", "r5", "rs3", "rs5", "sa3", "sb5", "t5") {
+      sql(s"CREATE TABLE r3(a ARRAY<CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE r5(a ARRAY<CHAR(5)>) USING $format")
+      sql(s"CREATE TABLE rs3(a ARRAY<STRUCT<c: CHAR(3)>>) USING $format")
+      sql(s"CREATE TABLE rs5(a ARRAY<STRUCT<c: CHAR(5)>>) USING $format")
+      sql(s"CREATE TABLE sa3(s STRUCT<a: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE sb5(s STRUCT<b: CHAR(5)>) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql("INSERT INTO r3 SELECT array('a')")
+      sql("INSERT INTO r5 SELECT array('a')")
+      sql("INSERT INTO rs3 SELECT array(named_struct('c', 'a'))")
+      sql("INSERT INTO rs5 SELECT array(named_struct('c', 'a'))")
+      sql("INSERT INTO sa3 SELECT named_struct('a', 'a')")
+      sql("INSERT INTO sb5 SELECT named_struct('b', 'a')")
+      sql("INSERT INTO t5 VALUES (1, 'a')")
+      val padded = "a" + " ".repeat(4)
+      val arrays = sql("SELECT a FROM r3 UNION ALL SELECT a FROM r5")
+      checkAnswer(arrays, Seq(Row(Seq(padded)), Row(Seq(padded))))
+      checkColType(arrays.schema(0), ArrayType(CharType(5)))
+      val structArrays = sql("SELECT a FROM rs3 UNION ALL SELECT a FROM rs5")
+      checkAnswer(structArrays, Seq(Row(Seq(Row(padded))), Row(Seq(Row(padded)))))
+      checkColType(
+        structArrays.schema(0), ArrayType(StructType(Seq(StructField("c", CharType(5))))))
+      // The output has the field names of the first child.
+      val renamed = sql("SELECT s FROM sa3 UNION ALL SELECT s FROM sb5")
+      checkAnswer(renamed, Seq(Row(Row(padded)), Row(Row(padded))))
+      checkColType(renamed.schema(0), StructType(Seq(StructField("a", CharType(5)))))
+
+      // The optimizer that a transpose runs on its input doesn't see an unresolved union.
+      val metadata = CharVarcharUtils.withRawType(Metadata.empty, CharType(10))
+      val transposed = spark.table("t5").union(spark.table("t5"))
+        .select(functions.col("c").as("c", metadata), functions.col("id"))
+        .transpose()
+      assert(transposed.collect().length == 1)
+    }
+  }
+
+  test("SPARK-61972: recursive CTEs over char columns of different lengths") {
+    withTable("t3", "t5") {
+      sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql("INSERT INTO t3 VALUES (1, 'a')")
+      sql("INSERT INTO t5 VALUES (10, 'a')")
+      val padded = "a" + " ".repeat(4)
+      // A union in the recursive term is padded during analysis, and its values are narrowed to
+      // the CHAR length of the anchor. Its execution doesn't pad it again.
+      checkAnswer(
+        sql("""WITH RECURSIVE r(c, n) AS (
+               |  SELECT c, 0 FROM t3
+               |  UNION ALL
+               |  SELECT c, n + 1 FROM (SELECT c, n FROM r UNION ALL SELECT c, id FROM t5)
+               |  WHERE n < 2)
+               |SELECT n FROM r WHERE c = 'a'""".stripMargin),
+        Seq(Row(0), Row(1), Row(2)))
+      // The rows of its CHAR(5) branch, which a LIMIT stops, have the anchor's length.
+      checkAnswer(
+        sql("""WITH RECURSIVE r(c, n) AS (
+               |  SELECT c, 0 FROM t3
+               |  UNION ALL
+               |  SELECT c, n + 1 FROM (SELECT c, n FROM r UNION ALL SELECT c, 0 FROM t5))
+               |SELECT count_if(c = 'a'), count_if(length(c) = 3), count(*)
+               |FROM (SELECT c FROM r LIMIT 5)""".stripMargin),
+        Row(5, 5, 5))
+      // An anchor padded to a longer length than the recursive term reads pads its values.
+      val widerAnchor = "(SELECT id, c FROM t3 UNION ALL SELECT id, c FROM t5)"
+      checkAnswer(
+        sql(s"""WITH RECURSIVE r(id, c, n) AS (
+               |  SELECT id, c, 0 FROM $widerAnchor
+               |  UNION ALL
+               |  SELECT t3.id, t3.c, r.n + 1 FROM r JOIN t3 ON r.id = t3.id
+               |  WHERE r.c = 'a' AND r.n < 3)
+               |SELECT id, n FROM r""".stripMargin),
+        Seq(Row(1, 0), Row(10, 0), Row(1, 1), Row(1, 2), Row(1, 3)))
+      checkAnswer(
+        sql(s"""WITH RECURSIVE r(id, c, n) AS (
+               |  SELECT id, c, 0 FROM $widerAnchor
+               |  UNION ALL
+               |  SELECT t5.id, t3.c, r.n + 1 FROM r JOIN t5 ON r.c = t5.c, t3 WHERE r.n < 2)
+               |SELECT id, n FROM r""".stripMargin),
+        Seq(Row(1, 0), Row(10, 0), Row(10, 1), Row(10, 1), Row(10, 2), Row(10, 2)))
+      checkAnswer(
+        sql("""WITH RECURSIVE r(c, n) AS (
+               |  SELECT c, 0 FROM t5
+               |  UNION ALL
+               |  SELECT t3.c, n + 1 FROM r CROSS JOIN t3 WHERE n < 2)
+               |SELECT n, c FROM r WHERE c = 'a'""".stripMargin),
+        Seq(Row(0, padded), Row(1, padded), Row(2, padded)))
+
+      // A widening cast of the recursive term keeps its CHAR types, which are narrowed.
+      withTable("sb3", "si5") {
+        sql(s"CREATE TABLE sb3(s STRUCT<k: BIGINT, c: CHAR(3)>) USING $format")
+        sql(s"CREATE TABLE si5(s STRUCT<k: INT, c: CHAR(5)>) USING $format")
+        sql("INSERT INTO sb3 SELECT named_struct('k', 1L, 'c', 'a')")
+        sql("INSERT INTO si5 SELECT named_struct('k', 2, 'c', 'b')")
+        checkAnswer(
+          sql("""WITH RECURSIVE r(s, n) AS (
+                 |  SELECT s, 0 FROM sb3
+                 |  UNION ALL
+                 |  SELECT si5.s, n + 1 FROM r CROSS JOIN si5 WHERE n < 1)
+                 |SELECT n, s FROM r""".stripMargin),
+          Seq(Row(0, Row(1L, "a  ")), Row(1, Row(2L, "b  "))))
+      }
+
+      // With the legacy flag, the values of the recursive term keep their own lengths.
+      withSQLConf(SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key -> "true") {
+        checkAnswer(
+          sql("""WITH RECURSIVE r(c, n) AS (
+                 |  SELECT c, 0 FROM t3
+                 |  UNION ALL
+                 |  SELECT t5.c, n + 1 FROM r CROSS JOIN t5 WHERE n < 1)
+                 |SELECT n, c FROM r""".stripMargin),
+          Seq(Row(0, "a  "), Row(1, padded)))
+      }
+    }
+  }
+
+  test("SPARK-61972: subquery comparisons of char columns of different lengths") {
+    withTable("t3", "t5", "s3", "s5", "r3", "r5") {
+      sql(s"CREATE TABLE t3(id INT, c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t5(id INT, c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE s3(s STRUCT<c: CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE s5(s STRUCT<c: CHAR(5)>) USING $format")
+      sql(s"CREATE TABLE r3(a ARRAY<CHAR(3)>) USING $format")
+      sql(s"CREATE TABLE r5(a ARRAY<CHAR(5)>) USING $format")
+      sql("INSERT INTO t3 VALUES (1, 'a')")
+      sql("INSERT INTO t5 VALUES (2, 'a')")
+      sql("INSERT INTO s3 SELECT named_struct('c', 'a')")
+      sql("INSERT INTO s5 SELECT named_struct('c', 'a')")
+      sql("INSERT INTO r3 SELECT array('a')")
+      sql("INSERT INTO r5 SELECT array('a')")
+      // nested CHAR fields and elements, and a correlated subquery whose column is shorter
+      checkAnswer(sql("SELECT 1 FROM s3 WHERE s IN (SELECT s FROM s5)"), Row(1))
+      checkAnswer(sql("SELECT 1 FROM r3 WHERE a IN (SELECT a FROM r5)"), Row(1))
+      checkAnswer(sql("SELECT id FROM t5 WHERE c IN (SELECT c FROM t3 WHERE t3.id <> t5.id)"),
+        Row(2))
+      // A constant that fails, in a branch that is never evaluated, is left to the evaluation.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("SELECT CASE WHEN false THEN (SELECT c FROM t3) IN (CAST(1 / 0 AS STRING)) " +
+            "ELSE true END"),
+          Row(true))
+        checkAnswer(
+          sql("SELECT CASE WHEN false THEN CAST(1 / 0 AS STRING) IN (SELECT c FROM t3) " +
+            "ELSE true END"),
+          Row(true))
+      }
+
+      // The legacy flag restores the comparisons without padding.
+      withSQLConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_SUBQUERY_COMPARISONS.key -> "true") {
+        checkAnswer(sql("SELECT id FROM t3 WHERE c IN (SELECT c FROM t5)"), Nil)
+        checkAnswer(sql("SELECT id FROM t3 WHERE c NOT IN (SELECT c FROM t5)"), Row(1))
+        checkAnswer(sql("SELECT id FROM t3 WHERE (id, c) IN (SELECT 1, c FROM t5)"), Nil)
+        checkAnswer(sql("SELECT 1 WHERE 'a' IN (SELECT c FROM t5)"), Nil)
+        checkAnswer(sql("SELECT id FROM t5 WHERE c = (SELECT c FROM t3)"), Nil)
+        checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM t5) IN ('a')"), Nil)
+      }
+    }
+  }
+
+  test("SPARK-61972: a view or SQL function body analyzed under a legacy CHAR flag") {
+    withTable("t3", "t5") {
+      sql(s"CREATE TABLE t3(c CHAR(3)) USING $format")
+      sql(s"CREATE TABLE t5(c CHAR(5)) USING $format")
+      sql("INSERT INTO t3 VALUES ('a')")
+      sql("INSERT INTO t5 VALUES ('a')")
+      val body = "WITH u AS (SELECT c FROM t3 UNION ALL SELECT c FROM t5) " +
+        "SELECT a.c FROM u a JOIN u b ON a.c = b.c"
+      Seq(
+        SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key,
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key).foreach { key =>
+        withClue(key) {
+          // In the session catalog, which can hold views and SQL functions.
+          val (v, f) = ("spark_catalog.default.v", "spark_catalog.default.f")
+          withView(v) {
+            withUserDefinedFunction(f -> false) {
+              withSQLConf(key -> "true") {
+                sql(s"CREATE VIEW $v AS $body")
+                sql(s"CREATE FUNCTION $f() RETURNS TABLE(c STRING) RETURN $body")
+              }
+              // A session without the flag reads them.
+              assert(sql(s"SELECT * FROM $v").count() == 2)
+              assert(sql(s"SELECT c FROM $v WHERE c IS NOT NULL").count() == 2)
+              assert(sql(s"SELECT * FROM $f()").count() == 2)
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1435,6 +1667,16 @@ trait CharVarcharTestSuite extends QueryTest {
 // Some basic char/varchar tests which doesn't rely on table implementation.
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
+
+  test("SPARK-61972: charTypeNarrowing pads values that fit and narrows trailing spaces") {
+    def narrow(s: String): String =
+      CharVarcharCodegenUtils.charTypeNarrowing(UTF8String.fromString(s), 3).toString
+    assert(narrow("a") == "a  ")
+    assert(narrow("a    ") == "a  ")
+    // Values with other characters past the length are returned as they are.
+    assert(narrow("abcd ") == "abcd ")
+    assert(narrow("abcde") == "abcde")
+  }
 
   private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
     assertParseExceedLimitError(sql(query).collect(), expectedLimit)
@@ -4665,6 +4907,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         checkAnswer(sql("SELECT c FROM e3 WHERE c = (SELECT c FROM e5)"), Row("abcdef"))
         checkAnswer(sql("SELECT 1 WHERE 'abcde' IN (SELECT c FROM e3)"), Nil)
         checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM e3) = 'abcde'"), Nil)
+        checkAnswer(sql("SELECT 1 WHERE (SELECT c FROM e3) IN ('abcde')"), Nil)
       }
     }
     withTempPath { dir =>

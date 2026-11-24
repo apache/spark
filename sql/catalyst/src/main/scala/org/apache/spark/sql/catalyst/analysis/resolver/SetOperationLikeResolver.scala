@@ -119,6 +119,9 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
     OperatorWithUncomparableTypeValidator.validate(unresolvedOperator, output)
 
     val resolvedOperator = unresolvedOperator.withNewChildren(paddedChildren)
+    if (paddedChildren != deduplicatedChildren) {
+      resolvedOperator.setTagValue(SetOperationCharPadding.CHAR_PADDED, ())
+    }
 
     cteRegistry.currentScope.tryPutWithCTE(
       unresolvedOperator = unresolvedOperator,

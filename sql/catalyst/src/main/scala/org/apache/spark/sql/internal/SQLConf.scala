@@ -8473,7 +8473,19 @@ object SQLConf {
         "lengths has the CHAR length of its first child, and the values of its other children " +
         "keep their own lengths, as before Spark 5.0. The values of views and recursive CTEs are " +
         "then not narrowed to the CHAR lengths they store either. When false, the output has the " +
-        "widest CHAR length, and the values of the shorter children are padded to it.")
+        "widest CHAR length, and the values of the shorter children are padded to it. A " +
+        "streaming query records the value in its checkpoint, and keeps it when it is restarted.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_NO_CHAR_PADDING_IN_SUBQUERY_COMPARISONS =
+    buildConf("spark.sql.legacy.noCharPaddingInSubqueryComparisons")
+      .internal()
+      .doc("When true, an IN subquery, and a comparison with a scalar subquery of a CHAR column, " +
+        "compare CHAR values of different lengths without padding them, as before Spark 5.0. " +
+        "When false, they pad the shorter values as a comparison of CHAR columns does.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

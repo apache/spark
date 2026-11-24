@@ -64,10 +64,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         j.copy(right = dedupRight(left, right))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
+      // Nothing above these set operations is resolved yet, so the padding of their CHAR lengths,
+      // see SetOperationCharPadding, needs no mapping of their output.
       case i @ Intersect(left, right, _) if !i.duplicateResolved && noMissingInput(right) =>
-        i.copy(right = dedupRight(left, right))
+        SetOperationCharPadding.padResolved(i.copy(right = dedupRight(left, right)))._1
       case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
-        e.copy(right = dedupRight(left, right))
+        SetOperationCharPadding.padResolved(e.copy(right = dedupRight(left, right)))._1
       // Only after we finish by-name resolution for Union
       case u: Union if !u.byName && !u.duplicatesResolvedBetweenBranches =>
         val unionWithChildOutputsDeduplicated =
@@ -93,7 +95,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
             child
           }
         }
-        unionWithChildOutputsDeduplicated.copy(children = newChildren)
+        SetOperationCharPadding.padResolved(
+          unionWithChildOutputsDeduplicated.copy(children = newChildren))._1
       case merge: MergeIntoTable
           if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
         merge.copy(sourceTable = dedupRight(merge.targetTable, merge.sourceTable))

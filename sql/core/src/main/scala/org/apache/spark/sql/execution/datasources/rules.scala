@@ -24,6 +24,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.TABLE_NAME
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -616,7 +618,7 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
  * catalog if evolution was detected.
  * It does so by walking the resolved plan looking for View operators for persisted views.
  */
-object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
+object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) with Logging {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case View(metaData, false, viewQuery, _)
@@ -645,6 +647,14 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           case _ => Map.empty
         }
 
+        // A view WITH SCHEMA EVOLUTION takes the CHAR and VARCHAR types of its query, such as the
+        // widest CHAR length of a set operation, which a view stored before had shorter.
+        val rawTypesChanged = evolvedRawTypes.nonEmpty || viewSchemaMode == SchemaEvolution &&
+          !redoSignature && viewFields.zip(viewQueryFields).exists { case (field, planField) =>
+            CharVarcharUtils.getRawTypeString(field.metadata) !=
+              CharVarcharUtils.getRawTypeString(planField.metadata)
+          }
+
         val schemaChanged = redoSignature || viewFields.zipWithIndex.exists { case (field, index) =>
           val planField = viewQueryFields(index)
           (field.dataType != planField.dataType ||
@@ -654,7 +664,7 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
               field.name != planField.name)))
         }
 
-        if (schemaChanged || evolvedRawTypes.nonEmpty) {
+        if (schemaChanged || rawTypesChanged) {
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
             val newFields = viewQuery.schema.zipWithIndex.map {
               case (StructField(name, dataType, nullable, _), index) =>
@@ -673,9 +683,13 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           try {
             session.sessionState.catalog.alterTable(updatedViewMeta)
           } catch {
-            // The narrowing keeps the values of the query as the stored CHAR types say, so a view
-            // whose only change is the CHAR types it evolves to is still read correctly.
-            case NonFatal(_) if !schemaChanged =>
+            // A view whose only change is the CHAR and VARCHAR types it evolves to is still read
+            // correctly: the narrowing keeps the values of the query as the stored CHAR types say,
+            // and a view WITH SCHEMA EVOLUTION returns the types of its query.
+            case NonFatal(e) if !schemaChanged =>
+              logWarning(log"Failed to update the CHAR and VARCHAR types of the view " +
+                log"${MDC(TABLE_NAME, metaData.qualifiedName)} in the catalog. They are updated " +
+                log"again when the view is read.", e)
             case NonFatal(e) =>
               throw new SparkException(
                 errorClass = "FAILED_UPDATE_VIEW_SCHEMA",

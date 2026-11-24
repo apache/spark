@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, CTERelationRef, Except, Intersect, LogicalPlan, Project, SetOperation, Union, UnionLoop, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, CTERelationRef, Except, Intersect, LogicalPlan, Project, SetOperation, Union, UnionLoop}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
@@ -37,21 +38,37 @@ import org.apache.spark.sql.types.DataType
  * During analysis, such a set operation is not resolved until its children are padded, see
  * [[isAligned]], so that nothing above it is resolved with the shorter length of its first child.
  * The children are padded once the set operation is resolved otherwise, after the widening of
- * their types and the deduplication of their output: in [[PadSetOperationCharLengths]] by the
- * fixed-point analyzer, and in `SetOperationLikeResolver` by the single-pass resolver, both with
- * [[padChildren]].
+ * their types and the deduplication of their output. In the fixed-point analyzer, the rules that
+ * do these rewrites pad the set operation in the same step with [[padResolved]], so that a chain
+ * of set operations is resolved in one traversal, and [[PadSetOperationCharLengths]] pads the
+ * others. The single-pass resolver pads them in `SetOperationLikeResolver`, with [[padChildren]].
  */
 object SetOperationCharPadding {
+
+  /**
+   * Marks a set operation of a plan that is analyzed again after it was optimized, such as an
+   * iteration of a recursive CTE, which recursive CTE execution builds from the optimized plan of
+   * the recursive term, so that it is not padded again: it was padded when the query was analyzed.
+   */
+  val SKIP_CHAR_PADDING = TreeNodeTag[Unit]("skipCharPadding")
+
+  /**
+   * Marks a set operation whose children analysis padded, so that a streaming query restored from
+   * a checkpoint can tell whether the padding changed its plan, see [[changesStreamingPlan]].
+   */
+  val CHAR_PADDED = TreeNodeTag[Unit]("charPadded")
 
   /**
    * Whether the CHAR lengths of the children of a set operation are the same at each position, so
    * that it needs no padding. Only analysis pads the children, so outside of it, see
    * [[AnalysisHelper.isInAnalyzer]], this is true: an optimizer rule can make the metadata of the
    * children differ, such as one that simplifies an expression into a column, whose alias then
-   * has the column's raw type. True if the children are not resolved yet.
+   * has the column's raw type. So it is for a set operation marked with [[SKIP_CHAR_PADDING]].
+   * True if the children are not resolved yet.
    */
-  def isAligned(children: Seq[LogicalPlan]): Boolean =
-    !AnalysisHelper.isInAnalyzer || !needsPadding(children)
+  def isAligned(setOperation: LogicalPlan): Boolean =
+    !AnalysisHelper.isInAnalyzer || setOperation.getTagValue(SKIP_CHAR_PADDING).isDefined ||
+      !needsPadding(setOperation.children)
 
   /** Whether the resolved children of a set operation have CHAR lengths to pad. */
   def needsPadding(children: Seq[LogicalPlan]): Boolean = {
@@ -78,11 +95,12 @@ object SetOperationCharPadding {
     } else {
       val alwaysPad = !SQLConf.get.readSideCharPadding
       children.zip(childOutputs).map { case (child, output) =>
-        // A column at more than one position has one raw type, and gets one padded column.
-        val paddedColumns = mutable.HashMap.empty[ExprId, NamedExpression]
+        // A column at more than one position is padded at each to the raw type there, once for
+        // each raw type. Nothing above the set operation refers to it yet, see isAligned.
+        val paddedColumns = mutable.HashMap.empty[(ExprId, DataType), NamedExpression]
         val projectList = output.zip(rawTypes).map {
           case (attr, Some(rawType)) =>
-            paddedColumns.getOrElseUpdate(attr.exprId,
+            paddedColumns.getOrElseUpdate((attr.exprId, rawType),
               CharVarcharUtils.padCharToWiderLength(attr, rawType, alwaysPad).map {
                 case (padded, paddedRawType) => newAlias(padded, attr, paddedRawType)
               }.getOrElse(attr))
@@ -95,6 +113,69 @@ object SetOperationCharPadding {
         }
       }.unzip
     }
+  }
+
+  /**
+   * Pads the children of a set operation that is resolved but for its CHAR lengths, during
+   * analysis, see [[padChildren]]. Returns the set operation and the mapping from its output to
+   * the new output, which is empty if it needs no padding. Rules of the fixed-point analyzer that
+   * rewrite a set operation into such a one call this on the result, so that it is resolved before
+   * the traversal visits its parent.
+   */
+  def padResolved(plan: LogicalPlan): (LogicalPlan, Seq[(Attribute, Attribute)]) = plan match {
+    case s @ (_: Union | _: Intersect | _: Except)
+        if resolvedExceptCharLengths(s) && !isAligned(s) =>
+      val (newChildren, _) = padChildren(s.children, s.children.map(_.output), newAlias)
+      if (newChildren == s.children) {
+        s -> Nil
+      } else {
+        // The output of a set operation is the output of its first child.
+        val attrMapping = s.children.head.output.zip(newChildren.head.output)
+          .distinctBy { case (a, _) => a.exprId }
+          .filterNot { case (a, b) => a.exprId == b.exprId }
+        val padded = s.withNewChildren(newChildren)
+        padded.setTagValue(CHAR_PADDED, ())
+        padded -> attrMapping
+      }
+    case _ => plan -> Nil
+  }
+
+  /**
+   * Whether the CHAR padding of set operations, see [[isEnabled]], changes the analyzed plan of a
+   * streaming query: whether a streaming set operation in it was padded, or has children whose
+   * CHAR lengths differ, which the padding would pad. Its stateful operators then key on values
+   * that the padding changes, so a query restored from a checkpoint keeps the padding that the
+   * checkpoint records.
+   */
+  def changesStreamingPlan(plan: LogicalPlan): Boolean = plan.exists {
+    case s @ (_: Union | _: Intersect | _: Except) if s.isStreaming =>
+      s.getTagValue(CHAR_PADDED).isDefined ||
+        CharVarcharUtils.widerCharRawTypes(s.children.map(_.output)).exists(_.isDefined)
+    case _ => false
+  }
+
+  /**
+   * [[padResolved]] for a set operation that a rule rewrote with the given mapping of its output,
+   * such as the widening of its types. Returns both mappings as one.
+   */
+  def padResolved(
+      plan: LogicalPlan,
+      attrMapping: Seq[(Attribute, Attribute)]): (LogicalPlan, Seq[(Attribute, Attribute)]) = {
+    val (padded, paddingMapping) = padResolved(plan)
+    if (paddingMapping.isEmpty) {
+      padded -> attrMapping
+    } else {
+      val paddedById = paddingMapping.map { case (a, b) => a.exprId -> b }.toMap
+      val remapped = attrMapping.map { case (a, b) => a -> paddedById.getOrElse(b.exprId, b) }
+      val remappedIds = attrMapping.map(_._2.exprId).toSet
+      padded -> (remapped ++ paddingMapping.filterNot { case (a, _) => remappedIds(a.exprId) })
+    }
+  }
+
+  private def resolvedExceptCharLengths(plan: LogicalPlan): Boolean = plan match {
+    case u: Union => u.resolvedExceptCharLengths
+    case s: SetOperation => s.resolvedExceptCharLengths
+    case _ => false
   }
 
   /** The alias of a padded column for the fixed-point analyzer. */
@@ -135,44 +216,28 @@ object SetOperationCharPadding {
   }
 
   /**
-   * Whether the plan reads the recursive reference of a recursive CTE that it is not part of,
-   * such as the union of the anchor and the recursive term of a recursive CTE before it becomes a
-   * [[UnionLoop]]. Such a set operation is not padded: the columns of a recursive CTE have the
-   * CHAR lengths of its anchor, and ApplyCharTypePadding narrows the values of the recursive term
-   * to them.
+   * Whether the plan reads a recursive CTE whose definition it is part of, before the reference is
+   * resolved to a `UnionLoopRef`: the union of the anchor and the recursive term of a recursive
+   * CTE, before `ResolveWithCTE` turns it into a [[UnionLoop]]. Such a union is not padded: the
+   * columns of a recursive CTE have the CHAR lengths of its anchor, and ApplyCharTypePadding brings
+   * the values of the recursive term to them. A set operation in the recursive term also reads the
+   * reference until then, and is padded once it reads a `UnionLoopRef`, like any other.
    */
   private def readsRecursiveReference(plan: LogicalPlan): Boolean = plan match {
     case _: UnionLoop => false
     case r: CTERelationRef => r.recursive
-    case _: UnionLoopRef => true
     case p => p.children.exists(readsRecursiveReference)
   }
 }
 
 /**
- * Pads the children of set operations whose CHAR lengths differ, see [[SetOperationCharPadding]].
+ * Pads the children of set operations whose CHAR lengths differ, see [[SetOperationCharPadding]],
+ * that no other rule padded when it rewrote them.
+ *
+ * TODO: a SequentialStreamingUnion is not padded, so it keeps the CHAR lengths of its first child.
  */
 object PadSetOperationCharLengths extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUpWithNewOutput {
-    // Once the types are widened and the output is deduplicated, as in the single-pass resolver.
-    case s @ (_: Union | _: Intersect | _: Except)
-        if resolvedExceptCharLengths(s) && SetOperationCharPadding.needsPadding(s.children) =>
-      val (newChildren, _) = SetOperationCharPadding.padChildren(
-        s.children, s.children.map(_.output), SetOperationCharPadding.newAlias)
-      if (newChildren == s.children) {
-        s -> Nil
-      } else {
-        // The output of a set operation is the output of its first child.
-        val attrMapping = s.children.head.output.zip(newChildren.head.output)
-          .distinctBy { case (a, _) => a.exprId }
-          .filterNot { case (a, b) => a.exprId == b.exprId }
-        s.withNewChildren(newChildren) -> attrMapping
-      }
-  }
-
-  private def resolvedExceptCharLengths(plan: LogicalPlan): Boolean = plan match {
-    case u: Union => u.resolvedExceptCharLengths
-    case s: SetOperation => s.resolvedExceptCharLengths
-    case _ => false
+    case s @ (_: Union | _: Intersect | _: Except) => SetOperationCharPadding.padResolved(s)
   }
 }

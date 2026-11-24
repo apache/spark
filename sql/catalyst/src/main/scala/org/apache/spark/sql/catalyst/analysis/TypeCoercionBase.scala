@@ -201,7 +201,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             assert(newChildren.length == 2)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
+            SetOperationCharPadding.padResolved(
+              Except(newChildren.head, newChildren.last, isAll), attrMapping)
           }
 
         case s @ Intersect(left, right, isAll)
@@ -215,7 +216,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             assert(newChildren.length == 2)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
+            SetOperationCharPadding.padResolved(
+              Intersect(newChildren.head, newChildren.last, isAll), attrMapping)
           }
 
         case s: Union
@@ -229,8 +231,13 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            s.copy(children = newChildren) -> attrMapping
+            SetOperationCharPadding.padResolved(s.copy(children = newChildren), attrMapping)
           }
+
+        // Pads a set operation that needs no widening in the same traversal, so that a parent
+        // that needs widening is widened in it too, see SetOperationCharPadding.
+        case s @ (_: Union | _: Intersect | _: Except) if s.childrenResolved =>
+          SetOperationCharPadding.padResolved(s)
 
         case s: UnionLoop
             if s.childrenResolved && s.anchor.output.length == s.recursion.output.length

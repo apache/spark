@@ -414,7 +414,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   // During analysis, the children are padded to the same CHAR lengths first, see
   // SetOperationCharPadding.
   override lazy val resolved: Boolean =
-    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(children)
+    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(this)
 }
 
 object SetOperation {
@@ -725,7 +725,7 @@ case class Union(
   // During analysis, the children are padded to the same CHAR lengths first, see
   // SetOperationCharPadding.
   override lazy val resolved: Boolean =
-    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(children)
+    resolvedExceptCharLengths && SetOperationCharPadding.isAligned(this)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)

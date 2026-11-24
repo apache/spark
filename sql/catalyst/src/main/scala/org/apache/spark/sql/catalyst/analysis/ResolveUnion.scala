@@ -208,7 +208,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
     case Union(children, byName, allowMissingCol) if byName =>
       children.reduceLeft { (left, right) =>
         checkColumnNames(left, right)
-        unionTwoSides(left, right, allowMissingCol)
+        // Nothing above a by-name union is resolved yet, so its output needs no mapping.
+        SetOperationCharPadding.padResolved(unionTwoSides(left, right, allowMissingCol))._1
       }
   }
 }

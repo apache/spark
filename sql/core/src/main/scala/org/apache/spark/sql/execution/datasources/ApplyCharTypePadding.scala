@@ -110,7 +110,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   /**
    * The columns of a recursive CTE have the CHAR lengths of its anchor. This narrows values of the
    * recursive term with longer CHAR lengths, such as those of a set operation in it, to them, as
-   * [[narrowViewColumns]] does for a view.
+   * [[narrowViewColumns]] does for a view, and pads those with shorter CHAR lengths to them, such
+   * as when the anchor is a set operation padded to a longer length than the recursive term reads.
    */
   private def narrowRecursiveTerms(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
@@ -120,7 +121,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           (for {
             rawType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
             anchorType <- CharVarcharUtils.getRawType(anchorAttr.metadata, anchorAttr.dataType)
-            narrowed <- narrowToLength(attr, rawType, anchorType)
+            narrowed <- narrowToLength(attr, rawType, anchorType, padShorter = true)
           } yield Alias(narrowed, attr.name)(
             qualifier = attr.qualifier,
             explicitMetadata = Some(CharVarcharUtils.withRawType(attr.metadata, anchorType))
@@ -139,8 +140,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def narrowToLength(
       expr: Expression,
       fromType: DataType,
-      toType: DataType): Option[Expression] = {
-    CharVarcharUtils.narrowCharToLength(expr, fromType, toType).map { narrowed =>
+      toType: DataType,
+      padShorter: Boolean = false): Option[Expression] = {
+    CharVarcharUtils.narrowCharToLength(expr, fromType, toType, padShorter).map { narrowed =>
       if (narrowed.dataType == expr.dataType) {
         narrowed
       } else {
@@ -150,11 +152,15 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   /**
-   * A view stores the CHAR types of its columns, and keeps them for the values of its query. A view
-   * of a set operation created before the output had the widest length of its children stores the
-   * length of the first child. This narrows the values back to that length, as the stored type
-   * says, so that comparisons padded to it still match them. The columns keep their expression IDs
-   * and metadata.
+   * A view stores the CHAR types of its columns, and keeps them for the values of its query. The
+   * stored CHAR length of a column can be shorter than the one of its query, such as for a view of
+   * a set operation created before the output had the widest length of its children, which stores
+   * the length of the first child, or a view of a table recreated with a longer CHAR column. This
+   * narrows the values of such a column back to the stored length, so that comparisons padded to
+   * it still match them. The columns keep their expression IDs and metadata.
+   *
+   * TODO: neither ReadSidePadding nor V2ExpressionBuilder translates the narrowing, so a filter on
+   * such a column is not pushed down to the source and does not use its column statistics.
    */
   private def narrowViewColumns(plan: LogicalPlan): LogicalPlan = {
     def queryAttr(e: Expression): Option[Attribute] = e match {
@@ -167,8 +173,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         val newProjectList = projectList.map {
           case a @ Alias(child, _) =>
             (for {
-              viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
               attr <- queryAttr(child)
+              // A column whose query has the raw type that the view stores needs no narrowing.
+              viewTypeString = CharVarcharUtils.getRawTypeString(a.metadata)
+              if viewTypeString.isEmpty ||
+                viewTypeString != CharVarcharUtils.getRawTypeString(attr.metadata)
+              viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
               // The raw type of the query's column after the view's cast to its stored type.
               queryType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
                 .flatMap(CharVarcharUtils.rawTypeOfCast(_, child.dataType))

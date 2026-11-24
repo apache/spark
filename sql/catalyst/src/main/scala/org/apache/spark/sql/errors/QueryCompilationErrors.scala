@@ -5383,4 +5383,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "cause" -> cause.getSimpleMessage),
       cause = Some(cause))
   }
+
+  def streamingSetOperationCharPaddingChangedError(
+      config: String,
+      recordedValue: Boolean): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_SET_OPERATION_CHAR_PADDING_CHANGED",
+      messageParameters = Map(
+        "config" -> toSQLConf(config),
+        "recordedValue" -> toSQLConfVal(recordedValue.toString)))
+  }
 }

@@ -8591,6 +8591,12 @@
     ],
     "sqlState" : "55019"
   },
+  "STREAMING_SET_OPERATION_CHAR_PADDING_CHANGED" : {
+    "message" : [
+      "The streaming query restored from the checkpoint has set operations of CHAR columns of different lengths, which the checkpoint records with <config> = <recordedValue>, and which the DataFrame of the query has under another value of <config>. Its stateful operators would then key on values padded differently from the ones in their state. Set <config> to <recordedValue> before the DataFrame is built, or start the query from a new checkpoint."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."

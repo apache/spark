@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, IN_SUBQUERY}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, Metadata, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -173,36 +174,42 @@ object ApplyCharTypePaddingHelper {
       // A comparison of types that don't match is left to CheckAnalysis.
       // As in ConstantFolding, a constant that fails to evaluate, such as one in a branch that is
       // never evaluated, is left to the evaluation of the query.
+      // LEGACY_NO_CHAR_PADDING_IN_SUBQUERY_COMPARISONS turns off these cases and the IN subquery.
       case b @ BinaryComparison(e @ CharScalarSubquery(metadata), lit)
-          if b.resolved && lit.foldable =>
+          if padSubqueryComparisons && b.resolved && lit.foldable =>
         ExprUtils.tryEvalFoldable(lit)
           .flatMap(padAttrLitCmp(e, metadata, padCharCol, lit, _, truncate = false))
           .map(b.withNewChildren)
           .getOrElse(b)
 
       case b @ BinaryComparison(lit, e @ CharScalarSubquery(metadata))
-          if b.resolved && lit.foldable =>
+          if padSubqueryComparisons && b.resolved && lit.foldable =>
         ExprUtils.tryEvalFoldable(lit)
           .flatMap(padAttrLitCmp(e, metadata, padCharCol, lit, _, truncate = false))
           .map(newChildren => b.withNewChildren(newChildren.reverse))
           .getOrElse(b)
 
       case b @ BinaryComparison(e1 @ CharOperand(m1), e2 @ CharOperand(m2))
-          if b.resolved && (e1.isInstanceOf[ScalarSubquery] || e2.isInstanceOf[ScalarSubquery]) =>
+          if padSubqueryComparisons && b.resolved &&
+            (e1.isInstanceOf[ScalarSubquery] || e2.isInstanceOf[ScalarSubquery]) =>
         b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(
           Seq(e1, e2), Seq(m1, m2).map(CharVarcharUtils.getRawType), padCharCol, truncate = false))
 
-      case i @ In(CharScalarSubquery(metadata), list) if i.resolved && list.forall(_.foldable) =>
+      case i @ In(CharScalarSubquery(metadata), list)
+          if padSubqueryComparisons && i.resolved && list.forall(_.foldable) =>
         val values = list.map(ExprUtils.tryEvalFoldable)
         CharVarcharUtils.getRawType(metadata).collect {
           case c: CharType if values.forall(_.isDefined) =>
             padInList(i, c, values.map(_.get), padCharCol, truncate = false)
         }.getOrElse(i)
 
-      case i: InSubquery if i.resolved => padInSubquery(i, padCharCol)
+      case i: InSubquery if padSubqueryComparisons && i.resolved => padInSubquery(i, padCharCol)
 
       case other => other
     }
+
+  private def padSubqueryComparisons: Boolean =
+    !SQLConf.get.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_SUBQUERY_COMPARISONS)
 
   /**
    * Pads each CHAR value or string literal of an IN subquery and the CHAR column of the subquery

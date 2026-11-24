@@ -28,11 +28,12 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
+import org.apache.spark.sql.catalyst.analysis.SetOperationCharPadding
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.Except
+import org.apache.spark.sql.catalyst.plans.logical.{Except, Intersect, LogicalPlan, Union}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -236,6 +237,13 @@ class StreamingQueryManager private[sql] (
     }
   }
 
+  // Whether the streaming set operations of the plan are not analyzed yet, so that analyzing it
+  // again pads them under the configuration of the session that analyzes it.
+  private def hasUnanalyzedSetOperations(plan: LogicalPlan): Boolean = !plan.exists {
+    case s @ (_: Union | _: Intersect | _: Except) => s.analyzed && s.isStreaming
+    case _ => false
+  }
+
   // scalastyle:off argcount
   private def createQuery(
       userSpecifiedName: Option[String],
@@ -292,6 +300,11 @@ class StreamingQueryManager private[sql] (
       case _ => false
     }
 
+    // The CHAR padding of streaming set operations changes the values that their stateful
+    // operators key on. A query restored from a checkpoint keeps the padding that the checkpoint
+    // records, see SetOperationCharPadding.changesStreamingPlan.
+    lazy val changesCharPadding = SetOperationCharPadding.changesStreamingPlan(analyzedPlan)
+
     val hasPersistentCheckpointLocation = userSpecifiedCheckpointLocation.isDefined ||
       sparkSession.sessionState.conf.checkpointLocation.isDefined
 
@@ -299,7 +312,7 @@ class StreamingQueryManager private[sql] (
       case _: ContinuousTrigger => (sparkSession, dataStreamWritePlan)
       case _ if recoverFromCheckpointLocation &&
           hasPersistentCheckpointLocation &&
-          hasExceptWithStreamingLeft =>
+          (hasExceptWithStreamingLeft || changesCharPadding) =>
         val (resolvedCheckpointRoot, _) = sparkSession.withActive {
           ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
         }
@@ -308,18 +321,35 @@ class StreamingQueryManager private[sql] (
         val checkpointMetadata = new StreamingQueryCheckpointMetadata(
           sparkSession, resolvedCheckpointRoot, readOnly = true)
 
-        val analysisSession = checkpointMetadata.offsetLog.getLatest()
+        checkpointMetadata.offsetLog.getLatest()
           .flatMap(_._2.metadataOpt)
           .map { metadata =>
             val allowStreamingExcept = OffsetSeqMetadata.readValue(
               metadata, SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME).toBoolean
+            val noCharWidening = OffsetSeqMetadata.readValue(
+              metadata, SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS).toBoolean
             val newSession = sparkSession.cloneSession()
             newSession.conf.set(
               SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME, allowStreamingExcept)
-            newSession
+            newSession.conf.set(
+              SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS, noCharWidening)
+            val sessionNoCharWidening = sparkSession.sessionState.conf.getConf(
+              SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS)
+            val writePlan = if (noCharWidening == sessionNoCharWidening || !changesCharPadding) {
+              resolvedDataStreamWritePlan
+            } else if (hasUnanalyzedSetOperations(df.queryExecution.logical)) {
+              // Such as a query written as one SQL statement, or sent as a Spark Connect plan.
+              resolvedDataStreamWritePlan.copy(
+                inputQuery = newSession.sessionState.executePlan(df.queryExecution.logical)
+                  .analyzed)
+            } else {
+              // The set operations of a Classic DataFrame were analyzed when it was built.
+              throw QueryCompilationErrors.streamingSetOperationCharPaddingChangedError(
+                SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key, noCharWidening)
+            }
+            (newSession, writePlan)
           }
-          .getOrElse(sparkSession)
-        (analysisSession, resolvedDataStreamWritePlan)
+          .getOrElse((sparkSession, resolvedDataStreamWritePlan))
       case _ => (sparkSession, dataStreamWritePlan)
     }
 

@@ -102,6 +102,16 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(entry.key).contains("true"))
   }
 
+  test("SPARK-61972: set operations keep the CHAR lengths of their first child for " +
+      "checkpoints that predate the padding") {
+    val entry = SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+    assert(OffsetSeqMetadata.readValue(offsetSeq.metadataOpt.get, entry) == "true")
+    val metadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("false"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
