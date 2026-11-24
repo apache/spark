@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PreparedExternalLookupJoin}
-import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
+import org.apache.spark.sql.execution.{SparkPlan, SparkStrategies, SparkStrategy}
 
 /** Plans the external lookup joins that [[PrepareExternalLookupJoin]] prepared. */
 object ExternalLookupJoinStrategy extends SparkStrategy {
@@ -37,6 +37,8 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
         lookup.scan,
         lookup.readerFactory,
         lookup.maxParameterRowsPerRequest,
+        lookup.cacheOptions,
+        SparkStrategies.isRealTimeMode(lookup.child),
         planLater(lookup.child)) :: Nil
     case _ => Nil
   }

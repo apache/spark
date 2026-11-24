@@ -291,7 +291,6 @@ class StreamingQueryManager private[sql] (
       case Except(left, _, _) if left.isStreaming => true
       case _ => false
     }
-
     val hasPersistentCheckpointLocation = userSpecifiedCheckpointLocation.isDefined ||
       sparkSession.sessionState.conf.checkpointLocation.isDefined
 

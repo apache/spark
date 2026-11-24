@@ -23,6 +23,9 @@ import { glob } from 'glob';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Per-test timeout for the repository-wide file scans below.
+const SCAN_TIMEOUT_MS = 60000;
+
 test('CSS files with data URI images do not violate CSP img-src policy', async function () {
   const cssFiles = await glob('**/*.css', {
     cwd: join(__dirname, '../..'),
@@ -35,7 +38,7 @@ test('CSS files with data URI images do not violate CSP img-src policy', async f
   for (const file of cssFiles) {
     const filePath = join(__dirname, '../..', file);
     const content = readFileSync(filePath, 'utf8');
-    
+
     if (dataUriPattern.test(content)) {
       hasDataUri = true;
       break;
@@ -50,7 +53,7 @@ test('CSS files with data URI images do not violate CSP img-src policy', async f
     // Verify that CSP includes img-src with data: support
     expect(httpSecurityFilter).toMatch(/img-src\s+[^;]*data:/);
   }
-});
+}, SCAN_TIMEOUT_MS);
 
 test('All inline scripts use CSP nonce', async function () {
   const scalaFiles = await glob('**/*.scala', {
@@ -70,7 +73,7 @@ test('All inline scripts use CSP nonce', async function () {
 
     while ((match = scriptTagPattern.exec(content)) !== null) {
       const attributes = match[1];
-      
+
       // Skip external scripts (those with src attribute)
       if (/src\s*=/.test(attributes)) {
         continue;
@@ -88,9 +91,9 @@ test('All inline scripts use CSP nonce', async function () {
   }
 
   if (violations.length > 0) {
-    const message = violations.map(v => 
+    const message = violations.map(v =>
       `${v.file}:${v.line} - Missing nonce: ${v.tag}`
     ).join('\n');
     throw new Error(`Found inline scripts without CSP nonce:\n${message}`);
   }
-});
+}, SCAN_TIMEOUT_MS);

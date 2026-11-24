@@ -26,7 +26,7 @@ import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.internal.LogKeys.COLUMN_NAME
+import org.apache.spark.internal.LogKeys.{COLUMN_NAME, FETCH_SIZE}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -210,9 +210,10 @@ private case class PostgresDialect()
     options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
       case Some(v) => v.toInt
       case None =>
-        logInfo(s"No fetchSize option set for PostgreSQL JDBC read. " +
-          s"Defaulting to $POSTGRES_DEFAULT_FETCH_SIZE to avoid loading all rows into memory. " +
-          s"Set the 'fetchsize' option explicitly to override this behavior.")
+        logInfo(log"No fetchSize option set for PostgreSQL JDBC read. " +
+          log"Defaulting to ${MDC(FETCH_SIZE, POSTGRES_DEFAULT_FETCH_SIZE)} to avoid loading " +
+          log"all rows into memory. Set the 'fetchsize' option explicitly to override this " +
+          log"behavior.")
         POSTGRES_DEFAULT_FETCH_SIZE
     }
   }
@@ -273,6 +274,10 @@ private case class PostgresDialect()
     // SQLSTATE 42000 covers both syntax errors and access-rule violations, so preserve the
     // original exception for that ambiguous state.
     exception.getSQLState == "42601"
+  }
+
+  override def isPermissionDeniedException(e: SQLException): Boolean = {
+    e.getSQLState == "42501"
   }
 
   // SHOW INDEX syntax

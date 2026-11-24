@@ -22,14 +22,14 @@ import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 import scala.util.Using
 import scala.util.control.NonFatal
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -72,6 +72,10 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // Must precede isObjectNotFoundException, whose default matches any 42xxx SQLSTATE.
+      case e: SQLException if dialect.isPermissionDeniedException(e) =>
+        throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+          fullQuery, e, isSchemaResolution = true)
       // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can
@@ -83,14 +87,8 @@ object JDBCRDD extends Logging {
         dialect.isNotSelectableObjectException(e) =>
         throw QueryCompilationErrors.objectNotSelectableError(catalogName.get, ident.get, e)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
-          messageParameters = Map(
-            "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
-            "externalEngineSqlState" -> getSQLState(e)
-          ),
-          cause = e)
+        throw QueryExecutionErrors.jdbcExternalEngineSyntaxError(
+          fullQuery, e, isSchemaResolution = true)
     }
   }
 
@@ -110,13 +108,6 @@ object JDBCRDD extends Logging {
     JdbcUtils.withConnection(options) {
       getQueryOutputSchema(query, options, dialect, _)
     }
-  }
-
-  /**
-   * Gets the SQLSTATE of the provided SQL exception or "unknown" if it is not defined.
-   */
-  private def getSQLState(e: SQLException): String = {
-    Option(e.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
   }
 
   /**
@@ -378,15 +369,13 @@ class JDBCRDD(
       try {
         stmt.executeQuery()
       } catch {
+        // Before the syntax check, as in resolveTable: some dialects treat any 42xxx as syntax.
+        case e: SQLException if dialect.isPermissionDeniedException(e) =>
+          throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+            sqlText, e, isSchemaResolution = false)
         case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-          throw new SparkException(
-            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-            messageParameters = Map(
-              "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
-              "externalEngineSqlState" -> JDBCRDD.getSQLState(e)
-            ),
-            cause = e)
+          throw QueryExecutionErrors.jdbcExternalEngineSyntaxError(
+            sqlText, e, isSchemaResolution = false)
       }
     }
 

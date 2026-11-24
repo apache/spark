@@ -278,6 +278,13 @@ class PredictBatchUDFTestsMixin:
         with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
             preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
 
+        # single scalar column with non-trivial tensor_input_shape => ERROR
+        sum_cols = predict_batch_udf(
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[2]]
+        )
+        with self.assertRaisesRegex(Exception, "Invalid input_tensor_shape for scalar column"):
+            self.df.withColumn("preds", sum_cols("a")).toPandas()
+
         # multiple scalar columns, multiple inputs, no input_tensor_shapes => list of numpy arrays
         def list_sum_fn():
             def predict(a, b, c, d):
@@ -347,6 +354,13 @@ class PredictBatchUDFTestsMixin:
         preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
+        # tensor column with wrong tensor_input_shape => ERROR
+        sum_cols = predict_batch_udf(
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[2]]
+        )
+        with self.assertRaisesRegex(Exception, "Input data does not match expected shape."):
+            self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
+
         # tensor column with multiple tensor_input_shapes => ERROR
         sum_cols = predict_batch_udf(
             array_sum_fn,
@@ -379,6 +393,33 @@ class PredictBatchUDFTestsMixin:
                 preds["preds"].to_numpy(),
             )
         )
+
+        # multiple tensor columns with fewer tensor_input_shapes than columns => ERROR
+        sum_cols = predict_batch_udf(
+            multi_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4]]
+        )
+        with self.assertRaisesRegex(Exception, "input_tensor_shapes must match columns"):
+            self.df_tensor2.withColumn("preds", sum_cols("t1", "t2")).toPandas()
+
+        # multiple tensor columns with wrong tensor_input_shapes => ERROR
+        sum_cols = predict_batch_udf(
+            multi_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[2], [3]]
+        )
+        with self.assertRaisesRegex(Exception, "Input data does not match expected shape."):
+            self.df_tensor2.withColumn("preds", sum_cols("t1", "t2")).toPandas()
+
+        # multiple tensor columns, single input => ERROR
+        def array_sum_fn():
+            def predict(inputs):
+                return np.sum(inputs, axis=1)
+
+            return predict
+
+        sum_cols = predict_batch_udf(
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4], [3]]
+        )
+        with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
+            self.df_tensor2.withColumn("preds", sum_cols("t1", "t2")).toPandas()
 
     def test_mixed_input_shapes(self):
         def mixed_sum_fn():

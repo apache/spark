@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -156,8 +156,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     val converters = new RowToColumnConverter(outputSchema)
     // The vectors grow as rows are appended, so that a large or no limit is not allocated.
     val initialCapacity = if (batchSize > 0) math.min(batchSize, 4096) else 4096
-    val vectors = OnHeapColumnVector
-      .allocateColumns(initialCapacity, outputSchema).toSeq
+    val vectors: Array[WritableColumnVector] = OnHeapColumnVector
+      .allocateColumns(initialCapacity, outputSchema).toArray
     val cb = new ColumnarBatch(vectors.toArray)
     context.addTaskCompletionListener[Unit] { _ => cb.close() }
 
@@ -171,7 +171,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         while (rowIter.hasNext && (count == 0 ||
             ((batchSize <= 0 || count < batchSize) && bytes < maxBytesPerBatch))) {
           val row = rowIter.next()
-          converters.convert(row, vectors.toArray)
+          converters.convert(row, vectors)
           bytes += row.getSizeInBytes
           count += 1
         }

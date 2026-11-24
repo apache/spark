@@ -649,6 +649,18 @@ SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + rand(0) * 0) > 1;
 SELECT * FROM t1 JOIN t2 ON foo3_1c(t1.c1) = 2;
 -- expect error: correlated scalar subquery cannot be used in Join
 SELECT * FROM t1 JOIN t2 ON foo3_1g(t1.c1) = 2;
+-- in join: temporary SQL UDF
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1;
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2;
+DROP TEMPORARY FUNCTION foo3_1h;
+-- in left outer join
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2;
+-- in left semi join
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2;
+-- in join with a parameter default
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y;
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2;
+DROP FUNCTION foo3_1i;
 
 -- in sort: unsupported
 SELECT * FROM t1 ORDER BY foo3_1b(c1);
@@ -747,6 +759,15 @@ FROM t;
 SELECT foo3_2e1(
     ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
     '2022-01-01');
+
+-- Correlated scalar function whose body aggregates in a CTE
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t;
+
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false;
+SELECT c1, foo3_2e2(c1) FROM t1;
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin;
 
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
@@ -1036,6 +1057,7 @@ DROP FUNCTION IF EXISTS foo3_2c2;
 DROP FUNCTION IF EXISTS foo3_2d1;
 DROP FUNCTION IF EXISTS foo3_2d2;
 DROP FUNCTION IF EXISTS foo3_2e1;
+DROP FUNCTION IF EXISTS foo3_2e2;
 DROP FUNCTION IF EXISTS foo3_3a;
 DROP FUNCTION IF EXISTS foo3_3at;
 DROP FUNCTION IF EXISTS foo3_14a;

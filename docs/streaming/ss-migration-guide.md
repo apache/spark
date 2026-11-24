@@ -25,6 +25,19 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join
+  can retain watermarked timestamp columns even when they are not selected. This applies when
+  the optimizer sees no unexpanded CTEs, the join condition contains only equality keys after
+  predicate pushdown, and each input has at most one watermarked column, which must be a
+  timestamp. Eligible joins use the timestamps to filter late input rows and store them in join
+  state. Checkpoints from earlier Spark versions keep their previous behavior.
+  To keep the previous behavior for a new query, set
+  `spark.sql.streaming.join.preserveEventTimeColumns.enabled` to `false` before starting it.
+  On restart, editing the join condition or a filter that compares the two inputs can change
+  whether the join qualifies and which columns it stores. An incompatible schema can fail
+  with `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE` or
+  `STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED`.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
@@ -37,6 +50,51 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `STREAMING_FILE_SINK_PARTITIONING_MISMATCH`. As a result, such existing queries fail to restart.
   To recover, write to a new table location with a new checkpoint location, or rewrite the
   committed files with the partition columns of the table.
+
+- Since Spark 4.4, a column derived from a typed Scala UDF with a primitive parameter is nullable
+  when the input of the parameter can be null, as the UDF returns NULL for a NULL input.
+  Previously, some of these columns, for example the output of a generator such as `explode` over
+  an array of the UDF results, were non-nullable. As a result, an existing query started before
+  Spark 4.3 that keeps such a column in its state, for example as a grouping key of a streaming
+  aggregation, fails to restart with `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new
+  checkpoint location, or set `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note
+  that the state of such a query can hold wrong keys, such as `-1` or `0`, for NULL inputs. The
+  same holds for a query started on Spark 4.3 or later, which restarts and then puts new NULL
+  inputs under a separate NULL key. To drop such keys, use a new checkpoint location.
+
+- Since Spark 4.4, a column that `unpivot` (or `melt`) or `groupingSets` of the Dataset API
+  computes from a column that an outer join makes nullable, for example the value column of
+  `unpivot`, is nullable. Previously, such a column was non-nullable and returned a wrong value,
+  such as `-1` or `0`, instead of NULL. As a result, an existing query started before Spark 4.3
+  that keeps such a column in its state, for example as a grouping key of a streaming aggregation,
+  fails to restart with `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new checkpoint
+  location, or set `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the
+  state of such a query can hold the wrong keys. The same holds for a query started on Spark 4.3 or
+  later, which restarts and then puts new NULL values under a separate NULL key. To drop such keys,
+  use a new checkpoint location.
+
+- Since Spark 4.4, a struct field, an array element, or a map value that `unpivot` (or `melt`),
+  `rollup`, `cube`, or `groupingSets` of the Dataset API computes from a column that an outer join
+  makes nullable, for example the field of a struct value of `unpivot`, is nullable. Previously,
+  it was non-nullable and returned a wrong value, such as `0`, instead of NULL. As a result, an
+  existing query started before Spark 4.3 that keeps such a struct, array, or map in its state, for
+  example as a grouping key of a streaming aggregation, fails to restart with
+  `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new checkpoint location, or set
+  `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the state of such a query
+  can hold the wrong keys.
+
+- Since Spark 4.4, the output column of a generator such as `explode` in the Dataset API, or a
+  struct field or an array element in it, is nullable when the input of the generator is computed
+  from a column that an outer join makes nullable, for example `explode(array(right("b")))` or
+  `explode(array(struct(right("b").as("x"))))` after a left outer join with `right`. Previously,
+  it was non-nullable and returned a wrong value, such as `-1` or `0`, instead of NULL. As a
+  result, an existing query started before Spark 4.3 that keeps such a value in its state, for
+  example as a grouping key of a streaming aggregation, fails to restart with
+  `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new checkpoint location, or set
+  `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note that the state of such a
+  query can hold the wrong keys. The same holds for a query started on Spark 4.3 or later, which
+  restarts and then puts new NULL values under a separate NULL key. To drop such keys, use a new
+  checkpoint location.
 
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
