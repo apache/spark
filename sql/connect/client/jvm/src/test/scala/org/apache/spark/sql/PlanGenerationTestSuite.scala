@@ -1406,10 +1406,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.sqrt("b")
   }
 
-  functionTest("try_abs") {
-    fn.try_abs(fn.col("a"))
-  }
-
   functionTest("try_add") {
     fn.try_add(fn.col("a"), fn.col("a"))
   }
@@ -1424,10 +1420,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("try_multiply") {
     fn.try_multiply(fn.col("a"), fn.col("a"))
-  }
-
-  functionTest("try_negative") {
-    fn.try_negative(fn.col("a"))
   }
 
   functionTest("try_subtract") {

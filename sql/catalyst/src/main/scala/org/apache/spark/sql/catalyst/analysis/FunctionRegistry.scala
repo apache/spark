@@ -515,8 +515,6 @@ object FunctionRegistry {
     expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
-    expression[TryAbs]("try_abs"),
-    expression[TryNegative]("try_negative"),
     expression[Unhex]("unhex")
   )
 
