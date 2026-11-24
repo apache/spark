@@ -416,6 +416,74 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-61871: CBO estimates an equi-join of CHAR/VARCHAR keys of different types") {
+    // Without first-class CHAR/VARCHAR types the comparison pads the shorter of two CHAR keys
+    // with rpad, and with read-side padding off pads both, while other keys are compared as they
+    // are. As first-class types it casts the keys to their common type. Each pair joins
+    // 1000 x 1000 rows with 10 values on each side.
+    val paddingOff = Seq(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false")
+    val modes = Seq(Seq.empty[(String, String)], paddingOff) ++
+      firstClassCharVarcharConfs.map(c => Seq(c.key -> "true"))
+    val pairs =
+      Seq("CHAR(5)" -> "CHAR(10)", "VARCHAR(5)" -> "VARCHAR(10)", "CHAR(5)" -> "VARCHAR(5)")
+    for (modeConfs <- modes; (leftType, rightType) <- pairs) {
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> "true") ++ modeConfs: _*) {
+        val (left, right) = ("char_varchar_join_left", "char_varchar_join_right")
+        withTable(left, right) {
+          sql(s"CREATE TABLE $left(a $leftType) USING parquet")
+          sql(s"CREATE TABLE $right(b $rightType) USING parquet")
+          Seq(left, right).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          sql(s"ANALYZE TABLE $left COMPUTE STATISTICS FOR COLUMNS a")
+          sql(s"ANALYZE TABLE $right COMPUTE STATISTICS FOR COLUMNS b")
+          Seq(s"$left JOIN $right ON a = b", s"$right JOIN $left ON b = a").foreach { join =>
+            checkRows(s"SELECT * FROM $join", 100000, s"$modeConfs, $leftType, $rightType") {
+              case j: Join => j
+            }
+          }
+          // As first-class types a union of VARCHAR columns of different lengths casts the
+          // shorter one. A union of CHAR columns of different types is rejected then.
+          if (leftType.startsWith("VARCHAR")) {
+            checkRows(s"SELECT k, count(*) FROM (SELECT a AS k FROM $left UNION ALL " +
+                s"SELECT b FROM $right) GROUP BY k", 10, s"$modeConfs, union") {
+              case g: Aggregate => g
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61871: CBO estimates CHAR predicates that a comparison pads") {
+    // A CHAR column compared with a longer literal is padded to the literal's length, and with
+    // read-side padding off to its own length as well. Both are estimated as the column.
+    Seq("true", "false").foreach { readSidePadding =>
+      withSQLConf(
+          SQLConf.CBO_ENABLED.key -> "true",
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+        val (left, right) = ("char_padded_predicate_left", "char_padded_predicate_right")
+        withTable(left, right) {
+          Seq(left, right).foreach { t =>
+            sql(s"CREATE TABLE $t(c CHAR(5)) USING parquet")
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+            sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS c")
+          }
+          val clue = s"readSideCharPadding $readSidePadding"
+          Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200, "c = '10003  '" -> 100,
+              "c IN ('10003  ', '10004')" -> 200).foreach { case (condition, expectedRows) =>
+            checkRows(s"SELECT * FROM $left WHERE $condition", expectedRows, clue) {
+              case f: Filter => f
+            }
+          }
+          checkRows(s"SELECT * FROM $left l JOIN $right r ON l.c = r.c", 100000, clue) {
+            case j: Join => j
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60830: partition pruning estimates a filter on a first-class CHAR/VARCHAR column") {
     for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {

@@ -22,7 +22,7 @@ import java.time.LocalTime
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, Cast, EqualTo, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, Cast, EqualTo, Expression, GreaterThan, Literal, StringRPad}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{DefaultValueInterval, NullValueInterval, ValueInterval}
@@ -730,6 +730,98 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       avgLen = Some(4), maxLen = Some(4)))))
     assert(innerJoinRows(intSide, stringSide, EqualTo(Cast(i, StringType), s))
       .contains(BigInt(100)))
+  }
+
+  test("SPARK-61871: join keys of CHAR/VARCHAR columns of different types use their stats") {
+    // 10 x 10 rows with 10 distinct values on each side give 10 rows from the distinct counts,
+    // and 100 rows as the cartesian product.
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0), avgLen = Some(5),
+      maxLen = Some(5))
+    def side(key: AttributeReference, read: Expression, keyStat: ColumnStat): LogicalPlan =
+      Project(Seq(Alias(read, key.name)(explicitMetadata = Some(key.metadata))),
+        StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> keyStat))))
+    def join(left: LogicalPlan, right: LogicalPlan, condition: Expression): Statistics =
+      Join(left, right, Inner, Some(condition), JoinHint.NONE).stats
+    def joinRows(left: LogicalPlan, right: LogicalPlan, condition: Expression): Option[BigInt] =
+      join(left, right, condition).rowCount
+    def rpad(plan: LogicalPlan, n: Int): Expression =
+      CharVarcharUtils.createStringRPad(plan.output.head, Literal(n))
+    def paddedSide(key: AttributeReference, keyStat: ColumnStat = stat): LogicalPlan =
+      side(key, CharVarcharUtils.addPaddingForScan(key), keyStat)
+
+    // Without first-class CHAR/VARCHAR types the shorter of two CHAR keys is padded with rpad.
+    val (c5, c10) = (paddedSide(charAttr("c5", 5)), paddedSide(charAttr("c10", 10)))
+    assert(joinRows(c5, c10, EqualTo(rpad(c5, 10), c10.output.head)).contains(BigInt(10)))
+    assert(joinRows(c10, c5, EqualTo(c10.output.head, rpad(c5, 10))).contains(BigInt(10)))
+    // Each key keeps its own lengths, which the read-side padding raises to 10 for c10.
+    val joinedStats = join(c5, c10, EqualTo(rpad(c5, 10), c10.output.head)).attributeStats
+    Seq(c5 -> 5L, c10 -> 10L).foreach { case (plan, length) =>
+      assert(joinedStats.get(plan.output.head).map(s => (s.avgLen, s.maxLen))
+        .contains((Some(length), Some(length))), plan)
+    }
+    // A VARCHAR key, or a pad other than a space, can make values equal: no estimate.
+    val v5 = paddedSide(varcharAttr("v5", 5))
+    assert(joinRows(v5, c10, EqualTo(rpad(v5, 10), c10.output.head)).contains(BigInt(100)))
+    assert(joinRows(c5, c10, EqualTo(StringRPad(c5.output.head, Literal(10), Literal("x")),
+      c10.output.head)).contains(BigInt(100)))
+    // rpad truncates longer values, so a key is estimated as its column only if the stats show
+    // that the values fit: not with a longer maximum length, or none. A column without non-null
+    // values matches no rows.
+    Seq(
+      stat.copy(maxLen = Some(15)) -> 100,
+      stat.copy(maxLen = None) -> 100,
+      stat.copy(distinctCount = Some(0), nullCount = Some(10), avgLen = Some(20),
+        maxLen = Some(20)) -> 0).foreach { case (keyStat, expectedRows) =>
+      val c = paddedSide(charAttr("c5", 5), keyStat)
+      assert(joinRows(c, c10, EqualTo(rpad(c, 10), c10.output.head))
+        .contains(BigInt(expectedRows)), keyStat)
+    }
+    // Stats can be stale, so a key is not estimated as its column through an rpad to a length
+    // below the CHAR length either, even if the stats show values that fit: a CHAR(10) column
+    // read without padding, with values of 5 characters.
+    val raw10 = charAttr("c10", 10)
+    val rawSide = StatsTestPlan(Seq(raw10), 10, AttributeMap(Seq(raw10 -> stat)))
+    assert(joinRows(rawSide, c5, EqualTo(rpad(rawSide, 5), c5.output.head))
+      .contains(BigInt(100)))
+    // The uniqueness of a side does not carry over, as rpad can make values equal that the stats
+    // do not show: 10 x 1000 rows against a side without column stats.
+    val grouped = Aggregate(c5.output, c5.output, c5)
+    val noColumnStats = StatsTestPlan(Seq(c10.output.head), 1000, AttributeMap(Nil))
+    assert(joinRows(grouped, noColumnStats, EqualTo(rpad(grouped, 10),
+      noColumnStats.output.head)).contains(BigInt(10000)))
+
+    // As first-class types, a comparison casts one key, or both, to their common type.
+    val rawChar10 = raw10.withDataType(CharType(10))
+    val rawCharSide = StatsTestPlan(Seq(rawChar10), 10, AttributeMap(Seq(rawChar10 -> stat)))
+    Seq(true, false).foreach { standardSemantics =>
+      def firstClassSide(key: AttributeReference): LogicalPlan =
+        side(key, firstClassRead(key, standardSemantics), stat)
+      val (fc5, fc10) = (firstClassSide(charAttr("c5", 5)), firstClassSide(charAttr("c10", 10)))
+      val (fv5, fv10) =
+        (firstClassSide(varcharAttr("v5", 5)), firstClassSide(varcharAttr("v10", 10)))
+      Seq(
+        (fc5, CharType(10), fc10) -> 10,
+        (fv5, VarcharType(10), fv10) -> 10,
+        (fc5, VarcharType(5), fv5) -> 10,
+        // A cast to a shorter type can make values equal, also where stale stats show values
+        // that fit: VARCHAR(10), and CHAR(10) read without padding. So can another collation.
+        (fv10, VarcharType(5), fv5) -> 100,
+        (rawCharSide, CharType(5), fc5) -> 100,
+        (rawCharSide, VarcharType(5), fv5) -> 100,
+        (fc5, CharType(10, "UTF8_LCASE"), fc10) -> 100,
+        (fc5, VarcharType(10, "UTF8_LCASE"), fv10) -> 100,
+        (fv5, VarcharType(10, "UTF8_LCASE"), fv10) -> 100).foreach {
+        case ((cast, to, other), expectedRows) =>
+          val key = Cast(cast.output.head, to)
+          assert(joinRows(cast, other, EqualTo(key, other.output.head))
+            .contains(BigInt(expectedRows)), s"$key, standard semantics $standardSemantics")
+          assert(joinRows(other, cast, EqualTo(other.output.head, key))
+            .contains(BigInt(expectedRows)), s"$key, standard semantics $standardSemantics")
+      }
+      // CHAR(10) and VARCHAR(5) are both cast to VARCHAR(10).
+      assert(joinRows(fc10, fv5, EqualTo(Cast(fc10.output.head, VarcharType(10)),
+        Cast(fv5.output.head, VarcharType(10)))).contains(BigInt(10)), standardSemantics)
+    }
   }
 
   test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {

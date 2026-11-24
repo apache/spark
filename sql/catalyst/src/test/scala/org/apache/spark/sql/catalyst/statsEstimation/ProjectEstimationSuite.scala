@@ -283,6 +283,47 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     assert(aliasStat(intChild, Cast(i, StringType)).isEmpty)
   }
 
+  test("SPARK-61871: column stats survive the padding and widening of CHAR/VARCHAR values") {
+    // E.g. a union of VARCHAR columns of different lengths, or a user-written rpad. Short values,
+    // so that the padding raises the lengths.
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(3), maxLen = Some(4))
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    def aliasStat(column: AttributeReference, columnStat: ColumnStat)(
+        e: Expression): Option[ColumnStat] = {
+      val child = StatsTestPlan(Seq(column), 1000, AttributeMap(Seq(column -> columnStat)))
+      val proj = Project(Seq(Alias(e, "k")()), child)
+      proj.stats.attributeStats.get(proj.output.head)
+    }
+    def lengths(n: Long): ColumnStat = stat.copy(avgLen = Some(n), maxLen = Some(n))
+
+    // rpad of a CHAR(5) column to 10.
+    val c = charAttr("c", 5)
+    val padded = CharVarcharUtils.createStringRPad(c, Literal(10))
+    assert(aliasStat(c, stat)(padded).contains(lengths(10)))
+    // rpad truncates longer values, so the stats must show values that fit.
+    assert(aliasStat(c, stat.copy(maxLen = Some(15)))(padded).isEmpty)
+    assert(aliasStat(c, stat.copy(maxLen = None))(padded).isEmpty)
+    // An all-null column has no values to pad or truncate.
+    assert(aliasStat(c, nullStat)(padded).contains(nullStat))
+
+    // As first-class types: a cast to CHAR pads, a cast to VARCHAR keeps the lengths of the read.
+    Seq(true, false).foreach { standardSemantics =>
+      val read = firstClassRead(c, standardSemantics)
+      assert(aliasStat(c, stat)(Cast(read, CharType(10))).contains(lengths(10)), read)
+      assert(aliasStat(c, stat)(Cast(read, VarcharType(10))).contains(lengths(5)), read)
+      assert(aliasStat(c, stat)(Cast(read, CharType(10, "UTF8_LCASE"))).isEmpty, read)
+      val v = varcharAttr("v", 10)
+      val vRead = firstClassRead(v, standardSemantics)
+      assert(aliasStat(v, stat)(Cast(vRead, VarcharType(20))).contains(stat), vRead)
+      assert(aliasStat(v, stat.copy(maxLen = Some(25)))(Cast(vRead, VarcharType(20))).isEmpty,
+        vRead)
+      // A cast to a shorter type can truncate, also where stale stats show values that fit.
+      assert(aliasStat(v, stat)(Cast(vRead, VarcharType(5))).isEmpty, vRead)
+    }
+  }
+
   private def checkProjectStats(
       child: LogicalPlan,
       projectAttrMap: AttributeMap[ColumnStat],

@@ -59,16 +59,37 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case ExtractAllEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
-      // A key cast to a STRING of its own collation is estimated as the key itself.
+      // A key cast to a STRING of its own collation is unique where the key is. A key that a
+      // comparison pads or widens is estimated as the column it reads (see `readColumn`), but is
+      // not unique where the column is.
       val strippedLeftKeys = leftKeys.map(CharVarcharUtils.stripCastToPlainString)
       val strippedRightKeys = rightKeys.map(CharVarcharUtils.stripCastToPlainString)
-      val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)
+      def keyColumns(keys: Seq[Expression], stripped: Seq[Expression], stats: Statistics) =
+        keys.zip(stripped).map { case (key, s) =>
+          readColumn(key, stats.attributeStats).map(_._1).getOrElse(s)
+        }
+      val leftKeyColumns = keyColumns(leftKeys, strippedLeftKeys, leftStats)
+      val rightKeyColumns = keyColumns(rightKeys, strippedRightKeys, rightStats)
+      val joinKeyPairs = extractJoinKeysWithColStats(leftKeyColumns, rightKeyColumns)
       val leftSideUniqueness =
         left.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedLeftKeys)))
       val rightSideUniqueness =
         right.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedRightKeys)))
-      val (numInnerJoinedRows, keyStatsAfterJoin) =
+      val (numInnerJoinedRows, joinedKeyStats) =
         computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
+      // The columns of a pair of keys padded or widened differently can hold values of different
+      // lengths, so each keeps its own lengths.
+      val widened = strippedLeftKeys.indices.collect {
+        case i if !(leftKeyColumns(i) eq strippedLeftKeys(i)) ||
+            !(rightKeyColumns(i) eq strippedRightKeys(i)) =>
+          Seq(leftKeyColumns(i), rightKeyColumns(i))
+      }.flatten
+      val keyStatsAfterJoin = AttributeMap(joinedKeyStats.toSeq.map {
+        case (attr, stat) if widened.exists(_.semanticEquals(attr)) =>
+          val own = (leftStats.attributeStats ++ rightStats.attributeStats)(attr)
+          attr -> stat.copy(avgLen = own.avgLen, maxLen = own.maxLen)
+        case other => other
+      })
 
       // 2. Estimate the number of output rows
       val leftRows = leftStats.rowCount.get
@@ -362,8 +383,6 @@ case class JoinEstimation(join: Join) extends Logging {
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
     leftKeys.zip(rightKeys).collect {
       // Currently we don't deal with equal joins like key1 = key2 + 5.
-      // TODO(SPARK-61871): nor with keys of CHAR or VARCHAR columns of different types, which are
-      // wrapped in a cast to a CHAR or VARCHAR type, or in rpad for CHAR keys of different lengths.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)

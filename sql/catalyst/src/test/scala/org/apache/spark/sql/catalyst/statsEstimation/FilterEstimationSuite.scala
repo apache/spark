@@ -1045,6 +1045,55 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       .contains(BigInt(10)))
   }
 
+  test("SPARK-61871: predicates on a CHAR/VARCHAR column that a comparison pads or widens") {
+    // colStatString has 10 distinct values of 2 characters and no nulls over 10 rows.
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
+    val c2 = charAttr("cstring", 2).withExprId(attrString.exprId)
+    // A predicate pushed below the read-side Project compares the padding of a column that has
+    // lost its CHAR metadata.
+    val padded = CharVarcharUtils.addPaddingForScan(c2).transform {
+      case _: Attribute => attrString
+    }
+    assert(padded.references.toSeq == Seq(attrString) && padded != attrString, padded)
+    // Without first-class CHAR/VARCHAR types a CHAR column compared with a longer literal is
+    // padded to the literal's length, and with read-side padding off to its own length as well.
+    val conditions = for {
+      column <- Seq(c2, padded)
+      condition <- Seq(
+        EqualTo(CharVarcharUtils.createStringRPad(column, Literal(3)), Literal("A0 ")) -> 1,
+        EqualTo(Literal("A0 "), CharVarcharUtils.createStringRPad(column, Literal(3))) -> 1,
+        In(CharVarcharUtils.createStringRPad(column, Literal(3)),
+          Seq(Literal("A0 "), Literal("A1 "))) -> 2,
+        EqualTo(CharVarcharUtils.createStringRPad(column, Literal(2)), Literal("A0")) -> 1)
+    } yield condition
+    conditions.foreach { case (condition, expectedRows) =>
+      assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)), condition)
+    }
+    // rpad truncates longer values, so all 10 rows are kept unless the stats show values that
+    // fit.
+    Seq(Some(4L), None).foreach { maxLen =>
+      val longChild = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(maxLen = maxLen))))
+      conditions.foreach { case (condition, _) =>
+        assert(Filter(condition, longChild).stats.rowCount.contains(BigInt(10)), condition)
+      }
+    }
+    // As first-class types a comparison can cast the column to a VARCHAR type at least as long,
+    // which is estimated as the column only for the same collation.
+    for {
+      column <- Seq(charAttr("cstring", 2), varcharAttr("cstring", 2))
+      standardSemantics <- Seq(true, false)
+    } {
+      val read = firstClassRead(column.withExprId(attrString.exprId), standardSemantics)
+      Seq(
+        EqualTo(Cast(read, VarcharType(3)), Literal("A0")) -> 1,
+        EqualTo(Cast(read, VarcharType(3, "UTF8_LCASE")), Literal("A0")) -> 10).foreach {
+        case (condition, expectedRows) =>
+          assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)), condition)
+      }
+    }
+  }
+
   test("SPARK-60810: equality on a string or binary column with a reported histogram") {
     // DSv2 connectors can report a histogram for any type. Only numeric-like types have
     // equi-height histograms, so string and binary columns fall back to their distinct count.
