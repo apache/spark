@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, Explode, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1151,6 +1151,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq(rightTime), joinOf(Seq(leftTime), Seq(rightTime), leftTime > rightTime)), Append)
   }
 
+  // The check covers append mode only; this plan is rejected in append mode.
+  test("join output watermark: key-only join before an aggregation outside append mode") {
+    Seq(Update, Complete).foreach { mode =>
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        Aggregate(Seq(leftTime), Seq(leftTime), keyOnlyJoin), mode)
+    }
+  }
+
   // Only the right input has no cutoff. A union maps the traced columns by position into each of
   // its inputs that holds the join, and a later join traces each of its inputs.
   private val oneSidedJoin = joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime),
@@ -1176,6 +1184,26 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         "the state of the right input of a stream-stream join has no cutoff"))
     }
   }
+  // The trace follows only the left time here, yet the check rejects, naming the right input:
+  // the path passes another stateful operator, or a node that creates the traced column, and for
+  // such a path every input of the join counts. The deduplication alone traces to the left input.
+  test("join output watermark: one-sided range join through a path the trace cannot follow") {
+    val narrowed = oneSidedJoin.select(leftKey, leftTime)
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+      Deduplicate(Seq(leftTime), narrowed), Append)
+    val generatedTime = AttributeReference("gt", TimestampType, metadata = watermarkMetadata)()
+    Seq(Aggregate(Seq(leftTime), Seq(leftTime), Deduplicate(Seq(leftTime), narrowed)),
+      Aggregate(Seq(generatedTime), Seq(generatedTime), Generate(
+        Explode(CreateArray(Seq(leftTime))), Nil, outer = false, None, Seq(generatedTime),
+        narrowed))
+    ).foreach { plan =>
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append))
+      assert(e.getMessage.contains(
+        "the state of the right input of a stream-stream join has no cutoff"))
+    }
+  }
+
 
   private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =
     TransformWithStateInPySpark(Literal(1), 1, Seq(att), Append, timeMode,
