@@ -1398,6 +1398,14 @@ class FilterPushdownSuite extends PlanTest {
         .where(Rand(0) > 0.1)
       comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer.analyze)
     }
+    // So it does through a projection between the joins, here one that renames `k`, below which
+    // `PushPredicateThroughNonJoin` would push it on into the lower join.
+    val projected = agg.join(b).select($"k".as("kk"), $"bk", $"bx")
+    comparePlans(
+      PushPredicateThroughJoin(projected.join(c, LeftOuter, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1 && $"kk" === $"bk").analyze),
+      projected.where($"kk" === $"bk").join(c, LeftOuter, Some($"bx" === $"cx"))
+        .where(Rand(0) > 0.1).analyze)
   }
 
   test("joins: push to one side after transformCondition") {

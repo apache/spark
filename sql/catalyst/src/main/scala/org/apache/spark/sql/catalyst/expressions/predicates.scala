@@ -341,11 +341,12 @@ trait PredicateHelper extends AliasHelper with Logging {
    * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
-   * dropped. A conjunct over more than one of `plans`, or of the inputs of a join among them, is
-   * only evaluated where they are joined, so it is checked against the columns that can fail there
-   * (see `atJoin` of `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push
-   * the parts of a disjunction that read one side below the join. The conjuncts that may not move
-   * are returned in their written order.
+   * dropped. A conjunct over more than one of `plans`, or of the inputs of a join below one of
+   * them, also through the projections between the joins, is only evaluated where they are
+   * joined, so it is checked against the columns that can fail there (see `atJoin` of
+   * `failableOutput`), except that `PushExtraPredicateThroughJoin` can still push the parts of a
+   * disjunction that read one side below the join. The conjuncts that may not move are returned in
+   * their written order.
    *
    * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
    * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
@@ -363,23 +364,30 @@ trait PredicateHelper extends AliasHelper with Logging {
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput(_)))
     lazy val failableAtJoin =
       AttributeSet.fromAttributeSets(plans.map(failableOutput(_, atJoin = true)))
-    lazy val inputs = plans.flatMap(joinInputs)
     val (cannotFail, stayUp) = following.partition { cond =>
-      val columns = if (inputs.count(p => cond.references.exists(p.outputSet.contains)) > 1) {
-        failableAtJoin
-      } else {
-        failable
-      }
+      val inputs = plans.flatMap(p => joinInputsRead(cond.references.intersect(p.outputSet), p))
+      val columns = if (inputs.size > 1) failableAtJoin else failable
       ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(columns.contains)
     }
     (leading ++ cannotFail, stayUp)
   }
 
-  /** The inputs of the joins at the top of `plan`, or `plan` itself if it is not a join. */
-  private def joinInputs(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case j: Join => joinInputs(j.left) ++ joinInputs(j.right)
-    case _ => Seq(plan)
-  }
+  /**
+   * The inputs of the joins at the top of `plan` that `columns`, output columns of `plan`, are
+   * read from, looking through the projections between the joins, or `plan` itself if it is not a
+   * join or a projection.
+   */
+  private def joinInputsRead(columns: AttributeSet, plan: LogicalPlan): Seq[LogicalPlan] =
+    plan match {
+      case _ if columns.isEmpty => Nil
+      case j: Join =>
+        joinInputsRead(columns.intersect(j.left.outputSet), j.left) ++
+          joinInputsRead(columns.intersect(j.right.outputSet), j.right)
+      case Project(projectList, child) =>
+        joinInputsRead(AttributeSet.fromAttributeSets(
+          projectList.filter(e => columns.contains(e.toAttribute)).map(_.references)), child)
+      case _ => Seq(plan)
+    }
 
   /**
    * Returns true if `condition`, the condition of a join or a filter whose inputs are `plans`, has
