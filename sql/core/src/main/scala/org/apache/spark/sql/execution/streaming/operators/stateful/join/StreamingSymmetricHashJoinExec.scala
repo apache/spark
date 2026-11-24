@@ -749,8 +749,10 @@ case class StreamingSymmetricHashJoinExec(
 
     // When the default mode picked the column that the value predicate tests because the join
     // condition bounds it, a row with a NULL in it can never match, and `column <= cutoff` never
-    // holds for it. The legacy mode, and the default mode for an input bounded only through a
-    // column cast to TIMESTAMP, test the event time, which the condition need not bound.
+    // holds for it. The legacy mode, the default mode for an input bounded only through a column
+    // cast to TIMESTAMP, and a checkpoint written without the join output watermark check for an
+    // input that the default mode would evict by another column test the event time, which the
+    // condition need not bound.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _, true)) =>
         Predicate.create(IsNull(column), inputAttributes).eval _

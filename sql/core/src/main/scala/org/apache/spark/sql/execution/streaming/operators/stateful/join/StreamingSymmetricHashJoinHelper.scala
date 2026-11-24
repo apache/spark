@@ -75,8 +75,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * Predicate for watermark on state values. See [[JoinStateKeyWatermarkPredicate]] for
    * the semantics of `stateWatermark` and `prevStateWatermark`. `conditionBoundsColumn` is true
    * only when the default mode picked the column that `expr` tests because the join condition
-   * bounds it, so that a row with a NULL in it can never match. The legacy mode and the fallback
-   * for an input bounded only through a column cast to TIMESTAMP leave it false.
+   * bounds it, so that a row with a NULL in it can never match. The legacy mode, the fallback for
+   * an input bounded only through a column cast to TIMESTAMP, and a checkpoint written without the
+   * join output watermark check for an input that the default mode would evict by another column
+   * leave it false and test the event time.
    */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
