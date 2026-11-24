@@ -2677,12 +2677,13 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       }
       (stayUp ++ rest).reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
 
-    // Removes an `If(p, x, false)` of the case above once `x` can not fail, e.g. after
-    // `ConstantFolding`, or once the conjuncts before it make `p` TRUE where they are TRUE and can
-    // not be NULL, e.g. after `InferFiltersFromConstraints` adds `IS NOT NULL` checks for the
+    // Removes an `If(p, x, false)` once `x` can not fail, e.g. after `ConstantFolding`, or, for
+    // one of the case above, once the conjuncts before it make `p` TRUE where they are TRUE and
+    // can not be NULL, e.g. after `InferFiltersFromConstraints` adds `IS NOT NULL` checks for the
     // columns of a comparison, also when the `If` is in an inner join condition. As a filter or a
     // join condition drops a row on which it is NULL, `p AND x` then keeps the same rows, and
-    // evaluates `x` only where it can.
+    // evaluates `x` only where it can. A user's `IF` is kept in that case, as a later rule may
+    // move `x` ahead of `p`, e.g. to one side of a join.
     case GuardsRemoved(plan) => plan
   }
 
@@ -2752,8 +2753,9 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     g
   }
 
-  // An equality whose sides read the two inputs of a join that `plan` has below projections and
-  // filters, or below the input that both sides read, as a join key does.
+  // An equality whose sides read the two inputs of a join that `plan` has below the operators
+  // that a filter is pushed through (see `PushPredicateThroughNonJoin`), or below the input that
+  // both sides read, as a join key does.
   private def isPossibleJoinKey(cond: Expression, plan: LogicalPlan): Boolean = cond match {
     case EqualTo(l, r) => betweenJoinInputs(l, r, plan)
     case EqualNullSafe(l, r) => betweenJoinInputs(l, r, plan)
@@ -2766,6 +2768,10 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
         val aliases = getAliasMap(projectList)
         betweenJoinInputs(replaceAlias(l, aliases), replaceAlias(r, aliases), child)
       case Filter(_, child) => betweenJoinInputs(l, r, child)
+      case u: UnaryNode
+          if (u.isInstanceOf[Aggregate] || PushPredicateThroughNonJoin.canPushThrough(u)) &&
+            (l.references ++ r.references).subsetOf(u.child.outputSet) =>
+        betweenJoinInputs(l, r, u.child)
       case Join(left, right, _, _, _) if l.references.nonEmpty && r.references.nonEmpty =>
         def within(e: Expression, p: LogicalPlan) = e.references.subsetOf(p.outputSet)
         (within(l, left) && within(r, right)) || (within(l, right) && within(r, left)) ||
@@ -2794,8 +2800,8 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     // The conjuncts of `x`, whose `If` is removed after `before`. An `If(y, x2, false)` that
     // `nest` put in it is removed too where `before` and `y` can not be NULL.
     def unguarded(before: Seq[Expression], x: Expression): Seq[Expression] = x match {
-      case If(y, x2, Literal.FalseLiteral)
-          if !canBeNull((before ++ splitConjunctivePredicates(y)).reduce(And), notNull) =>
+      case g @ If(y, x2, Literal.FalseLiteral) if isFilterGuard(g) &&
+          !canBeNull((before ++ splitConjunctivePredicates(y)).reduce(And), notNull) =>
         splitConjunctivePredicates(y) ++ unguarded(before ++ splitConjunctivePredicates(y), x2)
       case _ => splitConjunctivePredicates(x)
     }
@@ -2805,7 +2811,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
           if splitConjunctivePredicates(x).forall(!canFail(_, failable)) =>
         before ++ (ExpressionSet(splitConjunctivePredicates(p)) -- ExpressionSet(before)).toSeq ++
           splitConjunctivePredicates(x)
-      case (before, If(p, x, Literal.FalseLiteral)) if before.nonEmpty &&
+      case (before, g @ If(p, x, Literal.FalseLiteral)) if isFilterGuard(g) && before.nonEmpty &&
           splitConjunctivePredicates(p).forall(ExpressionSet(before).contains) &&
           !canBeNull(before.reduce(And), notNull) =>
         before ++ unguarded(before, x)

@@ -76,6 +76,13 @@ class FilterPushdownSuite extends PlanTest {
   // for every row.
   private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
 
+  // `If(p, x, false)` as `CombineFilters` makes it, marked as a filter guard.
+  private def filterGuard(p: Expression, x: Expression): Expression = {
+    val g = If(p, x, false)
+    g.setTagValue(PredicateHelper.FILTER_GUARD, ())
+    g
+  }
+
   // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
@@ -250,10 +257,13 @@ class FilterPushdownSuite extends PlanTest {
       Optimize.execute(testRelation.where(notNullCoalesce).where(divide).analyze),
       testRelation.where(notNullCoalesce && If(notNullCoalesce, divide, false)).analyze)
     comparePlans(
-      Optimize.execute(
-        testRelation.where($"c".isNotNull && $"c" === 1 && If($"c" === 1, divide, false)).analyze),
+      Optimize.execute(testRelation.where(
+        $"c".isNotNull && $"c" === 1 && filterGuard($"c" === 1, divide)).analyze),
       combined)
-    // An `If` over conjuncts that can not fail is removed too.
+    // A user's `IF` stays, as a later rule may move the division ahead of `c = 1`.
+    val userIf = testRelation.where($"c".isNotNull && $"c" === 1 && If($"c" === 1, divide, false))
+    comparePlans(Optimize.execute(userIf.analyze), userIf.analyze)
+    // An `If` over conjuncts that can not fail is removed too, also a user's `IF`.
     comparePlans(
       Optimize.execute(testRelation.where($"c" === 1 && If($"c" === 1, $"a" === 1, false)).analyze),
       testRelation.where($"c" === 1 && $"a" === 1).analyze)
@@ -305,6 +315,15 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(
       CombineFilters(aliased.where($"c" > $"d").where(aliasKey).analyze),
       aliased.where($"c" > $"d" && aliasKey).analyze)
+    // Also through a sort, which the filter is pushed through, but not through a limit.
+    val sorted = joined.orderBy($"a".asc)
+    comparePlans(
+      CombineFilters(sorted.where($"c" > $"d").where(key).analyze),
+      sorted.where($"c" > $"d" && key).analyze)
+    val limited = joined.limit(1)
+    comparePlans(
+      CombineFilters(limited.where($"c" > $"d").where(key).analyze),
+      limited.where($"c" > $"d" && If($"c" > $"d", key, false)).analyze)
     val oneSide = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI)) === $"b"
     comparePlans(
       CombineFilters(joined.where($"c" > $"d").where(oneSide).analyze),
@@ -331,7 +350,8 @@ class FilterPushdownSuite extends PlanTest {
     val Seq(f2, f3, f4) = Seq(canFail($"a", $"b"), canFail($"b", $"c"), canFail($"c", $"a"))
     // The top two filters and the bottom two are combined first, and then the top pair goes
     // into the `If` of the bottom one, after `f2`, so `c = 1` is not repeated.
-    val nested = $"c" === 1 && If($"c" === 1, If(f2, f3 && If(f3, f4, false), false), false)
+    val nested =
+      $"c" === 1 && filterGuard($"c" === 1, filterGuard(f2, f3 && filterGuard(f3, f4)))
     comparePlans(
       Optimize.execute(
         testRelation.where($"c" === 1).where(f2).where(f3).where(f4).analyze),
@@ -353,17 +373,23 @@ class FilterPushdownSuite extends PlanTest {
       Optimize.execute(testRelation.where($"c".isNotNull && nested).analyze),
       testRelation.where($"c".isNotNull && $"c" === 1 &&
         If(f2, f3 && If(f3, f4, false), false)).analyze)
+    // A user's `IF` in it stays.
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(notNull && $"c" === 1 && filterGuard($"c" === 1, If(f2, f3, false)))
+          .analyze),
+      testRelation.where(notNull && $"c" === 1 && If(f2, f3, false)).analyze)
     // Also with the checks below a projection, or in the inputs of an inner join whose condition
     // has an `If`.
     val projected = testRelation.where(notNull).select($"a", $"b", $"c")
     comparePlans(
-      CombineFilters(projected.where($"c" === 1 && If($"c" === 1, f2, false)).analyze),
+      CombineFilters(projected.where($"c" === 1 && filterGuard($"c" === 1, f2)).analyze),
       projected.where($"c" === 1 && f2).analyze)
     val left = testRelation.where($"c".isNotNull)
     val right = testRelation1.where($"d".isNotNull)
     comparePlans(
       CombineFilters(left.join(right,
-        condition = Some($"c" === $"d" && If($"c" === $"d", f2, false))).analyze),
+        condition = Some($"c" === $"d" && filterGuard($"c" === $"d", f2))).analyze),
       left.join(right, condition = Some($"c" === $"d" && f2)).analyze)
   }
 

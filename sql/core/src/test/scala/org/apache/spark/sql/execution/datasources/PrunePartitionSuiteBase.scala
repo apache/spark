@@ -85,11 +85,15 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
         sql("INSERT INTO t PARTITION (p = '2') VALUES (NULL, 0)")
         sql("INSERT INTO t PARTITION (p = '3') VALUES (5, NULL)")
         // `i > 1 OR j > 2` can be NULL, so the cast, which can fail, is combined into the filter
-        // below under an `If` of it, whose parts are still partition filters.
-        val df =
-          sql("SELECT * FROM (SELECT * FROM t WHERE i > 1 OR j > 2) WHERE CAST(p AS INT) = 1")
-        assert(getScanExecPartitionSize(df.queryExecution.sparkPlan) == 1)
-        checkAnswer(df, Row(2, 3, "1"))
+        // below under an `If` of it, whose parts are still partition filters. Also after
+        // `ReplaceNullWithFalseInPredicate` gives the CASE WHEN an ELSE FALSE.
+        Seq("CAST(p AS INT) = 1", "CASE WHEN CAST(p AS INT) = 1 THEN true END").foreach { cond =>
+          withClue(cond) {
+            val df = sql(s"SELECT * FROM (SELECT * FROM t WHERE i > 1 OR j > 2) WHERE $cond")
+            assert(getScanExecPartitionSize(df.queryExecution.sparkPlan) == 1)
+            checkAnswer(df, Row(2, 3, "1"))
+          }
+        }
       }
     }
   }
