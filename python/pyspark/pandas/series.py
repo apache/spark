@@ -4237,12 +4237,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * top: smallest rank if ascending
             * bottom: largest rank if ascending
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         pct : bool, default False
             Whether or not to display the returned rankings in percentile form.
 
-            .. versionadded:: 4.4.0
+            .. versionadded:: 5.0.0
 
         Returns
         -------

@@ -546,6 +546,20 @@ class GeneratorFunctionSuite extends SharedSparkSession {
       Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
   }
 
+  test("SPARK-62095: generator output from a column made nullable by an outer join") {
+    val left = Seq(1, 2).toDF("a")
+    val right = Seq(2).toDF("b")
+    val joined = left.join(right, left("a") === right("b"), "left_outer")
+    // `right("b")` is resolved as non-nullable, and becomes nullable after resolution
+    checkAnswer(
+      joined.select(left("a"), explode(array(right("b")))),
+      Row(1, null) :: Row(2, 2) :: Nil)
+    checkAnswer(
+      joined.select(left("a"), explode(array(struct(right("b").as("x")))).as("e"))
+        .select($"a", $"e.x"),
+      Row(1, null) :: Row(2, 2) :: Nil)
+  }
+
   test("SPARK-45171: Handle evaluated nondeterministic expression") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val df = sql("select explode(array(rand(0)))")

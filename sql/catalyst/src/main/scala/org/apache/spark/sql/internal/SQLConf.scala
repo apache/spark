@@ -651,6 +651,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableOptionalReferenceResolution")
+      .internal()
+      .doc("When true, enables resolution of optional column, field, and variable references " +
+        "(for example `col?`) in single-pass analyzer. Otherwise, resolution falls back to " +
+        "fixed-point analyzer.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -4776,6 +4787,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -5724,9 +5744,7 @@ object SQLConf {
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
-        "or a NumPy ndarray. " +
-        "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "or a NumPy ndarray.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -6698,7 +6716,7 @@ object SQLConf {
         "input relation resolves, so errors that leave it unresolved, such as a missing " +
         "table, are reported first.")
       .internal()
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -7220,10 +7238,10 @@ object SQLConf {
     buildConf("spark.sql.legacy.listAllSessionsResources")
       .internal()
       .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
-        "of every session, as before Spark 4.4, also in a session whose artifacts are isolated. " +
+        "of every session, as before Spark 4.5, also in a session whose artifacts are isolated. " +
         "When false, such a session lists those added to it and those added to the SparkContext " +
         "outside of any session.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -8779,6 +8797,33 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIONAL_REFERENCES_ENABLED =
+    buildConf("spark.sql.optionalReferences.enabled")
+      .internal()
+      .doc("When true, a `?` after an identifier of a column, field, or variable reference, or " +
+        "after a named parameter marker, makes that identifier optional: when no name matches " +
+        "the identifier, the reference evaluates to a NULL of type VOID instead of raising a " +
+        "not-found error. Ambiguous references and type errors are still raised. UPDATE, " +
+        "DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
+        "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
+        "and OPTIONS clauses of table and function definitions reject optional references.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES =
+    buildConf("spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences")
+      .internal()
+      .doc("When true (legacy behavior), the body of a SQL function that is called in a " +
+        "subquery resolves names that are neither its parameters nor its own columns as " +
+        "columns of the query around the subquery, before session variables. When false (the " +
+        "default), the body does not reference the calling query, like the body of a view.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
     buildConf("spark.sql.stableDerivedColumnAlias.enabled")
       .internal()
@@ -9576,6 +9621,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
+    buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
+      .internal()
+      .doc("When set to true, to_char restores the results of Spark 4.3 and earlier, which " +
+        "leave out the ones digit of a zero value for some format strings with no digits after " +
+        "the decimal point. For example: SELECT to_char(0, '999') returns '   ' and " +
+        "SELECT to_char(0, '999S') returns '+   '. When set to false, the ones digit is kept: " +
+        "they return '  0' and '  0+'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_XML_PARSER_ENABLED = {
     buildConf("spark.sql.legacy.useLegacyXMLParser")
       .internal()
@@ -9888,6 +9946,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
 
   override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
+
+  override def optionalReferencesEnabled: Boolean = getConf(OPTIONAL_REFERENCES_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
