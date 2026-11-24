@@ -198,6 +198,20 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql("SELECT * FROM testUDTF(1, 2)")
         assertDataFrameEqual(df, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
 
+    def test_udtf_not_null_column_with_eval_yielding_no_rows(self):
+        # SPARK-62320: eval yields no rows for some input rows of a UDTF with a NOT NULL column
+        @udtf(returnType="a: int NOT NULL")
+        class NotNullUDTF:
+            def eval(self, i: int):
+                for n in range(i):
+                    yield (n,)
+
+        self.spark.udtf.register("notNullUDTF", NotNullUDTF)
+        assertDataFrameEqual(
+            self.spark.sql("SELECT * FROM range(0, 3, 1, 1) JOIN LATERAL notNullUDTF(id)"),
+            [Row(id=1, a=0), Row(id=2, a=0), Row(id=2, a=1)],
+        )
+
     def test_udtf_with_lateral_join(self):
         class TestUDTF:
             def eval(self, a: int, b: int) -> Iterator:
