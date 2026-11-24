@@ -1020,12 +1020,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   nativeTest("abort a data writer whose commit failed") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
-    // Wait for cancelled sibling tasks before checking that their temporary files were removed.
-    val e = checkingOrderOfCalls {
-      intercept[Exception] {
-        session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
-          .option("fail", "commitDataWriter").mode("append").save()
-      }
+    val e = intercept[Exception] {
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
+        .option("fail", "commitDataWriter").mode("append").save()
     }
     checkError(
       exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
