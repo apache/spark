@@ -83,6 +83,12 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
           (projection, projectedLambda) =>
             forall.copy(argument = projection, function = projectedLambda)
         }
+      case aggregate @ ArrayAggregate(argument, _, merge: LambdaFunction, _) =>
+        projectArrayHigherOrderFunction(
+          argument, merge, numElementVariables = 1, firstElementVariable = 1) {
+          (projection, projectedMerge) =>
+            aggregate.copy(argument = projection, merge = projectedMerge)
+        }
       case filter @ ArrayFilter(argument, lambda: LambdaFunction) =>
         projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 1) {
           (projection, projectedLambda) =>
@@ -119,12 +125,15 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   private def projectArrayHigherOrderFunction(
       argument: Expression,
       lambda: LambdaFunction,
-      numElementVariables: Int)(
+      numElementVariables: Int,
+      firstElementVariable: Int = 0)(
       rebuild: (Expression, LambdaFunction) => Expression): Option[Expression] = {
     getProjection(argument).map {
       case projection @ ArrayTypeProjection(projectedElementSchema) =>
         val projectedArguments = lambda.arguments.zipWithIndex.map {
-          case (elementVar: NamedLambdaVariable, index) if index < numElementVariables =>
+          case (elementVar: NamedLambdaVariable, index)
+              if index >= firstElementVariable &&
+                index < firstElementVariable + numElementVariables =>
             elementVar.copy(dataType = projectedElementSchema)
           case (argument, _) =>
             argument
