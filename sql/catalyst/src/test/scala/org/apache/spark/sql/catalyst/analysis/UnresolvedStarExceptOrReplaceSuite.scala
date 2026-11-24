@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, St
 /**
  * Tests [[UnresolvedStarExceptOrReplace]] replacements, with and without
  * `appendMissingReplacements`, including nodes that hold several EXCEPT names. Pipe `|> SET` and
- * `|> EVAL` build one node per assignment, so SQL tests only reach the single-name case.
+ * `|> EVAL` build one node per assignment, so SQL tests only reach the single-name case. Also
+ * tests EXCEPT names without replacements that match more than one column.
  */
 class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {
 
@@ -130,12 +131,48 @@ class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {
       parameters = Map("name" -> "`x`", "referenceNames" -> "[`x`, `x`]"))
   }
 
-  test("an EXCEPT name without a replacement excludes every copy of the column it resolves to") {
-    val x = $"x".int
-    val y = $"y".string
+  test("an EXCEPT name without a replacement excludes every column that it matches") {
+    val x = $"x".int.withQualifier(Seq("t"))
+    val y = $"y".string.withQualifier(Seq("t"))
+    // A different column with the name, as in `SELECT x, y, 1 AS X`.
+    val otherX = $"X".int.withQualifier(Seq("t"))
+    // DeduplicateUnionChildOutput gives the second copy of a column in a UNION branch a new ExprId
+    // and the `__is_duplicate` tag, so name resolution finds only the first copy.
+    val unionCopy = AttributeReference(
+      "x", IntegerType, metadata = new MetadataBuilder().putNull("__is_duplicate").build())(
+      qualifier = Seq("t"))
+    for {
+      relation <- Seq(
+        LocalRelation(x, x, y),
+        LocalRelation(x, y, otherX),
+        LocalRelation(x, y, unionCopy),
+        LocalRelation(unionCopy, y, unionCopy.newInstance()))
+      exceptParts <- Seq(Seq("x"), Seq("t", "x"))
+    } {
+      val star = UnresolvedStarExceptOrReplace(
+        target = None, excepts = Seq(exceptParts), replacements = None)
+      assert(star.expand(relation, caseInsensitiveResolution) == Seq(y))
+    }
+  }
+
+  test("a qualified EXCEPT name without a replacement keeps the columns of other tables") {
+    val tx = $"x".int.withQualifier(Seq("t"))
+    val ux = $"x".int.withQualifier(Seq("u"))
     val star = UnresolvedStarExceptOrReplace(
-      target = None, excepts = Seq(Seq("x")), replacements = None)
-    assert(star.expand(LocalRelation(x, x, y), caseInsensitiveResolution) == Seq(y))
+      target = None, excepts = Seq(Seq("t", "x")), replacements = None)
+    assert(star.expand(LocalRelation(tx, ux), caseInsensitiveResolution) == Seq(ux))
+  }
+
+  test("a nested EXCEPT name without a replacement excludes the field of every matching column") {
+    val otherStructColumn = structColumn.newInstance()
+    val star = UnresolvedStarExceptOrReplace(
+      target = None, excepts = Seq(Seq("col", "i1")), replacements = None)
+    val expanded =
+      star.expand(LocalRelation(structColumn, otherStructColumn), caseInsensitiveResolution)
+    val remainingType = StructType(Seq(StructField("i2", IntegerType)))
+    assert(expanded.map(e => e.name -> e.dataType) ==
+      Seq("col" -> remainingType, "col" -> remainingType))
+    assert(expanded.map(_.references.toSeq) == Seq(Seq(structColumn), Seq(otherStructColumn)))
   }
 
   test("overlapping EXCEPT names fail the same way with and without replacements") {

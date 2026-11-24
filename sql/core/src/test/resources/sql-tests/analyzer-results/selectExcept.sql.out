@@ -234,6 +234,80 @@ Project [data#x.s2.f3 AS f3#x]
 
 
 -- !query
+SELECT * EXCEPT (id) FROM (SELECT id, name, id FROM tbl_view WHERE id = 10)
+-- !query analysis
+Project [name#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [id#x, name#x, id#x]
+      +- Filter (id#x = 10)
+         +- SubqueryAlias tbl_view
+            +- View (`tbl_view`, [id#x, name#x, data#x])
+               +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                  +- Project [id#x, name#x, data#x]
+                     +- SubqueryAlias tbl_view
+                        +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (id) FROM (SELECT id, name, id + 1 AS id FROM tbl_view WHERE id = 10)
+-- !query analysis
+Project [name#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [id#x, name#x, (id#x + 1) AS id#x]
+      +- Filter (id#x = 10)
+         +- SubqueryAlias tbl_view
+            +- View (`tbl_view`, [id#x, name#x, data#x])
+               +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                  +- Project [id#x, name#x, data#x]
+                     +- SubqueryAlias tbl_view
+                        +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (id) FROM (
+  SELECT id, name, id FROM tbl_view WHERE id = 10
+  UNION ALL
+  SELECT id, name, id FROM tbl_view WHERE id = 20)
+-- !query analysis
+Project [name#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Project [id#x, name#x, id#x AS id#x]
+      :  +- Project [id#x, name#x, id#x]
+      :     +- Filter (id#x = 10)
+      :        +- SubqueryAlias tbl_view
+      :           +- View (`tbl_view`, [id#x, name#x, data#x])
+      :              +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+      :                 +- Project [id#x, name#x, data#x]
+      :                    +- SubqueryAlias tbl_view
+      :                       +- LocalRelation [id#x, name#x, data#x]
+      +- Project [id#x, name#x, id#x AS id#x]
+         +- Project [id#x, name#x, id#x]
+            +- Filter (id#x = 20)
+               +- SubqueryAlias tbl_view
+                  +- View (`tbl_view`, [id#x, name#x, data#x])
+                     +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                        +- Project [id#x, name#x, data#x]
+                           +- SubqueryAlias tbl_view
+                              +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (data.f1) FROM (SELECT data, id, data AS data FROM tbl_view WHERE id = 10)
+-- !query analysis
+Project [named_struct(s2, data#x.s2) AS data#x, id#x, named_struct(s2, data#x.s2) AS data#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [data#x, id#x, data#x AS data#x]
+      +- Filter (id#x = 10)
+         +- SubqueryAlias tbl_view
+            +- View (`tbl_view`, [id#x, name#x, data#x])
+               +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                  +- Project [id#x, name#x, data#x]
+                     +- SubqueryAlias tbl_view
+                        +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
 SELECT * EXCEPT name FROM tbl_view
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException

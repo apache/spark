@@ -1501,29 +1501,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select * from (select x, x, x from t union all select x, x, x from t)
-|> drop x
-|> eval x = 1
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_REFERENCE",
-  "sqlState" : "42704",
-  "messageParameters" : {
-    "name" : "`x`",
-    "referenceNames" : "[`x`, `x`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 93,
-    "fragment" : "select * from (select x, x, x from t union all select x, x, x from t)\n|> drop x\n|> eval x = 1"
-  } ]
-}
-
-
--- !query
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1719,6 +1696,140 @@ select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
 Project [x#x, named_struct(middle, named_struct()) AS outer#x]
 +- Project [1 AS x#x, named_struct(middle, named_struct(inner, 2)) AS outer#x]
    +- OneRowRelation
+
+
+-- !query
+select 1 as x, 2 as y, 3 as x
+|> drop x
+-- !query analysis
+Project [y#x]
++- Project [1 AS x#x, 2 AS y#x, 3 AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+select x, y, x from t
+|> drop x
+-- !query analysis
+Project [y#x]
++- Project [x#x, y#x, x#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from (select x, y, x from t union all select x, y, x from t)
+|> drop x
+-- !query analysis
+Project [y#x]
++- Project [x#x, y#x, x#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [x#x, y#x, x#x AS x#x]
+         :  +- Project [x#x, y#x, x#x]
+         :     +- SubqueryAlias spark_catalog.default.t
+         :        +- Relation spark_catalog.default.t[x#x,y#x] csv
+         +- Project [x#x, y#x, x#x AS x#x]
+            +- Project [x#x, y#x, x#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from (select x, y, x from t union all select x, y, x from t) as u
+|> drop u.x
+-- !query analysis
+Project [y#x]
++- Project [x#x, y#x, x#x]
+   +- SubqueryAlias u
+      +- Union false, false
+         :- Project [x#x, y#x, x#x AS x#x]
+         :  +- Project [x#x, y#x, x#x]
+         :     +- SubqueryAlias spark_catalog.default.t
+         :        +- Relation spark_catalog.default.t[x#x,y#x] csv
+         +- Project [x#x, y#x, x#x AS x#x]
+            +- Project [x#x, y#x, x#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
+|> eval x = 1
+-- !query analysis
+Project [1 AS x#x]
++- Project
+   +- Project [x#x, x#x, x#x]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- Union false, false
+            :- Project [x#x, x#x AS x#x, x#x AS x#x]
+            :  +- Project [x#x, x#x, x#x]
+            :     +- SubqueryAlias spark_catalog.default.t
+            :        +- Relation spark_catalog.default.t[x#x,y#x] csv
+            +- Project [x#x, x#x AS x#x, x#x AS x#x]
+               +- Project [x#x, x#x, x#x]
+                  +- SubqueryAlias spark_catalog.default.t
+                     +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as l
+|> cross join t as r
+|> drop x
+-- !query analysis
+Project [y#x, y#x]
++- Join Cross
+   :- SubqueryAlias l
+   :  +- SubqueryAlias spark_catalog.default.t
+   :     +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias r
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as l
+|> cross join t as r
+|> drop l.x
+-- !query analysis
+Project [y#x, x#x, y#x]
++- Join Cross
+   :- SubqueryAlias l
+   :  +- SubqueryAlias spark_catalog.default.t
+   :     +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias r
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select named_struct('i1', 1, 'i2', 2) as col, named_struct('i1', 3, 'i2', 4) as col
+|> drop col.i1
+-- !query analysis
+Project [named_struct(i2, col#x.i2) AS col#x, named_struct(i2, col#x.i2) AS col#x]
++- Project [named_struct(i1, 1, i2, 2) AS col#x, named_struct(i1, 3, i2, 4) AS col#x]
+   +- OneRowRelation
+
+
+-- !query
+select * from (select x, y, x from t union all select x, y, x from t)
+|> select * except (x)
+-- !query analysis
+Project [y#x]
++- Project [x#x, y#x, x#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [x#x, y#x, x#x AS x#x]
+         :  +- Project [x#x, y#x, x#x]
+         :     +- SubqueryAlias spark_catalog.default.t
+         :        +- Relation spark_catalog.default.t[x#x,y#x] csv
+         +- Project [x#x, y#x, x#x AS x#x]
+            +- Project [x#x, y#x, x#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
