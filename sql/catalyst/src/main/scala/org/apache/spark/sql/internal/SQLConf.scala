@@ -4323,6 +4323,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS =
+    buildConf("spark.sql.streaming.join.preserveEventTimeColumns.enabled")
+      .internal()
+      .doc("When true, column pruning preserves an unambiguous watermark timestamp for " +
+        "late-event filtering in plans without unexpanded CTE references whose only stateful " +
+        "operator is a stream-stream join with no residual condition after predicate pushdown. " +
+        "Other plan shapes keep legacy pruning even when this value is true. The timestamp " +
+        "is stored in the ordinary input row. The checkpoint pins the value across restarts. " +
+        "Existing checkpoints without this setting use false to preserve their " +
+        "state schemas and pruning behavior.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()
