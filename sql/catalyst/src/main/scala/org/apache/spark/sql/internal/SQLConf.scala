@@ -1933,7 +1933,10 @@ object SQLConf {
         "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
         "function conjuncts that precede that one, and after the ones that can raise an " +
         "error: for example, an inferred `isnotnull(x)` no longer drops a row with a NULL `x` " +
-        "before `y + 1 > 0` raises on it in `y + 1 > 0 AND x > 0`. A predicate pushed down " +
+        "before `y + 1 > 0` raises on it in `y + 1 > 0 AND x > 0`. To place the inferred " +
+        "predicates, the optimizer computes the constraints of up to every prefix of the " +
+        "condition, which grows quadratically with the number of conjuncts, e.g. about 0.1 " +
+        "seconds for 200 conjuncts. A predicate pushed down " +
         "to a DSv2 data source is still evaluated before the others, by the source or after " +
         "the scan, while " +
         "after the scan of a DSv1 source, a pushed predicate that the source does not handle " +
