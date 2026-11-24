@@ -447,6 +447,10 @@ object SchemaInferenceUtils extends Logging {
    * recursive diff found changes. The resulting paths would contain consecutive
    * `element`/`key`/`value` segments that
    * [[org.apache.spark.sql.connector.catalog.CatalogV2Util]] cannot resolve (SPARK-59188).
+   *
+   * When every rejected change is a comment change, the error names the commented fields
+   * instead of the (then identical, since `simpleString` omits comments) current and target
+   * types, and tells the user how to keep the update running.
    */
   private def rejectUnsupportedNestedTypeChanges(
       currentType: DataType,
@@ -456,6 +460,13 @@ object SchemaInferenceUtils extends Logging {
     if (typeChanges.nonEmpty) {
       (currentType, targetType) match {
         case (_: ArrayType | _: MapType, _: ArrayType | _: MapType) =>
+          val commentChanges = typeChanges.collect { case c: TableChange.UpdateColumnComment => c }
+          if (commentChanges.size == typeChanges.size) {
+            throw new SparkUnsupportedOperationException(
+              errorClass = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+              messageParameters = Map(
+                "columnPath" -> commentChanges.map(_.fieldNames().mkString(".")).mkString(", ")))
+          }
           throw new SparkUnsupportedOperationException(
             errorClass = "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
             messageParameters = Map(
