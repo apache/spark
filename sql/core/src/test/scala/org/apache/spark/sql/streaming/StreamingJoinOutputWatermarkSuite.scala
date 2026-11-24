@@ -122,6 +122,15 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         .groupBy(window(col(t), "10 seconds", "5 seconds")).count()
         .select($"window.start".cast("long"), $"count"),
         Seq(Row(0L, 1L), Row(5L, 1L)), Seq(Row(35L, 2L), Row(40L, 2L))),
+      ("two window aggregations", (l, r, t) => l.join(r, expr(oneSidedRange))
+        .groupBy(window(col(t), "5 seconds").as("w")).count()
+        .groupBy(window($"w", "10 seconds")).agg(sum("count").as("count"))
+        .select($"window.start".cast("long"), $"count"),
+        Seq(Row(0L, 1L)), Seq(Row(40L, 2L))),
+      // The second row of key 2 in the window from 40 is a duplicate.
+      ("a deduplication", (l, r, t) => windowCount(l.join(r, expr(oneSidedRange))
+        .select($"leftKey", $"rightKey", col(t)).dropDuplicates(), t),
+        Seq(Row(0L, 1L)), Seq(Row(40L, 1L))),
       ("an aggregate function of the other input's time", (l, r, t) => l.join(r,
         expr(oneSidedRange)).groupBy(window(col(t), "10 seconds"))
         .agg(count("*").as("count"), max($"rightTime").cast("long").as("maxRightTime"))
@@ -176,6 +185,33 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           val (otherLeftInput, _, rejected) = query("rightTime")
           testStream(rejected)(AddData(otherLeftInput, (1, 5L)), expectRejected("right"))
         }
+      }
+    }
+
+    test(s"a range join bounded on one side only before a later stream-stream join, V$version") {
+      withJoinConf(version) {
+        def query(time: String)
+            : (MemoryStream[(Int, Long)], MemoryStream[(Int, Long)], MemoryStream[(Int, Long)],
+              DataFrame) = {
+          val (leftInput, left) = input("left")
+          val (rightInput, right) = input("right")
+          val (otherInput, other) = input("other")
+          (leftInput, rightInput, otherInput, windowCount(
+            left.join(right, expr(oneSidedRange)).select($"leftKey", col(time)).join(other,
+              expr(s"leftKey = otherKey AND $time BETWEEN otherTime - INTERVAL 10 SECONDS " +
+                "AND otherTime + INTERVAL 10 SECONDS")), time))
+        }
+        val (leftInput, rightInput, otherInput, accepted) = query("leftTime")
+        def addAll(key: Int, time: Long, rightTime: Long): StreamAction =
+          StreamProgressLockedActions(Seq(AddData(leftInput, (key, time)),
+            AddData(rightInput, (key, rightTime)), AddData(otherInput, (key, time))))
+        val steps = Seq(addAll(1, 5L, 8L), addAll(2, 40L, 40L), AddData(rightInput, (2, 41L)),
+          addAll(3, 100L, 100L), AddData(rightInput, (3, 101L)), addAll(4, 200L, 200L),
+          AddData(rightInput, (4, 201L)))
+        testStream(accepted)(steps.flatMap(Seq(_, ProcessAllAvailable())) :+
+          CheckAnswer((0L, 1L), (40L, 2L), (100L, 2L)): _*)
+        val (otherLeftInput, _, _, rejected) = query("rightTime")
+        testStream(rejected)(AddData(otherLeftInput, (1, 5L)), expectRejected("right"))
       }
     }
 

@@ -1121,13 +1121,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Each of these passes only because of one condition: the left semi join emits only its left
   // input, an operator whose input has no event time filters no joined row, and a join input
-  // without an event time emits none. A deduplication by the event time is a stateful operator,
-  // through which the trace does not follow.
+  // without an event time emits none. transformWithState in processing-time mode is a stateful
+  // operator through which the trace does not follow.
   Seq[(String, LogicalPlan)](
     "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime),
-      Deduplicate(Seq(leftTime), Join(TestStreamingRelation(Seq(leftKey, leftTime)),
+      scalaTransformWithState(Join(TestStreamingRelation(Seq(leftKey, leftTime)),
         TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
-        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE))),
+        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE), ProcessingTime)),
     "an operator whose input has no event time" ->
       Deduplicate(Seq(leftKey), Aggregate(Seq(leftKey), Seq(leftKey), keyOnlyJoin)),
     "a watermark above a join of inputs without one" -> {
@@ -1185,14 +1185,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
   // The trace follows only the left time here, yet the check rejects, naming the right input:
-  // the path passes another stateful operator, or a node that creates the traced column, and for
-  // such a path every input of the join counts. The deduplication alone traces to the left input.
+  // the path passes a stateful operator that does not drop late rows, or a node that creates the
+  // traced column, and for such a path every input of the join counts. A path through a
+  // deduplication, which drops late rows and is checked itself, ends there.
   test("join output watermark: one-sided range join through a path the trace cannot follow") {
     val narrowed = oneSidedJoin.select(leftKey, leftTime)
     UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
-      Deduplicate(Seq(leftTime), narrowed), Append)
+      Aggregate(Seq(leftTime), Seq(leftTime), Deduplicate(Seq(leftTime), narrowed)), Append)
     val generatedTime = AttributeReference("gt", TimestampType, metadata = watermarkMetadata)()
-    Seq(Aggregate(Seq(leftTime), Seq(leftTime), Deduplicate(Seq(leftTime), narrowed)),
+    Seq(Aggregate(Seq(leftTime), Seq(leftTime), scalaTransformWithState(narrowed, ProcessingTime)),
       Aggregate(Seq(generatedTime), Seq(generatedTime), Generate(
         Explode(CreateArray(Seq(leftTime))), Nil, outer = false, None, Seq(generatedTime),
         narrowed))
