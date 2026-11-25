@@ -179,19 +179,28 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
     }.get
   }
 
+  // The configurations that the assertions of the tests depend on, which a test may override:
+  // lookups on, and Python pushdown off, so that a plan is reused across micro-batches.
+  private val pinnedConfs = Seq(
+    SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true",
+    SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "false",
+    SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "false")
+
   /**
    * Runs `f` with the lookup source registered, a lookup table with the options, and a new
-   * directory for the events of its readers.
+   * directory for the events of its readers, with `pinnedConfs` unless `pinned` is false, and
+   * then `confs`.
    */
   private def withLookupSource(
       schema: String = "id BIGINT, tier INT, name STRING",
-      confs: Seq[(String, String)] = Seq.empty)(
+      confs: Seq[(String, String)] = Seq.empty,
+      pinned: Boolean = true)(
       options: (String, String)*)(f: (DataFrame, File) => Unit): Unit = {
     assume(shouldTestPandasUDFs)
     spark.dataSource.registerPython(
       dataSourceName, createUserDefinedPythonDataSource(dataSourceName, lookupSourceScript(schema)))
     withTempDir { markerDir =>
-      withSQLConf(confs: _*) {
+      withSQLConf((if (pinned) pinnedConfs else Nil) ++ confs: _*) {
         val lookup = spark.read.format(dataSourceName)
           .options(options.toMap + ("markerDir" -> markerDir.getAbsolutePath)).load()
         f(lookup, markerDir)
@@ -524,7 +533,7 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
     assume(shouldTestPandasUDFs)
     // No configuration is set: lookups are enabled by default.
     assert(spark.conf.get(SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key) === "true")
-    withLookupSource()() { (lookup, _) =>
+    withLookupSource(pinned = false)() { (lookup, _) =>
       checkStream(idStream(Some(1L)).join(lookup, col("sid") === lookup("id"))
         .select(col("sid"), col("name")), Seq(Row(1L, "name1-0")))
     }
@@ -547,17 +556,18 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
     }
   }
 
-  test("lookups reuse a plan only while filter and limit pushdown are off, as batch reads do") {
+  test("lookups reuse a plan unless the planning pushes filters, as batch reads do") {
     withLookupSource(confs = Seq(
         SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false"))() { (lookup, markerDir) =>
       val stream = MemoryStream[Long](1)(Encoders.scalaLong, spark.sqlContext).toDF().toDF("sid")
-      def plans(nullSafe: Boolean = false): Int = {
+      def plans(nullSafe: Boolean = false, filtered: Boolean = false): Int = {
+        val side = if (filtered) lookup.filter("tier = 1") else lookup
         val condition = if (nullSafe) {
-          stream("sid") <=> lookup("id")
+          stream("sid") <=> side("id")
         } else {
-          stream("sid") === lookup("id")
+          stream("sid") === side("id")
         }
-        stream.join(lookup, condition).queryExecution.optimizedPlan
+        stream.join(side, condition).queryExecution.optimizedPlan
         eventCounts(markerDir)("plan")
       }
       // With both pushdowns off, as by default, a plan is reused for the same candidates, and
@@ -566,14 +576,19 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
       assert(plans() === 1)
       assert(plans(nullSafe = true) === 2)
       assert(plans(nullSafe = true) === 2)
-      // With either pushdown on, each scan plans again.
-      Seq(
-          SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key,
-          SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key).zipWithIndex.foreach { case (conf, i) =>
-        withSQLConf(conf -> "true") {
-          assert(plans() === 3 + 2 * i)
-          assert(plans() === 4 + 2 * i)
-        }
+      // With filter pushdown on, a planning that pushes a filter into the lookup reader plans
+      // again each time, and one without a lookup-side filter reuses its plan. A change of the
+      // configuration plans again, once.
+      withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        assert(plans(filtered = true) === 3)
+        assert(plans(filtered = true) === 4)
+        assert(plans() === 5)
+        assert(plans() === 5)
+      }
+      // Spark pushes no limit into a lookup, so with limit pushdown on, a plan is reused.
+      withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+        assert(plans() === 6)
+        assert(plans() === 6)
       }
       // Turned off again, the plan of the first call is reused.
       assert(plans() === 6)

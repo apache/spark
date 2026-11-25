@@ -59,7 +59,11 @@ class PythonTable(
 
   // Whether the data source serves lookups. Only with the lookup support turned on, so that
   // Python data sources keep their capabilities while it is off. Python finds it out on the
-  // class, without creating the data source.
+  // class, without creating the data source. Every Python data source pays this once per
+  // registration: one Python worker on the driver, whose daemon starts once per driver or Spark
+  // Connect session. That is an accepted cost of turning lookups on. Deciding it where the class
+  // is registered would avoid it, but would need the answer from the Python registration API,
+  // from the Spark Connect registration of a data source and from the static data source lookup.
   private def supportsExternalLookup: Boolean =
     SQLConf.get.pythonExternalLookupEnabled && ds.source.lookupSupport.supportsLookup
 }

@@ -7923,7 +7923,12 @@ object SQLConf {
       "the EXTERNAL_LOOKUP table capability, so that Spark can read it by lookups as the " +
       "static side of a stream-static join. A data source that implements lookupReader() but " +
       "not reader() is then lookup-only. When false, Python data sources report the same " +
-      "capabilities as without lookup support.")
+      "capabilities as without lookup support. While it is true, Spark asks a Python worker on " +
+      "the driver whether a registered Python data source implements lookupReader(), the " +
+      "first time it asks for the capabilities of a table of that data source, also of one " +
+      "that implements no lookupReader(), and keeps the answer with the registration. The " +
+      "first such worker also starts the Python daemon of its module, once per driver or " +
+      "Spark Connect session, as the other planner workers do.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf

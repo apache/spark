@@ -167,9 +167,9 @@ class PythonScanBuilder(
   // plan replays them into the lookup reader instead, whose answer only decides which rows the
   // reader may omit, and which filters the scan reports as pushed: Spark evaluates every filter
   // of a lookup scan again on the returned rows. Spark calls no `pushLimit` on a lookup builder.
-  // As for the read info of a batch read, the data source reuses the plan of an earlier call with
-  // the same inputs while filter and limit pushdown are off, such as that of the previous
-  // micro-batch of a streaming query.
+  // As for the read info of a batch read, which is reused while its scan pushes nothing, the data
+  // source reuses the plan of an earlier call with the same inputs, such as that of the previous
+  // micro-batch of a streaming query, unless the call pushes filters into the lookup reader.
   override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
     val plan = ds.getOrCreateLookupPlan(shortName, options, outputSchema, allFilters, candidates)
     lookupPlan = Some(plan)
