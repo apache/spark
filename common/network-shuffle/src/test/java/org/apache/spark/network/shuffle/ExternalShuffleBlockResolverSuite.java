@@ -23,6 +23,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -329,6 +331,210 @@ public class ExternalShuffleBlockResolverSuite {
         assertTrue(outsideFile.delete() || !outsideFile.exists());
       }
       context.cleanup();
+    }
+  }
+
+  private static void createSymbolicLinkOrSkip(File link, File target) {
+    try {
+      Files.createSymbolicLink(link.toPath(), target.toPath());
+    } catch (UnsupportedOperationException | IOException e) {
+      // Filesystems without symlink support cannot exercise this case.
+      Assumptions.assumeTrue(false, "symlinks unsupported on this filesystem");
+    }
+  }
+
+  /**
+   * removeBlocks checks the resolved path of a block like a block fetch does, so a block whose
+   * hashed sub-directory was replaced by a link to another directory is not removed there.
+   */
+  @Test
+  public void removeBlocksSkipsBlockResolvingOutsideLocalDirs() throws Exception {
+    TestShuffleDataContext context = new TestShuffleDataContext(1, 5);
+    context.create();
+    File outsideDir = Files.createTempDirectory("outside").toFile();
+    try {
+      String blockId = "rdd_7_0";
+      File subDir = new File(ExecutorDiskUtils.getFilePath(
+        context.localDirs, context.subDirsPerLocalDir, blockId)).getParentFile();
+      File outsideFile = new File(outsideDir, blockId);
+      Files.writeString(outsideFile.toPath(), "should not be deleted", StandardCharsets.UTF_8);
+      JavaUtils.deleteRecursively(subDir);
+      createSymbolicLinkOrSkip(subDir, outsideDir);
+
+      ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+      resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
+
+      assertEquals(0, resolver.removeBlocks("app0", "0", new String[] { blockId }));
+      assertTrue(outsideFile.exists(), "A file outside the local directory must not be removed");
+    } finally {
+      context.cleanup();
+      JavaUtils.deleteRecursively(outsideDir);
+    }
+  }
+
+  /**
+   * Executors reloaded from the state store are validated like a registration, and the ones the
+   * validator rejects are dropped, also from the state store.
+   */
+  @Test
+  public void reloadDropsExecutorsWithInvalidLocalDirs() throws Exception {
+    File root = Files.createTempDirectory("ess-local-root").toFile();
+    File dbDir = Files.createTempDirectory("ess-db").toFile();
+    try {
+      File dbFile = new File(dbDir, "registeredExecutors.rdb");
+      File ownDir = new File(root, "spark-x/executor-x/blockmgr-x");
+      assertTrue(ownDir.mkdirs(), "precondition: directory created");
+
+      ExternalShuffleBlockResolver writer = new ExternalShuffleBlockResolver(conf, dbFile);
+      try {
+        writer.registerExecutor("app0", "exec0",
+          new ExecutorShuffleInfo(new String[] { ownDir.getPath() }, 64, SORT_MANAGER));
+        writer.registerExecutor("app0", "exec1",
+          new ExecutorShuffleInfo(new String[] { root.getPath() }, 64, SORT_MANAGER));
+      } finally {
+        writer.close();
+      }
+
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, false);
+      ExternalShuffleBlockResolver reader =
+        new ExternalShuffleBlockResolver(conf, dbFile, Runnable::run, validator);
+      try {
+        AppExecId kept = new AppExecId("app0", "exec0");
+        assertEquals(Set.of(kept), reader.executors.keySet());
+        assertEquals(Set.of(kept),
+          ExternalShuffleBlockResolver.reloadRegisteredExecutors(reader.db).keySet());
+      } finally {
+        reader.close();
+      }
+    } finally {
+      JavaUtils.deleteRecursively(root);
+      JavaUtils.deleteRecursively(dbDir);
+    }
+  }
+
+  /**
+   * Creates the file of {@code blockId} in {@code dir}, under the hashed sub-directory name that
+   * the block has in {@code localDir}.
+   */
+  private static File createBlockFileIn(
+      File dir, String localDir, int subDirsPerLocalDir, String blockId) throws IOException {
+    File blockFile = new File(
+      ExecutorDiskUtils.getFilePath(new String[] { localDir }, subDirsPerLocalDir, blockId));
+    File file = new File(new File(dir, blockFile.getParentFile().getName()), blockId);
+    assertTrue(file.getParentFile().mkdirs(), "precondition: directory created");
+    Files.writeString(file.toPath(), "should not be deleted", StandardCharsets.UTF_8);
+    return file;
+  }
+
+  /**
+   * removeBlocks checks a block against the local dir as it was at registration, also when the
+   * read-time check is disabled, so a registered dir replaced by a link later is not followed.
+   */
+  @Test
+  public void removeBlocksSkipsReplacedLocalDirWithoutReadVerification() throws Exception {
+    TransportConf noReadVerification = new TransportConf("shuffle", new MapConfigProvider(
+      Map.of(Constants.SHUFFLE_SERVICE_VERIFY_BLOCK_PATHS_AT_READ, "false")));
+    TestShuffleDataContext context = new TestShuffleDataContext(1, 5);
+    context.create();
+    File outsideDir = Files.createTempDirectory("outside").toFile();
+    try {
+      String blockId = "rdd_7_0";
+      File outsideFile =
+        createBlockFileIn(outsideDir, context.localDirs[0], context.subDirsPerLocalDir, blockId);
+      ExternalShuffleBlockResolver resolver =
+        new ExternalShuffleBlockResolver(noReadVerification, null);
+      resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
+
+      // Replace the registered dir itself with a link to another directory.
+      File localDir = new File(context.localDirs[0]);
+      JavaUtils.deleteRecursively(localDir);
+      createSymbolicLinkOrSkip(localDir, outsideDir);
+
+      assertEquals(0, resolver.removeBlocks("app0", "0", new String[] { blockId }));
+      assertTrue(outsideFile.exists(), "A file outside the local directory must not be removed");
+    } finally {
+      context.cleanup();
+      JavaUtils.deleteRecursively(outsideDir);
+    }
+  }
+
+  /**
+   * An executor reloaded from the state store gets its local dirs pinned after the validation, so a
+   * registered dir replaced by a link after the restart is not followed when a block is removed.
+   */
+  @Test
+  public void removeBlocksSkipsReplacedLocalDirOfReloadedExecutor() throws Exception {
+    File root = Files.createTempDirectory("ess-local-root").toFile();
+    File outsideDir = Files.createTempDirectory("outside").toFile();
+    File dbDir = Files.createTempDirectory("ess-db").toFile();
+    try {
+      File dbFile = new File(dbDir, "registeredExecutors.rdb");
+      File localDir = new File(root, "spark-x/blockmgr-x");
+      assertTrue(localDir.mkdirs(), "precondition: directory created");
+      String blockId = "rdd_7_0";
+      File outsideFile = createBlockFileIn(outsideDir, localDir.getPath(), 64, blockId);
+
+      ExternalShuffleBlockResolver writer = new ExternalShuffleBlockResolver(conf, dbFile);
+      try {
+        writer.registerExecutor("app0", "exec0",
+          new ExecutorShuffleInfo(new String[] { localDir.getPath() }, 64, SORT_MANAGER));
+      } finally {
+        writer.close();
+      }
+
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, false);
+      ExternalShuffleBlockResolver reader =
+        new ExternalShuffleBlockResolver(conf, dbFile, Runnable::run, validator);
+      try {
+        // Replace the registered dir itself with a link to another directory after the restart.
+        JavaUtils.deleteRecursively(localDir);
+        createSymbolicLinkOrSkip(localDir, outsideDir);
+
+        assertEquals(0, reader.removeBlocks("app0", "exec0", new String[] { blockId }));
+        assertTrue(outsideFile.exists(), "A file outside the local directory must not be removed");
+      } finally {
+        reader.close();
+      }
+    } finally {
+      JavaUtils.deleteRecursively(root);
+      JavaUtils.deleteRecursively(outsideDir);
+      JavaUtils.deleteRecursively(dbDir);
+    }
+  }
+
+  /**
+   * An ExternalBlockHandler built with local-dir roots passes its validator to the block resolver
+   * it creates, so the resolver validates the executors it reloads.
+   */
+  @Test
+  public void blockHandlerPassesItsValidatorToTheResolver() throws Exception {
+    File root = Files.createTempDirectory("ess-local-root").toFile();
+    File dbDir = Files.createTempDirectory("ess-db").toFile();
+    try {
+      File dbFile = new File(dbDir, "registeredExecutors.rdb");
+      File ownDir = new File(root, "spark-x/executor-x/blockmgr-x");
+      assertTrue(ownDir.mkdirs(), "precondition: directory created");
+      ExternalShuffleBlockResolver writer = new ExternalShuffleBlockResolver(conf, dbFile);
+      try {
+        writer.registerExecutor("app0", "exec0",
+          new ExecutorShuffleInfo(new String[] { ownDir.getPath() }, 64, SORT_MANAGER));
+        writer.registerExecutor("app0", "exec1",
+          new ExecutorShuffleInfo(new String[] { root.getPath() }, 64, SORT_MANAGER));
+      } finally {
+        writer.close();
+      }
+
+      ExternalBlockHandler handler =
+        new ExternalBlockHandler(conf, dbFile, new String[] { root.getPath() }, false);
+      try {
+        assertEquals(Set.of(new AppExecId("app0", "exec0")),
+          handler.getBlockResolver().executors.keySet());
+      } finally {
+        handler.close();
+      }
+    } finally {
+      JavaUtils.deleteRecursively(root);
+      JavaUtils.deleteRecursively(dbDir);
     }
   }
 

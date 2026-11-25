@@ -32,7 +32,8 @@ public class Constants {
   /**
    * Whether the shuffle service re-resolves block file paths at read time and requires them
    * to remain under the executor's registered local directories. Enabled by default; disable
-   * to skip the per-fetch path canonicalization cost.
+   * to skip the per-fetch path canonicalization cost. Removing a block always checks its path,
+   * whatever this setting says.
    */
   public static final String SHUFFLE_SERVICE_VERIFY_BLOCK_PATHS_AT_READ =
     "spark.shuffle.service.verifyBlockPathsAtRead";

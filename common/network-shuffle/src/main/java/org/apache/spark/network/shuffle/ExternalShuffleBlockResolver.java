@@ -94,9 +94,13 @@ public class ExternalShuffleBlockResolver {
 
   private final boolean verifyBlockPathsAtRead;
 
+  // Validates the local dirs of reloaded executors.
+  private final LocalDirValidator localDirValidator;
+
   // Canonical forms of registered executor local dirs, cached because they are checked on
-  // every block open. Keyed by the raw registered path string. Entries are evicted when the
-  // last registered executor referencing the dir is removed in applicationRemoved().
+  // every block open and before every block removal. Keyed by the raw registered path string.
+  // Entries are evicted when the last registered executor referencing the dir is removed in
+  // applicationRemoved().
   @VisibleForTesting
   final ConcurrentMap<String, Path> canonicalLocalDirs = new ConcurrentHashMap<>();
 
@@ -107,9 +111,16 @@ public class ExternalShuffleBlockResolver {
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
+    this(conf, registeredExecutorFile, LocalDirValidator.ACCEPT_ALL);
+  }
+
+  ExternalShuffleBlockResolver(
+      TransportConf conf,
+      File registeredExecutorFile,
+      LocalDirValidator localDirValidator) throws IOException {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")), localDirValidator);
   }
 
   // Allows tests to have more control over when directories are cleaned up.
@@ -118,7 +129,17 @@ public class ExternalShuffleBlockResolver {
       TransportConf conf,
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
+    this(conf, registeredExecutorFile, directoryCleaner, LocalDirValidator.ACCEPT_ALL);
+  }
+
+  @VisibleForTesting
+  ExternalShuffleBlockResolver(
+      TransportConf conf,
+      File registeredExecutorFile,
+      Executor directoryCleaner,
+      LocalDirValidator localDirValidator) throws IOException {
     this.conf = conf;
+    this.localDirValidator = localDirValidator;
     this.rddFetchEnabled =
       Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.verifyBlockPathsAtRead =
@@ -146,6 +167,7 @@ public class ExternalShuffleBlockResolver {
         MDC.of(LogKeys.SHUFFLE_DB_BACKEND_NAME, dbBackend),
         MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY, Constants.SHUFFLE_SERVICE_DB_BACKEND));
       executors = reloadRegisteredExecutors(db);
+      validateReloadedExecutors();
     } else {
       executors = new ConcurrentHashMap<>();
     }
@@ -154,6 +176,35 @@ public class ExternalShuffleBlockResolver {
 
   public int getRegisteredExecutorsSize() {
     return executors.size();
+  }
+
+  /**
+   * Validates the reloaded executors like a registration. Their state store entries can predate
+   * the check at registration, or were checked against other local-dir roots. An executor whose
+   * local dirs the validator rejects is dropped, also from the state store, so it is neither
+   * served nor cleaned up. For the others, the canonical form of their local dirs is pinned, as at
+   * registration.
+   */
+  private void validateReloadedExecutors() {
+    Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<AppExecId, ExecutorShuffleInfo> entry = it.next();
+      AppExecId fullId = entry.getKey();
+      try {
+        localDirValidator.validate(entry.getValue().localDirs, fullId.appId);
+        pinCanonicalLocalDirs(entry.getValue().localDirs);
+      } catch (IllegalArgumentException e) {
+        logger.warn("Dropping reloaded executor {} with invalid local dirs: {}",
+          MDC.of(LogKeys.APP_EXECUTOR_ID, fullId), MDC.of(LogKeys.ERROR, e.getMessage()));
+        it.remove();
+        try {
+          db.delete(dbAppExecKey(fullId));
+        } catch (Exception ex) {
+          logger.error("Error deleting {} from executor state db", ex,
+            MDC.of(LogKeys.APP_EXECUTOR_ID, fullId));
+        }
+      }
+    }
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -175,17 +226,25 @@ public class ExternalShuffleBlockResolver {
       logger.error("Error saving registered executors", e);
     }
     executors.put(fullId, executorInfo);
-    if (verifyBlockPathsAtRead && executorInfo.localDirs != null) {
-      // Pin the canonical form of the registered dirs while they are known to be validated,
-      // so a later change to a registered dir itself is still detected at read time. Dirs of
-      // executors reloaded from the state store are resolved lazily on first block fetch.
-      for (String localDir : executorInfo.localDirs) {
-        try {
-          canonicalLocalDirs.put(localDir, new File(localDir).getCanonicalFile().toPath());
-        } catch (IOException e) {
-          logger.warn("Failed to resolve local dir {}; will retry on first block fetch", e,
-            MDC.of(LogKeys.PATH, localDir));
-        }
+    pinCanonicalLocalDirs(executorInfo.localDirs);
+  }
+
+  /**
+   * Pins the canonical form of an executor's local dirs while they are known to be validated, so
+   * a later change to a registered dir itself is still detected when a block is read or removed.
+   * It pins them whatever verifyBlockPathsAtRead says, because removing a block always checks its
+   * path.
+   */
+  private void pinCanonicalLocalDirs(String[] localDirs) {
+    if (localDirs == null) {
+      return;
+    }
+    for (String localDir : localDirs) {
+      try {
+        canonicalLocalDirs.put(localDir, new File(localDir).getCanonicalFile().toPath());
+      } catch (IOException e) {
+        logger.warn("Failed to resolve local dir {}; will retry on first use", e,
+          MDC.of(LogKeys.PATH, localDir));
       }
     }
   }
@@ -362,19 +421,28 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Returns a File for {@code filename} under the executor's registered local dirs, verifying
-   * at open time that the fully resolved path is still contained in one of those directories.
-   * The local dirs themselves are validated when the executor registers, but their contents
-   * can change afterwards, so the resolved path is re-checked here against the canonical form
-   * of the registered dirs.
+   * Same as {@link #getContainedFile}, but skips the path check when
+   * {@code spark.shuffle.service.verifyBlockPathsAtRead} is disabled.
    */
   private File getVerifiedFile(ExecutorShuffleInfo executor, String filename) {
+    if (!verifyBlockPathsAtRead) {
+      return new File(
+        ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, filename));
+    }
+    return getContainedFile(executor, filename);
+  }
+
+  /**
+   * Returns a File for {@code filename} under the executor's registered local dirs, and fails if
+   * its fully resolved path is not contained in one of those directories. The local dirs
+   * themselves are validated when the executor registers, but their contents can change
+   * afterwards, so the resolved path is re-checked here against the canonical form of the
+   * registered dirs.
+   */
+  private File getContainedFile(ExecutorShuffleInfo executor, String filename) {
     String path =
       ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, filename);
     File file = new File(path);
-    if (!verifyBlockPathsAtRead) {
-      return file;
-    }
     try {
       Path canonicalFile = file.getCanonicalFile().toPath();
       for (String localDir : executor.localDirs) {
@@ -464,8 +532,15 @@ public class ExternalShuffleBlockResolver {
           MDC.of(LogKeys.BLOCK_ID, blockId));
         continue;
       }
-      File file = new File(
-        ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, blockId));
+      // The path is always checked before deleting, whatever verifyBlockPathsAtRead says.
+      File file;
+      try {
+        file = getContainedFile(executor, blockId);
+      } catch (RuntimeException e) {
+        logger.warn("Skipping block whose path could not be verified: {} ({})",
+          MDC.of(LogKeys.BLOCK_ID, blockId), MDC.of(LogKeys.ERROR, e.getMessage()));
+        continue;
+      }
       if (file.delete()) {
         numRemovedBlocks++;
       } else {

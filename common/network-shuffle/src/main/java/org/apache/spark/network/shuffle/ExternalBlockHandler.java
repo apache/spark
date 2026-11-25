@@ -92,10 +92,8 @@ public class ExternalBlockHandler extends RpcHandler
       File registeredExecutorFile,
       String[] allowedLocalDirs,
       boolean requireAppScopedLocalDirs) throws IOException {
-    this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager(conf, null),
-      new LocalDirValidator(allowedLocalDirs, requireAppScopedLocalDirs));
+    this(conf, registeredExecutorFile, new NoOpMergedShuffleFileManager(conf, null),
+      allowedLocalDirs, requireAppScopedLocalDirs);
   }
 
   public ExternalBlockHandler(
@@ -112,10 +110,20 @@ public class ExternalBlockHandler extends RpcHandler
       MergedShuffleFileManager mergeManager,
       String[] allowedLocalDirs,
       boolean requireAppScopedLocalDirs) throws IOException {
-    this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      mergeManager,
+    this(conf, registeredExecutorFile, mergeManager,
       new LocalDirValidator(allowedLocalDirs, requireAppScopedLocalDirs));
+  }
+
+  // Shares one validator between the handler and its block resolver.
+  private ExternalBlockHandler(
+      TransportConf conf,
+      File registeredExecutorFile,
+      MergedShuffleFileManager mergeManager,
+      LocalDirValidator localDirValidator) throws IOException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile, localDirValidator),
+      mergeManager,
+      localDirValidator);
   }
 
   @VisibleForTesting
@@ -146,7 +154,7 @@ public class ExternalBlockHandler extends RpcHandler
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager,
       MergedShuffleFileManager mergeManager) {
-    this(streamManager, blockManager, mergeManager, new LocalDirValidator(null, false));
+    this(streamManager, blockManager, mergeManager, LocalDirValidator.ACCEPT_ALL);
   }
 
   private ExternalBlockHandler(

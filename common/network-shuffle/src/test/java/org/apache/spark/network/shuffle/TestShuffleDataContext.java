@@ -50,7 +50,11 @@ public class TestShuffleDataContext {
   }
 
   public void create() throws IOException {
-    String root = System.getProperty("java.io.tmpdir");
+    create(System.getProperty("java.io.tmpdir"));
+  }
+
+  /** Creates the local dirs below {@code root}. */
+  public void create(String root) throws IOException {
     for (int i = 0; i < localDirs.length; i ++) {
       localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
