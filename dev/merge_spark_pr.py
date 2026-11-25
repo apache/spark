@@ -4487,6 +4487,7 @@ COMPONENTS = (
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
     Component("EXAMPLES", ("EXAMPLE",), primary=True, jira_name="Examples"),
+    Component("GRAPH", ("GRAPHFRAME", "GRAPHFRAMES"), primary=True, jira_name="Graph"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
     Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),

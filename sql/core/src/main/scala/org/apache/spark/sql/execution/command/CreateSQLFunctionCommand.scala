@@ -184,7 +184,8 @@ case class CreateSQLFunctionCommand(
 
         // Check the function body can be analyzed correctly.
         val (analyzed, referredTempVarsUnderIdentifier) =
-          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
+          analyzer.executeWithReferredTempVariablesUnderIdentifier(
+            plan, isPersistentSQLFunctionBody = !isTemp)
         val (resolved, resolvedReturnType) = analyzed match {
           case p @ Project(expr :: Nil, _) if expr.resolved =>
             (p, Left(resolveReturnType(expr.dataType, collation)))
@@ -211,7 +212,8 @@ case class CreateSQLFunctionCommand(
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
         val (analyzed, referredTempVarsUnderIdentifier) =
-          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
+          analyzer.executeWithReferredTempVariablesUnderIdentifier(
+            plan, isPersistentSQLFunctionBody = !isTemp)
         val newPlan = analyzed match {
           case Project(_, j: LateralJoin) => j
           case j: LateralJoin => j

@@ -51,6 +51,10 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
+  private def scanOf(df: DataFrame): DataSourceV2ScanRelation =
+    df.queryExecution.optimizedPlan.collectFirst { case r: DataSourceV2ScanRelation => r }
+      .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
+
   test("SPARK-55978: TABLESAMPLE SYSTEM pushdown removes Sample node") {
     withSampleTable { table =>
       val df = sql(s"SELECT * FROM $table TABLESAMPLE SYSTEM (50 PERCENT)")
@@ -183,6 +187,8 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         // Without sample: join should be pushed down
         val dfNoSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfNoSample)
+        val joined = scanOf(dfNoSample)
+        assert(joined.repeatableRead && !joined.onlyRowWisePushdowns)
 
         // The connector preserves its previously pushed sample when pushing down the join.
         val dfWithSample = sql(
@@ -191,6 +197,8 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         checkJoinPushed(dfWithSample)
         checkSamplePushed(dfWithSample, pushed = true)
         checkPushedInfo(dfWithSample, "LEFT SAMPLE: SYSTEM SAMPLE (50.0)")
+        // A pushed sample in a side lets the source pick other rows on a second read.
+        assert(!scanOf(dfWithSample).isRepeatableRead)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
@@ -215,6 +223,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         checkJoinPushed(rightSample)
         checkSamplePushed(rightSample, pushed = true)
         checkPushedInfo(rightSample, "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
+        assert(!scanOf(rightSample).isRepeatableRead)
 
         val bothSamples = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
@@ -225,6 +234,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
           bothSamples,
           "LEFT SAMPLE: SYSTEM SAMPLE (50.0)",
           "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
+        assert(!scanOf(bothSamples).isRepeatableRead)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
@@ -306,6 +316,31 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
           .join(spark.table(t2), "id")
         checkJoinNotPushed(df)
         checkSamplePushed(df, pushed = true)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-61870: a pushed join over a pushed join with a sample does not read the same rows " +
+    "again") {
+    val joinSampleCatalog = "testjoinsamplerepeatable"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val sampled = spark.table(t1).sample(0.5, 1L).join(spark.table(t2).select("id"), "id")
+        // A pushed join above it keeps the sample only with the inner join's pushed operators.
+        // The sampled side keeps all its columns, so the sample sits on its scan.
+        val nested = sampled.join(spark.table(t2).select("id"), "id")
+        checkJoinPushed(nested)
+        assert(!scanOf(nested).isRepeatableRead)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")

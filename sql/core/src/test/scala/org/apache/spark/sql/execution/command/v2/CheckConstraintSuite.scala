@@ -497,6 +497,56 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-62070: Check constraint of CREATE TABLE comparing a CHAR column") {
+    // CREATE TABLE stores the predicate without padding 'OPEN' to the length of `status`.
+    // A write pads it when it converts the predicate back.
+    // A write also pads it when it parses `predicateSql`, which `current_date()` makes it do,
+    // with or without the legacy config for CHECK constraints.
+    // A write that treats CHAR as STRING pads neither the values nor the literal.
+    Seq(
+      ("status = 'OPEN'", "OPEN", true, Nil),
+      ("status <> 'CLOSED'", "CLOSED", false, Nil),
+      ("status = 'OPEN' AND closed <= current_date()", "OPEN", true, Nil),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, Nil),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false,
+        Seq(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT.key -> "true")),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false,
+        Seq(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true"))
+    ).foreach { case (cond, status, accepted, confs) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, status CHAR(10), closed DATE, " +
+          s"CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+        val insert = s"INSERT INTO $t VALUES (1, '$status', DATE'2000-01-01')"
+        withSQLConf(confs: _*) {
+          if (accepted) {
+            sql(insert)
+          } else {
+            val error = intercept[SparkRuntimeException](sql(insert))
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$cond $confs")
+          }
+        }
+        checkAnswer(spark.table(t).select("id"), if (accepted) Seq(Row(1)) else Nil)
+      }
+    }
+  }
+
+  test("SPARK-62070: UPDATE and MERGE with a check constraint comparing a CHAR column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, status CHAR(10), " +
+        s"CONSTRAINT c1 CHECK (status <> 'CLOSED')) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'OPEN')")
+      Seq(
+        s"UPDATE $t SET status = 'CLOSED'",
+        s"MERGE INTO $t t USING (SELECT 1 AS id) s ON t.id = s.id " +
+          "WHEN MATCHED THEN UPDATE SET status = 'CLOSED'"
+      ).foreach { stmt =>
+        val error = intercept[SparkRuntimeException](sql(stmt))
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", stmt)
+      }
+      checkAnswer(spark.table(t), Row(1, "OPEN      "))
+    }
+  }
+
   test("SPARK-60032: Check constraint added by ALTER TABLE with an error in a branch") {
     // The optimizer keeps an expression that fails in a branch that may not run, and so does the
     // check for the current date.
@@ -670,6 +720,90 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (ts <= current_timestamp())")
       }
       assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
+    }
+  }
+
+  test("SPARK-60451: Check constraint added by CREATE or REPLACE TABLE on a special datetime") {
+    // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
+    // with `current_date()`, a constraint on one that reads the current date is stored without a
+    // predicate and writes read its text.
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        Seq(
+          ("CREATE", "d DATE", "d <= CAST('today' AS DATE)", "current_date()",
+            "DATE'9999-12-31'"),
+          ("CREATE", "d DATE", "d <= 'today'", "current_date()", "DATE'9999-12-31'"),
+          ("CREATE", "d TIMESTAMP", "d <= CAST('now' AS TIMESTAMP)", "current_timestamp()",
+            "TIMESTAMP'9999-12-31 00:00:00'"),
+          ("CREATE", "d TIMESTAMP_NTZ(9)", "d <= CAST('today' AS TIMESTAMP_NTZ(9))",
+            "CAST(TIMESTAMP_NTZ'2020-01-01 00:00:00' AS TIMESTAMP_NTZ(9))",
+            "CAST(TIMESTAMP_NTZ'9999-12-31 00:00:00' AS TIMESTAMP_NTZ(9))"),
+          ("CREATE", "d TIMESTAMP_LTZ(9)", "d <= CAST('now' AS TIMESTAMP_LTZ(9))",
+            "CAST(TIMESTAMP'2020-01-01 00:00:00' AS TIMESTAMP_LTZ(9))",
+            "CAST(TIMESTAMP'9999-12-31 00:00:00' AS TIMESTAMP_LTZ(9))"),
+          ("REPLACE", "d DATE", "d <= CAST('today' AS DATE)", "current_date()",
+            "DATE'9999-12-31'")
+        ).foreach { case (command, column, cond, accepted, rejected) =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            if (command == "REPLACE") sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+            sql(s"$command TABLE $t (id INT, $column, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicate() == null, s"$command $cond $ansi")
+            sql(s"INSERT INTO $t VALUES (1, $accepted)")
+            val error = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO $t VALUES (2, $rejected)")
+            }
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$command $cond $ansi")
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+          }
+        }
+        // 'epoch' has a fixed value, so the predicate compares with it, as with ALTER TABLE, also
+        // in an expression around it.
+        Seq(
+          ("d DATE", "d >= CAST('epoch' AS DATE)", "DATE'1970-01-01'", "DATE'1969-12-31'"),
+          ("d DATE", "d >= CAST('epoch' AS DATE) - 1", "DATE'1969-12-31'", "DATE'1969-12-30'"),
+          ("d TIMESTAMP", "d >= 'epoch'", "TIMESTAMP'2020-01-01 00:00:00'",
+            "TIMESTAMP'1960-01-01 00:00:00'"),
+          ("d TIMESTAMP_NTZ(9)", "d >= CAST('epoch' AS TIMESTAMP_NTZ(9))",
+            "CAST(TIMESTAMP_NTZ'2020-01-01 00:00:00' AS TIMESTAMP_NTZ(9))",
+            "CAST(TIMESTAMP_NTZ'1960-01-01 00:00:00' AS TIMESTAMP_NTZ(9))"),
+          ("d TIMESTAMP_LTZ(9)", "d >= CAST('epoch' AS TIMESTAMP_LTZ(9))",
+            "CAST(TIMESTAMP'2020-01-01 00:00:00' AS TIMESTAMP_LTZ(9))",
+            "CAST(TIMESTAMP'1960-01-01 00:00:00' AS TIMESTAMP_LTZ(9))")
+        ).foreach { case (column, cond, accepted, rejected) =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            sql(s"CREATE TABLE $t (id INT, $column) $defaultUsing")
+            sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+            val altered = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            sql(s"DROP TABLE $t")
+            sql(s"CREATE TABLE $t (id INT, $column, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicate() != null && check.predicate() == altered.predicate(),
+              s"$cond $ansi")
+            sql(s"INSERT INTO $t VALUES (1, $accepted)")
+            val error = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO $t VALUES (2, $rejected)")
+            }
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$cond $ansi")
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+          }
+        }
+        // `SpecialDatetimeValues` reads the string of the outer cast before the cast of 'epoch'
+        // in it has a value, so giving the inner cast its value first would change the outer one.
+        // A string that reads the current date is 'epoch' only until that date changes.
+        Seq(
+          "d <= CAST(CASE WHEN CAST('epoch' AS DATE) IS NULL THEN 'today' ELSE '2000-01-01' END " +
+            "AS DATE)",
+          "d >= CAST(CASE WHEN current_date() > DATE'9999-01-01' THEN 'today' ELSE 'epoch' END " +
+            "AS DATE)"
+        ).foreach { cond =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            sql(s"CREATE TABLE $t (id INT, d DATE, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicate() == null, s"$cond $ansi")
+          }
+        }
+      }
     }
   }
 

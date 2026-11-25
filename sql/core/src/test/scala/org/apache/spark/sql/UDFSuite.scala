@@ -171,6 +171,33 @@ class UDFSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-62146: error reporting for named arguments - udf") {
+    val legacyUdaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType().add("a", LongType)
+      def bufferSchema: StructType = new StructType().add("sum", LongType)
+      def dataType: DataType = LongType
+      def deterministic: Boolean = true
+      def initialize(buffer: MutableAggregationBuffer): Unit = {}
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {}
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {}
+      def evaluate(buffer: Row): Any = buffer.getLong(0)
+    }
+    withUserDefinedFunction("f1" -> true, "f2" -> true, "f3" -> true, "f4" -> true) {
+      spark.udf.register("f1", (x: Long) => x + 1)
+      spark.udf.register("f2", udf((x: Long) => x + 1))
+      spark.udf.register("f3", udaf(KryoBufAggregator()))
+      spark.udf.register("f4", legacyUdaf)
+      Seq("f1", "f2", "f3", "f4").foreach { name =>
+        val call = s"$name(x => 1L)"
+        checkError(
+          exception = intercept[AnalysisException](sql(s"SELECT $call").collect()),
+          condition = "NAMED_PARAMETERS_NOT_SUPPORTED",
+          parameters = Map("functionName" -> toSQLId(name)),
+          context = ExpectedContext(fragment = call, start = 7, stop = 6 + call.length))
+      }
+    }
+  }
+
   test("error reporting for undefined functions") {
     val sqlText = "a_function_that_does_not_exist()"
     checkError(
@@ -1274,6 +1301,44 @@ class UDFSuite extends SharedSparkSession {
     val df = Seq(Some(1), None).toDF("c")
       .select(f($"c").as("f"), f($"f"))
     checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
+  }
+
+  test("SPARK-61935: ScalaUDF null handling of a column made nullable by an outer join") {
+    val f = udf[Int, Int](_ + 1)
+    val ds1 = Seq(1, 2).toDS()
+    val ds2 = Seq(2).toDS()
+    // `ds2("value")` is resolved as non-nullable, and becomes nullable after resolution
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer").select(f(ds2("value"))),
+      Row(null) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-61935: grouping sets, CTE and generator over a ScalaUDF with a primitive input") {
+    withTempView("gs") {
+      withUserDefinedFunction("plus1" -> true) {
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        Seq((1, None), (2, Some(201)), (3, None)).toDF("pk", "salary")
+          .createOrReplaceTempView("gs")
+
+        checkAnswer(
+          sql("SELECT plus1(salary) AS k, count(*) FROM gs " +
+            "GROUP BY GROUPING SETS ((plus1(salary)))"),
+          Row(null, 2) :: Row(202, 1) :: Nil)
+
+        // a CTE that is not inlined
+        checkAnswer(
+          sql(
+            """WITH c AS (SELECT pk, plus1(salary) AS k, rand() AS r FROM gs)
+              |SELECT a.pk, a.k, a.k IS NULL FROM c a JOIN c b ON a.pk = b.pk
+              |""".stripMargin),
+          Row(1, null, true) :: Row(2, 202, false) :: Row(3, null, true) :: Nil)
+
+        val df = sql("SELECT explode(array(plus1(a), plus1(b))) AS v " +
+          "FROM VALUES (1, 2), (NULL, 3) AS t(a, b)")
+        assert(df.schema("v").nullable)
+        checkAnswer(df, Row(2) :: Row(3) :: Row(null) :: Row(4) :: Nil)
+      }
+    }
   }
 
   test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {

@@ -633,6 +633,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableOptionalReferenceResolution")
+      .internal()
+      .doc("When true, enables resolution of optional column, field, and variable references " +
+        "(for example `col?`) in single-pass analyzer. Otherwise, resolution falls back to " +
+        "fixed-point analyzer.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -1237,10 +1248,27 @@ object SQLConf {
       .doc("When true, use a dedicated sort-merge physical operator for DataFrame AS-OF joins " +
         "instead of rewriting to a correlated subquery. The strategy is selected during " +
         "analysis; later changes to this setting do not affect already analyzed joins. " +
-        "SQL AS-OF joins always use sort-merge. The sort-merge operator evaluates " +
+        "SQL AS-OF joins and DataFrame AS-OF joins with a streaming left side always use " +
+        "sort-merge, unless spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery is " +
+        "true. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_AS_OF_JOIN_REWRITE_STREAMING_LEFT_TO_SUBQUERY =
+    buildConf("spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery")
+      .internal()
+      .doc("When true, a DataFrame AS-OF join with a streaming left side is rewritten to a " +
+        "correlated subquery unless spark.sql.join.sortMergeAsOfJoin.enabled is true, which is " +
+        "the behavior in Spark 4.3 and earlier. Its decorrelation adds stateful operators: " +
+        "without a watermark the query fails at its first micro-batch, and with a watermark " +
+        "the query holds back and drops rows. Use it only to restart an existing query from " +
+        "a checkpoint written with that behavior. When false, such a join uses the sort-merge " +
+        "operator. The strategy is selected during analysis.")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -4314,8 +4342,11 @@ object SQLConf {
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
-      .doc("When true, Spark will validate if renamed checkpoint file exists.")
-      .internal()
+      .doc("When true, after renaming a checkpoint file from its temporary file, Spark " +
+        "verifies that the renamed file exists and fails the write if it does not, instead " +
+        "of committing a batch whose checkpoint file is missing. This adds one existence " +
+        "check per checkpoint file written. Consider enabling it when the checkpoint " +
+        "location is on an object store whose rename is not guaranteed to be atomic.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4411,6 +4442,21 @@ object SQLConf {
     .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS =
+    buildConf("spark.sql.streaming.join.preserveEventTimeColumns.enabled")
+      .internal()
+      .doc("When true, column pruning preserves an unambiguous watermark timestamp for " +
+        "late-event filtering in plans without unexpanded CTE references whose only stateful " +
+        "operator is a stream-stream join with no residual condition after predicate pushdown. " +
+        "Other plan shapes keep legacy pruning even when this value is true. The timestamp " +
+        "is stored in the ordinary input row. The checkpoint pins the value across restarts. " +
+        "Existing checkpoints without this setting use false to preserve their " +
+        "state schemas and pruning behavior.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
@@ -4750,6 +4796,15 @@ object SQLConf {
     buildConf("spark.sql.codegen.join.sortMergeAsOfJoin.enabled")
       .internal()
       .doc("When true, enable code-gen for backward and forward sort-merge AS-OF join.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_BIN_BY_CODEGEN =
+    buildConf("spark.sql.codegen.binBy.enabled")
+      .internal()
+      .doc("When true, enable code-gen for the BIN BY relation operator.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -5703,9 +5758,7 @@ object SQLConf {
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
-        "or a NumPy ndarray. " +
-        "The following data type is unsupported: " +
-        "ArrayType of TimestampType.")
+        "or a NumPy ndarray.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -5795,6 +5848,26 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
       .createWithDefault(100)
+
+  val PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingAggregation")
+      .doc("The level at which the sampling profiler aggregates the sampled call stacks: " +
+        "\"query\" merges samples from the same SQL query, or from all micro-batches of the " +
+        "same streaming query (samples outside a SQL query are merged under \"unknown\"), " +
+        "\"stage\" merges samples from the same stage, and " +
+        "\"task\" keeps one result per task, merging its attempts. At every level, threads " +
+        "with the same name are merged into one call tree, even threads of one task that " +
+        "run at the same time. A finer level uses more memory where the results are " +
+        "merged: on the driver in classic PySpark, and on the " +
+        "client in Spark Connect, where the server keeps every task's result until it sends " +
+        "them to the client, whatever the level. This takes effect only when " +
+        "spark.sql.pyspark.udf.profiler is set to \"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("query", "stage", "task"))
+      .createWithDefault("stage")
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -6182,7 +6255,8 @@ object SQLConf {
   val PYTHON_UDF_DETAILED_TIMING_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
       .internal()
-      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .doc("When true, collect detailed timing metrics for supported Python UDFs. " +
+        "Detailed timing is not collected when spark.python.udf.pipelined.enabled is true.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -6676,7 +6750,7 @@ object SQLConf {
         "input relation resolves, so errors that leave it unresolved, such as a missing " +
         "table, are reported first.")
       .internal()
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -7021,6 +7095,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.evalCountBugUdfConditionally.enabled")
+      .internal()
+      .doc("When true, a Python or external UDF in the zero-row result of a COUNT-bug rewrite " +
+        "in DecorrelateInnerQuery is evaluated only for the outer rows that take that branch, " +
+        "so such a UDF no longer runs (and possibly fails) on rows that have matching inner " +
+        "rows. When false, revert to evaluating the UDF for every row, which can fail a query " +
+        "that references the UDF's result only for rows without matching inner rows. Only " +
+        "effective for the subqueries whose COUNT bug DecorrelateInnerQuery handles, which needs " +
+        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG =
     buildConf("spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled")
       .internal()
@@ -7176,6 +7265,18 @@ object SQLConf {
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
         "be applied only when any artifact is added to the session.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_LIST_ALL_SESSIONS_RESOURCES =
+    buildConf("spark.sql.legacy.listAllSessionsResources")
+      .internal()
+      .doc("When true, LIST FILES, LIST JARS and LIST ARCHIVES list the files, jars and archives " +
+        "of every session, as before Spark 4.5, also in a session whose artifacts are isolated. " +
+        "When false, such a session lists those added to it and those added to the SparkContext " +
+        "outside of any session.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -8730,6 +8831,33 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIONAL_REFERENCES_ENABLED =
+    buildConf("spark.sql.optionalReferences.enabled")
+      .internal()
+      .doc("When true, a `?` after an identifier of a column, field, or variable reference, or " +
+        "after a named parameter marker, makes that identifier optional: when no name matches " +
+        "the identifier, the reference evaluates to a NULL of type VOID instead of raising a " +
+        "not-found error. Ambiguous references and type errors are still raised. UPDATE, " +
+        "DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
+        "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
+        "and OPTIONS clauses of table and function definitions reject optional references.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES =
+    buildConf("spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences")
+      .internal()
+      .doc("When true (legacy behavior), the body of a SQL function that is called in a " +
+        "subquery resolves names that are neither its parameters nor its own columns as " +
+        "columns of the query around the subquery, before session variables. When false (the " +
+        "default), the body does not reference the calling query, like the body of a view.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
     buildConf("spark.sql.stableDerivedColumnAlias.enabled")
       .internal()
@@ -9086,22 +9214,47 @@ object SQLConf {
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.enabled")
       .internal()
-      .doc("When true, pushes an EnsureRequirements hash shuffle below a union during AQE " +
-        "query stage preparation. Eligible children already reporting the selected layout " +
-        "are retained; other children are retargeted or receive a new exchange. The target " +
-        "partition count must be at least the smaller of the replaced exchange's count and " +
-        "the effective initial shuffle count, including " +
-        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set, and at most a bounded " +
-        "multiple of the larger of the two. Requires " +
-        s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
-        "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
-        "shuffled join's layout can make skew optimization or local reads violate ancestor " +
-        "requirements; AQE may reject the optimization or add a shuffle when skew optimization " +
-        "is forced. Join inputs and join branches are opt-in. Cost compensation applies only " +
-        "to SimpleCostEvaluator. Custom evaluators should account for one union exchange " +
-        "becoming multiple branch exchanges; otherwise AQE may reject a re-plan and its other " +
-        "runtime optimizations due to the increased exchange count.")
+      .doc("When true, pushes an EnsureRequirements shuffle below a union during AQE query " +
+        "stage preparation. The shuffle and the target are hash or V2 keyed layouts. A V2 keyed " +
+        "target additionally requires " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled, " +
+        "which the V2 bucketing settings further gate; it is off by default. Eligible " +
+        "children already reporting the target keep their layouts; under a keyed target so do " +
+        "an unmarked child whose keys are a subset of the domain's and a marked child that " +
+        "declares the domain's list in the same order and still routes by hash. Every other " +
+        "child, including an ineligible one that reports the target, is retargeted or given a " +
+        "new exchange. The target partition count must be at least the smaller of " +
+        "the replaced exchange's count and the effective initial shuffle count, and at most a " +
+        s"bounded multiple of the larger; the initial count includes " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
+        s"${UNION_OUTPUT_PARTITIONING.key}. Removing the union's exchange can reduce AQE skew " +
+        "handling and join conversion opportunities. Keeping a shuffled join child's layout " +
+        "can make skew optimization or local reads violate ancestor requirements; AQE then " +
+        "rejects the optimization or adds a shuffle when skew optimization is forced. Join " +
+        "inputs and join branches are opt-in. Only SimpleCostEvaluator compensates the added " +
+        "exchanges; custom evaluators should account for them, or AQE may reject the re-plan " +
+        "and its other runtime optimizations.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.partialReplay.enabled")
+      .internal()
+      .doc("When the whole-plan check rejects a push-down proposal, the rule plans the same " +
+        "query with keyed targets off, which is the base policy, and keeps that plan when the " +
+        "whole plan holds; otherwise it falls back to the whole-plan retry on the removed " +
+        "layouts. When enabled, the rule also replays the proposal one site at a time: keyed " +
+        "targets on top of the hash-only plan, or the proposal itself over the input plan when " +
+        "that pass changes nothing or fails. In the replay over the input plan a site the whole " +
+        "plan rejects takes the layout of the exchange it removes; the replay visits a site " +
+        "before the sites that contain it, so a nested union can shuffle an inner site's moved " +
+        "legs a second time. A replayed site is kept only while the whole plan still holds. " +
+        "Each attempt re-derives the whole plan, and a site in the replay over the input plan " +
+        "can try two targets, so a rejected proposal costs up to two rewrites and checks per " +
+        "candidate site when enabled.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -9184,6 +9337,39 @@ object SQLConf {
       .checkValue(_ >= 0, "The maximum number of union children must be non-negative.")
       .createWithDefault(10)
 
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled")
+      .internal()
+      .doc("When true, union shuffle push-down may use a V2 keyed layout as the union's " +
+        "output, whether the shuffle it replaces was keyed or hash. A child already reporting " +
+        "the picked domain keeps its layout, and so does an unmarked child reporting a subset " +
+        "of its keys; a marked child has to declare the domain's list in the same order and " +
+        "still route unlisted keys by hash. The " +
+        "other children are shuffled onto the domain, and rows of a key the domain does not " +
+        "declare are routed by hash, which the layout records. The grouping above the rebuilt " +
+        "union keeps the claim to that key set. When false, the rule uses hash layouts only. " +
+        s"Requires ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key}, " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_SHUFFLE_ENABLED.key}, since a child " +
+        s"may be shuffled onto the domain, with " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} disabled. " +
+        "A target naming only part of the consumer's cluster keys needs " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} disabled and " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys." +
+        "enabled on. A target partitioned by a transform over the cluster keys, such as " +
+        "bucket(n, id), needs the subset permission whatever " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} is set to. " +
+        "A source-reported keyed layout is kept only when the consumer's shuffle group cannot " +
+        s"coalesce: ${COALESCE_PARTITIONS_ENABLED.key} off, " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key} on, or " +
+        "a consumer whose inputs do not all reach an exchange, which the rule admits without " +
+        "either setting. A keyed target kept at an inner union site leaves a grouped layout " +
+        "that an enclosing union site cannot take as its target, so a nested union can shuffle " +
+        "the inner site's moved legs a second time.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
     buildConf(
       "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys.enabled"
@@ -9192,7 +9378,11 @@ object SQLConf {
       .doc("When true, shuffle push-down may use partition keys that are a subset of the " +
         s"consumer's clustering keys if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} " +
         "is false and the consumer accepts that distribution. Such targets can concentrate " +
-        "rows in fewer partitions. When false, targets must match all clustering keys.")
+        "rows in fewer partitions. A V2 keyed target partitioned by a transform over the " +
+        "clustering keys, such as bucket(n, id), needs this permission even when it covers " +
+        "every one of them, and a V2 keyed target naming part of the clustering keys also " +
+        s"needs ${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} off. When " +
+        "false, targets must match all clustering keys.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -9479,6 +9669,20 @@ object SQLConf {
       .createWithDefault(1000)
   }
 
+  val LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA = {
+    buildConf("spark.sql.legacy.pipelines.streamingTable.keepExistingColumnMetadata")
+      .internal()
+      .doc("When true, an incremental update of a Declarative Pipelines streaming table keeps " +
+        "the column comments and other column metadata the table already has on the columns " +
+        "it shares with the pipeline's declared or inferred schema, as Spark 4.4 does. When " +
+        "false (default), those columns take their metadata from the pipeline's schema, as a " +
+        "full refresh and an update of a materialized view do.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   val HADOOP_LINE_RECORD_READER_ENABLED =
     buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
@@ -9524,6 +9728,19 @@ object SQLConf {
         "According to the description of the split function, this should be set to false by " +
         "default. See SPARK-49968 for details.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK =
+    buildConf("spark.sql.legacy.toChar.formatZeroAsBlank")
+      .internal()
+      .doc("When set to true, to_char restores the results of Spark 4.3 and earlier, which " +
+        "leave out the ones digit of a zero value for some format strings with no digits after " +
+        "the decimal point. For example: SELECT to_char(0, '999') returns '   ' and " +
+        "SELECT to_char(0, '999S') returns '+   '. When set to false, the ones digit is kept: " +
+        "they return '  0' and '  0+'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -9839,6 +10056,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
 
   override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
+
+  override def optionalReferencesEnabled: Boolean = getConf(OPTIONAL_REFERENCES_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
@@ -10687,6 +10906,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
 
+  def pythonUDFProfilerSamplingAggregation: String =
+    getConf(PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION)
+
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
@@ -11147,6 +11369,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
+
+  def legacyPipelinesKeepStreamingTableColumnMetadata: Boolean =
+    getConf(SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 

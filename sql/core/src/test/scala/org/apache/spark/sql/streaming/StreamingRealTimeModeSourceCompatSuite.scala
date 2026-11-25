@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off
@@ -244,6 +245,7 @@ private class CompatRealTimeTable extends Table with SupportsRead {
  * RTM streaming query to prove an external-style source is still driven correctly, for both
  * `nextWithTimeout` entry points.
  */
+@DataSourceV2Test
 class StreamingRealTimeModeSourceCompatSuite extends StreamRealTimeModeManualClockSuiteBase {
   import testImplicits._
 
