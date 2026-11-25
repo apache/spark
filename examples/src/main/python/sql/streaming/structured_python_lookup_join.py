@@ -29,7 +29,7 @@ The example joins a stream of events (user_id, segment, day) with the offers sto
       ON offers.user_id = events.user_id
      AND offers.segment <=> events.segment
      AND offers.valid_from <= events.day AND events.day < offers.valid_until
-    WHERE offers.country = 'KR'
+     AND offers.country = 'KR'
 
 Key concepts demonstrated:
 - Hint mode: a source with reader() and lookupReader() is read by lookups only where the query
@@ -226,9 +226,9 @@ class OffersLookupReader(DataSourceLookupReader):
         return self.conn.execute(sql, args)
 
     def lookup(self, parameters):
-        # parameters: a list of distinct tuples, one value per selected predicate; ordinal i is
-        # parameters[i]. segment can be None, and IS matches a NULL. An ordinal that never
-        # appears in the results is a miss.
+        # parameters: a list of tuples, one per distinct parameter row and one value per
+        # selected predicate; ordinal i is parameters[i]. segment can be None, and IS matches a
+        # NULL. An ordinal that never appears in the results is a miss.
         cursor = self._query(parameters)
         if not self.arrow:
             # Yield (ordinal, row in schema order) pairs.

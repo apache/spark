@@ -624,7 +624,10 @@ and the reader may keep what it learns on ``self``:
 Spark then pickles the reader. On the executors, it calls :meth:`DataSourceLookupReader.lookup`
 once per request, on a copy of the reader per input partition, and
 :meth:`DataSourceLookupReader.close` after the last request. ``lookup`` receives a list of
-distinct tuples, one value per selected predicate. Only the fields of ``<=>`` predicates can be
+tuples, one per distinct parameter row and one value per selected predicate. A ``TIMESTAMP``
+value arrives as a naive ``datetime`` in the worker's local time, so two instants in the hour
+that a daylight-saving change repeats can make two tuples equal: do not rely on distinct tuples
+when a selected parameter is a ``TIMESTAMP``. Only the fields of ``<=>`` predicates can be
 ``None``, and a ``None`` there matches a stored NULL. The example sends one SQL statement per
 request, not one per key: the parameter rows become a ``VALUES`` table with their ordinals,
 joined to the stored table. It yields one ``(ordinal, row)`` pair per result row, where the
