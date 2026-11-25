@@ -402,7 +402,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
       outerPlan: LogicalPlan,
       innerPlan: LogicalPlan,
       conditions: Seq[Expression]): LogicalPlan = innerPlan match {
-    case d @ DomainJoin(domainAttrs, child, joinType, outerJoinCondition) =>
+    case d @ DomainJoin(domainAttrs, child, joinType, outerJoinCondition, _) =>
       val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
 
       val newChild = joinType match {

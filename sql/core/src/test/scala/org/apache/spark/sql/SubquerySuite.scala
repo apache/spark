@@ -27,16 +27,19 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Ev
   ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class SubquerySuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -73,6 +76,29 @@ class SubquerySuite extends SharedSparkSession
     r.createOrReplaceTempView("r")
     t.createOrReplaceTempView("t")
   }
+
+  // The query is optimized and planned, and fails when it runs.
+  private def checkFailsAtRuntime[T <: SparkThrowable : ClassTag](
+      query: String,
+      condition: String): Unit = withClue(query) {
+    val df = sql(query)
+    df.queryExecution.executedPlan
+    val e = intercept[T](df.collect())
+    assert(e.getCondition === condition)
+  }
+
+  private def optimizedPlan(query: String, legacyNestedAggregate: Boolean): LogicalPlan =
+    withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key ->
+        legacyNestedAggregate.toString) {
+      sql(query).queryExecution.optimizedPlan
+    }
+
+  // COUNT(*) over a correlated MAX with a filter between them that keeps every row. The filter
+  // keeps PullupCorrelatedPredicates from computing the result for an outer row without matching
+  // rows before decorrelation, so the subquery needs the domain joins of DecorrelateInnerQuery.
+  private def domainJoinCount(outer: String): String =
+    s"(SELECT COUNT(*) FROM (SELECT MAX(b.v) m FROM b WHERE b.k = $outer) " +
+      "WHERE m IS NULL OR m >= 0)"
 
   private def checkNumJoins(plan: LogicalPlan, numJoins: Int): Unit = {
     val joins = plan.collect { case j: Join => j }
@@ -3635,16 +3661,7 @@ class SubquerySuite extends SharedSparkSession
       Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
       Seq.empty[Int].toDF("k").createOrReplaceTempView("e")
       Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
-      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
-      // is still optimized and planned, and fails when it runs.
-      def checkFailsAtRuntime[T <: SparkThrowable : ClassTag](
-          query: String,
-          condition: String): Unit = withClue(query) {
-        val df = sql(query)
-        df.queryExecution.executedPlan
-        val e = intercept[T](df.collect())
-        assert(e.getCondition === condition)
-      }
+      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows.
       def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
           query: String,
           condition: String): Unit = withClue(query) {
@@ -3774,6 +3791,496 @@ class SubquerySuite extends SharedSparkSession
         checkAnswer(
           sql(s"SELECT * FROM t1 WHERE b IN (SELECT c FROM t2) AND $guard AND a / b > 1"),
           Row(4, 2))
+      }
+    }
+  }
+
+  test("SPARK-60501: count bug of correlated scalar subqueries over an emptied local relation") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1, a2) AS VALUES (1, 1), (2, 2)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (1, 1), (2, 2)")
+      // ConvertToLocalRelation, which the test session excludes, empties the filtered relation.
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+        // Projections over a COUNT whose filtered input becomes empty.
+        checkAnswer(
+          sql("SELECT a1, (SELECT s * s FROM (SELECT c + 1 AS s FROM (SELECT COUNT(*) c FROM t2 " +
+            "WHERE t2.b1 = t1.a1 AND t2.b2 > 10))) FROM t1"),
+          Seq(Row(1, 1), Row(2, 1)))
+        // Results of top aggregates over a lower MAX, for which the result for an outer row
+        // without matching rows is computed before decorrelation (the routing is checked in
+        // PullupCorrelatedPredicatesSuite).
+        checkAnswer(
+          sql("SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
+            "WHERE t2.b1 = t1.a1 AND t2.b2 > 10)) FROM t1"),
+          Seq(Row(1, 1), Row(2, 1)))
+        checkAnswer(
+          sql("SELECT a1, (SELECT struct(SUM(m), COUNT(m), COLLECT_LIST(m)) FROM " +
+            "(SELECT MAX(b2) m FROM t2 WHERE t2.b1 = t1.a1 AND t2.b2 > 10)) FROM t1"),
+          Seq(Row(1, Row(null, 0, Seq())), Row(2, Row(null, 0, Seq()))))
+        // An uncorrelated lower COUNT returns the correct result, as before (the routing is
+        // checked in PullupCorrelatedPredicatesSuite).
+        checkAnswer(
+          sql("SELECT a1, (SELECT COUNT(*) FROM (SELECT COUNT(*) c FROM t2 WHERE t2.b2 > 10) " +
+            "WHERE c < t1.a2) FROM t1"),
+          Seq(Row(1, 1), Row(2, 1)))
+      }
+    }
+  }
+
+  test("SPARK-60501: a grouped top aggregate over a lower aggregate gets the result computed " +
+      "before decorrelation") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1) AS VALUES (0), (1)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
+      // The top aggregate returns one row for the group of the row of the lower MAX, also for
+      // a1 = 1, which has no matching rows. On master, the subquery had no count bug handling,
+      // since it has a GROUP BY. It returns at most one row, so it gets a left outer join, also
+      // with single joins on, and no other join.
+      withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val df = sql("SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
+          "WHERE t2.b1 = t1.a1) GROUP BY m) FROM t1")
+        checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        assert(df.queryExecution.optimizedPlan.collect { case j: Join => j.joinType } ==
+          Seq(LeftOuter))
+      }
+    }
+  }
+
+  test("SPARK-60501: an expression that fails on the value over no rows fails at runtime") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1, a2) AS VALUES (0, 1), (1, 2)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
+      val subquery = "(SELECT SUM(d) FROM (SELECT 10 / COALESCE(MAX(b2), 0) d FROM t2 " +
+        "WHERE t1.a1 = t2.b1))"
+      // The golden file has these queries too, but cannot tell when they fail. The value over no
+      // rows is computed for t1.a1 = 1, which has no matching rows, also in the second query,
+      // whose WHERE removes that row. In the last query, every outer row has matching rows. The
+      // legacy conf gives the results of before. A regular session also runs
+      // ConvertToLocalRelation, which the test session excludes, over the views.
+      val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
+      Seq(Nil, Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "")).foreach { sessionConfs =>
+        withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: sessionConfs: _*) {
+          val all = s"SELECT a1, $subquery FROM t1"
+          val filtered = s"SELECT a1 FROM t1 WHERE a1 = 0 AND $subquery IS NOT NULL"
+          Seq(all, filtered).foreach {
+            checkFailsAtRuntime[SparkArithmeticException](_, "DIVIDE_BY_ZERO")
+          }
+          checkAnswer(sql(s"SELECT a1, $subquery FROM t1 WHERE a1 = 0"), Row(0, 10.0 / 3))
+          withSQLConf(legacyKey -> "true") {
+            checkAnswer(sql(all), Seq(Row(0, 10.0 / 3), Row(1, null)))
+            checkAnswer(sql(filtered), Row(0))
+          }
+          // So does a grouping key over the value over no rows, which keeps the result from being
+          // computed before decorrelation.
+          val groupedByFailing = "SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
+            "WHERE t1.a1 = t2.b1) GROUP BY 10 / COALESCE(m, 0)) FROM t1"
+          checkFailsAtRuntime[SparkArithmeticException](groupedByFailing, "DIVIDE_BY_ZERO")
+          withSQLConf(legacyKey -> "true") {
+            checkAnswer(sql(groupedByFailing), Seq(Row(0, 1), Row(1, null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60501: a Python UDF over the result of a lower aggregate runs on the value over no " +
+      "rows only for outer rows without matching rows") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    registerTestUDF(TestFailingPythonUDF(name = "inv"), spark)
+    withTempView("lo", "lo7", "ri") {
+      Seq(2, 3, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 3, 6, 7).toDF("a").createOrReplaceTempView("lo7")
+      Seq((2, 3L), (2, 3L), (3, 2L), (6, 1L)).toDF("c", "d").createOrReplaceTempView("ri")
+      val subquery = "(SELECT SUM(x) FROM (SELECT inv(COALESCE(MAX(ri.d), 0)) AS x FROM ri " +
+        "WHERE ri.c = o.a))"
+      // Every outer row of lo has matching rows, so inv(0), the value over no rows, is not
+      // computed (SPARK-61482).
+      checkAnswer(sql(s"SELECT o.a, $subquery FROM lo o"),
+        Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Nil)
+      // The outer row 7 has no matching rows, so inv(0) is computed for it and fails.
+      val e = intercept[Exception](sql(s"SELECT o.a, $subquery FROM lo7 o").collect())
+      assert(e.getMessage.contains("ZeroDivisionError"))
+      // The value over no rows of a UDF that does not fail there is the correct result for 7.
+      // A COUNT(*) does not use the result of the UDF, so it is not computed for 7 either.
+      checkAnswer(sql("SELECT o.a, (SELECT COUNT(*) FROM (SELECT inv(COALESCE(MAX(ri.d), 0)) " +
+        "AS x FROM ri WHERE ri.c = o.a)) FROM lo7 o"),
+        Row(2, 1) :: Row(3, 1) :: Row(6, 1) :: Row(7, 1) :: Nil)
+      checkAnswer(sql("SELECT o.a, (SELECT SUM(x) FROM (SELECT inv(10 DIV " +
+        "COALESCE(MAX(ri.d), 1)) AS x FROM ri WHERE ri.c = o.a)) FROM lo7 o"),
+        Row(2, 33) :: Row(3, 20) :: Row(6, 10) :: Row(7, 10) :: Nil)
+      // Without SPARK-61482's conditional evaluation, the UDF would run on the value over no rows
+      // for every outer row, so the subquery keeps the count bug handling of before.
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+        checkAnswer(sql(s"SELECT o.a, $subquery FROM lo o"),
+          Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Nil)
+        checkAnswer(sql(s"SELECT o.a, $subquery FROM lo7 o"),
+          Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Row(7, null) :: Nil)
+        // A COUNT(*), whose result is computed before decorrelation, still gets the fix.
+        checkAnswer(sql("SELECT o.a, (SELECT COUNT(*) FROM (SELECT inv(COALESCE(MAX(ri.d), 0)) " +
+          "AS x FROM ri WHERE ri.c = o.a)) FROM lo7 o"),
+          Row(2, 1) :: Row(3, 1) :: Row(6, 1) :: Row(7, 1) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-60501: a non-deterministic input of the operator with the subquery gets the fix " +
+      "without domain joins and keeps the count bug handling of before where it needs them") {
+    withTempView("b") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      withUserDefinedFunction("spark60501_rk" -> true) {
+        spark.udf.register("spark60501_rk",
+          udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
+        // Every key has one row in b, so COUNT(*) over its MAX is 1. The domain joins of
+        // decorrelation would compute the random keys again, and outer rows whose key is
+        // missing there would get NULL.
+        Seq("(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.kk))",
+            domainJoinCount("o.kk")).foreach { subquery =>
+          checkAnswer(
+            sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM " +
+              "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
+            Row(1, 1000))
+          // So would they for a non-deterministic CTE that is referenced twice, which is not
+          // inlined and is computed again when its exchange is not reused.
+          withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+            checkAnswer(
+              sql("WITH o AS (SELECT spark60501_rk(id) kk FROM range(1000)) " +
+                s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM o " +
+                s"UNION ALL SELECT $subquery c FROM o) GROUP BY c"),
+              Row(1, 2000))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60501: a result computed before decorrelation is not used where the domain " +
+      "join that decorrelation adds anyway computes a non-deterministic outer input again") {
+    withTempView("b") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      withUserDefinedFunction("spark60501_rk" -> true) {
+        spark.udf.register("spark60501_rk",
+          udf((_: Long) => 1 + scala.util.Random.nextInt(999)).asNondeterministic())
+        // Every key has rows below it in b, so s is not NULL and the result is 0 for every row.
+        // For the non-equality correlation, decorrelation adds a domain join, as on master, which
+        // computes the random keys again; a row whose key is missing there gets the result over
+        // no rows of master, 0, and would get 1, the result for a row without matching rows.
+        val subquery = "(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
+          "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))"
+        checkAnswer(
+          sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM " +
+            "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
+          Row(0, 1000))
+        // A COUNT(*) over the MAX is 1 for every outer row, with matching rows or not (kk below
+        // 500 has none here), so that result is used for the rows that the domain joins miss too.
+        checkAnswer(
+          sql("SELECT c, COUNT(*) FROM (SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b " +
+            "WHERE b.k < o.kk - 500)) c FROM (SELECT spark60501_rk(id) kk FROM range(1000)) o) " +
+            "GROUP BY c"),
+          Row(1, 1000))
+      }
+    }
+  }
+
+  test("SPARK-60501: an outer input over an RDD that gives other rows when computed again") {
+    withTempView("b", "o") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      val rdd = spark.sparkContext.parallelize(0 until 1000, 4)
+        .map(_ => Row(1 + scala.util.Random.nextInt(999)))
+      spark.createDataFrame(rdd, new StructType().add("kk", IntegerType))
+        .createOrReplaceTempView("o")
+      // As for a non-deterministic outer input (see above): every key has rows below it in b, so
+      // the result is 0 for the first subquery and 1 for the second, for every row, also where
+      // the domain join of the non-equality correlation computes the RDD again and misses keys.
+      Seq("(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
+          "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))" -> 0,
+          "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))" -> 1).foreach {
+        case (subquery, result) =>
+          checkAnswer(sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM o) GROUP BY c"),
+            Row(result, 1000))
+      }
+      // A subquery that needs the domain joins keeps the plan of before.
+      val needsDomainJoins = "SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b " +
+        "WHERE b.k = o.kk) WHERE s > 0) FROM o"
+      def joins(legacy: Boolean): Int =
+        optimizedPlan(needsDomainJoins, legacy).collect { case j: Join => j }.size
+      assert(joins(legacy = false) === joins(legacy = true))
+    }
+  }
+
+  test("SPARK-60501: a non-deterministic filter above the subquery and a LIMIT in the outer " +
+      "input keep the count bug handling of before where the subquery needs domain joins") {
+    withTempView("b", "o") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      spark.range(1000).selectExpr("id k").createOrReplaceTempView("o")
+      withUserDefinedFunction("spark60501_rk" -> true) {
+        spark.udf.register("spark60501_rk",
+          udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
+        // The filter is pushed below the Project with the subquery, where the domain joins of
+        // decorrelation would evaluate it again, and outer rows that pass it only the first time
+        // would get 0 or NULL instead of 1.
+        Seq("(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))",
+            domainJoinCount("o.k")).foreach { subquery =>
+          checkAnswer(
+            sql(s"SELECT DISTINCT c FROM (SELECT * FROM (SELECT o.k, $subquery c FROM o) " +
+              "WHERE spark60501_rk(k) > 500)"),
+            Row(1))
+        }
+      }
+      // A LIMIT without a total order can keep other rows when computed again, so with one in
+      // the outer input, the plan is the one of before, without the domain joins.
+      val inInput = s"SELECT o.k, ${domainJoinCount("o.k")} FROM (SELECT * FROM o LIMIT 100) o"
+      comparePlans(optimizedPlan(inInput, legacyNestedAggregate = false),
+        optimizedPlan(inInput, legacyNestedAggregate = true))
+      // The result computed before decorrelation needs no domain joins: the same joins as before,
+      // and the correct result for keys without matching rows.
+      val computed = "SELECT o.k, (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b " +
+        "WHERE b.k = o.k)) c FROM (SELECT id k FROM range(1000, 3000) LIMIT 1000) o"
+      checkNumJoins(optimizedPlan(computed, legacyNestedAggregate = false),
+        optimizedPlan(computed, legacyNestedAggregate = true).collect { case j: Join => j }.size)
+      checkAnswer(sql(s"SELECT DISTINCT c FROM ($computed)"), Row(1))
+    }
+  }
+
+  test("SPARK-60501: a LIMIT above the subquery gets the fix without a LIMIT in the domain " +
+      "joins") {
+    withTempView("b", "o") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      spark.range(1000).selectExpr("id k").createOrReplaceTempView("o")
+      val subquery = domainJoinCount("o.k")
+      def joins(plan: LogicalPlan): Int = plan.collect { case j: Join => j }.size
+      def limits(plan: LogicalPlan): Int = plan.collect { case l: LocalLimit => l }.size
+      def limitsInLeftOuterRight(plan: LogicalPlan): Int =
+        plan.collect { case Join(_, right, LeftOuter, _, _) => limits(right) }.sum
+      def limitedLeftOuterJoin(plan: LogicalPlan): Boolean = plan.exists {
+        case Join(LocalLimit(_, _), _, LeftOuter, _, _) => true
+        case _ => false
+      }
+      // LimitPushDown keeps the LIMIT above the Project with the subquery until the domain joins
+      // are built, also when other rules move a filter or a join condition first, and for a
+      // LIMIT 1 over a DISTINCT. For a LIMIT 1 over a GROUP BY with the subquery,
+      // PullOutGroupingExpressions puts the subquery into a Project below the Aggregate, and the
+      // LIMIT 1 stops above that Project. The subquery gets the domain joins, but no more
+      // LocalLimits than with the legacy conf, and none in the right side of a left outer join,
+      // where the domain joins are.
+      val limitAbove = Seq(
+        s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100",
+        s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k WHERE o.k > 0 LIMIT 100",
+        s"SELECT o.k, $subquery FROM o JOIN b ON b.v = 1 LIMIT 100",
+        s"SELECT o.k, $subquery FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+        s"SELECT o.k, $subquery c FROM (SELECT DISTINCT k FROM o) o GROUP BY ALL LIMIT 1")
+      limitAbove.foreach { query =>
+        val fixed = optimizedPlan(query, legacyNestedAggregate = false)
+        val legacy = optimizedPlan(query, legacyNestedAggregate = true)
+        withClue(query) {
+          assert(joins(fixed) > joins(legacy))
+          assert(limits(fixed) === limits(legacy))
+          assert(limitsInLeftOuterRight(fixed) === 0)
+        }
+      }
+      // Other correlated subqueries keep the pushdown of before: without domain joins, the
+      // LIMIT 1 turns the DISTINCT into a Project, and a non-aggregated subquery, which becomes
+      // a left single join, still gets the LIMIT into the left side of the left join below it.
+      // With the domain joins that decorrelation added before, e.g. over a lower COUNT, for a
+      // non-equality correlation in a single aggregate or for a correlation below a UNION ALL, the
+      // LIMIT still also goes into the domain joins, as on master and 4.3.0.
+      val single = "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)"
+      assert(!optimizedPlan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+        legacyNestedAggregate = false).exists { case a: Aggregate => a.groupOnly; case _ => false })
+      val lowerCount = "(SELECT SUM(c) FROM (SELECT COUNT(*) c FROM b WHERE b.k = o.k))"
+      val nonEquality = "(SELECT MAX(b.v) FROM b WHERE b.k > o.k)"
+      Seq(s"SELECT o.k, $lowerCount FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10",
+          s"SELECT o.k, $lowerCount FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+          s"SELECT o.k, $nonEquality FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10").foreach { query =>
+        withClue(query) {
+          assert(limitsInLeftOuterRight(optimizedPlan(query, legacyNestedAggregate = false)) > 0)
+        }
+      }
+      // A subquery that uses the result computed before decorrelation keeps the domain joins that
+      // decorrelation adds anyway, here for a non-equality correlation and for a correlation below
+      // a UNION ALL. Where that result can differ from the result of an outer row that they miss
+      // and from that of master, they do not get the LIMIT; otherwise, e.g. for COUNT(*) over the
+      // row of the MAX or SUM of the MAX, they do, as on master.
+      def overMax(top: String, correlated: String): String =
+        s"(SELECT $top FROM (SELECT MAX(x.v) s FROM $correlated x))"
+      val nonEqualityInput = "(SELECT b.v FROM b WHERE b.k > o.k)"
+      val unionAllInput = "(SELECT b.v FROM b WHERE b.k = o.k UNION ALL " +
+        "SELECT c.v FROM b c WHERE c.k = o.k)"
+      Seq(nonEqualityInput, unionAllInput).foreach { input =>
+        Seq("COUNT(*) FILTER (WHERE s IS NULL)" -> false, "COUNT(*)" -> true, "SUM(s)" -> true)
+          .foreach { case (top, pushed) =>
+            val query = s"SELECT o.k, ${overMax(top, input)} FROM o LEFT JOIN b c ON o.k = c.k " +
+              "LIMIT 10"
+            val fixed = optimizedPlan(query, legacyNestedAggregate = false)
+            val legacy = optimizedPlan(query, legacyNestedAggregate = true)
+            withClue(query) {
+              assert(joins(fixed) === joins(legacy))
+              assert(limitsInLeftOuterRight(legacy) > 0)
+              assert((limitsInLeftOuterRight(fixed) > 0) === pushed)
+            }
+          }
+      }
+      // Pins the default, under which a non-aggregated subquery becomes a left single join.
+      withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val nonAggregate = "(SELECT b.v FROM b WHERE b.k = o.k)"
+        val unionAll = "(SELECT u.v FROM (SELECT b.v FROM b WHERE b.k = o.k UNION ALL " +
+          "SELECT c.v FROM b c WHERE c.k = o.k) u)"
+        Seq(nonAggregate, unionAll).foreach { s =>
+          val query = s"SELECT o.k, $s FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
+          withClue(query) {
+            assert(limitedLeftOuterJoin(optimizedPlan(query, legacyNestedAggregate = false)))
+          }
+        }
+        val query = s"SELECT o.k, $unionAll FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
+        assert(optimizedPlan(query, legacyNestedAggregate = false).collect {
+          case Join(_, right, LeftSingle, _, _) => limits(right)
+        }.sum > 0, query)
+      }
+      // In a nested subquery, LimitPushDown, which OptimizeSubqueries runs on its plan, keeps the
+      // LIMIT above the inner subquery too, which gets the domain joins.
+      val nested = s"SELECT (SELECT SUM(c) FROM (SELECT o.k, $subquery c FROM o " +
+        "LEFT JOIN b d ON o.k = d.k LIMIT 10)) FROM b WHERE b.k = 0"
+      def innerPlans(legacy: Boolean): Seq[LogicalPlan] =
+        optimizedPlan(nested, legacyNestedAggregate = legacy).flatMap(_.expressions)
+          .flatMap(_.collect { case s: SubqueryExpression => s.plan })
+      val (inner, innerLegacy) = (innerPlans(legacy = false), innerPlans(legacy = true))
+      withClue(nested) {
+        assert(inner.nonEmpty && inner.forall(limitsInLeftOuterRight(_) == 0))
+        assert(inner.map(joins).sum > innerLegacy.map(joins).sum)
+      }
+    }
+  }
+
+  test("SPARK-60501: outer inputs that give the same rows again get the fix") {
+    withTempView("b", "o") {
+      spark.range(3).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      spark.range(4).selectExpr("id k").createOrReplaceTempView("o")
+      // k = 3 has no rows in b, and COUNT(*) over the MAX is 1 for it: under a LIMIT over an
+      // aggregate or an inner join, with an uncorrelated EXISTS, a subquery decorrelated with a
+      // domain join, and a LATERAL join in the outer input, with the domain joins and with the
+      // result computed before decorrelation.
+      val subqueries = Seq(domainJoinCount("o.k"),
+        "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))")
+      for (subquery <- subqueries; query <- Seq(
+          s"SELECT o.k, $subquery FROM (SELECT k, SUM(k) s FROM o GROUP BY k) o LIMIT 21",
+          s"SELECT o.k, $subquery FROM o JOIN (SELECT k j FROM o) p ON o.k = p.j LIMIT 21",
+          s"SELECT o.k, $subquery FROM o WHERE EXISTS (SELECT 1 FROM b)",
+          s"SELECT o.k, $subquery FROM (SELECT o.*, (SELECT MAX(b.v) FROM b WHERE b.k > o.k) mx " +
+            "FROM o) o",
+          s"SELECT o.k, $subquery FROM o WHERE (SELECT MAX(b.v) FROM b WHERE b.k > o.k) IS NULL " +
+            "OR o.k < 4",
+          s"SELECT o.k, $subquery FROM (SELECT o.k, l.m FROM o, LATERAL (SELECT MAX(b.v) m " +
+            "FROM b WHERE b.k = o.k) l) o")) {
+        checkAnswer(sql(query), (0 until 4).map(k => Row(k, 1)))
+      }
+    }
+  }
+
+  test("SPARK-60501: outer references that are not orderable get the fix without domain joins, " +
+      "keep the count bug handling of before where the subquery needs them, and a map lookup " +
+      "that is pulled out gets the fix there") {
+    withTempView("b") {
+      spark.range(3).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      // id = 3 has no matching rows. The domain joins of decorrelation would fail for the struct
+      // with a map field, the variant, a map, here in size(o.m) and in element_at(o.m, 0), and a
+      // calendar interval, so a subquery that needs them keeps the results of before, also the
+      // wrong result for id = 3. The result computed before decorrelation needs no domain joins.
+      Seq("o.s.f" -> "SELECT named_struct('f', id, 'm', map(id, id)) s FROM range(4)",
+          "CAST(o.x AS BIGINT)" -> "SELECT parse_json(CAST(id AS STRING)) x FROM range(4)",
+          "size(o.m) - 1" -> ("SELECT map_from_arrays(sequence(0, CAST(id AS INT)), " +
+            "sequence(0, CAST(id AS INT))) m FROM range(4)"),
+          "element_at(o.m, 0L)" -> "SELECT map(0L, id) m FROM range(4)",
+          "extract(day FROM o.i)" ->
+            "SELECT make_interval(0, 0, 0, CAST(id AS INT)) i FROM range(4)").foreach {
+        case (key, outer) =>
+          checkAnswer(sql(s"SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b " +
+            s"WHERE b.k = $key)) FROM ($outer) o"), Seq(Row(1), Row(1), Row(1), Row(1)))
+          checkAnswer(sql(s"SELECT ${domainJoinCount(key)} FROM ($outer) o"),
+            Seq(Row(1), Row(1), Row(1), Row(0)))
+      }
+      // A lookup o.m[0] is pulled out into the outer query by
+      // PullOutNestedDataOuterRefExpressions, so the outer reference is orderable and the
+      // query returns the correct result with the domain joins, as does an ANSI interval, which
+      // is orderable.
+      checkAnswer(
+        sql(s"SELECT ${domainJoinCount("o.m[0]")} FROM (SELECT map(0L, id) m FROM range(4)) o"),
+        Seq(Row(1), Row(1), Row(1), Row(1)))
+      checkAnswer(
+        sql(s"SELECT ${domainJoinCount("extract(day FROM o.i)")} " +
+          "FROM (SELECT make_dt_interval(CAST(id AS INT)) i FROM range(4)) o"),
+        Seq(Row(1), Row(1), Row(1), Row(1)))
+    }
+  }
+
+  test("SPARK-60501: outer values that compare equal but differ, and a user-defined aggregate " +
+      "function in the lower aggregate, keep the count bug handling of before") {
+    // The domain joins of decorrelation keep one of the outer values -0.0 and 0.0, or 'a' and
+    // 'A' in UTF8_LCASE, and give its result to the other, which a correlation over a binary
+    // string tells apart. These correlations are pulled up without domain joins as before.
+    withTempView("od", "oc", "bc") {
+      sql("CREATE TEMP VIEW od AS SELECT * FROM VALUES (CAST('-0.0' AS DOUBLE)), " +
+        "(CAST('0.0' AS DOUBLE)) AS od(d)")
+      Seq("0.0" -> Seq(Row("-0.0", 0), Row("0.0", 1)),
+          "-0.0" -> Seq(Row("-0.0", 1), Row("0.0", 0))).foreach { case (value, expected) =>
+        withTempView("b") {
+          sql(s"CREATE TEMP VIEW b AS SELECT * FROM VALUES ('$value', 1) AS b(s, v)")
+          checkAnswer(sql("SELECT CAST(od.d AS STRING), (SELECT COUNT(*) FROM (SELECT MAX(b.v) m " +
+            "FROM b WHERE b.s = CAST(od.d AS STRING)) WHERE m IS NOT NULL) FROM od"), expected)
+        }
+      }
+      sql("CREATE TEMP VIEW oc AS SELECT CAST(s AS STRING) COLLATE UTF8_LCASE s FROM " +
+        "VALUES ('a'), ('A') AS t(s)")
+      sql("CREATE TEMP VIEW bc AS SELECT * FROM VALUES ('a', 1) AS bc(t, v)")
+      checkAnswer(sql("SELECT CAST(oc.s AS STRING COLLATE UTF8_BINARY), (SELECT COUNT(*) FROM " +
+        "(SELECT MAX(bc.v) m FROM bc WHERE bc.t = CAST(oc.s AS STRING COLLATE UTF8_BINARY)) " +
+        "WHERE m IS NOT NULL) FROM oc"), Seq(Row("A", 0), Row("a", 1)))
+    }
+    // A Scala Aggregator with a zero of 0 returns 0, not NULL, on empty input. k = 2 has no
+    // matching rows.
+    withTempView("a", "b") {
+      withUserDefinedFunction("spark60501_sum0" -> true) {
+        spark.udf.register("spark60501_sum0", functions.udaf(new Aggregator[Long, Long, Long] {
+          def zero: Long = 0L
+          def reduce(b: Long, a: Long): Long = b + a
+          def merge(b1: Long, b2: Long): Long = b1 + b2
+          def finish(r: Long): Long = r
+          def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+          def outputEncoder: Encoder[Long] = Encoders.scalaLong
+        }))
+        sql("CREATE TEMP VIEW a AS SELECT * FROM VALUES (1), (2) AS a(k)")
+        sql("CREATE TEMP VIEW b AS SELECT * FROM VALUES (1, 100L), (1, 200L) AS b(k, v)")
+        Seq("(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM (SELECT spark60501_sum0(b.v) s " +
+            "FROM b WHERE b.k = a.k))",
+            "(SELECT COUNT(*) FROM (SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k) " +
+            "WHERE s IS NULL)").foreach { subquery =>
+          checkAnswer(sql(s"SELECT a.k, $subquery FROM a"), Seq(Row(1, 0), Row(2, 0)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60501: a streaming outer query gets the fix without domain joins and keeps the " +
+      "count bug handling of before where the subquery needs them") {
+    withTempView("b", "sa", "spark60501_0", "spark60501_1") {
+      sql("CREATE TEMP VIEW b(k, v) AS VALUES (1, 100), (1, 200)")
+      // The domain joins of decorrelation would aggregate the streaming outer query and outer
+      // join it back, which fails in append and update mode, so a subquery that needs them runs
+      // as before. This pins the result of before, also the wrong result for k = 2, which has no
+      // matching rows. The result computed before decorrelation needs no domain joins.
+      Seq("(SELECT COUNT(*) FROM (SELECT MAX(b.v) m FROM b WHERE b.k = sa.k))" -> 1,
+          domainJoinCount("sa.k") -> 0).foreach { case (subquery, unmatched) =>
+        val input = MemoryStream[Int]
+        input.toDF().toDF("k").createOrReplaceTempView("sa")
+        val query = sql(s"SELECT sa.k, $subquery c FROM sa").writeStream.format("memory")
+          .queryName(s"spark60501_$unmatched").outputMode("append").start()
+        try {
+          input.addData(1, 2)
+          query.processAllAvailable()
+          checkAnswer(spark.table(s"spark60501_$unmatched"), Seq(Row(1, 1), Row(2, unmatched)))
+        } finally {
+          query.stop()
+        }
       }
     }
   }

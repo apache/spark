@@ -411,7 +411,8 @@ object SubExprUtils extends PredicateHelper {
  *
  * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on
  * empty input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that
- * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
+ * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL,
+ * unless `countBugResult` is set (see below).
  * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
  * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
  *
@@ -419,6 +420,14 @@ object SubExprUtils extends PredicateHelper {
  * returns at most 1 row. For such subqueries we use a modification of an outer join called
  * LeftSingle join. This value is set in PullupCorrelatedPredicates and used in
  * RewriteCorrelatedScalarSubquery.
+ *
+ * `countBugResult` is the result of the subquery for an outer row for which the decorrelated
+ * subquery returns no row, if PullupCorrelatedPredicates computed it from the subquery before
+ * decorrelation and kept it (see rewriteSubQueries). RewriteCorrelatedScalarSubquery uses it
+ * instead of evaluating the decorrelated subquery on zero tuples, which cannot tell that a lower
+ * Aggregate without grouping expressions returned one row on empty input. When it is set,
+ * `mayHaveCountBug` is true, also for a top Aggregate with a GROUP BY clause over such a lower
+ * Aggregate, which returns a row for the row of the lower Aggregate.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
@@ -427,7 +436,8 @@ case class ScalarSubquery(
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
-    needSingleJoin: Option[Boolean] = None)
+    needSingleJoin: Option[Boolean] = None,
+    countBugResult: Option[Literal] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
@@ -441,7 +451,8 @@ case class ScalarSubquery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
     outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
-  override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+  override def toString: String = s"scalar-subquery#${exprId.id} $conditionString" +
+    countBugResult.map(r => s" countBugResult=${r.sql}").getOrElse("")
   override lazy val canonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,

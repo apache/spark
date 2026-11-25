@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow, NamedExpression, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -351,6 +351,38 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.offset(2).limit(1).analyze),
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-60501: keep a limit above a Project with a scalar subquery with a domain join " +
+      "with keepLimitAbove") {
+    val Seq(a, _, _) = testRelation.output
+    val Seq(d, e, _) = testRelation2.output
+    val agg = testRelation2.groupBy()(max(e).as("m")).analyze
+    def withDomainJoin(marked: Boolean): NamedExpression = {
+      val domainJoin = DomainJoin(Seq(d), testRelation2, keepLimitAbove = marked)
+      ScalarSubquery(domainJoin.groupBy()(max(e).as("m")), outerAttrs = Seq(a)).as("s")
+    }
+    // The joins that RewriteCorrelatedScalarSubquery builds for a domain join with keepLimitAbove
+    // compute the input of the Project again, so a limit there could keep other rows.
+    val join = testRelation.join(testRelation2, LeftOuter, Some(a === d))
+    val groupOnly = testRelation.groupBy(a)(a)
+    // Not analyzed, since the analyzer would recompute the outer references from the plan.
+    val keptAbove = Project(Seq(a, withDomainJoin(marked = true)), join).limit(2)
+    comparePlans(Optimize.execute(keptAbove), keptAbove)
+    val limitOneKeptAbove = Project(Seq(a, withDomainJoin(marked = true)), groupOnly).limit(1)
+    comparePlans(Optimize.execute(limitOneKeptAbove), limitOneKeptAbove)
+    // Other scalar subqueries, also correlated ones and ones with domain joins without
+    // keepLimitAbove, keep the pushdown of before.
+    Seq(withDomainJoin(marked = false), ScalarSubquery(agg, outerAttrs = Seq(a)).as("s"),
+        ScalarSubquery(agg).as("s")).foreach { s =>
+      comparePlans(
+        Optimize.execute(Project(Seq(a, s), join).limit(2)),
+        Project(Seq(a, s),
+          LocalLimit(2, testRelation).join(testRelation2, LeftOuter, Some(a === d))).limit(2))
+      comparePlans(
+        Optimize.execute(Project(Seq(a, s), groupOnly).limit(1)),
+        Project(Seq(a, s), Project(Seq(a), LocalLimit(1, testRelation))).limit(1))
+    }
   }
 
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
