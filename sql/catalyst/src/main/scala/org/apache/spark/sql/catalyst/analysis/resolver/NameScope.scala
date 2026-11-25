@@ -196,6 +196,11 @@ class NameScope(
   /**
    * Whether hidden output can be used for name resolution in this scope. When `false`, only main
    * output and metadata columns from hidden output are considered during resolution.
+   *
+   * This flag and [[shouldPreferHiddenOutput]] are operator-scoped: the operator that marks the
+   * scope uses them for its own expressions, and [[Resolver]] clears them via
+   * [[clearHiddenOutputResolutionMarks]] once that operator is resolved, so they never apply to
+   * the expressions of a parent operator.
    */
   private var canResolveNameByHiddenOutput: Boolean = false
 
@@ -323,6 +328,22 @@ class NameScope(
   }
 
   /**
+   * Clears the marks set by [[markScopeForHaving]], [[markScopeForSort]] and
+   * [[markScopeForHiddenOutputResolution]]. [[Resolver]] calls this after resolving each operator,
+   * so that, for example, a [[Project]] above a [[Filter]] cannot resolve names by the hidden
+   * output the [[Filter]] condition could use:
+   *
+   * {{{
+   *   // Fails with UNRESOLVED_COLUMN, like in the fixed-point Analyzer.
+   *   df.select("col2").filter($"col1" > 1).select("col1")
+   * }}}
+   */
+  def clearHiddenOutputResolutionMarks(): Unit = {
+    canResolveNameByHiddenOutput = false
+    shouldPreferHiddenOutput = false
+  }
+
+  /**
    * Returns new [[NameScope]] which preserves all the immutable [[NameScope]] properties but
    * overwrites `output`, `hiddenOutput`, `availableAliases`, `unaggregatedAccessOnlyIds` and
    * `qualifiedAccessOnlyOutputIds` if provided. The
@@ -336,7 +357,9 @@ class NameScope(
    * while resolving the aggregate expressions and read while resolving the grouping expressions,
    * and an overwrite can happen in between, so dropping it would make SELECT-list aliases
    * invisible to group-by-alias resolution. The `canResolveNameByHiddenOutput` and
-   * `shouldPreferHiddenOutput` flags are propagated from the current scope.
+   * `shouldPreferHiddenOutput` flags are propagated from the current scope, so that they survive
+   * an overwrite done by the operator that set them. [[Resolver]] clears them once that operator
+   * is resolved.
    */
   def overwrite(
       output: Option[Seq[Attribute]] = None,
@@ -489,6 +512,21 @@ class NameScope(
   def clearAvailableAliases(): Unit = {
     availableAliases.clear()
     availableAliasesNameLookup.clear()
+  }
+
+  /**
+   * Clears [[unaggregatedAccessOnlyIds]]. Only HAVING and ORDER BY directly above the grouping
+   * analytics [[Aggregate]] that set them may use them. A [[Project]] or an [[Aggregate]] above it
+   * calls this before resolving its own expressions, because there the Expand-output grouping
+   * attributes are plain input columns:
+   *
+   * {{{
+   *   -- `a` in `sum(a)` is the output column of the derived table.
+   *   SELECT sum(a) FROM (SELECT a FROM t GROUP BY CUBE(a)) sq;
+   * }}}
+   */
+  def clearUnaggregatedAccessOnlyIds(): Unit = {
+    unaggregatedAccessOnlyIds.clear()
   }
 
   /**
@@ -679,7 +717,17 @@ class NameScope(
    * Name resolution can be done using the hidden output for certain operators (e.g [[Sort]],
    * [[Filter]], [[RepartitionByExpression]]). This is indicated by the scope-level
    * [[canResolveNameByHiddenOutput]] flag, set via [[markScopeForHaving]], [[markScopeForSort]],
-   * or directly by the corresponding operator resolver.
+   * or directly by the corresponding operator resolver. When `useHiddenOutputResolutionMarks` is
+   * `false` (lookups from a subquery into this outer scope), the scope marks are ignored and
+   * `parameters.canResolveNameByHiddenOutput` and `parameters.shouldPreferHiddenOutput` are used
+   * instead, because the fixed-point Analyzer resolves outer references only by the output of the
+   * outer operator's children:
+   *
+   * {{{
+   *   -- `t.b` is not in the output of the ORDER BY child, so this fails with UNRESOLVED_COLUMN.
+   *   SELECT a FROM t ORDER BY (SELECT max(v) FROM s WHERE s.k = t.b);
+   * }}}
+   *
    * Example:
    *
    * {{{
@@ -756,13 +804,20 @@ class NameScope(
    */
   def resolveMultipartName(
       multipartName: Seq[String],
-      parameters: NameResolutionParameters = NameResolutionParameters()): NameTarget = {
+      parameters: NameResolutionParameters = NameResolutionParameters(),
+      useHiddenOutputResolutionMarks: Boolean = true): NameTarget = {
+    val (effectiveCanResolveNameByHiddenOutput, effectiveShouldPreferHiddenOutput) =
+      if (useHiddenOutputResolutionMarks) {
+        (canResolveNameByHiddenOutput, shouldPreferHiddenOutput)
+      } else {
+        (parameters.canResolveNameByHiddenOutput, parameters.shouldPreferHiddenOutput)
+      }
     val resolvedMultipartName: ResolvedMultipartName =
       tryResolveMultipartNameByOutput(
         multipartName = multipartName,
         nameComparator = nameComparator,
-        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
-        shouldPreferHiddenOutput = shouldPreferHiddenOutput,
+        canResolveNameByHiddenOutput = effectiveCanResolveNameByHiddenOutput,
+        shouldPreferHiddenOutput = effectiveShouldPreferHiddenOutput,
         canReferenceAggregatedAccessOnlyAttributes =
           parameters.canReferenceAggregatedAccessOnlyAttributes,
         extractValueExtractionKey = parameters.extractValueExtractionKey
@@ -1390,19 +1445,22 @@ class NameScopeStack(
         prevScope.getHiddenAttributeById(attribute.exprId).isEmpty
       }
 
+    // Only the grouping analytics [[Aggregate]] exposes its Expand-output grouping attribute IDs.
+    // Any other operator that redefines the output drops them, so that they are not visible to
+    // the operators above it.
     val newUnaggregatedAccessOnlyIds = groupingModifier match {
       case GroupingModifier.GroupingAnalytics(attributeIds) =>
         val result = new HashSet[ExprId](attributeIds.size)
         result.addAll(attributeIds)
-        Some(result)
+        result
       case _ =>
-        None
+        new HashSet[ExprId]
     }
 
     val newScope = prevScope.overwrite(
       output = Some(output),
       hiddenOutput = Some(resultHiddenOutput),
-      unaggregatedAccessOnlyIds = newUnaggregatedAccessOnlyIds,
+      unaggregatedAccessOnlyIds = Some(newUnaggregatedAccessOnlyIds),
       qualifiedAccessOnlyOutputIds = if (retainQualifiedAccessOnlyOutput) {
         None
       } else {
@@ -1747,7 +1805,11 @@ class NameScopeStack(
     outerScopes.foreach { outer =>
       if (nameTargetFromOuterScope.isEmpty) {
         outerScopeLevel += 1
-        val nameTarget = outer.resolveMultipartName(multipartName, parameters)
+        val nameTarget = outer.resolveMultipartName(
+          multipartName = multipartName,
+          parameters = parameters,
+          useHiddenOutputResolutionMarks = false
+        )
 
         if (nameTarget.candidates.nonEmpty) {
           val candidatesWrappedInOuterReferences = nameTarget.candidates.map { candidate =>

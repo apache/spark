@@ -494,6 +494,10 @@ class Resolver(
             }
         }
 
+      // Hidden output resolution marks only apply to the expressions of the operator that set
+      // them (e.g. [[Sort]] or [[Filter]]), never to its parent's.
+      scopes.current.clearHiddenOutputResolutionMarks()
+
       val resolvedPlanWithMetadataColumns = insertReferencedMetadataColumnsForOperator(
         resolvedPlan = resolvedPlan,
         referencedMetadataColumns =
@@ -648,21 +652,31 @@ class Resolver(
    *
    *  2. DataFrame
    *  {{{ spark.sql("SELECT * FROM VALUES (1, 2)").select("col1").as("q1").select("col2"); }}}
+   *
+   * The child is a new query block, so we push both a [[QueryBlockScope]] and a [[NameScope]] for
+   * it. This way every [[NameScope]] used by the operators of the child (e.g. a [[Sort]] or HAVING
+   * at its top) belongs to the child's [[QueryBlockScope]]. The child's output and hidden output
+   * are read before its [[NameScope]] is popped, because [[NameScopeStack.popScope]] does not
+   * propagate the output.
    */
   private def resolveSubqueryAlias(unresolvedSubqueryAlias: SubqueryAlias): LogicalPlan = {
     queryBlockScopes.push()
-    val resolvedSubqueryAlias = try {
-      unresolvedSubqueryAlias.copy(child = resolve(unresolvedSubqueryAlias.child))
+    scopes.pushScope()
+    val (resolvedSubqueryAlias, childOutput, childHiddenOutput) = try {
+      val resolvedSubqueryAlias =
+        unresolvedSubqueryAlias.copy(child = resolve(unresolvedSubqueryAlias.child))
+      (resolvedSubqueryAlias, scopes.current.output, scopes.current.hiddenOutput)
     } finally {
+      scopes.popScope()
       queryBlockScopes.pop()
     }
 
     val qualifier = resolvedSubqueryAlias.identifier.qualifier :+ resolvedSubqueryAlias.alias
-    val output = scopes.current.output.map(attribute => attribute.withQualifier(qualifier))
+    val output = childOutput.map(attribute => attribute.withQualifier(qualifier))
     val metadataForHiddenOutput = computeMetadataHiddenOutputForSubqueryAlias(
       resolvedChild = resolvedSubqueryAlias.child,
       qualifier = qualifier,
-      hiddenOutput = scopes.current.hiddenOutput
+      hiddenOutput = childHiddenOutput
     )
     scopes.overwriteCurrent(
       output = Some(output),
@@ -1108,9 +1122,12 @@ class Resolver(
    * rebuilt [[LateralJoin]] under that wrapping [[Project]] so validation (missing-input and
    * [[ValidateSubqueryExpression]], which requires the host to be a [[LateralJoin]]) sees it.
    *
-   * Only [[LateralJoin]] needs this: other base operators either wrap themselves in a [[Project]]
-   * during resolution (e.g. [[JoinResolver]]), so insertion leaves that [[Project]] in place, or
-   * host subqueries that [[ValidateSubqueryExpression]] permits under a [[Project]].
+   * Only [[LateralJoin]] is mapped here. Other base operators either wrap themselves in a
+   * [[Project]] during resolution (e.g. [[JoinResolver]]), so insertion leaves that [[Project]] in
+   * place, or host subqueries that [[ValidateSubqueryExpression]] permits under a [[Project]].
+   * A [[Sort]] or [[Filter]] that references both a hidden output column and a metadata column is
+   * still validated in its pre-insertion form, so such queries fail with `MISSING_ATTRIBUTES`:
+   * {{{ SELECT a FROM file_table ORDER BY b, _metadata.file_name; }}}
    */
   private def baseOperatorInResolvedPlan(
       resolvedOperator: LogicalPlan,

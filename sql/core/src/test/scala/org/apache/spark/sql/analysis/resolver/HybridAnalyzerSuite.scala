@@ -466,13 +466,17 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
           )
         }
 
-        val query = spark.sql("SELECT * FROM v_identifier_guard")
-        checkAnswer(query, Seq.empty)
-        assert(
-          query.queryExecution.analyzed
-            .getTagValue(ResolverRunner.SINGLE_PASS_ANALYSIS_MARKER)
-            .isEmpty
-        )
+        // Dual run returns the single-pass result when both analyzers agree, so the marker is
+        // only missing if single-pass rejected the view body.
+        withSQLConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> "true") {
+          val query = spark.sql("SELECT * FROM v_identifier_guard")
+          checkAnswer(query, Seq.empty)
+          assert(
+            query.queryExecution.analyzed
+              .getTagValue(ResolverRunner.SINGLE_PASS_ANALYSIS_MARKER)
+              .isEmpty
+          )
+        }
       }
     }
   }

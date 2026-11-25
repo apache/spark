@@ -19,7 +19,11 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{
+  PosParameterizedQuery,
+  UnresolvedAlias,
+  UnresolvedAttribute
+}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -912,6 +916,18 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUti
           "class org.apache.spark.sql.catalyst.analysis.PosParameter expression resolution"
         )
       )
+      // [[PosParameterizedQuery]] over a [[SupervisingCommand]] or over a plan without parameter
+      // markers is resolved by [[PosParameterizedQueryResolver]].
+      Seq("EXPLAIN SELECT ?", "DESCRIBE QUERY SELECT ?", "EXPLAIN EXPLAIN SELECT ?", "SELECT 1")
+        .foreach { query =>
+          checkResolverGuard(
+            plan = PosParameterizedQuery(
+              spark.sessionState.sqlParser.parsePlan(query),
+              Seq(Literal(1))
+            ),
+            unsupportedReason = None
+          )
+        }
     }
   }
 

@@ -409,22 +409,30 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   }
 
   /**
-   * Returns a sequence of data types representing the widened data types for each column:
+   * Returns the widened data type of each column, like the fixed-point [[WidenSetOperationTypes]]:
    *  - Validates that the number of columns in each child of the set operator is equal.
-   *  - Validates that the data types of columns can be widened to a common type.
-   *  - Deduces the widened data types for each column.
+   *  - Deduces the widened data type of each column. A column has no widened data type (`None`)
+   *    if its data types have no wider common type, but are still compatible in the context of the
+   *    operator (see [[areDataTypesCompatibleInTheContextOfOperator]]), for example structs with
+   *    different field names in a [[Union]]:
+   *    {{{
+   *    SELECT named_struct('a', 1) UNION ALL SELECT named_struct('b', 2);
+   *    }}}
+   *    Such a column is not cast, like in the fixed-point Analyzer. Otherwise we throw
+   *    `INCOMPATIBLE_COLUMN_TYPE`.
    *  - In the case of recursive CTEs (UnionLoop), we follow the logic of the fixed point analyzer
    *  which only widens the type of the recursion, but never the anchor.
    */
   private def validateAndDeduceTypes(
       unresolvedOperator: LogicalPlan,
       childOutputs: Seq[Seq[Attribute]],
-      isRecursiveCTE: Boolean): Seq[DataType] = {
+      isRecursiveCTE: Boolean): Seq[Option[DataType]] = {
     val childDataTypes = childOutputs.map(attributes => attributes.map(attr => attr.dataType))
 
-    val expectedNumColumns = childDataTypes.head.length
+    val firstChildColumnTypes = childDataTypes.head
+    val expectedNumColumns = firstChildColumnTypes.length
 
-    childDataTypes.tail.zipWithIndex.foldLeft(childDataTypes.head) {
+    childDataTypes.tail.zipWithIndex.foldLeft(firstChildColumnTypes.map(Option(_))) {
       case (widenedTypes, (childColumnTypes, childIndex)) =>
         if (childColumnTypes.length != expectedNumColumns) {
           throwNumColumnsMismatch(
@@ -437,29 +445,30 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
 
         widenedTypes.zip(childColumnTypes).zipWithIndex.map {
           case ((widenedColumnType, columnTypeForCurrentRow), columnIndex) =>
-            val widerType = getTypeCoercion
-              .findWiderTypeForTwo(widenedColumnType, columnTypeForCurrentRow)
-              .getOrElse {
-                if (areDataTypesCompatibleInTheContextOfOperator(
-                    unresolvedOperator, widenedColumnType, columnTypeForCurrentRow)) {
-                  widenedColumnType
-                } else {
-                  throwIncompatibleColumnTypeError(
-                    unresolvedOperator = unresolvedOperator,
-                    columnIndex = columnIndex,
-                    childIndex = childIndex,
-                    widenedColumnType = widenedColumnType,
-                    columnTypeForCurrentRow = columnTypeForCurrentRow
-                  )
-                }
-              }
+            val previousColumnType =
+              widenedColumnType.getOrElse(firstChildColumnTypes(columnIndex))
+            val widerType = widenedColumnType.flatMap { widenedType =>
+              getTypeCoercion.findWiderTypeForTwo(widenedType, columnTypeForCurrentRow)
+            }
             if (isRecursiveCTE) {
-              validateRecursiveCteTypeCompatibility(
-                widerType,
-                widenedColumnType,
-                columnTypeForCurrentRow
+              Some(
+                validateRecursiveCteTypeCompatibility(
+                  widerType,
+                  previousColumnType,
+                  columnTypeForCurrentRow
+                )
               )
             } else {
+              if (widerType.isEmpty && !areDataTypesCompatibleInTheContextOfOperator(
+                  unresolvedOperator, previousColumnType, columnTypeForCurrentRow)) {
+                throwIncompatibleColumnTypeError(
+                  unresolvedOperator = unresolvedOperator,
+                  columnIndex = columnIndex,
+                  childIndex = childIndex,
+                  widenedColumnType = previousColumnType,
+                  columnTypeForCurrentRow = columnTypeForCurrentRow
+                )
+              }
               widerType
             }
         }
@@ -469,15 +478,15 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   /**
    * Validates type compatibility for recursive CTEs. For recursive CTEs, we follow the logic
    * of the fixed point analyzer which only widens the type of the recursion, but never the anchor.
-   * This means the wider type must equal the anchor type (widenedColumnType), otherwise we throw
-   * an error.
+   * This means the wider type must exist and equal the anchor type (widenedColumnType), otherwise
+   * we throw an error.
    */
   private def validateRecursiveCteTypeCompatibility(
-      widerType: DataType,
+      widerType: Option[DataType],
       widenedColumnType: DataType,
       columnTypeForCurrentRow: DataType): DataType = {
-    if (widerType == widenedColumnType) {
-      widerType
+    if (widerType.contains(widenedColumnType)) {
+      widenedColumnType
     } else {
       throw cannotMergeIncompatibleDataTypesError(
         widenedColumnType,
@@ -489,12 +498,12 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   /**
    * Coerce `childOutputs` to the previously calculated `widenedTypes`. If the data types for
    * child output has changed, we have to add a [[Project]] operator with a [[Cast]] to the new
-   * type.
+   * type. Columns without a widened data type are not cast.
    */
   private def coerceChildOutputs(
       children: Seq[LogicalPlan],
       childOutputs: Seq[Seq[Attribute]],
-      widenedTypes: Seq[DataType]): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
+      widenedTypes: Seq[Option[DataType]]): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
 
     children
@@ -503,16 +512,19 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
         case (child, output) =>
           var outputChanged = false
           val newExpressions = output.zip(widenedTypes).map {
-            case (attribute, widenedType) =>
-              if (DataType.equalsStructurally(attribute.dataType, widenedType)) {
-                attribute
-              } else {
-                outputChanged = true
-                autoGeneratedAliasProvider.newAlias(
-                  child = Cast(attribute, widenedType, Some(sessionLocalTimeZone)),
-                  name = Some(attribute.name)
-                )
-              }
+            /**
+             * Probably more correct way to compare data types here would be to call
+             * [[DataType.equalsStructurally]] but fixed-point [[Analyzer]] rule
+             * [[WidenSetOperationTypes]] uses `!=`, so we do the same to stay compatible.
+             */
+            case (attribute, Some(widenedType)) if attribute.dataType != widenedType =>
+              outputChanged = true
+              autoGeneratedAliasProvider.newAlias(
+                child = Cast(attribute, widenedType, Some(sessionLocalTimeZone)),
+                name = Some(attribute.name)
+              )
+            case (attribute, _) =>
+              attribute
           }
 
           if (outputChanged) {

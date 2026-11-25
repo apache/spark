@@ -45,11 +45,6 @@ class HavingResolver(
   private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
 
   /**
-   * Resolve [[UnresolvedHaving]] operator:
-   *  1. Resolve its child using the [[Resolver.resolve]].
-   *  2. Delegate resolution to `handleHavingWithResolvedChild`.
-   */
-  /**
    * Over grouping analytics (CUBE, ROLLUP or GROUPING SETS), the HAVING condition can't reference
    * nested fields of grouping expressions yet, because grouping expressions are replaced with the
    * [[Expand]] output attributes. For example:
@@ -72,6 +67,11 @@ class HavingResolver(
     }
   }
 
+  /**
+   * Resolve [[UnresolvedHaving]] operator:
+   *  1. Resolve its child using the [[Resolver.resolve]].
+   *  2. Delegate resolution to `handleHavingWithResolvedChild`.
+   */
   override def resolve(unresolvedHaving: UnresolvedHaving): LogicalPlan = {
     val resolvedChild = resolver.resolve(unresolvedHaving.child)
 
