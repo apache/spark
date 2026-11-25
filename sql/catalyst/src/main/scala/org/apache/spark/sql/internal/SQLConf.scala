@@ -7957,7 +7957,7 @@ object SQLConf {
         "false, it is written in the JVM default time zone, the same as with " +
         s"${DATETIME_JAVA8API_ENABLED.key}=false. The SQL Server dialect writes such a " +
         "literal in the session time zone either way.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
