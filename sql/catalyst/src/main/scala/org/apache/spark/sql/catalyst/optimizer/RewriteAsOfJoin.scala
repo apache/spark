@@ -22,7 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.AnyTimestampNanoType
+import org.apache.spark.util.Utils
 
 /**
  * Replaces logical [[AsOfJoin]] operator using a combination of Join and Aggregate operator.
@@ -48,7 +50,7 @@ import org.apache.spark.sql.types.AnyTimestampNanoType
  *   WHERE __right__ IS NOT NULL
  * }}}
  */
-object RewriteAsOfJoin extends Rule[LogicalPlan] {
+object RewriteAsOfJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithNewOutput {
       case j: AsOfJoin if !j.requiresSortMergeAsOfJoin =>
@@ -81,9 +83,50 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         val aggExpr = Alias(nearestRight, "__nearest_right__")()
         val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
 
-        val projectWithScalarSubquery = Project(
+        val projectWithCorrelatedSubquery = Project(
           left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
           left)
+        // When DecorrelateInnerQuery is disabled, two cases keep the legacy decorrelation and its
+        // previous plan:
+        // - A streaming left side reaches here only with
+        //   spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery, which keeps the previous plan
+        //   so that a query restarts from its checkpoint. The decorrelated plan would add stateful
+        //   operators on the streaming side.
+        // - With a constant left as-of key, when every correlated conjunct is an equality, a
+        //   single-value IN or reads only left columns, the legacy decorrelation groups the right
+        //   rows by the right columns these read. That is cheaper than the domain join of
+        //   DecorrelateInnerQuery when one side of an equality is an expression such as
+        //   `r.k + 1`, and right when that side maps right rows one-to-one. When it does not,
+        //   such as `r.k % 10`, the rows stay as before.
+        val keepsLegacyPlan = left.isStreaming ||
+          (!orderExpressionWithOuterReference.exists(_.isInstanceOf[OuterReference]) &&
+            splitConjunctivePredicates(conditionWithOuterReference).forall {
+              case Equality(_, _) | In(_, Seq(_)) => true
+              case e => !SubExprUtils.containsOuter(e) || !e.exists(_.isInstanceOf[Attribute])
+            })
+        val projectWithScalarSubquery = if (conf.decorrelateInnerQueryEnabled || keepsLegacyPlan) {
+          projectWithCorrelatedSubquery
+        } else {
+          // Without DecorrelateInnerQuery, PullupCorrelatedPredicates only pulls correlated
+          // predicates out of a Filter. It would leave the outer reference in the MIN_BY order
+          // expression, and pull a non-equality predicate such as the as-of condition above the
+          // Aggregate, which changes its result. So decorrelate this subquery as when it is
+          // enabled: run the rules that do it then, with it enabled, on this Project alone. A
+          // leaf stands in for `left`, so that other subqueries follow the configuration. The
+          // later run of PullupCorrelatedPredicates keeps the result, as it has no outer
+          // references left. Like the optimizer, skip an excluded
+          // PullOutNestedDataOuterRefExpressions; PullupCorrelatedPredicates is non-excludable.
+          val leftPlaceholder = LocalRelation(left.output)
+          val host = projectWithCorrelatedSubquery.withNewChildren(Seq(leftPlaceholder))
+          val pullOutExcluded = conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+            .contains(PullOutNestedDataOuterRefExpressions.ruleName)
+          val decorrelationEnabled = conf.clone()
+          decorrelationEnabled.setConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED, true)
+          SQLConf.withExistingConf(decorrelationEnabled) {
+            PullupCorrelatedPredicates(
+              if (pullOutExcluded) host else PullOutNestedDataOuterRefExpressions(host))
+          }.transformUp { case r: LocalRelation if r == leftPlaceholder => left }
+        }
 
         val filterRight = joinType match {
           case LeftOuter => projectWithScalarSubquery

@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamingAsOfJoinSuite extends StreamTest {
@@ -141,6 +142,26 @@ class StreamingAsOfJoinSuite extends StreamTest {
           assert(asOfJoin.get.requiresSortMergeAsOfJoin == !legacy)
         }
       }
+    }
+  }
+
+  test("SPARK-62239: DataFrame stream-static ASOF join with decorrelateInnerQuery disabled") {
+    withSQLConf(
+        SQLConf.LEGACY_AS_OF_JOIN_REWRITE_STREAMING_LEFT_TO_SUBQUERY.key -> "true",
+        SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+      val input = MemoryStream[(Int, Int)]
+      val trades = castToImpl(input.toDF().toDF("t", "k"))
+      val quotes = castToImpl(Seq((1, 1, 100), (5, 1, 500), (3, 2, 300)).toDF("qt", "qk", "v"))
+      // The legacy conf keeps the correlated subquery rewrite for a streaming left side. With a
+      // constant left key and an equality, the legacy decorrelation aggregates only the static
+      // side, while the decorrelation of a batch left side aggregates the streaming one.
+      val joined = trades.joinAsOf(quotes, lit(10), quotes.col("qt"),
+        trades.col("k") === quotes.col("qk") + 1, "inner", null, true, "backward")
+      testStream(joined)(
+        AddData(input, (6, 2)),
+        CheckNewAnswer((6, 2, 5, 1, 500)),
+        AddData(input, (7, 2), (1, 3)),
+        CheckNewAnswer((7, 2, 5, 1, 500), (1, 3, 3, 2, 300)))
     }
   }
 
