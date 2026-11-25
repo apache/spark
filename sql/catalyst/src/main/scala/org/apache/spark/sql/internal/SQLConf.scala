@@ -9460,7 +9460,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-
   val SINGLE_TASK_EXECUTION_ENABLED =
     buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
       .doc("When true, eligible query fragments that read a small single-partition scan can run " +
