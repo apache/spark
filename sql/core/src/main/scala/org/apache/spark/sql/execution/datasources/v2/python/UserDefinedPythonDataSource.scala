@@ -681,7 +681,10 @@ private[python] class PythonDataSourceFilters(
 /**
  * The result of planning a lookup in Python, with [[UserDefinedPythonDataSourceLookupPlanRunner]].
  *
- * @param reader The planned lookup reader, pickled, which the executors use to look up rows.
+ * @param reader The planned lookup reader, pickled, which the executors use to look up rows. It
+ *               is empty for a selection that Spark rejects, empty or with a repeated position,
+ *               which Python neither sizes nor pickles, so that Spark reports the selection's
+ *               error, as for a Scala connector.
  * @param pushedFilterIndexes The positions of the filters that the reader pushes, among the
  *                            filters that were sent.
  * @param selectedIndexes The positions of the selected lookup predicates among the candidates, in
@@ -691,7 +694,8 @@ private[python] class PythonDataSourceFilters(
  * @param parameterTypes The data type of each field of a parameter row: that of the parameter of
  *                       each selected predicate, in order.
  * @param maxParameterRowsPerRequest The maximum number of parameter rows per request, which Spark
- *                                   checks to be positive.
+ *                                   checks to be positive, or 0 for a selection that Spark
+ *                                   rejects.
  */
 case class PythonDataSourceLookupPlan(
     reader: Array[Byte],

@@ -202,10 +202,11 @@ def _main(infile: IO, outfile: IO) -> None:
     connector.
 
     The values sent back to the JVM, in order, are:
-    - the pickled reader, as planned, which the executors use to look up rows.
+    - the pickled reader, as planned, which the executors use to look up rows, or no bytes for
+      a selection that Spark rejects, empty or with a repeated position.
     - the indices of the filters that the reader pushes.
     - the positions of the selected candidates, in the order of the reader's selection.
-    - the maximum number of parameter rows per request.
+    - the maximum number of parameter rows per request, or 0 for a selection that Spark rejects.
 
     When the data source breaks the contract of the lookup API, the reply is instead
     `LOOKUP_CONTRACT_VIOLATION`, the subclass of the JVM's error and its parameters.
@@ -249,15 +250,19 @@ def _main(infile: IO, outfile: IO) -> None:
 
             # Do not silently ignore a pushFilters method while filter pushdown is disabled.
             # Spark never pushes a limit into a lookup, and a lookup reader has no pushLimit.
-            check_pushdown_not_disabled(
-                reader, enable_filter_pushdown=enable_filter_pushdown, enable_limit_pushdown=False
-            )
+            check_pushdown_not_disabled(reader, enable_filter_pushdown=enable_filter_pushdown)
 
             # Plan the lookup, in the order in which Spark calls a Scala connector: filter
             # pushdown, then the selection of the lookup predicates, then the request size.
             pushed_filter_indices = push_filters(reader, filters)
             selected_positions = select_lookup_predicates(reader, candidates)
-            max_rows = max_parameter_rows_per_request(reader)
+            # Spark rejects an empty selection, or one that repeats a position, right after the
+            # selection, as for a Scala connector. So the reader is then neither asked for its
+            # request size, which it may derive from its selection, nor pickled.
+            accepted = len(selected_positions) > 0 and len(set(selected_positions)) == len(
+                selected_positions
+            )
+            max_rows = max_parameter_rows_per_request(reader) if accepted else 0
     except LookupContractViolation as violation:
         write_int(LOOKUP_CONTRACT_VIOLATION, outfile)
         write_with_length(violation.subclass.encode("utf-8"), outfile)
@@ -268,8 +273,12 @@ def _main(infile: IO, outfile: IO) -> None:
         return
 
     # Return the planned reader. It is pickled before anything else is written, so that a reader
-    # that cannot be pickled fails with the error of the pickler instead of a malformed reply.
-    pickleSer._write_with_length(reader, outfile)
+    # that cannot be pickled fails with the error of the pickler instead of a malformed reply. A
+    # selection that Spark rejects has no planned reader.
+    if accepted:
+        pickleSer._write_with_length(reader, outfile)
+    else:
+        write_int(0, outfile)
 
     # Return the pushed filter indices.
     write_int(len(pushed_filter_indices), outfile)

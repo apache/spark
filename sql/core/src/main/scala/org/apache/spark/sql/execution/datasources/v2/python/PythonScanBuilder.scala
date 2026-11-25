@@ -27,7 +27,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * @param lookupOnly Whether the data source serves lookups but no batch reads, so that the
- *                   builder only ever builds a lookup scan.
+ *                   builder never builds a batch scan, only lookup and micro-batch scans.
  */
 class PythonScanBuilder(
     ds: PythonDataSourceV2,
@@ -84,9 +84,9 @@ class PythonScanBuilder(
     }
     allFilters = filters
     if (lookupOnly) {
-      // A lookup-only data source has no batch reader to push the filters into. Spark builds
-      // only lookup scans from this builder, and `selectLookupPredicates` pushes the filters
-      // into the lookup reader instead. Spark evaluates every filter of a lookup scan again on
+      // A lookup-only data source has no batch reader to push the filters into. Spark builds no
+      // batch scan from this builder, and `selectLookupPredicates` pushes the filters into the
+      // lookup reader instead. Spark evaluates every filter of a lookup scan again on
       // the returned rows, so reporting none as pushed here changes no result.
       return filters
     }

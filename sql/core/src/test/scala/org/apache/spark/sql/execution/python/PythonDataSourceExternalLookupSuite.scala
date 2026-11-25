@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonExternalLookupReaderFactory, PythonScan, PythonScanBuilder}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{EqualTo, Filter, Or}
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
@@ -317,9 +318,11 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
     assume(shouldTestPandasUDFs)
     registerLookupSource(lookupSourceScript(batchReader = None))
     withExternalLookup() {
-      def planningError(select: String): AnalysisException = intercept[AnalysisException] {
-        joinWithStream(lookupTable("select" -> select)).queryExecution.optimizedPlan
-      }
+      def planningError(select: String, options: (String, String)*): AnalysisException =
+        intercept[AnalysisException] {
+          joinWithStream(lookupTable(("select" -> select) +: options: _*))
+            .queryExecution.optimizedPlan
+        }
 
       checkError(
         exception = planningError("[]"),
@@ -327,6 +330,16 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
         parameters = Map("table" -> quotedName))
       checkError(
         exception = planningError("[0, 0]"),
+        condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
+        parameters = Map("table" -> quotedName, "position" -> "0", "predicate" -> "id = ?"))
+      // Spark rejects the selection before it asks for the request size, as for a Scala
+      // connector, so a request size that would break the contract does not matter then.
+      checkError(
+        exception = planningError("[]", "maxRows" -> "None"),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE",
+        parameters = Map("table" -> quotedName))
+      checkError(
+        exception = planningError("[0, 0]", "maxRows" -> "None"),
         condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
         parameters = Map("table" -> quotedName, "position" -> "0", "predicate" -> "id = ?"))
       // The contract violations that Python finds are reported with the errors of a Scala
@@ -397,6 +410,19 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  // The methods of a lookup reader that pushes `tier = 2`.
+  private val tierPushingLookupReader =
+    """
+      |    def pushFilters(self, filters):
+      |        for f in filters:
+      |            if f != EqualTo(("tier",), 2):
+      |                yield f
+      |""".stripMargin
+
+  private def pushedFilters(df: DataFrame): String =
+    preparedLookupJoin(joinWithStream(df)).get.scan.asInstanceOf[PythonScan]
+      .getMetaData()("PushedFilters")
+
   test("filters on the lookup side are pushed into the lookup reader") {
     assume(shouldTestPandasUDFs)
     // The batch reader pushes no filter, and the lookup reader pushes `tier = 2`, so the scan
@@ -407,17 +433,17 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
           |    def pushFilters(self, filters):
           |        return filters
           |""".stripMargin + batchReaderMethods),
-      lookupReaderMethods =
-        """
-          |    def pushFilters(self, filters):
-          |        for f in filters:
-          |            if f != EqualTo(("tier",), 2):
-          |                yield f
-          |""".stripMargin))
+      lookupReaderMethods = tierPushingLookupReader))
     withExternalLookup(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      val lookup = lookupTable().hint("EXTERNAL_LOOKUP").filter("tier = 2")
-      val prepared = preparedLookupJoin(joinWithStream(lookup)).get
-      assert(prepared.scan.asInstanceOf[PythonScan].getMetaData()("PushedFilters") ===
+      assert(pushedFilters(lookupTable().hint("EXTERNAL_LOOKUP").filter("tier = 2")) ===
+        "[EqualTo(tier,2)]")
+    }
+    // Also with limit pushdown on, which defers the planning of the batch read: the lookup scan
+    // plans no batch read, so the batch reader's other answer is never replayed.
+    withExternalLookup(
+        SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      assert(pushedFilters(lookupTable().hint("EXTERNAL_LOOKUP").filter("tier = 2")) ===
         "[EqualTo(tier,2)]")
     }
     // A lookup reader that implements pushFilters() fails while filter pushdown is disabled.
@@ -432,6 +458,26 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
           "type" -> "lookup",
           "msg" -> "(?s).*DATA_SOURCE_PUSHDOWN_DISABLED.*TestLookupReader.*pushFilters.*"),
         matchPVals = true)
+    }
+  }
+
+  test("filters on the lookup side of a lookup-only data source are pushed into its reader") {
+    assume(shouldTestPandasUDFs)
+    // A lookup-only data source has no batch reader, so its filters go to the lookup reader
+    // only, also with filter pushdown on.
+    registerLookupSource(
+      lookupSourceScript(batchReader = None, lookupReaderMethods = tierPushingLookupReader))
+    withExternalLookup(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      assert(pushedFilters(lookupTable().filter("tier = 2")) === "[EqualTo(tier,2)]")
+
+      // A filter that Python does not receive, ahead of `tier = 2`, does not shift the pushed
+      // filters, which refer to the positions of all the filters.
+      val builder = scanBuilder(lookupTable())
+      val filters = Array[Filter](
+        Or(EqualTo("tier", 1), EqualTo("name", "a")), EqualTo("tier", 2))
+      assert(builder.pushFilters(filters).toSeq === filters.toSeq)
+      builder.selectLookupPredicates(Array(candidate("=", "id", new LookupParameter(LongType))))
+      assert(builder.pushedFilters().toSeq === Seq(EqualTo("tier", 2)))
     }
   }
 }

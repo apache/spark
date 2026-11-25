@@ -196,10 +196,10 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
         outfile.seek(0)
         return read_int(outfile), read_int(outfile)
 
-    def _run_planner(self, reader, candidates, filters=(), filter_pushdown=True):
+    def _run_planner(self, reader, candidates, filters=(), filter_pushdown=True, outfile=None):
         """
         Runs `plan_data_source_lookup` with a data source whose `lookupReader()` returns `reader`,
-        and returns its reply, from the start.
+        and returns its reply, from the start, in `outfile` if given.
         """
         from pyspark.serializers import CloudPickleSerializer
 
@@ -218,7 +218,7 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
         self._write_utf8(json.dumps(candidates), infile)
         infile.write(b"\x01" if filter_pushdown else b"\x00")
         infile.seek(0)
-        outfile = io.BytesIO()
+        outfile = outfile if outfile is not None else io.BytesIO()
         plan_data_source_lookup._main(infile, outfile)
         outfile.seek(0)
         return outfile
@@ -232,7 +232,9 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
         from pyspark.serializers import CloudPickleSerializer, read_int
 
         outfile = self._run_planner(reader, candidates, filters, filter_pushdown)
-        planned = CloudPickleSerializer().loads(outfile.read(read_int(outfile)))
+        # No planned reader for a selection that Spark rejects.
+        length = read_int(outfile)
+        planned = CloudPickleSerializer().loads(outfile.read(length)) if length else None
         pushed = [read_int(outfile) for _ in range(read_int(outfile))]
         selected = [read_int(outfile) for _ in range(read_int(outfile))]
         max_rows = read_int(outfile)
@@ -539,6 +541,94 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
             filter_pushdown=False,
         )
         self.assertEqual((pushed, selected), ([], [0]))
+
+    def test_plan_lookup_leaves_a_rejected_selection_to_the_jvm(self):
+        import threading
+
+        from pyspark.serializers import read_int
+
+        # A selection that Spark rejects, empty or with a repeated position, is passed on with
+        # no planned reader: the reader is neither asked for its request size, which it may
+        # derive from its selection, nor pickled, so Spark reports the selection's error.
+        class UnsizedReader(self._SelectingReader):
+            def selectLookupPredicates(self, candidates):
+                self.lock = threading.Lock()
+                return super().selectLookupPredicates(candidates)
+
+            def maxParameterRowsPerRequest(self):
+                raise AssertionError("maxParameterRowsPerRequest() was called")
+
+        candidates = [self._candidate("=", "id"), self._candidate("=", "id")]
+        for selection in ([], [1, 1]):
+            with self.subTest(selection=selection):
+                outfile = self._run_planner(UnsizedReader(lambda _: selection), candidates)
+                self.assertEqual(read_int(outfile), 0)  # no planned reader
+                self.assertEqual([read_int(outfile) for _ in range(read_int(outfile))], [])
+                selected = [read_int(outfile) for _ in range(read_int(outfile))]
+                self.assertEqual(selected, selection)
+                self.assertEqual(read_int(outfile), 0)  # no request size
+                self.assertEqual(outfile.read(), b"")
+
+    def test_plan_lookup_fails_for_a_reader_that_cannot_be_pickled(self):
+        import threading
+
+        class LockingReader(self._SelectingReader):
+            def selectLookupPredicates(self, candidates):
+                self.lock = threading.Lock()
+                return super().selectLookupPredicates(candidates)
+
+        # The planned reader is pickled before anything else is written, so the reply holds
+        # nothing that the JVM could misread as a plan.
+        outfile = io.BytesIO()
+        with self.assertRaisesRegex(Exception, "cannot pickle"):
+            self._run_planner(
+                LockingReader(lambda _: [0]), [self._candidate("=", "id")], outfile=outfile
+            )
+        self.assertEqual(outfile.getvalue(), b"")
+
+    def test_pushdown_check_of_a_reader_class_with_both_bases(self):
+        from pyspark.errors import PySparkAssertionError
+        from pyspark.sql.worker.utils import check_pushdown_not_disabled, is_method_overridden
+
+        # One reader class may serve batch reads and lookups, with its bases in either order.
+        class BatchFirstReader(DataSourceReader, DataSourceLookupReader):
+            def read(self, partition):
+                return iter([])
+
+            def selectLookupPredicates(self, candidates):
+                return [0]
+
+            def lookup(self, parameters):
+                return iter([])
+
+        class LookupFirstReader(DataSourceLookupReader, DataSourceReader):
+            read = BatchFirstReader.read
+            selectLookupPredicates = BatchFirstReader.selectLookupPredicates
+            lookup = BatchFirstReader.lookup
+
+        for reader_cls in (BatchFirstReader, LookupFirstReader):
+            with self.subTest(reader=reader_cls.__name__):
+                # It implements no pushdown method, so it passes the checks of both paths.
+                check_pushdown_not_disabled(
+                    reader_cls(), enable_filter_pushdown=False, enable_limit_pushdown=False
+                )
+                check_pushdown_not_disabled(reader_cls(), enable_filter_pushdown=False)
+                self.assertFalse(is_method_overridden(reader_cls(), "pushFilters"))
+                self.assertFalse(is_method_overridden(reader_cls(), "pushLimit"))
+
+                class LimitingReader(reader_cls):
+                    def pushLimit(self, limit):
+                        return True
+
+                # Its pushLimit is a batch read's method: the batch path finds it, and lookup
+                # planning, which checks only pushFilters, does not.
+                self.assertTrue(is_method_overridden(LimitingReader(), "pushLimit"))
+                with self.assertRaises(PySparkAssertionError) as pe:
+                    check_pushdown_not_disabled(
+                        LimitingReader(), enable_filter_pushdown=True, enable_limit_pushdown=False
+                    )
+                self.assertEqual(pe.exception.getMessageParameters()["method"], "pushLimit")
+                check_pushdown_not_disabled(LimitingReader(), enable_filter_pushdown=False)
 
     def test_plan_lookup_reports_the_request_size(self):
         class SizedReader(self._SelectingReader):

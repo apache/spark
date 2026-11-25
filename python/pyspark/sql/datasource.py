@@ -295,6 +295,13 @@ class DataSource(ABC):
         when a streaming query starts, to check that the join can be planned, and discard the
         result.
 
+        Spark pushes filters into a scan before it knows that the scan is a lookup. So for a data
+        source that also implements :meth:`reader`, while `spark.sql.python.filterPushdown.enabled`
+        is true, each planning of a lookup first plans a batch read, as for any batch read: Spark
+        creates a batch reader with :meth:`reader`, calls its
+        :meth:`DataSourceReader.pushFilters` and, while `spark.sql.python.limitPushdown.enabled` is
+        false, its :meth:`DataSourceReader.partitions`, and then discards that plan.
+
         .. versionadded:: 4.5.0
 
         Parameters
@@ -1156,14 +1163,15 @@ class DataSourceLookupReader(ABC):
     batch of stream rows, Spark sends the join keys to it and joins the rows that it returns.
 
     Each time Spark plans a lookup, on the driver, it creates a reader with
-    :meth:`DataSource.lookupReader` and calls :meth:`pushFilters`,
-    :meth:`selectLookupPredicates` and :meth:`maxParameterRowsPerRequest` on it, once each and
-    in that order. Spark may plan a lookup more than once for one query, for example when a
-    streaming query starts, each time with a new reader. Spark then pickles the planned reader
-    and, on the executors, calls :meth:`lookup` and :meth:`close` on a copy of it per input
-    partition. So the reader must stay picklable, and changes that the planning methods make to
-    `self` are visible to :meth:`lookup`. Create connections and other resources lazily, in the
-    first :meth:`lookup` call, not in `__init__` or in a planning method.
+    :meth:`DataSource.lookupReader` and calls these methods on it, each at most once, in this
+    order: :meth:`pushFilters`, only while Python filter pushdown is on and there is a filter to
+    push; :meth:`selectLookupPredicates`; and :meth:`maxParameterRowsPerRequest`, only after a
+    selection that Spark accepts. Spark may plan a lookup more than once for one query, for
+    example when a streaming query starts, each time with a new reader. Spark then pickles the
+    planned reader and, on the executors, calls :meth:`lookup` and :meth:`close` on a copy of it
+    per input partition. So the reader must stay picklable, and changes that the planning
+    methods make to `self` are visible to :meth:`lookup`. Create connections and other resources
+    lazily, in the first :meth:`lookup` call, not in `__init__` or in a planning method.
 
     For each parameter row, :meth:`lookup` must return every stored row that matches the
     selected predicates and passes the filters that :meth:`pushFilters` reports as pushed,
@@ -1368,8 +1376,9 @@ class DataSourceLookupReader(ABC):
         Spark never sends more parameter rows in one request. Spark also caps a request at 1000
         parameter rows, and by limits of its own, such as the size of a request in bytes. The
         reader must return complete results for a request of that size, with no cap on the
-        number of result rows. Spark calls this method once on each reader, after
-        :meth:`selectLookupPredicates`.
+        number of result rows. Spark calls this method at most once on each reader, after a
+        selection of :meth:`selectLookupPredicates` that it accepts: not after an empty one, or
+        one that repeats a position.
 
         By default, it returns 1000, Spark's own cap, so Spark never splits a request for the
         reader.
@@ -1409,7 +1418,11 @@ class DataSourceLookupReader(ABC):
         parameters : list of tuples
             Between 1 and :meth:`maxParameterRowsPerRequest` parameter rows. Field `i` of each
             tuple is the value for the candidate at the `i`-th position that
-            :meth:`selectLookupPredicates` returned. No two tuples are equal. Only the fields of
+            :meth:`selectLookupPredicates` returned. Spark sends no two equal parameter rows,
+            but two TIMESTAMP values in a repeated local hour, such as the hour that a
+            daylight-saving change repeats, arrive as equal values (see below), so do not rely
+            on distinct tuples, for example as dictionary keys, when a selected parameter is a
+            TIMESTAMP. Only the fields of
             `<=>` predicates can be `None`; a `None` there matches a stored NULL. When a
             selected range predicate reads a stream column, each request holds exactly one
             parameter row. The list and its tuples are read-only. Each value has the Python
