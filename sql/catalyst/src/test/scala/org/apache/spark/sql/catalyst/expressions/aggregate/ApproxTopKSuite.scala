@@ -424,17 +424,32 @@ class ApproxTopKSuite extends SparkFunSuite {
       case row: InternalRow => (row.get(0, itemType), row.getLong(1))
     }
 
+  // Inputs with four distinct counts (including null), used to build approx_top_k buffers.
+  private val bufferInputs: Seq[(DataType, Seq[InternalRow])] = Seq(
+    StringType -> stringRows("a", "b", "b", null, "c", "c", "c"),
+    LongType -> (Seq(1L, 2L, 2L, 3L, 3L, 3L).map(InternalRow(_)) :+ InternalRow(null)))
+
   test("SPARK-62341: approx_top_k buffers round-trip through serialize and deserialize") {
-    Seq(
-      StringType -> stringRows("a", "b", "b", null, "c", "c", "c"),
-      LongType -> (Seq(1L, 2L, 2L, 3L, 3L, 3L).map(InternalRow(_)) :+ InternalRow(null))
-    ).foreach { case (dataType, rows) =>
+    bufferInputs.foreach { case (dataType, rows) =>
       val agg = new ApproxTopK(BoundReference(0, dataType, nullable = true), 4, 10)
       val buffer = buildBuffer(agg, rows)
       val restored = agg.deserialize(agg.serialize(buffer))
       val expected = topItems(agg.eval(buffer), dataType)
       assert(expected.size == 4)
       assert(topItems(agg.eval(restored), dataType) == expected)
+    }
+  }
+
+  test("SPARK-62341: deserialized approx_top_k buffer does not reference the input bytes") {
+    // The sketch is decoded in place from the input array, so the decoded buffer must copy
+    // everything it needs: overwriting the input afterwards must not change it.
+    bufferInputs.foreach { case (dataType, rows) =>
+      val agg = new ApproxTopK(BoundReference(0, dataType, nullable = true), 4, 10)
+      val buffer = buildBuffer(agg, rows)
+      val bytes = agg.serialize(buffer)
+      val restored = agg.deserialize(bytes)
+      java.util.Arrays.fill(bytes, 0.toByte)
+      assert(topItems(agg.eval(restored), dataType) == topItems(agg.eval(buffer), dataType))
     }
   }
 
