@@ -45,6 +45,14 @@ object UnionByNameTransformer extends SQLConfHelper {
    * Projects the children of a by-name union, whose outputs are `leftOutput` and `rightOutput`, so
    * that their columns line up by name. The right child is always projected; the left child only
    * when `allowMissingCol` adds columns or nested fields to it. `newAlias` builds new columns.
+   *
+   * The alignment is done in the following steps:
+   *  1. Check that neither side has duplicate column names.
+   *  2. Build a project list for `right` based on `left` output names.
+   *  3. Append the `right` attributes that are not in that project list, delegating failure checks
+   *     to `CheckAnalysis`.
+   *  4. If `allowMissingCol` is true, build a project list for `left` based on the projected
+   *     `right` output names, adding the missing (nested) fields to `left`.
    */
   def alignChildrenByName(
       left: LogicalPlan,
@@ -55,20 +63,15 @@ object UnionByNameTransformer extends SQLConfHelper {
       newAlias: (Expression, String) => Alias): AlignedUnionChildren = {
     checkColumnNames(leftOutput, rightOutput)
 
-    // Builds a project list for `right` based on `left` output names
     val (rightProjectList, aliased) =
       compareAndAddFields(leftOutput, rightOutput, allowMissingCol, newAlias)
 
-    // Delegates failure checks to `CheckAnalysis`
     val notFoundAttrs = rightOutput.diff(rightProjectList ++ aliased)
     val rightChildProjectList = rightProjectList ++ notFoundAttrs
     val rightChild = Project(rightChildProjectList, right)
     val rightChildOutput = rightChildProjectList.map(_.toAttribute)
 
-    // Builds a project for `logicalPlan` based on `right` output names, if allowing
-    // missing columns.
     val (leftChild, leftChildOutput) = if (allowMissingCol) {
-      // Add missing (nested) fields to left plan.
       val (leftProjectList, _) =
         compareAndAddFields(rightChildOutput, leftOutput, allowMissingCol, newAlias)
       val leftProjectOutput = leftProjectList.map(_.toAttribute)
@@ -88,7 +91,9 @@ object UnionByNameTransformer extends SQLConfHelper {
       rightOutput = rightChildOutput)
   }
 
-  // Check column name duplication
+  /**
+   * Checks for column name duplication in `leftOutputAttrs` and in `rightOutputAttrs`.
+   */
   private def checkColumnNames(
       leftOutputAttrs: Seq[Attribute],
       rightOutputAttrs: Seq[Attribute]): Unit = {
@@ -107,6 +112,14 @@ object UnionByNameTransformer extends SQLConfHelper {
    * at right side has same name with left side struct attribute, but two structs are not the
    * same data type, i.e., some missing (nested) fields at right struct attribute, then this
    * method will try to add missing (nested) fields into the right attribute with null values.
+   *
+   * For each left attribute, the right attribute with the same name is:
+   *  - kept as is, if both sides are primitive types or equivalent complex types.
+   *  - aliased after merging its (nested) fields with the left type, if the two types are complex
+   *    and have different nested structs at some level. Map types are currently not supported, so
+   *    for them the alias wraps the existing attribute.
+   * If there is no right attribute with the same name, a null column is added when
+   * `allowMissingCol` is true, and an exception is thrown otherwise.
    */
   private def compareAndAddFields(
       leftOutputAttrs: Seq[Attribute],
@@ -123,14 +136,11 @@ object UnionByNameTransformer extends SQLConfHelper {
         val foundAttr = found.get
         val foundDt = foundAttr.dataType
         if (!DataType.equalsStructurallyByName(foundDt, lattr.dataType, resolver)) {
-          // The two types are complex and have different nested structs at some level.
-          // Map types are currently not supported and will return the existing attribute.
           aliased += foundAttr
           newAlias(
             mergeFields(foundAttr, lattr.dataType, allowMissingCol, lambdaDepth = 0),
             foundAttr.name)
         } else {
-          // Either both sides are primitive types or equivalent complex types
           foundAttr
         }
       } else {
@@ -147,7 +157,9 @@ object UnionByNameTransformer extends SQLConfHelper {
   }
 
   /**
-   * Handles the merging of complex types. Currently supports structs and arrays recursively.
+   * Handles the merging of complex types. Currently supports structs and arrays recursively. For
+   * any other combination of types, `col` is returned as is and the check is left to the analysis
+   * of the resulting union.
    */
   private def mergeFields(col: Expression, targetType: DataType,
       allowMissing: Boolean, lambdaDepth: Int): Expression = {
@@ -158,7 +170,6 @@ object UnionByNameTransformer extends SQLConfHelper {
         case (_: ArrayType, targetArray: ArrayType) =>
           transformArray(col, targetArray, allowMissing, lambdaDepth)
         case _ =>
-          // Unsupported combination, let the resulting union analyze
           col
       }
     } else {
@@ -172,6 +183,8 @@ object UnionByNameTransformer extends SQLConfHelper {
    * struct columns with same name but different nested fields. This method will recursively
    * return a new struct with all of the expected fields, adding null values when `col` doesn't
    * already contain them. Currently we don't support merging structs nested inside of maps.
+   * Null values are only added if `allowMissing` is true; otherwise, a field missing from `col`
+   * throws an exception.
    */
   private def addFields(col: Expression,
      targetType: StructType, allowMissing: Boolean, lambdaDepth: Int): Expression = {
@@ -191,10 +204,8 @@ object UnionByNameTransformer extends SQLConfHelper {
             ExtractValue(col, Literal(cf.name), resolver), expectedType, allowMissing, lambdaDepth)
         case (None, expectedType) =>
           if (allowMissing) {
-            // for allowMissingCol allow the null values
             Literal(null, expectedType)
           } else {
-            // for allowMissingCol as false throw exception for missing col
             throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
               expectedField.name, colType.fields)
           }
