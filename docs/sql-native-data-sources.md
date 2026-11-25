@@ -129,9 +129,13 @@ Spark calls the functions of the table as follows:
   the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the
   initial offset of the source yet, Spark asks for it with `initial_offset`, and keeps it in the
   checkpoint, so a query that restarts before its first micro-batch is committed starts from the
-  same offset. For each micro-batch, it asks for the `latest_offset`, with the offset that the
-  micro-batch starts after, plans the partitions with `stream_partitions`, which also returns the
-  state of the stream reader, and calls `read` on the executors. With `Trigger.AvailableNow`, a run
+  same offset. For each micro-batch, it asks for the `latest_offset`, with the starting progress
+  boundary of the micro-batch, plans the partitions with `stream_partitions`, which also returns the
+  state of the stream reader, and calls `read` on the executors. `stream_partitions` gets the
+  starting and ending progress boundaries of the micro-batch, and the library defines how offsets
+  map to records: if an offset is the next row to read, `{"next":10}` to `{"next":13}` reads rows
+  10, 11, and 12. Equal boundaries describe no data, and adjacent ranges must neither repeat nor
+  skip records. With `Trigger.AvailableNow`, a run
   reads the data that was available when it started: Spark asks for the `latest_offset` without a
   limit once, before the first micro-batch that it plans, and reads up to it. Offsets are defined
   by the library, as compact JSON on a single line: Spark stores each offset as a line of the

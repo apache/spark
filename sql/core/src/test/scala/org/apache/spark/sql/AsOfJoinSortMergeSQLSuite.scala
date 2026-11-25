@@ -22,16 +22,19 @@ import java.sql.{Date, Timestamp}
 import scala.util.Random
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, CodegenObjectFactoryMode,
+  EqualTo, Expression, Literal}
+import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
-import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.execution.{FileSourceScanExec, InputAdapter, SparkPlan,
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DecimalType, IntegerType, LongType, StringType,
+  StructType}
 
 /**
  * SQL ASOF JOIN tests that exercise the sort-merge physical operator.
@@ -160,15 +163,81 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  /** Names of the columns that the scan of `table` filters on. */
-  private def scanFilterColumns(df: DataFrame, table: String): Set[String] = {
+  /** The data filters that the scan of `table` runs. */
+  private def scanDataFilters(df: DataFrame, table: String): Seq[Expression] = {
     val plan = df.queryExecution.executedPlan
     val scans = collect(plan) {
       case scan: FileSourceScanExec if scan.tableIdentifier.exists(_.table == table) => scan
     }
     assert(scans.length == 1, s"Expected one scan of $table in plan:\n$plan")
-    scans.head.dataFilters.flatMap(_.references.map(_.name)).toSet
+    scans.head.dataFilters
   }
+
+  /** Names of the columns that the scan of `table` filters on. */
+  private def scanFilterColumns(df: DataFrame, table: String): Set[String] =
+    scanDataFilters(df, table).flatMap(_.references.map(_.name)).toSet
+
+  /** The joins below the left input and below the right input of the as-of join of `df`. */
+  private def joinsBelowAsOfInputs(df: DataFrame): (Seq[BaseJoinExec], Seq[BaseJoinExec]) = {
+    val plan = df.queryExecution.executedPlan
+    val asOfJoins = collect(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(asOfJoins.length == 1, s"Expected one SortMergeAsOfJoinExec in plan:\n$plan")
+    def joinsBelow(input: SparkPlan): Seq[BaseJoinExec] =
+      collect(input) { case j: BaseJoinExec => j }
+    (joinsBelow(asOfJoins.head.left), joinsBelow(asOfJoins.head.right))
+  }
+
+  /**
+   * Checks the rows of `query` with InferFiltersFromConstraints excluded and with it on. With it
+   * on, asserts one join below the as-of input with the subquery and none below the other input.
+   * Returns the query with the rule on.
+   */
+  private def checkOneSubqueryJoin(
+      query: String, onLeftInput: Boolean, expected: Seq[Row]): DataFrame = {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      checkSortMergeAsOf(sql(query), expected)
+    }
+    val df = sql(query)
+    checkSortMergeAsOf(df, expected)
+    val (leftJoins, rightJoins) = joinsBelowAsOfInputs(df)
+    val (subqueryJoins, otherJoins) =
+      if (onLeftInput) (leftJoins, rightJoins) else (rightJoins, leftJoins)
+    assert(subqueryJoins.size == 1 && otherJoins.isEmpty,
+      s"Expected one join below only the input with the subquery in plan:\n" +
+        df.queryExecution.executedPlan)
+    df
+  }
+
+  /** Whether the scan of `table` keeps only the rows where string `column` equals `value`. */
+  private def scanFiltersOnEquality(
+      df: DataFrame, table: String, column: String, value: String): Boolean =
+    scanDataFilters(df, table).exists {
+      case EqualTo(a: Attribute, Literal(v, _: StringType)) =>
+        a.name == column && v.toString == value
+      case _ => false
+    }
+
+  /** Asserts that every input row of the as-of join of `df` reaches the join. */
+  private def assertEveryInputRowReachesAsOfJoin(df: DataFrame): Unit = {
+    val qe = df.queryExecution
+    def inputs(plan: LogicalPlan): Seq[LogicalPlan] =
+      plan.collectFirst { case j: AsOfJoin => j.children }.get
+    def numRows(plan: LogicalPlan): Long = classic.Dataset.ofRows(spark, plan).count()
+    inputs(qe.analyzed).zip(inputs(qe.optimizedPlan)).foreach { case (input, joinInput) =>
+      assert(numRows(joinInput) == numRows(input),
+        s"Expected every input row to reach the as-of join in:\n${qe.optimizedPlan}")
+    }
+  }
+
+  /**
+   * Checks `query` with checkCursorScan, without InferFiltersFromConstraints. It would drop the
+   * rows with a NULL ON key before the join, so also asserts that every input row reaches it.
+   */
+  private def checkCursorScanWithNullOnKeys(query: => DataFrame, expected: Seq[Row]): Unit =
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      assertEveryInputRowReachesAsOfJoin(query)
+      checkCursorScan(query, expected)
+    }
 
   /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
   private def withOrderedRightView(rows: String, columns: String)(f: => Unit): Unit = {
@@ -1249,6 +1318,54 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("SPARK-62137: WHERE on the left input that can fail is not pushed below an inner as-of " +
+    "join ahead of its throwable ON condition") {
+    // The CASE WHEN is false on the only pair, since 5 > 9 is false, so the join drops the only
+    // left row, the one where the division is by zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("asof_guard_l", "asof_guard_r") {
+        sql("CREATE TABLE asof_guard_l USING parquet AS " +
+          "SELECT * FROM VALUES (1, 10, 9, 5) AS l(k, t, v, f)")
+        sql("CREATE TABLE asof_guard_r USING parquet AS " +
+          "SELECT * FROM VALUES (1, 5, 9) AS r(k, t, g)")
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT a.k
+              |FROM asof_guard_l a ASOF JOIN asof_guard_r b
+              |  MATCH_CONDITION (a.t >= b.t)
+              |  ON a.k = b.k AND CASE WHEN a.f < 0 THEN raise_error('neg') ELSE a.f > b.g END
+              |WHERE 10 / (a.v - 9) < 100
+              |""".stripMargin),
+          Nil)
+      }
+    }
+  }
+
+  test("SPARK-62137: a condition that can fail is not pushed below an as-of join ahead of its " +
+    "throwable MATCH_CONDITION") {
+    // The MATCH_CONDITION is false on the only pair, since 10 < 5 is false, and the join
+    // evaluates its ON condition only on the pairs that it matches. So the inner join drops the
+    // only left row, the one where the divisions over the left side are by zero, and the left
+    // outer join keeps it without a match, never dividing by the right side's zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("asof_guard_l", "asof_guard_r") {
+        sql("CREATE TABLE asof_guard_l USING parquet AS " +
+          "SELECT * FROM VALUES (1, 10, 9) AS l(k, t, v)")
+        sql("CREATE TABLE asof_guard_r USING parquet AS " +
+          "SELECT * FROM VALUES (1, 5, 9) AS r(k, t, g)")
+        def query(joinType: String, rest: String): String =
+          s"SELECT a.k FROM asof_guard_l a $joinType JOIN asof_guard_r b " +
+            "MATCH_CONDITION (a.t < CASE WHEN b.t < 0 THEN raise_error('neg') ELSE b.t END) " +
+            rest
+        checkSortMergeAsOf(sql(query("ASOF", "ON a.k = b.k WHERE 10 / (a.v - 9) < 100")), Nil)
+        checkSortMergeAsOf(sql(query("ASOF", "ON a.k = b.k AND 10 / (a.v - 9) < 100")), Nil)
+        checkSortMergeAsOf(
+          sql(query("LEFT ASOF", "ON a.k = b.k AND 10 / (b.g - 9) < 100")), Seq(Row(1)))
+      }
+    }
+  }
+
   test("WHERE on the right input runs after the closest match, unlike the same ON predicate") {
     withTradeQuoteTables {
       // The 10:00:11 trade's closest quote is 180.20. WHERE drops the trade, while ON skips
@@ -1297,6 +1414,439 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
         Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.20),
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), null)))
+  }
+
+  test("WHERE on the left ON key also filters the right scan") {
+    withTradeQuoteTables {
+      Seq("LEFT ASOF JOIN", "ASOF JOIN").foreach { join =>
+        val text =
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t $join quotes_t q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |WHERE t.symbol = 'MSFT'
+             |""".stripMargin
+        val expected = Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil
+        withClue(s"$join: ") {
+          val query = sql(text)
+          checkSortMergeAsOf(query, expected)
+          assert(scanFiltersOnEquality(query, "quotes_t", "symbol", "MSFT"))
+        }
+        withClue(s"$join, inference across as-of joins off: ") {
+          withSQLConf(SQLConf.INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED.key -> "false") {
+            val query = sql(text)
+            checkSortMergeAsOf(query, expected)
+            assert(scanFilterColumns(query, "quotes_t").isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("a right input filter on the ON key filters the left scan only for an inner join") {
+    withTradeQuoteTables {
+      // A left outer join keeps every trade, so only the inner join may skip the other symbols.
+      val leftOuterQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t LEFT ASOF JOIN (SELECT * FROM quotes_t WHERE symbol = 'MSFT') q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        leftOuterQuery,
+        Seq(
+          Row(Timestamp.valueOf("2026-06-29 09:59:59"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:11"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50)))
+      assert(scanFilterColumns(leftOuterQuery, "trades_t").isEmpty)
+
+      val innerQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t ASOF JOIN (SELECT * FROM quotes_t WHERE symbol = 'MSFT') q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin)
+      checkSortMergeAsOf(innerQuery, Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil)
+      assert(scanFiltersOnEquality(innerQuery, "trades_t", "symbol", "MSFT"))
+    }
+  }
+
+  test("filter inference keeps a left row with a NULL ON key in a LEFT ASOF JOIN") {
+    // The NULL key never matches, but a left outer join must still return the row.
+    withTable("null_key_t") {
+      sql(
+        """
+          |CREATE TABLE null_key_t USING parquet AS
+          |SELECT * FROM VALUES (1, 'A', 5), (2, NULL, 5) AS t(id, k, ts)
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT t.id, r.tag
+            |FROM null_key_t t
+            |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), (NULL, 1, 'n1') AS r(k, ts, tag)
+            |  MATCH_CONDITION (t.ts >= r.ts)
+            |  ON t.k = r.k
+            |""".stripMargin),
+        Seq(Row(1, "a1"), Row(2, null)))
+    }
+  }
+
+  test("an inferred right filter does not make a right input expression fail") {
+    // The join reads the right input lazily and one row past each key group. A right filter
+    // would skip 'B', so (ask - bid) / bid would run on 'C', which divides by zero.
+    withTable("asof_tr", "asof_qu", "asof_tr2", "asof_qu2", "asof_bids") {
+      sql("CREATE TABLE asof_tr USING parquet AS SELECT * FROM VALUES ('A', 5) AS t(sym, ts)")
+      sql(
+        """
+          |CREATE TABLE asof_qu USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 10, 9), ('B', 1, 10, 9), ('C', 1, 10, 0)
+          |  AS q(sym, ts, ask, bid)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_tr2 USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 5) AS t(sym, x, ts)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_qu2 USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 1, 10, 9), ('B', NULL, 1, 10, 9), ('B', 1, 1, 10, 0)
+          |  AS q(sym, x, ts, ask, bid)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_bids USING parquet AS
+          |SELECT * FROM VALUES ('A', 0, 9), ('B', 0, 9), ('C', 0, 0) AS b(sym, ts, bid)
+          |""".stripMargin)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // The window keeps the order the join needs, so the join reads its output directly.
+        checkCursorScan(
+          sql(
+            """
+              |SELECT t.sym, q.spread, q.prev
+              |FROM asof_tr t ASOF JOIN (
+              |  SELECT sym, ts, (ask - bid) / bid AS spread, prev
+              |  FROM (SELECT *, lag(bid) OVER (PARTITION BY sym ORDER BY ts) AS prev
+              |    FROM asof_qu)) q
+              |  MATCH_CONDITION (t.ts >= q.ts)
+              |  ON t.sym = q.sym
+              |WHERE t.sym <> 'B'
+              |""".stripMargin),
+          Row("A", 1.0 / 9, null) :: Nil)
+        // IS NOT NULL on the second ON key would skip ('B', NULL).
+        checkCursorScan(
+          sql(
+            """
+              |SELECT t.sym, q.spread, q.prev
+              |FROM asof_tr2 t ASOF JOIN (
+              |  SELECT sym, x, ts, (ask - bid) / bid AS spread, prev
+              |  FROM (SELECT *, lag(bid) OVER (PARTITION BY sym, x ORDER BY ts) AS prev
+              |    FROM asof_qu2)) q
+              |  MATCH_CONDITION (t.ts >= q.ts)
+              |  ON t.sym = q.sym AND t.x = q.x
+              |""".stripMargin),
+          Row("A", 1.0 / 9, null) :: Nil)
+        // The right input is an as-of join, which keeps the order of its left input.
+        for (cursorScan <- Seq("false", "true")) {
+          withSQLConf(
+              SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+              SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan) {
+            checkSortMergeAsOf(
+              sql(
+                """
+                  |SELECT t.sym, q.spread
+                  |FROM asof_tr t ASOF JOIN (
+                  |  SELECT a.sym, a.ts, (a.ask - a.bid) / b.bid AS spread
+                  |  FROM asof_qu a ASOF JOIN asof_bids b
+                  |    MATCH_CONDITION (a.ts >= b.ts)
+                  |    ON a.sym = b.sym) q
+                  |  MATCH_CONDITION (t.ts >= q.ts)
+                  |  ON t.sym = q.sym
+                  |WHERE t.sym <> 'B'
+                  |""".stripMargin),
+              Row("A", 1.0 / 9) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  /** Runs `f` with tables for as-of joins inside correlated subqueries and LATERAL joins. */
+  private def withSubqueryAsOfTables(f: => Unit): Unit = {
+    withTable("asof_o", "asof_l", "asof_r", "asof_l3", "asof_s") {
+      sql("CREATE TABLE asof_o USING parquet AS SELECT * FROM VALUES (1), (2) AS o(id)")
+      sql(
+        """
+          |CREATE TABLE asof_l USING parquet AS
+          |SELECT * FROM VALUES (1, 0, 5, 10, 'x'), (2, 3, 3, 10, 'y') AS l(id, k, a, ts, extra)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_r USING parquet AS
+          |SELECT * FROM VALUES (0, 1, 100), (3, 1, 30), (7, 1, 70) AS r(k, ts, v)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_l3 USING parquet AS
+          |SELECT * FROM VALUES (1, 'text', 'abc', 7, 10), (2, 'num', '7', 7, 10)
+          |  AS l(id, kind, s, y, ts)
+          |""".stripMargin)
+      sql("CREATE TABLE asof_s USING parquet AS SELECT * FROM VALUES (7) AS s(x)")
+      f
+    }
+  }
+
+  test("an as-of join in a subquery or lateral body gets no filter that can fail") {
+    // The body goes through filter inference on its own and again after the main plan inlines
+    // it. A filter the as-of case added must not lead the second run to one that can fail, such
+    // as 10 / k > 0 from k = a and 10 / a > 0 on the row with k = 0 and a = 5.
+    withSubqueryAsOfTables {
+      val cases = Seq(
+        """
+          |SELECT o.id, (SELECT max(r.v)
+          |  FROM (SELECT id, k, a, ts FROM asof_l WHERE 10 / a > 0) l
+          |  ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) AS v
+          |FROM asof_o o
+          |""".stripMargin -> Seq(Row(1, null), Row(2, 30)),
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) lat
+          |WHERE 10 / lat.a > 0
+          |""".stripMargin -> Seq(Row(2, 30)),
+        // An uncorrelated lateral body runs the as-of case twice. Only IS NOT NULL, not k = a,
+        // may come out of the first run, under the legacy flag.
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.id, l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a) lat
+          |WHERE lat.id = o.id AND 10 / lat.a > 0
+          |""".stripMargin -> Seq(Row(2, 30)),
+        // r.k > 5 and l.y = r.k must not lead to CAST(s AS INT) > 5, which casts 'abc'.
+        """
+          |SELECT o.id, (SELECT max(r.v)
+          |  FROM (SELECT * FROM asof_l3 WHERE kind = 'num' AND CAST(s AS INT) = y) l
+          |  ASOF JOIN (SELECT * FROM asof_r WHERE k > 5) r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.y = r.k
+          |  WHERE l.id = o.id) AS v
+          |FROM asof_o o
+          |""".stripMargin -> Seq(Row(1, null), Row(2, 70)))
+      // Parquet would skip the file of the 'text' row by its statistics.
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+        for ((query, expected) <- cases) {
+          withClue(query) {
+            withSQLConf(
+                SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+              checkSortMergeAsOf(sql(query), expected)
+            }
+            checkSortMergeAsOf(sql(query), expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("an outer NOT IN pushed into a lateral as-of join runs once") {
+    // The main plan's run adds l.k = l.a to the inlined lateral body. It must not also rewrite
+    // the pushed-in l.a NOT IN with it into a second anti join.
+    withSubqueryAsOfTables {
+      val df = checkOneSubqueryJoin(
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) lat
+          |WHERE lat.a NOT IN (SELECT x FROM asof_s)
+          |""".stripMargin,
+        onLeftInput = true,
+        Row(2, 30) :: Nil)
+      assert(scanDataFilters(df, "asof_l").exists {
+        case EqualTo(x: Attribute, y: Attribute) => Set(x.name, y.name) == Set("k", "a")
+        case _ => false
+      }, s"Expected l.k = l.a on the scan of asof_l in plan:\n${df.queryExecution.executedPlan}")
+    }
+  }
+
+  test("a filter inferred from the ON condition is not added if it can fail") {
+    withTable("guarded_t") {
+      sql(
+        """
+          |CREATE TABLE guarded_t USING parquet AS
+          |SELECT * FROM VALUES (1, 6, 'num', 0, 100), (2, 10, 'text', 0, 100)
+          |  AS t(id, k, kind, lo, hi)
+          |""".stripMargin)
+      withGuardedConditionConfs {
+        // WHERE t.lo = 0 and ON CAST(r.v AS INT) >= t.lo give CAST(r.v AS INT) >= 0. As a right
+        // filter it would cast 'abc', which only the 'text' row could match, and fail. The legacy
+        // flag must not add it either, as as-of joins had no inferred filters before.
+        val results = Seq(
+          "LEFT ASOF JOIN" -> Seq(Row(1, "42"), Row(2, null)),
+          "ASOF JOIN" -> Seq(Row(1, "42")))
+        for ((join, expected) <- results; legacy <- Seq("false", "true")) {
+          withClue(s"$join, legacy inference $legacy: ") {
+            withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> legacy) {
+              checkSortMergeAsOf(
+                sql(
+                  s"""
+                     |SELECT t.id, r.v
+                     |FROM guarded_t t $join VALUES (5, '42'), (8, 'abc') AS r(k, v)
+                     |  MATCH_CONDITION (t.k >= r.k)
+                     |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo
+                     |    AND CAST(r.v AS INT) <= t.hi
+                     |WHERE t.lo = 0
+                     |""".stripMargin),
+                expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("an IN or NOT IN subquery on the ON key adds no join below the other input") {
+    // The subqueries run as joins below the as-of join. On the other input, a sort-merge semi
+    // join for IN would keep only the key order, so the as-of join would sort that input again.
+    // A NOT IN anti join would run over every row of that input.
+    withTradeQuoteTables {
+      withTable("symbols_t") {
+        sql(
+          """
+            |CREATE TABLE symbols_t USING parquet AS
+            |SELECT * FROM VALUES ('MSFT'), ('GOOG') AS s(symbol)
+            |""".stripMargin)
+        def subqueryOnLeft(join: String, in: String): String =
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t $join quotes_t q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |WHERE t.symbol $in (SELECT symbol FROM symbols_t)
+             |""".stripMargin
+        def subqueryOnRight(in: String): String =
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t ASOF JOIN
+             |  (SELECT * FROM quotes_t WHERE symbol $in (SELECT symbol FROM symbols_t)) q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |""".stripMargin
+        val msft = Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50)
+        val goog = Row(Timestamp.valueOf("2026-06-29 09:59:59"), null)
+        val aapl = Seq(
+          Row(Timestamp.valueOf("2026-06-29 10:00:05"), 180.10),
+          Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.20))
+        // The query, whether its subquery is on the left input, and the expected rows.
+        val cases = Seq(
+          (subqueryOnLeft("LEFT ASOF JOIN", "IN"), true, Seq(msft, goog)),
+          (subqueryOnLeft("LEFT ASOF JOIN", "NOT IN"), true, aapl),
+          (subqueryOnLeft("ASOF JOIN", "IN"), true, Seq(msft)),
+          (subqueryOnLeft("ASOF JOIN", "NOT IN"), true, aapl),
+          (subqueryOnRight("IN"), false, Seq(msft)),
+          (subqueryOnRight("NOT IN"), false, aapl))
+        // No broadcast, so the IN subquery runs as a sort-merge semi join.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          for ((query, onLeftInput, expected) <- cases) {
+            withClue(query) {
+              checkOneSubqueryJoin(query, onLeftInput, expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("an input subquery filter next to an inferred ON key filter runs once") {
+    // The inferred equality or literal must not rewrite the input's own subquery into a second
+    // semi or anti join on that input.
+    withTable("asof_l", "asof_r", "asof_s", "asof_listed") {
+      sql(
+        """
+          |CREATE TABLE asof_l USING parquet AS
+          |SELECT * FROM VALUES (1, 10, 1), (2, 10, 2), (3, 10, 3) AS l(k, ts, a)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_r USING parquet AS
+          |SELECT * FROM VALUES (1, 5, 1, 'X'), (2, 5, 2, 'X'), (3, 5, 3, 'Y') AS r(k, ts, a, venue)
+          |""".stripMargin)
+      sql("CREATE TABLE asof_s USING parquet AS SELECT * FROM VALUES (2) AS s(x)")
+      sql(
+        """
+          |CREATE TABLE asof_listed USING parquet AS
+          |SELECT * FROM VALUES (1, 'X'), (3, 'X') AS s(k, venue)
+          |""".stripMargin)
+      val keyEqualsA: Expression => Boolean = {
+        case EqualTo(x: Attribute, y: Attribute) => Set(x.name, y.name) == Set("k", "a")
+        case _ => false
+      }
+      val keyIsOne: Expression => Boolean = {
+        case EqualTo(x: Attribute, Literal(1, _)) => x.name == "k"
+        case EqualTo(Literal(1, _), x: Attribute) => x.name == "k"
+        case _ => false
+      }
+      // The query, whether its subquery is on the left input, the expected rows, and the table
+      // and filter that the rule adds to the scan of that input.
+      val cases = Seq(
+        // ON l.k = r.k AND l.k = r.a adds r.k = r.a next to r.a NOT IN.
+        ("""
+           |SELECT l.k, r.ts
+           |FROM asof_l l LEFT ASOF JOIN
+           |  (SELECT * FROM asof_r WHERE a NOT IN (SELECT x FROM asof_s)) r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k AND l.k = r.a
+           |""".stripMargin, false, Seq(Row(1, 5), Row(2, null), Row(3, 5)), "asof_r",
+          keyEqualsA),
+        // WHERE l.k = 1 adds r.k = 1 next to (r.k, r.venue) IN.
+        ("""
+           |SELECT l.k, r.venue
+           |FROM asof_l l LEFT ASOF JOIN
+           |  (SELECT * FROM asof_r WHERE (k, venue) IN (SELECT k, venue FROM asof_listed)) r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k
+           |WHERE l.k = 1
+           |""".stripMargin, false, Seq(Row(1, "X")), "asof_r", keyIsOne),
+        // For an inner join, ON l.k = r.k AND r.k = l.a adds l.k = l.a next to l.a NOT IN.
+        ("""
+           |SELECT l.k, r.ts
+           |FROM (SELECT * FROM asof_l WHERE a NOT IN (SELECT x FROM asof_s)) l
+           |ASOF JOIN asof_r r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k AND r.k = l.a
+           |""".stripMargin, true, Seq(Row(1, 5), Row(3, 5)), "asof_l", keyEqualsA))
+      // No broadcast, so the IN subquery runs as a sort-merge semi join.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        for ((query, onLeftInput, expected, table, isAddedFilter) <- cases) {
+          withClue(query) {
+            val df = checkOneSubqueryJoin(query, onLeftInput, expected)
+            assert(scanDataFilters(df, table).exists(isAddedFilter),
+              s"Expected the added key filter on the scan of $table in plan:\n" +
+                df.queryExecution.executedPlan)
+          }
+        }
+      }
+    }
   }
 
   test("ON condition does not divide when an AND guard before it is FALSE") {
@@ -1572,7 +2122,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("cursor scan: backward match moves forward across trades and keys") {
     // B has no quotes, C has quotes but no trades, and NULL keys never match. A best row kept
     // from key A would give B a match.
-    checkCursorScan(
+    checkCursorScanWithNullOnKeys(
       sql(
         """
           |SELECT t.sym, t.ts, q.tag
@@ -1589,12 +2139,12 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("cursor scan: two ON keys, with NULL parts, start a new group on either key") {
     // (1, 1) and (1, 2) differ only in the second key. A cursor that compared only the first
     // key would give trade 5 the quote q1n, and trade 1 the later quote q12.
-    checkCursorScan(
+    checkCursorScanWithNullOnKeys(
       sql(
         """
           |SELECT t.id, q.tag
-          |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10), (5, 1, 1, 3)
-          |  AS t(id, a, b, ts)
+          |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10),
+          |  (5, 1, 1, 3) AS t(id, a, b, ts)
           |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
           |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
           |  MATCH_CONDITION (t.ts >= q.ts)
@@ -1605,21 +2155,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
 
   test("cursor scan: a NULL right ON key ends the group like any later key") {
     // Row 'null key' has k1 = 2, so it ends the group of k1 = 1, and the scan stops there. It
-    // must not read on to row 'bad', whose ON key r.a / r.b divides by zero under ANSI.
+    // must not read on to row 'bad', whose ON key r.a / r.b divides by zero under ANSI. Filter
+    // inference must keep 'null key' too, as r.a / r.b can fail.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withOrderedRightView(
           "(1, 10, 2, 1, 'match'), (2, NULL, 1, 1, 'null key'), (3, 1, 0, 1, 'bad')",
           "k1, a, b, ts, tag") {
-        checkCursorScan(
-          sql(
-            """
-              |SELECT t.k1, r.tag
-              |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
-              |ASOF JOIN r
-              |  MATCH_CONDITION (t.ts >= r.ts)
-              |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
-              |""".stripMargin),
-          Row(1, "match") :: Nil)
+        val query =
+          """
+            |SELECT t.k1, r.tag
+            |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
+            |ASOF JOIN r
+            |  MATCH_CONDITION (t.ts >= r.ts)
+            |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
+            |""".stripMargin
+        withClue("InferFiltersFromConstraints excluded: ") {
+          checkCursorScanWithNullOnKeys(sql(query), Row(1, "match") :: Nil)
+        }
+        withClue("InferFiltersFromConstraints on: ") {
+          checkCursorScan(sql(query), Row(1, "match") :: Nil)
+        }
       }
     }
   }
@@ -1692,7 +2247,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   gridTest("cursor scan: a NOT NULL left ON key never matches a NULL right ON key")(
     notNullLeftKeyQueries.keys.toSeq.sorted) { keyShape =>
     val (query, expected) = notNullLeftKeyQueries(keyShape)
-    checkCursorScan(sql(query), expected)
+    checkCursorScanWithNullOnKeys(sql(query), expected)
   }
 
   test("a LIMIT in the join's codegen stage stops the join early") {
@@ -1849,6 +2404,76 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                |  MATCH_CONDITION (t.k $op q.k)
                |""".stripMargin),
           Row(1, "negative zero") :: Row(2, "nan") :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: a quote equal to the trade under UTF8_LCASE or as -0.0 matches only an " +
+      "inclusive MATCH_CONDITION") {
+    // Under UTF8_LCASE, 'B' equals 'b', and -0.0 equals 0.0. The UTF8_LCASE case catches a
+    // compare that drops the collation of the key values, as a byte compare orders 'B' before
+    // 'b'. The DOUBLE case checks that both scans also treat -0.0 and 0.0 as equal.
+    def lcase(value: String): String = s"'$value' COLLATE UTF8_LCASE"
+    Seq(
+      (lcase("b"), Seq(lcase("a") -> "a", lcase("B") -> "B", lcase("c") -> "c")),
+      ("0.0D", Seq("-1.0D" -> "minus one", "-0.0D" -> "negative zero", "1.0D" -> "one"))
+    ).foreach { case (trade, quotes) =>
+      // The tags of the quotes before, equal to and after the trade.
+      val tags = quotes.map(_._2)
+      val quoteRows = quotes.map { case (k, tag) => s"($k, '$tag')" }.mkString(", ")
+      Seq(">=" -> tags(1), ">" -> tags(0), "<=" -> tags(1), "<" -> tags(2)).foreach {
+        case (op, tag) =>
+          withClue(s"$trade $op: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT q.tag
+                   |FROM VALUES ($trade) AS t(k)
+                   |ASOF JOIN VALUES $quoteRows AS q(k, tag)
+                   |  MATCH_CONDITION (t.k $op q.k)
+                   |""".stripMargin),
+              Row(tag) :: Nil)
+          }
+      }
+    }
+  }
+
+  test("cursor scan: later trades of a group that tie with a quote under UTF8_LCASE or as -0.0 " +
+      "match it only with an inclusive MATCH_CONDITION") {
+    // Trades low, tie and high, and quotes tie2 and top, in one group. The tie trade and the tie2
+    // quote are equal, but differ in bytes or bits, one way in the first case of each type and
+    // the other way in the second. Forward, the tie and high trades check the quote that the
+    // trade before them kept. Backward, they compare the quote the cursor waits at. The
+    // UTF8_LCASE cases catch a compare that drops the collation, which gives one of them the
+    // wrong quote. The DOUBLE cases check that both scans also treat -0.0 and 0.0 as equal.
+    def lcase(value: String): String = s"'$value' COLLATE UTF8_LCASE"
+    val cases = Seq(
+      // (low, tie, high, tie2, top)
+      (lcase("a"), lcase("b"), lcase("c"), lcase("B"), lcase("d")),
+      (lcase("a"), lcase("B"), lcase("c"), lcase("b"), lcase("d")),
+      ("-1.0D", "0.0D", "0.5D", "-0.0D", "1.0D"),
+      ("-1.0D", "-0.0D", "0.5D", "0.0D", "1.0D"))
+    // The tags of the quotes that trades low, tie and high match.
+    val matches = Seq(
+      "<=" -> Seq("tie2", "tie2", "top"),
+      "<" -> Seq("tie2", "top", "top"),
+      ">=" -> Seq(null, "tie2", "tie2"),
+      ">" -> Seq(null, null, "tie2"))
+    for {
+      (low, tie, high, tie2, top) <- cases
+      (op, tags) <- matches
+    } {
+      withClue(s"trades $low, $tie, $high, quotes $tie2, $top, $op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 1, $low), (1, 2, $tie), (1, 3, $high) AS t(g, id, k)
+               |LEFT ASOF JOIN VALUES (1, $tie2, 'tie2'), (1, $top, 'top') AS q(g, k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON t.g = q.g
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
       }
     }
   }
@@ -2017,15 +2642,19 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           // buffered scan would open one spill file per right row of the group for every left row.
           for (cursorScan <- Seq(false, true)) {
             withClue(s"seed $seed, $joinType, t.ts $op q.ts, cursor scan $cursorScan: ") {
+              // Without InferFiltersFromConstraints, the NULL ON key row reaches the join.
               withSQLConf(
                   SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-                  SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
-                checkWithAsOfJoinCodegenOffAndOn(sql(
+                  SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                  SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+                val query =
                   s"""
                      |SELECT t.id, q.ts, q.tag
                      |FROM t $joinType ASOF JOIN q
                      |  MATCH_CONDITION (t.ts $op q.ts) ON t.k = q.k
-                     |""".stripMargin)) { df =>
+                     |""".stripMargin
+                assertEveryInputRowReachesAsOfJoin(sql(query))
+                checkWithAsOfJoinCodegenOffAndOn(sql(query)) { df =>
                   checkAnswer(df, expected)
                   assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
                 }
@@ -2033,6 +2662,184 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Runs `f` with random views t and q. Left groups 0, 1 and 2 have 100 rows each, and right
+   * groups 0, 1 and 3 have 300, so group 2 has no right rows. Each right key is unique in its
+   * group, and about one left key in 20 is NULL. Strings and binaries have random lengths, so
+   * each right row writes other bytes into the buffer that the right row before it used.
+   */
+  private def withRandomKeyViews(f: => Unit): Unit = {
+    val random = new Random(7)
+    def word(): String = random.alphanumeric.take(1 + random.nextInt(12)).mkString
+    def orNull(value: Any): Any = if (random.nextInt(20) == 0) null else value
+    def bytes(value: String): Array[Byte] = value.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    val leftRows = (0 until 300).map { id =>
+      val str = word()
+      Row(id, id % 3, orNull(str), orNull(bytes(word())),
+        orNull(BigDecimal(random.nextInt(100000), 2)), orNull(random.nextInt(1000).toLong))
+    }
+    val rightRows = Seq(0, 1, 3).flatMap { g =>
+      def unique[T](next: => T): Seq[T] = Iterator.continually(next).distinct.take(300).toSeq
+      val strings = unique(word().map(_.toUpper))
+      val binaries = unique(word()).map(bytes)
+      val decimals = random.shuffle((0 until 200000).toList).take(300)
+      val longs = random.shuffle((0 until 10000).toList).take(300)
+      (0 until 300).map { i =>
+        Row(g, strings(i), binaries(i), BigDecimal(decimals(i), 2), longs(i).toLong, s"q$g-$i")
+      }
+    }
+    val leftSchema = new StructType().add("id", IntegerType).add("g", IntegerType)
+      .add("s", StringType).add("b", BinaryType).add("d", DecimalType(10, 2)).add("v", LongType)
+    val rightSchema = new StructType().add("g", IntegerType).add("s", StringType)
+      .add("b", BinaryType).add("d", DecimalType(11, 2)).add("v", LongType).add("tag", StringType)
+    withTempView("t", "q") {
+      spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
+        .createOrReplaceTempView("t")
+      spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
+        .createOrReplaceTempView("q")
+      f
+    }
+  }
+
+  /**
+   * Checks a LEFT ASOF JOIN of views t and q on `t.g = q.g` and `bound` against a plain join that
+   * picks the closest right row by `rightKey`: the largest for `>=` and `>`, the smallest for `<=`
+   * and `<`. Runs it with the cursor scan off and on, each with the codegen off and on, in one
+   * partition, so the cursor moves between the groups.
+   */
+  private def checkClosestRowLikePlainJoin(
+      leftKey: String, op: String, rightKey: String, bound: String = ""): Unit = {
+    val closest = if (op.startsWith(">")) "MAX" else "MIN"
+    val on = s"t.g = q.g$bound"
+    val expected = sql(
+      s"""
+         |SELECT t.id, $closest(named_struct('k', $rightKey, 'tag', q.tag)).tag
+         |FROM t LEFT JOIN q ON $on AND $leftKey $op $rightKey
+         |GROUP BY t.id
+         |""".stripMargin).collect().toSeq
+    for (cursorScan <- Seq(false, true)) {
+      withClue(s"$leftKey $op $rightKey ON $on, cursor scan $cursorScan: ") {
+        withSQLConf(
+            SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+            SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+          checkWithAsOfJoinCodegenOffAndOn(sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM t LEFT ASOF JOIN q MATCH_CONDITION ($leftKey $op $rightKey) ON $on
+               |""".stripMargin)) { df =>
+            checkAnswer(df, expected)
+            assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+          }
+        }
+      }
+    }
+  }
+
+  private val closestRowOperators = Seq(">=", ">", "<=", "<")
+
+  test("cursor scan: STRING and BINARY column keys match a plain join after the next right row " +
+      "reuses the buffer of the one compared") {
+    withRandomKeyViews {
+      for (key <- Seq("s", "b"); op <- closestRowOperators) {
+        checkClosestRowLikePlainJoin(s"t.$key", op, s"q.$key")
+      }
+    }
+  }
+
+  test("cursor scan: computed STRING and DECIMAL left keys match a plain join while the right " +
+      "rows go by") {
+    withRandomKeyViews {
+      for {
+        // Each of these returns a new string or DECIMAL(11, 2) for each left row.
+        (leftKey, rightKey) <- Seq("upper(t.s)" -> "q.s", "concat(t.s, 'x')" -> "q.s",
+          "t.d + t.d" -> "q.d")
+        op <- closestRowOperators
+      } {
+        checkClosestRowLikePlainJoin(leftKey, op, rightKey)
+      }
+    }
+  }
+
+  test("cursor scan: a tolerance bound on a computed BIGINT key matches a plain join while the " +
+      "right rows go by") {
+    withRandomKeyViews {
+      for {
+        (op, bound) <- Seq(">=" -> " AND q.v >= t.v * 10 - 25", ">" -> " AND q.v > t.v * 10 - 25",
+          "<=" -> " AND q.v <= t.v * 10 + 25", "<" -> " AND q.v < t.v * 10 + 25")
+      } {
+        checkClosestRowLikePlainJoin("t.v * 10", op, "q.v", bound)
+      }
+    }
+  }
+
+  test("cursor scan: a forward kept quote is checked again from its copy, not from the right " +
+      "row after it") {
+    // Trades b, c and e keep quote e, while the next quote z has taken the right row buffer.
+    // Trade m must drop e and match z, which a check against z would not do. With a tolerance,
+    // trade 9 must drop 5 and get no match, as 100 is past 9 + 4.
+    Seq(
+      "<=" -> Seq("e", "e", "e", "z"),
+      "<" -> Seq("e", "e", "z", "z")
+    ).foreach { case (op, tags) =>
+      withClue(s"STRING $op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 'b'), (2, 'c'), (3, 'e'), (4, 'm') AS t(id, k)
+               |LEFT ASOF JOIN VALUES ('e', 'e'), ('zzzzzzzzzzzz', 'z') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+    Seq(
+      "<=" -> Seq("5", "5", "5", null),
+      "<" -> Seq("5", "5", null, null)
+    ).foreach { case (op, tags) =>
+      withClue(s"BIGINT $op ON q.v <= t.v + 4: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 1L), (2, 2L), (3, 5L), (4, 9L) AS t(id, v)
+               |LEFT ASOF JOIN VALUES (5L, '5'), (100L, '100') AS q(v, tag)
+               |  MATCH_CONDITION (t.v $op q.v)
+               |  ON q.v <= t.v + 4
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+  }
+
+  test("cursor scan: a NULL left key or a new group does not reuse the left key of the row " +
+      "before") {
+    // Trade 3 has a NULL key after trade 2 of group 1. Group 3 has no quotes, so the cursor
+    // never reads trade 5's key. Trades 4 and 6 each match another quote than the last key the
+    // cursor read before them would: trade 2's 'k' and trade 4's 'd'.
+    val trades = "(1, 1, 'c'), (2, 1, 'k'), (3, 2, NULL), (4, 2, 'd'), (5, 3, 'm'), (6, 4, 'p')"
+    val quotes = "(1, 'b'), (1, 'j'), (2, 'a'), (2, 'f'), (4, 'c'), (4, 'h'), (4, 'q')"
+    Seq(
+      ">=" -> Seq("b", "j", null, "a", null, "h"),
+      ">" -> Seq("b", "j", null, "a", null, "h"),
+      "<=" -> Seq("j", null, null, "f", null, "q"),
+      "<" -> Seq("j", null, null, "f", null, "q")
+    ).foreach { case (op, tags) =>
+      withClue(s"$op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.k
+               |FROM VALUES $trades AS t(id, g, k)
+               |LEFT ASOF JOIN VALUES $quotes AS q(g, k)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON t.g = q.g
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
       }
     }
   }
@@ -2109,6 +2916,205 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             |  ON t.sym = q.sym AND t.active
             |""".stripMargin),
         Row(1, "q5") :: Row(2, null) :: Nil)
+    }
+  }
+
+  test("cursor scan: a tolerance bound in ON returns the closest quote within the bound") {
+    // Key 'a' has quotes at 10, 20, 30, 38, 40, 42 and 50, and the tolerance is 3. Each trade of
+    // key 'a' is inside, at or past the tolerance from its closest quote, or matches one
+    // exactly. Key 'b' has no quotes, 'c' has no trades, and 'd' has only a NULL quote time.
+    val trades =
+      """VALUES (1, 'a', 8), (2, 'a', 12), (3, 'a', 23), (4, 'a', 27), (5, 'a', 29), (6, 'a', 34),
+        |  (7, 'a', 40), (8, 'a', 47), (9, 'a', 53), (10, 'a', NULL), (11, 'b', 5), (12, 'd', 5),
+        |  (13, NULL, 10) AS t(id, k, ts)""".stripMargin
+    val quotes =
+      """VALUES ('a', NULL, 'a_null'), ('a', 10, 'q10'), ('a', 20, 'q20'), ('a', 30, 'q30'),
+        |  ('a', 38, 'q38'), ('a', 40, 'q40'), ('a', 42, 'q42'), ('a', 50, 'q50'),
+        |  ('c', 1, 'c1'), ('d', NULL, 'd_null'), (NULL, 10, 'null key')
+        |  AS q(k, ts, tag)""".stripMargin
+    for {
+      (direction, inclusiveOp, strictOp, sign) <-
+        Seq(("backward", ">=", ">", "-"), ("forward", "<=", "<", "+"))
+      exact <- Seq(true, false)
+      inclusive <- Seq(true, false)
+      joinType <- Seq("INNER", "LEFT")
+      ansi <- Seq(true, false)
+    } {
+      // The matches of trades 1 to 9, by id.
+      val (inside, atTolerance, exactMatch) = direction match {
+        // 12 is 2 after 10. 23 and 53 are 3 after 20 and 50. 40 is 2 after 38.
+        case "backward" => (Map(2 -> "q10"), Map(3 -> "q20", 9 -> "q50"), "q38")
+        // 8 and 29 are 2 and 1 before 10 and 30. 27 and 47 are 3 before 30 and 50. 40 is 2
+        // before 42. 23 keeps 30 as its closest quote but fails the bound, so 27 checks the
+        // kept quote again.
+        case _ => (Map(1 -> "q10", 5 -> "q30"), Map(4 -> "q30", 8 -> "q50"), "q42")
+      }
+      val found = inside ++ (if (inclusive) atTolerance else Map.empty) +
+        (7 -> (if (exact) "q40" else exactMatch))
+      val expected = (1 to 13).flatMap { id =>
+        found.get(id) match {
+          case Some(tag) => Some(Row(id, tag))
+          case None if joinType == "LEFT" => Some(Row(id, null))
+          case None => None
+        }
+      }
+      val matchOp = if (exact) inclusiveOp else strictOp
+      // The bound compares the quote time first, so it uses the operator of the direction too.
+      val boundOp = if (inclusive) inclusiveOp else strictOp
+      withClue(s"t.ts $matchOp q.ts ON q.ts $boundOp t.ts $sign 3, $joinType, ANSI $ansi: ") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          checkCursorScanWithNullOnKeys(
+            sql(
+              s"""
+                 |SELECT t.id, q.tag
+                 |FROM $trades
+                 |$joinType ASOF JOIN $quotes
+                 |  MATCH_CONDITION (t.ts $matchOp q.ts)
+                 |  ON t.k = q.k AND q.ts $boundOp t.ts $sign 3
+                 |""".stripMargin),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("cursor scan: a tolerance bound in ON on BIGINT, DATE and TIMESTAMP keys returns the " +
+      "closest quote within the bound") {
+    // The trade keys are 10 and 20 and the quote keys 7, 13, 16 and 24, in the unit of the
+    // tolerance 3. So 10 matches 7 backward and 13 forward, both at the tolerance, and 20 is 4
+    // from its closest quotes, past the tolerance. There are no ON keys.
+    Seq(
+      ("CAST(n AS BIGINT)", "3"),
+      ("date_add(DATE'2024-01-01', n)", "INTERVAL '3' DAY"),
+      // A whole number of days.
+      ("date_add(DATE'2024-01-01', n)", "3"),
+      ("add_months(DATE'2024-01-01', n)", "INTERVAL '3' MONTH"),
+      ("TIMESTAMP'2024-01-01 00:00:00' + make_dt_interval(0, 0, 0, n)", "INTERVAL '3' SECOND"),
+      ("TIMESTAMP_NTZ'2024-01-01 00:00:00' + make_dt_interval(0, 0, 0, n)",
+        "INTERVAL '3' SECOND"),
+      ("TIMESTAMP'2024-01-01 00:00:00' + make_ym_interval(0, n)", "INTERVAL '3' MONTH")
+    ).foreach { case (key, tolerance) =>
+      Seq(("backward", ">=", "-", 7), ("forward", "<=", "+", 13)).foreach {
+        case (direction, op, sign, tag) =>
+          withClue(s"$key, $direction: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT t.id, q.tag
+                   |FROM (SELECT n AS id, $key AS ts FROM VALUES (10), (20) AS v(n)) t
+                   |LEFT ASOF JOIN
+                   |  (SELECT n AS tag, $key AS ts FROM VALUES (7), (13), (16), (24) AS v(n)) q
+                   |  MATCH_CONDITION (t.ts $op q.ts)
+                   |  ON q.ts $op t.ts $sign $tolerance
+                   |""".stripMargin),
+              Row(10, tag) :: Row(20, null) :: Nil)
+          }
+      }
+    }
+  }
+
+  test("cursor scan: ON conditions other than one tolerance bound keep the buffered scan") {
+    // The trade at 10 has v = 5. Quotes 3, 6 and 8 come before it, and 12 and 17 after it.
+    Seq(
+      // These bounds keep quotes far enough away. The closest quote fails them, while a farther
+      // one passes.
+      ("t.ts >= q.ts", "q.ts <= t.ts - 5", "q3"),
+      ("t.ts <= q.ts", "q.ts >= t.ts + 5", "q17"),
+      // Quote 8 is inside the tolerance but fails the second part. Quote 6 passes both.
+      ("t.ts >= q.ts", "q.ts >= t.ts - 5 AND q.v > t.v", "q6"),
+      // A bound on a column the join does not sort on. Quote 8 fails it, while quote 6 passes.
+      ("t.ts >= q.ts", "q.v >= t.ts - 5", "q6"),
+      // A tolerance bound written with the limit first, or as a distance.
+      ("t.ts >= q.ts", "t.ts - 5 <= q.ts", "q8"),
+      ("t.ts >= q.ts", "t.ts - q.ts <= 5", "q8")
+    ).foreach { case (matchCondition, on, tag) =>
+      withClue(s"$matchCondition ON $on: ") {
+        checkBufferedScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 10, 5) AS t(id, ts, v)
+               |LEFT ASOF JOIN VALUES (3, 9, 'q3'), (6, 9, 'q6'), (8, 1, 'q8'), (12, 9, 'q12'),
+               |  (17, 9, 'q17') AS q(ts, v, tag)
+               |  MATCH_CONDITION ($matchCondition)
+               |  ON $on
+               |""".stripMargin),
+          Row(1, tag) :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: a DOUBLE ON bound with an infinite or NaN limit returns the closest quote " +
+      "within the bound") {
+    // Spark orders NaN above +Infinity, in the sort and in the comparisons. So a limit that is
+    // NaN, such as +Infinity - Infinity, still passes the quotes at one end of the order.
+    val inf = "CAST('Infinity' AS DOUBLE)"
+    val negInf = "CAST('-Infinity' AS DOUBLE)"
+    val nan = "CAST('NaN' AS DOUBLE)"
+    // (operator, sign, tolerance, the tags of trades +Infinity, -Infinity, NaN and 2.0)
+    Seq(
+      ("<=", "+", inf, Seq("pinf", "ninf", "nan", "pinf")),
+      ("<=", "+", negInf, Seq("pinf", "ninf", "nan", null)),
+      (">=", "-", inf, Seq(null, "ninf", "nan", "one")),
+      (">=", "-", negInf, Seq("pinf", null, "nan", null))
+    ).foreach { case (op, sign, tolerance, tags) =>
+      withClue(s"t.k $op q.k ON q.k $op t.k $sign $tolerance: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, $inf), (2, $negInf), (3, $nan), (4, 2.0D) AS t(id, k)
+               |LEFT ASOF JOIN VALUES ($negInf, 'ninf'), (1.0D, 'one'), ($inf, 'pinf'),
+               |  ($nan, 'nan') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |  ON q.k $op t.k $sign $tolerance
+               |""".stripMargin),
+          tags.zipWithIndex.map { case (tag, i) => Row(i + 1, tag) })
+      }
+    }
+  }
+
+  test("cursor scan: an ON tolerance limit that overflows fails both scans under ANSI and " +
+      "matches nothing without ANSI") {
+    // Forward adds the tolerance to the trade time, and backward subtracts it.
+    Seq(
+      ("<=", "+", Long.MaxValue - 1, Long.MaxValue, 0L),
+      (">=", "-", Long.MinValue + 1, Long.MinValue, Long.MaxValue)
+    ).foreach { case (op, sign, tradeTs, quoteTs, farSide) =>
+      def query(quotes: String): DataFrame = sql(
+        s"""
+           |SELECT t.ts, q.ts
+           |FROM VALUES (${tradeTs}L) AS t(ts)
+           |LEFT ASOF JOIN VALUES $quotes AS q(ts)
+           |  MATCH_CONDITION (t.ts $op q.ts)
+           |  ON q.ts $op t.ts $sign 10
+           |""".stripMargin)
+      withClue(s"t.ts $op q.ts: ") {
+        // The quote passes the comparison, so both scans evaluate the limit.
+        for {
+          cursorScan <- Seq(false, true)
+          codegen <- Seq(false, true)
+        } {
+          withClue(s"cursor scan $cursorScan, codegen $codegen: ") {
+            withSQLConf(
+                SQLConf.ANSI_ENABLED.key -> "true",
+                SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+              val e = intercept[RuntimeException](query(s"(${quoteTs}L)").collect())
+              assert(e.asInstanceOf[SparkThrowable].getCondition == "ARITHMETIC_OVERFLOW", e)
+            }
+          }
+        }
+        // Without ANSI, the limit wraps around, so the quote is past it.
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          checkCursorScan(query(s"(${quoteTs}L)"), Row(tradeTs, null) :: Nil)
+        }
+        // No quote passes the comparison, so neither scan evaluates the limit.
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkCursorScanWithNullOnKeys(
+            query(s"(CAST(NULL AS BIGINT)), (${farSide}L)"), Row(tradeTs, null) :: Nil)
+        }
+      }
     }
   }
 

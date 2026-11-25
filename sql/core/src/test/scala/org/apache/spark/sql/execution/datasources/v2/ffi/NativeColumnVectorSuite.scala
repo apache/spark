@@ -34,11 +34,13 @@ import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArro
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.sql.vectorized.ArrowColumnVector
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Checks that a [[NativeColumnVector]] reads the nulls and values that an [[ArrowColumnVector]]
  * of the same Arrow vector reads.
  */
+@DataSourceV2Test
 class NativeColumnVectorSuite extends SparkFunSuite {
 
   // The rows of the batches, more than 8 so that the validity bitmaps have several bytes, and the

@@ -27,12 +27,14 @@ import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for the data-source-table side of [[DelegatingTable]]: a v2 catalog returns
  * metadata-only tables and Spark reads / writes them via the V1 data-source path.
  * View-related paths live in [[DataSourceV2MetadataViewSuite]].
  */
+@DataSourceV2Test
 class DataSourceV2MetadataTableSuite extends SharedSparkSession {
   import testImplicits._
 

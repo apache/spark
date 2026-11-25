@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
+import scala.util.Success
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -579,6 +580,15 @@ case class KeyLayout(
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
+
+  /**
+   * Whether `other` carries the same layout state: whether the keys are unique, whether they were
+   * collapsed, and why they repeat. The unknown-keys state is not asked, since it records where
+   * rows of an undeclared key were placed rather than how the layout describes its keys.
+   */
+  def describesSameLayoutState(other: KeyLayout): Boolean =
+    isGrouped == other.isGrouped && isCollapsed == other.isCollapsed &&
+      ungroupingOrigin == other.ungroupingOrigin
 }
 
 /**
@@ -2641,8 +2651,13 @@ case class KeyedShuffleSpec(
       "Required distributions of join legs should be the same size.")
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        // `canCreatePartitioning` admits only a template over bare columns, see there.
-        rebuiltOver(te, clustering(positionSet.head))
+        // `canCreatePartitioning` admits only a template over bare columns, see there. A key of
+        // another type than the column, which the check below requires to be stored as it is,
+        // goes to the function by storage, see `storedKey`. A join's key has the column's type,
+        // so its transform stays equal to the layout's, which e.g. `UnionExec` compares.
+        val key = clustering(positionSet.head)
+        rebuiltOver(te, key).copy(storedKey = !DataType.equalsStructurally(
+          key.dataType, te.references.head.dataType, ignoreNullability = true))
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The child shuffled onto this layout is placed by evaluating what is built here, which would
@@ -2652,26 +2667,33 @@ case class KeyedShuffleSpec(
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
     // A join's keys share their types, apart from nullability and field names, so that answers
     // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
-    // cogroup, need not have them (SPARK-60782). Its other key can be one the layout's function
-    // does not take, e.g. a `BIGINT` against a function declaring `INT`, or a string of another
-    // collation. Or one the function takes, but stored otherwise than
-    // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
-    // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
-    // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
-    // too. So such a child fails here, while planning, with an error that names the key's type.
+    // cogroup, need not have them (SPARK-60782). Its other key can be stored otherwise than the
+    // layout's column, e.g. an `INT` against a `BIGINT` column, or a string of another collation.
+    // Where the function takes such a key, e.g. that `INT` through a widening cast, every row is
+    // then placed with the keyed side's rows of its value, but the cogroup pairs its groups by
+    // comparing the two sides' key rows, so they do not pair, or the cogroup fails, and falling
+    // back to a hash shuffle would pair them wrongly too. So such a child fails here, while
+    // planning, with
+    // an error that names the key and its type. A key stored as the column is goes by storage and
+    // is placed by the keyed side's bytes, see `storedKey`, unless the function cannot take it
+    // even so, e.g. a nested decimal of more precision than declared, which fails here too.
     // This covers transform positions only. An identity position is rebuilt over the other key
     // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
     // before this check, and are left to SPARK-60782.
-    // The storage check comes first, since it needs no call: a key it refuses is named, and the
-    // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
-    // not evaluated.
+    // The storage check comes first, since it needs no call, and a key it refuses is named. The
+    // call over a key it takes is asked without logging, see `isEvaluableQuietly`, and what
+    // resolving it throws is the error's cause.
     partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
       case ((te: TransformExpression, positionSet), t: TransformExpression) =>
         val columnType = te.references.head.dataType
         positionSet.iterator.map(clustering)
           .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
-          .orElse(Option.when(!canEvaluate(t))(t.children.head))
-          .foreach { key =>
+          .map((_, Option.empty[Throwable]))
+          .orElse(t.isEvaluableQuietly match {
+            case Success(true) => None
+            case evaluable => Some((t.children.head, evaluable.failed.toOption))
+          })
+          .foreach { case (key, cause) =>
             // `name()` and `inputTypes()` are connector code, which must not replace this error.
             val functionClass = t.function.getClass.getName
             val name = TransformExpression.orElse(t.function.name(), functionClass)
@@ -2679,7 +2701,8 @@ case class KeyedShuffleSpec(
               t.numBucketsOpt.fold(name)(n => s"$name($n)"),
               columnType,
               TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
-              key)
+              key,
+              cause.orNull)
           }
       case _ =>
     }

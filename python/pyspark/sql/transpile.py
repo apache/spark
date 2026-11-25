@@ -39,6 +39,14 @@ all-numeric and all-string variants.
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
 ``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
 
+``s.upper()``, ``s.lower()``, ``s.startswith(p)`` and ``s.endswith(p)`` lower to
+the Catalyst function of the same name when every operand is a string
+(SPARK-59816). With ``spark.sql.icu.caseMappings.enabled`` (the default) both
+sides apply full Unicode case mappings, so a sharp s uppercases to ``"SS"`` in
+each. A NULL operand raises, as the method call would on ``None`` in Python.
+Other methods, and the optional ``start``/``end`` arguments, stay interpreted
+Python.
+
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
 of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
@@ -111,12 +119,16 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    endswith,
     isnan,
     length,
     lit,
+    lower,
     pmod,
     raise_error,
     repeat,
+    startswith,
+    upper,
     when,
 )
 from pyspark.sql.types import (
@@ -216,7 +228,7 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
 
     Used to gate ``if``/ternary lowering: we only allow the test expression
     into Catalyst's ``when(coalesce(test, false), ...)`` form when it provably
-    produces a boolean. Everything else (bare Name, arithmetic, function calls,
+    produces a boolean. Everything else (bare Name, arithmetic, other calls,
     subscript, ...) must force a fallback to interpreted Python instead of
     silently diverging.
     """
@@ -234,6 +246,9 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
         case ast.IfExp(body=body, orelse=orelse):
             # Ternary is boolean only if both branches are.
             return _is_definitely_boolean(body) and _is_definitely_boolean(orelse)
+        case ast.Call(func=ast.Attribute(attr=method)) if method in _STRING_METHODS:
+            # `s.startswith(p)` / `s.endswith(p)` produce bool (SPARK-59816).
+            return _STRING_METHODS[method][2] == "bool"
         case _:
             return False
 
@@ -299,12 +314,29 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
     return frozenset(), frozenset()
 
 
+# ``str`` method -> (Catalyst function, argument count, result category).
+_STRING_METHODS: dict[str, Tuple[Callable[..., Column], int, str]] = {
+    "upper": (upper, 0, "string"),
+    "lower": (lower, 0, "string"),
+    "startswith": (startswith, 1, "bool"),
+    "endswith": (endswith, 1, "bool"),
+}
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
     variety = "catalyst"
 
     def __init__(self) -> None:
+        from pyspark.sql import SparkSession
+
+        session = SparkSession.getActiveSession()
+        self._null_strictness = (
+            session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
+            if session is not None
+            else None
+        ) or "strict"
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
         self._nonnull_params: frozenset = frozenset()
@@ -553,6 +585,12 @@ class CatalystTranspiler(AbstractTranspiler):
         value info, so it is documented, not guarded): Spark orders ``NaN``
         as greater than every value, whereas Python's ``NaN`` comparisons
         are all ``False``.
+
+        ``spark.sql.experimental.optimizer.transpileNullStrictness`` controls
+        this guard. Under ``strict`` (the default) a NULL operand raises,
+        matching Python's TypeError. Under ``loose`` the guard is skipped and
+        NULL propagates as NULL, allowing more UDFs to transpile at the cost of
+        that semantic difference on NULL inputs.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -565,6 +603,8 @@ class CatalystTranspiler(AbstractTranspiler):
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
+            return op(left_col, right_col)
+        if self._null_strictness == "loose":
             return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
@@ -658,6 +698,17 @@ class CatalystTranspiler(AbstractTranspiler):
                         "types fall back to interpreted Python"
                     )
                 return "numeric"
+            case ast.Call(
+                func=ast.Attribute(value=receiver, attr=method), args=args, keywords=[]
+            ) if method in _STRING_METHODS and len(args) == _STRING_METHODS[method][1]:
+                # Only ``str`` receivers and arguments are lowered (SPARK-59816);
+                # any other category raises so this variant is dropped.
+                if any(self._category(params, n) != "string" for n in [receiver, *args]):
+                    raise UnsupportedOperationException(
+                        f"`{method}` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                return _STRING_METHODS[method][2]
             case ast.Return(value=value) if value is not None:
                 return self._category(params, value)
             case ast.IfExp(body=if_body, orelse=if_orelse):
@@ -993,6 +1044,27 @@ class CatalystTranspiler(AbstractTranspiler):
                 )
                 self._null_guard_emitted = True
                 return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
+            case ast.Call(
+                func=ast.Attribute(value=receiver, attr=method), args=args, keywords=[]
+            ) if method in _STRING_METHODS and len(args) == _STRING_METHODS[method][1]:
+                # SPARK-59816: Python raises on a ``None`` receiver or argument,
+                # while the Catalyst function returns NULL, so guard like ``len``.
+                self._category(params, body)  # raises for a non-string operand
+                operands = [receiver, *args]
+                cols = [self._convert_chunk(params, n) for n in operands]
+                func = _STRING_METHODS[method][0]
+                if all(self._is_nonnull_node(params, n) for n in operands):
+                    return func(*cols)
+                null_guard = cols[0].isNull()
+                for c in cols[1:]:
+                    null_guard = null_guard | c.isNull()
+                err = lit(
+                    f"Python UDF transpiler: cannot call str.{method}() with a NULL "
+                    "operand; Python would raise here. Add an `is not None` guard "
+                    "or filter NULLs upstream."
+                )
+                self._null_guard_emitted = True
+                return when(null_guard, raise_error(err)).otherwise(func(*cols))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "

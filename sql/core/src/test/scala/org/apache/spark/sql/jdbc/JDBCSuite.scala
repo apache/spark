@@ -49,7 +49,7 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTru
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, FilterExec, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScanBuilder
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
@@ -1702,6 +1702,69 @@ class JDBCSuite extends SharedSparkSession {
     val syntaxError = new SQLException("ORA-00900: invalid SQL statement", "42000", 900)
     assert(!dialect.isNotSelectableObjectException(syntaxError))
     assert(dialect.isSyntaxErrorBestEffort(syntaxError))
+  }
+
+  private def resolveTableWithError(
+      jdbcUrl: String,
+      error: SQLException,
+      ident: Option[Identifier]): SparkException = {
+    val conn = mock(classOf[Connection])
+    when(conn.prepareStatement(anyString())).thenThrow(error)
+    val options = new JDBCOptions(Map("url" -> jdbcUrl, "dbtable" -> "restricted.t"))
+    intercept[SparkException] {
+      JDBCRDD.resolveTable(options, conn, ident, Some("pg"))
+    }
+  }
+
+  test("SPARK-61982: Postgres permission denied during schema resolution") {
+    val error = new SQLException("ERROR: permission denied for table t.", "42501")
+    Seq(None, Some(Identifier.of(Array("restricted"), "t"))).foreach { ident =>
+      val e = resolveTableWithError("jdbc:postgresql://localhost/db", error, ident)
+      checkError(
+        exception = e,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = "42501",
+        parameters = Map(
+          "jdbcQuery" -> "SELECT * FROM restricted.t WHERE 1=0",
+          "externalEngineSqlState" -> "42501",
+          "externalEngineError" -> "ERROR: permission denied for table t"))
+      assert(e.getCause eq error)
+    }
+  }
+
+  test("SPARK-61982: permission error through an aggregated Postgres dialect") {
+    // AggregatedDialect inherits the base isObjectNotFoundException, which matches any 42xxx.
+    val customDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+    }
+    JdbcDialects.registerDialect(customDialect)
+    try {
+      val error = new SQLException("ERROR: permission denied for table t", "42501")
+      val e = resolveTableWithError(
+        "jdbc:postgresql://localhost/db", error, Some(Identifier.of(Array("restricted"), "t")))
+      checkError(
+        exception = e,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = "42501",
+        parameters = Map(
+          "jdbcQuery" -> "SELECT * FROM restricted.t WHERE 1=0",
+          "externalEngineSqlState" -> "42501",
+          "externalEngineError" -> "ERROR: permission denied for table t"))
+    } finally {
+      JdbcDialects.unregisterDialect(customDialect)
+    }
+  }
+
+  test("SPARK-61982: H2 keeps its syntax-error classification for SQLSTATE 42501") {
+    val error = new SQLException("Not enough rights for object", "42501")
+    checkError(
+      exception = resolveTableWithError(url, error, None),
+      condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      sqlState = "42000",
+      parameters = Map(
+        "jdbcQuery" -> "SELECT * FROM restricted.t WHERE 1=0",
+        "externalEngineSqlState" -> "42501",
+        "externalEngineError" -> "Not enough rights for object"))
   }
 
   test("OracleDialect jdbc type mapping") {

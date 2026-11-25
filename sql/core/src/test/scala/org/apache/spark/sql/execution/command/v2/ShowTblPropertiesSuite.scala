@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `SHOW TBLPROPERTIES` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {
   test("display properties supplement current properties and exclude reserved keys") {
     withNamespaceAndTable("ns", "table") { tbl =>

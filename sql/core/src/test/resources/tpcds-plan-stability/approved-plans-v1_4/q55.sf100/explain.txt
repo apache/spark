@@ -24,7 +24,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#3), dynamicpruningexpression(ss_sold_date_sk#3 IN dynamicpruning#4)]
 PushedFilters: [IsNotNull(ss_item_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_ext_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 3]
 Input [3]: [ss_item_sk#1, ss_ext_sales_price#2, ss_sold_date_sk#3]
@@ -38,7 +38,7 @@ Output [4]: [i_item_sk#5, i_brand_id#6, i_brand#7, i_manager_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,28), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:bigint,i_brand_id:int,i_brand:string,i_manager_id:int>
 
 (5) ColumnarToRow [codegen id : 1]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_brand#7, i_manager_id#8]
@@ -53,7 +53,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_brand#7, i_manager_id#8]
 
 (8) BroadcastExchange
 Input [3]: [i_item_sk#5, i_brand_id#6, i_brand#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
@@ -115,7 +115,7 @@ Output [3]: [d_date_sk#9, d_year#16, d_moy#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (19) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#9, d_year#16, d_moy#17]
@@ -130,6 +130,6 @@ Input [3]: [d_date_sk#9, d_year#16, d_moy#17]
 
 (22) BroadcastExchange
 Input [1]: [d_date_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=3]
 
 

@@ -24,7 +24,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
-case class CollationKey(expr: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class CollationKey(expr: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NoThrow {
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = BinaryType
