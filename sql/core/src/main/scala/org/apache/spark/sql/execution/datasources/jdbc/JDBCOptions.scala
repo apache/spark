@@ -300,6 +300,16 @@ class JDBCOptions(
   }
 
   def getRedactUrl(): String = JDBCOptions.redactUrl(url, SQLConf.get.stringRedactionPattern)
+
+  /**
+   * Whether `other` opens a connection to the same database, with the same driver, connection
+   * provider and connection properties as these options.
+   */
+  def opensSameConnection(other: JDBCOptions): Boolean =
+    url == other.url &&
+      driverClass == other.driverClass &&
+      connectionProviderName == other.connectionProviderName &&
+      asConnectionProperties == other.asConnectionProperties
 }
 
 class JdbcOptionsInWrite(
