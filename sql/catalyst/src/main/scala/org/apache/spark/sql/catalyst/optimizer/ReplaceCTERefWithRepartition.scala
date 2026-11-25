@@ -36,16 +36,17 @@ import org.apache.spark.sql.internal.SQLConf
  * A definition marked `forceSkipInline` that a batch query references at least twice is lowered,
  * when [[SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE]] is on, to a plan-reuse
  * [[RepartitionByExpression]] (a nonzero `repartitionId` shared by every copy of the definition),
- * which [[ReplaceRepartitionWithCTEReuse]] then seals into [[CTEReuseRelation]]s so the body is
- * materialized once. References are counted by the copies of the plan that holds them: a reference
- * inside the body of a definition that is not sealed counts once per copy of that body, a reference
- * inside a sealed definition, which is materialized once, counts once, and a reference inside a
- * definition that nothing reads counts zero. Every other definition, including a forced definition
- * read only once and every definition of a streaming query, keeps the plain lowering: a
- * repartition without a plan-reuse id, or no extra repartition when the body already repartitions
- * or hosts a merged scalar subquery. The one exception is a forced definition pinned through
- * `forcePartitioning` while the flag is on: it is repartitioned on its pin even when it is not
- * sealed.
+ * which [[ReplaceRepartitionWithCTEReuse]] then seals into [[CTEReuseRelation]]s. With AQE on, the
+ * body is then materialized once; with AQE off, the sealed copies are deduplicated by exchange
+ * reuse on a best-effort basis (see [[ReplaceRepartitionWithCTEReuse]]). References are counted
+ * by the copies of the plan that holds them: a reference inside the body of a definition that is
+ * not sealed counts once per copy of that body, a reference inside a sealed definition, whose body
+ * all of its references share, counts once, and a reference inside a definition that nothing
+ * reads counts zero. Every other definition, including a forced definition read only once and
+ * every definition of a streaming query, keeps the plain lowering: a repartition without a
+ * plan-reuse id, or no extra repartition when the body already repartitions or hosts a merged
+ * scalar subquery. The one exception is a forced definition pinned through `forcePartitioning`
+ * while the flag is on: it is repartitioned on its pin even when it is not sealed.
  *
  * Note that this rule should be called at the very end of the optimization phase to best guarantee
  * that CTE repartition shuffles are reused.

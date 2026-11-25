@@ -850,9 +850,9 @@ class CTEReuseWithoutAQESuite
   test("CTE ref inside a subquery that is inside another CTE's body") {
     withCTEReuseNoAQE {
       withReuseSrc {
-        // cte_base is referenced in the main query AND inside a scalar subquery that sits in
-        // cte_wrap's body -> cte_base is reused across the main scope and a subquery nested in
-        // another CTE's materialized body.
+        // Both references to cte_base sit inside cte_wrap's body, one in its FROM clause and one
+        // in a scalar subquery -> cte_base is reused between cte_wrap's body and a subquery
+        // nested in it. The main query reads only cte_wrap.
         val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_base AS (SELECT id, v, rand() as rb FROM reuse_src),
@@ -1212,6 +1212,102 @@ class CTEReuseWithoutAQESuite
             }
             assert(wrappers.exists(_.outputPartitioning.numPartitions == 8),
               s"Expected a shuffle above the CTE shuffle:\n${df.queryExecution.executedPlan}")
+            checkAnswer(df, Seq(1, 2, 3, 1, 2, 3, 4, 5).map(Row(_)))
+          }
+        }
+      }
+    }
+  }
+
+  // Shuffles that sit directly above a CTE reuse shuffle, live or reused.
+  private def cteShuffleWrappers(df: DataFrame): Seq[ShuffleExchangeExec] = {
+    def isCTEShuffle(p: SparkPlan): Boolean = p match {
+      case s: ShuffleExchangeExec => s.isCreatedForSubplanReuse
+      case r: ReusedExchangeExec => isCTEShuffle(r.child)
+      case _ => false
+    }
+    df.queryExecution.executedPlan.collectWithSubqueries {
+      case s: ShuffleExchangeExec if isCTEShuffle(s.child) => s
+    }
+  }
+
+  // Shuffles in the main query whose input reads `table`.
+  private def shufflesOverTable(df: DataFrame, table: String): Seq[ShuffleExchangeExec] =
+    df.queryExecution.executedPlan.collect {
+      case s: ShuffleExchangeExec if s.child.collectFirst {
+        case f: FileSourceScanExec if f.tableIdentifier.exists(_.table == table) => f
+      }.isDefined => s
+    }
+
+  test("a CTE shuffle next to a side that is shuffled anyway keeps its layout") {
+    withCTEReuseNoAQE {
+      // No inferred IS NOT NULL filter, so the CTE shuffle is the join's direct child.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+        withReuseSrc {
+          withTable("plain_side") {
+            sql("CREATE TABLE plain_side (id INT, w INT) USING parquet")
+            sql("INSERT INTO plain_side VALUES (1, 100), (2, 200), (3, 300)")
+            // plain_side has to be shuffled for the join either way. The CTE shuffle (hash on id
+            // into 4 partitions) cannot be re-partitioned in place, so it is the co-partition
+            // target even though it has fewer partitions than spark.sql.shuffle.partitions:
+            // plain_side is shuffled into 4 partitions, and the CTE output is shuffled once.
+            val df = sqlWithForcedCTEReuse(
+              """WITH cte AS (SELECT /*+ REPARTITION(4, id) */ id, v, rand() AS r FROM reuse_src)
+                |SELECT c1.id FROM cte c1 JOIN plain_side p ON c1.id = p.id
+                |UNION ALL
+                |SELECT c2.id FROM cte c2
+                |""".stripMargin)
+            assertCTEReuseApplied(df)
+            assertNoDanglingReusedExchange(df)
+            val executed = df.queryExecution.executedPlan
+            val cteShuffles = liveCTEShuffles(df)
+            assert(cteShuffles.size == 1 &&
+              cteShuffles.head.outputPartitioning.numPartitions == 4,
+              s"Expected one live 4-partition CTE shuffle:\n$executed")
+            assert(cteShuffleWrappers(df).isEmpty,
+              s"Expected no shuffle above the CTE shuffle:\n$executed")
+            val sideShuffles = shufflesOverTable(df, "plain_side")
+            assert(sideShuffles.size == 1 &&
+              sideShuffles.head.outputPartitioning.numPartitions == 4,
+              s"Expected plain_side to be shuffled into the CTE's 4 partitions:\n$executed")
+            checkAnswer(df, Seq(1, 2, 3, 1, 2, 3, 4, 5).map(Row(_)))
+          }
+        }
+      }
+    }
+  }
+
+  test("a CTE shuffle with more partitions than a bucketed side is the co-partition target") {
+    withCTEReuseNoAQE {
+      // No inferred IS NOT NULL filter, so the CTE shuffle is the join's direct child.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        withReuseSrc {
+          withTable("bucketed_side") {
+            sql("CREATE TABLE bucketed_side (id INT, w INT) USING parquet " +
+              "CLUSTERED BY (id) INTO 2 BUCKETS")
+            sql("INSERT INTO bucketed_side VALUES (1, 100), (2, 200), (3, 300)")
+            // Neither side needs a new shuffle on its own: the CTE shuffle (hash on id into 4
+            // partitions) and the bucketed scan (2 buckets) both keep their layout for free, so
+            // the one with more partitions is the co-partition target, as with AQE on. The
+            // bucketed side is shuffled into 4 partitions and the CTE shuffle is not wrapped.
+            val df = sqlWithForcedCTEReuse(
+              """WITH cte AS (SELECT /*+ REPARTITION(4, id) */ id, v, rand() AS r FROM reuse_src)
+                |SELECT c1.id FROM cte c1 JOIN bucketed_side b ON c1.id = b.id
+                |UNION ALL
+                |SELECT c2.id FROM cte c2
+                |""".stripMargin)
+            assertCTEReuseApplied(df)
+            assertNoDanglingReusedExchange(df)
+            val executed = df.queryExecution.executedPlan
+            assert(cteShuffleWrappers(df).isEmpty,
+              s"Expected no shuffle above the CTE shuffle:\n$executed")
+            val sideShuffles = shufflesOverTable(df, "bucketed_side")
+            assert(sideShuffles.size == 1 &&
+              sideShuffles.head.outputPartitioning.numPartitions == 4,
+              s"Expected bucketed_side to be shuffled into the CTE's 4 partitions:\n$executed")
             checkAnswer(df, Seq(1, 2, 3, 1, 2, 3, 4, 5).map(Row(_)))
           }
         }

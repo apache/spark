@@ -73,18 +73,8 @@ case class InsertAdaptiveSparkPlan(
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
-          // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
-          val subqueryMap = buildSubqueryMap(plan)
-          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-          val preprocessingRules = Seq(
-            planSubqueriesRule,
-            PlanCTEReuse(adaptiveExecutionContext))
-          // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
-            plan,
-            preprocessingRules,
-            "AQE Preprocessing")
+          val (newPlan, preprocessingRules) = preprocess(plan)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
@@ -108,6 +98,30 @@ case class InsertAdaptiveSparkPlan(
       }
 
     case _ => plan
+  }
+
+  /**
+   * Runs the AQE pre-processing rules on `plan`: plans its sub-queries adaptively, then builds and
+   * registers the shared inner AQE of each CTE reference in it (see [[PlanCTEReuse]]). Returns the
+   * pre-processed plan and the rules, which the [[AdaptiveSparkPlanExec]] that runs the plan
+   * applies again when it re-plans. Throws [[SubqueryAdaptiveNotSupportedException]] when a
+   * sub-query cannot be planned adaptively, and [[CTEAdaptiveNotSupportedException]] when a CTE
+   * reference's subplan cannot.
+   *
+   * `PlanCTEReuse` (same package) also calls this alone for a reference whose shared inner AQE is
+   * already registered, since that reference needs only its own pre-processed subplan.
+   */
+  private[adaptive] def preprocess(plan: SparkPlan): (SparkPlan, Seq[Rule[SparkPlan]]) = {
+    // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
+    val subqueryMap = buildSubqueryMap(plan)
+    val preprocessingRules = Seq(
+      PlanAdaptiveSubqueries(subqueryMap),
+      PlanCTEReuse(adaptiveExecutionContext))
+    val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
+      plan,
+      preprocessingRules,
+      "AQE Preprocessing")
+    (newPlan, preprocessingRules)
   }
 
   // AQE is only useful when the query has exchanges, sub-queries or table caches. This method

@@ -45,8 +45,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                 carries it, and forced definitions whose deterministic bodies are canonically
  *                 equal share it. It is not the CTERelationDef id that plans print.
  * @param subplan  The [[ShuffleExchangeLike]] over the shared subplan. Its logical link
- *                 points to the repartition in [[CTEReuseRelation.sharedSubplan]] so the
- *                 inner AQE can re-optimize correctly.
+ *                 points to a private clone of [[CTEReuseRelation.sharedSubplan]] that the
+ *                 planning strategy made, so the inner AQE re-optimizes its own copy of the
+ *                 body rather than the object that other plannings of the reference read.
  */
 case class CTEReuseExchange(
     cteId: Long,

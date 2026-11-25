@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.optimizer.{PushdownPredicatesAndPruneColumn
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.execution.ExtendedMode
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -975,13 +976,20 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("forced CTE under an existing repartition materializes once (one value set)") {
     withCTEReuseEnabled {
-      // A nondeterministic body under a user REPARTITION. If each reference materialized its own
-      // copy, the two sides' rand() values would differ; one shared materialization makes each id's
-      // value identical on both sides of the self-join.
+      // A nondeterministic body under a user REPARTITION. The UDF returns a fresh value on every
+      // call, so if each reference materialized its own copy of the body, the two sides' values
+      // would differ for every id; one shared materialization makes each id's value identical on
+      // both sides of the self-join. rand() would not tell the two apart: its fixed seed and the
+      // identical range partitions below the repartition reproduce the same values on every run.
+      spark.udf.register("repartition_root_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
       val df = sqlWithForcedCTEReuse(
-        """WITH cte AS (SELECT /*+ REPARTITION(3, id) */ id, rand() as r FROM range(20))
+        """WITH cte AS (SELECT /*+ REPARTITION(3, id) */ id, repartition_root_uuid() as r
+          |  FROM range(20))
           |SELECT (c1.r = c2.r) AS same FROM cte c1 JOIN cte c2 ON c1.id = c2.id
           |""".stripMargin)
+      assertAllRefsShareOneNonzeroId(
+        collectCTEReuseRelations(df.queryExecution.optimizedPlan), refCount = 2)
       checkAnswer(df, (0 until 20).map(_ => Row(true)))
     }
   }

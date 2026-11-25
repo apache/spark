@@ -344,7 +344,9 @@ case class EnsureRequirements(
    * when no child can serve, and then they all take a shuffle.
    *
    * Find out the shuffle spec that gives better parallelism. A child with no `ShuffleExchangeLike`
-   * node comes first, and the largest number of partitions decides among those.
+   * node comes first, and the largest number of partitions decides among those. A child that is a
+   * CTE reuse shuffle (`isCreatedForSubplanReuse`) ranks like one with no exchange, since it
+   * cannot be re-partitioned in place.
    *
    * NOTE: this is not optimal for the case when there are more than 2 children. Consider:
    *   (10, 10, 11)
@@ -386,6 +388,14 @@ case class EnsureRequirements(
     val pairings: Seq[Seq[Pairing]] = childMembers.zipWithIndex.map { case (members, index) =>
       members.map(new Pairing(_, index))
     }
+    // Whether the child's own shuffle can be re-partitioned in place, so that re-shuffling it adds
+    // no shuffle. A CTE reuse shuffle cannot: `shuffleToCoPartition` wraps it in a new shuffle to
+    // keep the shared exchange canonically equal, so keeping its layout is as free as keeping that
+    // of a child with no exchange, which is how the AQE plan ranks the same CTE reference.
+    def hasReshufflableExchange(child: SparkPlan): Boolean = child match {
+      case s: ShuffleExchangeLike => !s.isCreatedForSubplanReuse
+      case _ => false
+    }
     // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
     // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
     // consider the minimum parallelism iff ALL children need to be re-shuffled.
@@ -395,14 +405,15 @@ case class EnsureRequirements(
     //      layout (`canServe` above, as for the case of `RangePartitioning`), therefore it needs
     //      to be re-shuffled according to another child's shuffle spec.
     //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
-    //      introducing extra shuffle.
+    //      introducing extra shuffle. A CTE reuse shuffle is the exception: re-shuffling it adds
+    //      a shuffle on top (see `hasReshufflableExchange`).
     //
     // On the other hand, in scenarios such as:
     //   HashPartitioning(5) <-> HashPartitioning(6)
     // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
     // HashPartitioning(6).
     val shouldConsiderMinParallelism = children.zip(pairings).forall { case (child, members) =>
-      !members.exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
+      !members.exists(_.canServe) || hasReshufflableExchange(child)
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
@@ -416,7 +427,8 @@ case class EnsureRequirements(
       case _ => None
     }
     // Rank on two things at once. A child with no `ShuffleExchangeLike` node comes first, since
-    // keeping it costs nothing. For instance, if we have:
+    // keeping it costs nothing, and so does a child that is a CTE reuse shuffle, which cannot be
+    // re-shuffled without adding a shuffle. For instance, if we have:
     //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
     // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
     // new shuffle for A. Then the best parallelism decides, and for a collection that is the best
@@ -425,7 +437,7 @@ case class EnsureRequirements(
     // What the winner contributes is its members, the alternatives the layout is picked from below,
     // each with the member every child pairs with it. Empty when no child can serve as the layout.
     val bestPairings: Seq[Pairing] = candidateSpecs.maxByOption { case (child, members) =>
-      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.member.numPartitions).max)
+      (!hasReshufflableExchange(child), members.map(_.member.numPartitions).max)
     }.toSeq.flatMap(_._2)
 
     // Which children the winner reaches at all, over all of its serving members.

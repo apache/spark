@@ -40,6 +40,8 @@ import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, ShuffleExchang
  * stage that replaces the reference keeps the reference's canonical form, which is the canonical
  * form of its `subplan`, and a query stage's canonical form must not hold the logical plans of
  * unplanned subqueries. The preprocessed subplan is metadata: the stage runs the shared inner AQE.
+ * So the inner AQE is built only for the first reference of a `cteId`; every later reference only
+ * runs the preprocessing rules on its own subplan.
  */
 case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
   extends Rule[SparkPlan] {
@@ -58,11 +60,22 @@ case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
             !re.subplan.containsAnyPattern(PLAN_EXPRESSION, CTE_REUSE_EXCHANGE) =>
         // The shared inner AQE exists, and this reference's subplan has nothing to preprocess.
         re
+      case re: CTEReuseExchange if registry.contains(re.cteId) =>
+        // The shared inner AQE exists, so this reference needs only its own preprocessed subplan:
+        // run the preprocessing rules on it, planning its subqueries and any nested CTE, without
+        // building another inner AQE. A subquery that cannot be planned adaptively backs the whole
+        // query off AQE, as it does when the inner AQE is built below.
+        val preprocessed = try {
+          InsertAdaptiveSparkPlan(adaptiveExecutionContext).preprocess(re.subplan)._1
+        } catch {
+          case SubqueryAdaptiveNotSupportedException(_) =>
+            throw CTEAdaptiveNotSupportedException(re.subplan.logicalLink.orNull)
+        }
+        withSubplan(re, preprocessed)
       case re: CTEReuseExchange =>
         // Build and register the shared inner AQE for this cteId so stage creation resolves it from
         // cteAQERegistry. re.subplan is already physical, so applyInternal wraps it in an inner AQE
-        // and recursively preprocesses any nested CTE or subquery in the body. When an inner AQE is
-        // already registered, the new one only provides this reference's preprocessed subplan.
+        // and recursively preprocesses any nested CTE or subquery in the body.
         val innerAQE = InsertAdaptiveSparkPlan(adaptiveExecutionContext).applyInternal(
           re.subplan, isSubquery = true) match {
           case aqe: AdaptiveSparkPlanExec => aqe
@@ -73,10 +86,14 @@ case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
             throw CTEAdaptiveNotSupportedException(re.subplan.logicalLink.orNull)
         }
         registry.putIfAbsent(re.cteId, innerAQE)
-        innerAQE.inputPlan match {
-          case s: ShuffleExchangeLike => re.copy(subplan = s)
-          case _ => re
-        }
+        withSubplan(re, innerAQE.inputPlan)
     }
   }
+
+  // The reference with `preprocessed` as its subplan, when that is still the shared shuffle.
+  private def withSubplan(re: CTEReuseExchange, preprocessed: SparkPlan): CTEReuseExchange =
+    preprocessed match {
+      case s: ShuffleExchangeLike => re.copy(subplan = s)
+      case _ => re
+    }
 }
