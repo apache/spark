@@ -278,7 +278,8 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         from google.protobuf.message import Message
 
         def collect(message):
-            if message.DESCRIPTOR.name == "MapPartitions":
+            # The functions of RDDs, of the MapPartitions relations of their Python functions.
+            if message.DESCRIPTOR.name == "PythonUDF" and message.eval_type == 0:
                 commands.append(message.command)
             for field, value in message.ListFields():
                 if field.message_type is not None:

@@ -3894,6 +3894,21 @@ class RepartitionByExpression(google.protobuf.message.Message):
 global___RepartitionByExpression = RepartitionByExpression
 
 class MapPartitions(google.protobuf.message.Message):
+    """A Python function of the partitions of `input`, of the eval type of its `PythonUDF`:
+
+    - SQL_MAP_PANDAS_ITER_UDF and SQL_MAP_ARROW_ITER_UDF: mapInPandas and mapInArrow, whose output
+      type is the struct of the columns of the output.
+    - NON_UDF: a function of the RDD API of the Python client (see `RDDRelation`), which the
+      Python worker runs as the PythonRDD of Spark Classic runs it. The command is the tuple of the
+      function, the profiler, the deserializer and the serializer that Spark Classic pickles with
+      cloudpickle for its PythonRDD. The worker reads each row of `input`, of one or two binary or
+      string columns, as an element (or as a pair of elements for two columns) of byte arrays, and
+      writes byte arrays. The output type is `struct<value: binary>`, of one column of what the
+      function writes, or `struct<key: int not null, value: binary>`, of the pairs that the
+      function writes in turn, as `RDD.partitionBy` writes the partition index (a long of 8 bytes
+      in big-endian order) and the batch of each pair.
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
@@ -3902,7 +3917,9 @@ class MapPartitions(google.protobuf.message.Message):
     PROFILE_ID_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
+        """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow and the
+        functions of the RDD API.
+        """
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
@@ -4961,94 +4978,19 @@ class RDDRelation(google.protobuf.message.Message):
     An RDD is a relation whose rows hold its elements in the columns that the Python RDD API
     declares, for instance one binary column of pickled batches of elements. Its partitions are the
     partitions of the RDD, so these relations keep the partitioning of Spark Classic's RDDs: the
-    partitions of their inputs, the empty partitions included, in the order of the elements.
+    partitions of their inputs, the empty partitions included, in the order of the elements. The
+    functions of RDDs are `MapPartitions` relations of Python functions of eval type NON_UDF, and
+    their shuffles `RepartitionByExpression`s of `DirectShufflePartitionID`.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class MapPartitions(google.protobuf.message.Message):
-        """A Python function of the index and of the elements of each partition of `input`, run as the
-        PythonRDD of Spark Classic runs it: the Python worker reads each row of `input` as an element
-        (or as a pair of elements for two columns) of byte arrays, and writes byte arrays. The output
-        has one binary column, `value`, or, with `output_pairs`, the columns `key` (int) and `value`
-        (binary) of the pairs that the function writes in turn, as `RDD.partitionBy` writes the
-        partition index (a long of 8 bytes in big-endian order) and the batch of each pair.
-        """
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        INPUT_FIELD_NUMBER: builtins.int
-        COMMAND_FIELD_NUMBER: builtins.int
-        PYTHON_VER_FIELD_NUMBER: builtins.int
-        IS_BARRIER_FIELD_NUMBER: builtins.int
-        PYTHON_HASH_SEED_FIELD_NUMBER: builtins.int
-        OUTPUT_PAIRS_FIELD_NUMBER: builtins.int
-        @property
-        def input(self) -> global___Relation:
-            """(Required) The input RDD, with one or two binary or string columns."""
-        command: builtins.bytes
-        """(Required) The function, as Spark Classic pickles it for its PythonRDD: a tuple of the
-        function, the profiler, the deserializer and the serializer, pickled with cloudpickle.
-        """
-        python_ver: builtins.str
-        """(Required) The version of Python of the client, as "major.minor"."""
-        is_barrier: builtins.bool
-        """(Optional) Whether the partitions are computed in a barrier stage."""
-        python_hash_seed: builtins.str
-        """(Optional) The PYTHONHASHSEED of the Python workers, so that they hash strings as the
-        client does: for instance, to find the partition of a key. The server's when not set.
-        """
-        output_pairs: builtins.bool
-        """(Optional) Whether the function writes pairs of keys and values."""
-        def __init__(
-            self,
-            *,
-            input: global___Relation | None = ...,
-            command: builtins.bytes = ...,
-            python_ver: builtins.str = ...,
-            is_barrier: builtins.bool = ...,
-            python_hash_seed: builtins.str | None = ...,
-            output_pairs: builtins.bool = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_python_hash_seed",
-                b"_python_hash_seed",
-                "input",
-                b"input",
-                "python_hash_seed",
-                b"python_hash_seed",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_python_hash_seed",
-                b"_python_hash_seed",
-                "command",
-                b"command",
-                "input",
-                b"input",
-                "is_barrier",
-                b"is_barrier",
-                "output_pairs",
-                b"output_pairs",
-                "python_hash_seed",
-                b"python_hash_seed",
-                "python_ver",
-                b"python_ver",
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_python_hash_seed", b"_python_hash_seed"]
-        ) -> typing_extensions.Literal["python_hash_seed"] | None: ...
-
     class Values(google.protobuf.message.Message):
         """The `value` column of the rows of `input`, whose columns are `key` and `value`: for instance,
-        the pairs that a `MapPartitions` with `output_pairs` writes, moved to the partitions of their
-        keys by a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy`
-        shuffles the batches of its pairs.
+        the pairs that the function of a `MapPartitions` of the output type
+        `struct<key: int not null, value: binary>` writes, moved to the partitions of their keys by a
+        `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy` shuffles the
+        batches of its pairs.
         """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -5328,7 +5270,6 @@ class RDDRelation(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["input", b"input", "profile_id", b"profile_id"],
         ) -> None: ...
 
-    MAP_PARTITIONS_FIELD_NUMBER: builtins.int
     VALUES_FIELD_NUMBER: builtins.int
     UNION_FIELD_NUMBER: builtins.int
     ZIP_PARTITIONS_FIELD_NUMBER: builtins.int
@@ -5339,8 +5280,6 @@ class RDDRelation(google.protobuf.message.Message):
     TO_DATA_FRAME_FIELD_NUMBER: builtins.int
     ELEMENTS_FIELD_NUMBER: builtins.int
     WITH_RESOURCES_FIELD_NUMBER: builtins.int
-    @property
-    def map_partitions(self) -> global___RDDRelation.MapPartitions: ...
     @property
     def values(self) -> global___RDDRelation.Values: ...
     @property
@@ -5364,7 +5303,6 @@ class RDDRelation(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        map_partitions: global___RDDRelation.MapPartitions | None = ...,
         values: global___RDDRelation.Values | None = ...,
         union: global___RDDRelation.Union | None = ...,
         zip_partitions: global___RDDRelation.ZipPartitions | None = ...,
@@ -5387,8 +5325,6 @@ class RDDRelation(google.protobuf.message.Message):
             b"elements",
             "from_data_frame",
             b"from_data_frame",
-            "map_partitions",
-            b"map_partitions",
             "parallelize",
             b"parallelize",
             "relation_type",
@@ -5416,8 +5352,6 @@ class RDDRelation(google.protobuf.message.Message):
             b"elements",
             "from_data_frame",
             b"from_data_frame",
-            "map_partitions",
-            b"map_partitions",
             "parallelize",
             b"parallelize",
             "relation_type",
@@ -5438,7 +5372,6 @@ class RDDRelation(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["relation_type", b"relation_type"]
     ) -> (
         typing_extensions.Literal[
-            "map_partitions",
             "values",
             "union",
             "zip_partitions",

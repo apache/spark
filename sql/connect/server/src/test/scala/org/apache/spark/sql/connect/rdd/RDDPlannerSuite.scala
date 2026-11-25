@@ -22,14 +22,16 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.google.protobuf.ByteString
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.connect.proto
 import org.apache.spark.resource.{ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.internal.SQLConf
@@ -75,6 +77,30 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
       .addPartitionExprs(partitionId)
     relation(_.getValuesBuilder.setInput(shuffle))
   }
+
+  /**
+   * The `MapPartitions` relation of a Python function of eval type NON_UDF of `input`, as the RDD
+   * API sends its functions, of `outputType` and the other fields that `f` sets.
+   */
+  private def mapPartitions(input: proto.Relation, outputType: StructType)(
+      f: (proto.MapPartitions.Builder, proto.PythonUDF.Builder) => Unit = (_, _) => ())
+      : proto.Relation = {
+    val udf = proto.PythonUDF
+      .newBuilder()
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputType))
+      .setEvalType(PythonEvalType.NON_UDF)
+      .setCommand(ByteString.copyFrom(Array[Byte](1, 2, 3)))
+      .setPythonVer("3.11")
+    val mp = proto.MapPartitions.newBuilder().setInput(input)
+    f(mp, udf)
+    mp.setFunc(proto.CommonInlineUserDefinedFunction.newBuilder().setPythonUdf(udf))
+    proto.Relation.newBuilder().setMapPartitions(mp).build()
+  }
+
+  private val valueType = StructType(Seq(StructField("value", BinaryType)))
+
+  private val pairsType = StructType(
+    Seq(StructField("key", IntegerType, nullable = false), StructField("value", BinaryType)))
 
   private def values(rel: proto.Relation): Seq[Seq[String]] = {
     val plan = transform(rel)
@@ -139,27 +165,56 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
       parameters = Map("numInputs" -> "3"))
   }
 
-  test("map partitions runs a Python function with the environment of PySpark") {
-    val rel = relation { r =>
-      r.getMapPartitionsBuilder
-        .setInput(parallelize(1))
-        .setCommand(ByteString.copyFrom(Array[Byte](1, 2, 3)))
-        .setPythonVer("3.11")
-        .setPythonHashSeed("42")
-        .setOutputPairs(true)
+  test("map partitions runs a Python function of eval type NON_UDF as a PythonRDD") {
+    val rel = mapPartitions(parallelize(1), valueType)()
+    val plan = transform(rel).asInstanceOf[PythonRDDMapPartitions]
+    assert(!plan.outputPairs)
+    assert(plan.output.map(_.dataType) === Seq(BinaryType))
+    assert(plan.func.command === Seq[Byte](1, 2, 3))
+    assert(plan.func.pythonVer === "3.11")
+    assert(!plan.isBarrier)
+    // The server's PYTHONHASHSEED, or "0", when the function has none.
+    assert(plan.func.envVars.get("PYTHONHASHSEED") === sys.env.getOrElse("PYTHONHASHSEED", "0"))
+    assert(!plan.func.envVars.containsKey("PYSPARK_CONNECT_RDD_PROFILER"))
+  }
+
+  test("map partitions writes pairs of an output type of keys and values, in a barrier stage") {
+    val rel = mapPartitions(parallelize(1), pairsType) { (mp, udf) =>
+      mp.setIsBarrier(true)
+      udf.setPythonHashSeed("42").addAdditionalIncludes("include.zip")
     }
     withSQLConf(SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
       val plan = transform(rel).asInstanceOf[PythonRDDMapPartitions]
       assert(plan.outputPairs)
       assert(plan.output.map(_.dataType) === Seq(IntegerType, BinaryType))
-      assert(plan.func.command === Seq[Byte](1, 2, 3))
-      assert(plan.func.pythonVer === "3.11")
+      assert(plan.isBarrier)
       assert(plan.func.envVars.get("PYTHONHASHSEED") === "42")
       assert(plan.func.envVars.get("PYSPARK_CONNECT_RDD_PROFILER") === "perf")
-      assert(!plan.isBarrier)
+      assert(plan.func.pythonIncludes.contains("include.zip"))
     }
-    val plan = transform(rel).asInstanceOf[PythonRDDMapPartitions]
-    assert(!plan.func.envVars.containsKey("PYSPARK_CONNECT_RDD_PROFILER"))
+  }
+
+  test("map partitions runs in the stage of the resource profile of its ID") {
+    val profile = new ResourceProfileBuilder().require(new TaskResourceRequests().cpus(1)).build()
+    spark.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val rel = mapPartitions(parallelize(1), valueType)((mp, _) => mp.setProfileId(profile.id))
+    val plan = transform(rel).asInstanceOf[PythonRDDWithResources]
+    assert(plan.profile === profile)
+    assert(plan.child.isInstanceOf[PythonRDDMapPartitions])
+  }
+
+  test("map partitions takes an output type of values, or of keys and values") {
+    for (outputType <- Seq(
+        StructType(Seq(StructField("value", IntegerType))),
+        StructType(Seq(StructField("data", BinaryType))),
+        StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
+        StructType(Seq(StructField("value", BinaryType), StructField("key", IntegerType))))) {
+      checkError(
+        exception =
+          intercept[InvalidPlanInput](transform(mapPartitions(parallelize(1), outputType)())),
+        condition = "CONNECT_INVALID_PLAN.RDD_MAP_PARTITIONS_INVALID_OUTPUT_TYPE",
+        parameters = Map("dataType" -> toSQLType(outputType)))
+    }
   }
 
   test("values of a shuffle, and elements") {

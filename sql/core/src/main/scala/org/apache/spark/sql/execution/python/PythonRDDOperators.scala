@@ -33,13 +33,15 @@ import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StructType
 
 /**
  * A Python function of the index and of the elements of each partition of `child`, which
- * [[PythonRDDMapPartitionsExec]] runs as the PythonRDD of Spark Classic runs it.
+ * [[PythonRDDMapPartitionsExec]] runs as the PythonRDD of Spark Classic runs it: the function of
+ * a `MapPartitions` relation of eval type NON_UDF (see `MapPartitions` in relations.proto).
  *
  * @param func the command of the function, as PySpark pickles it for a PythonRDD.
  * @param isBarrier whether the partitions are computed in a barrier stage.
  * @param outputPairs whether the function writes keys and values in turn, which are the
- *                    `key` (int) and `value` (binary) columns of the output; otherwise the output
- *                    has one column, `value`.
+ *                    `key` (int) and `value` (binary) columns of the output, as its output type
+ *                    `struct<key: int not null, value: binary>` tells; otherwise the output has
+ *                    one column, `value`.
  */
 case class PythonRDDMapPartitions(
     func: PythonFunction,

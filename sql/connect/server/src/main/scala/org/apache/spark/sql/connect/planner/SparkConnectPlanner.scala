@@ -692,7 +692,6 @@ class SparkConnectPlanner(
         val analyzed = session.sessionState.executePlan(baseRel).analyzed
         transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
         val profile = if (rel.hasProfileId) {
           val profileId = rel.getProfileId
@@ -700,23 +699,29 @@ class SparkConnectPlanner(
         } else {
           None
         }
-        pythonUdf.evalType match {
-          case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
-            logical.MapInPandas(
-              pythonUdf,
-              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
-              baseRel,
-              isBarrier,
-              profile)
-          case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
-            logical.MapInArrow(
-              pythonUdf,
-              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
-              baseRel,
-              isBarrier,
-              profile)
-          case _ =>
-            throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
+        if (commonUdf.getPythonUdf.getEvalType == PythonEvalType.NON_UDF) {
+          // A function of the RDD API of the Python client (see RDDRelation in relations.proto).
+          rddPlanner.transformMapPartitions(commonUdf.getPythonUdf, isBarrier, profile, baseRel)
+        } else {
+          val pythonUdf = transformPythonUDF(commonUdf)
+          pythonUdf.evalType match {
+            case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
+              logical.MapInPandas(
+                pythonUdf,
+                DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
+                baseRel,
+                isBarrier,
+                profile)
+            case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
+              logical.MapInArrow(
+                pythonUdf,
+                DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
+                baseRel,
+                isBarrier,
+                profile)
+            case _ =>
+              throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
+          }
         }
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)

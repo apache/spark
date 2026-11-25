@@ -24,10 +24,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.execution.python._
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -44,28 +45,6 @@ private[connect] class RDDPlanner(planner: SparkConnectPlanner) {
   /** The logical plan of an [[proto.RDDRelation]]. */
   def transformRDDRelation(rel: proto.RDDRelation): LogicalPlan = {
     rel.getRelationTypeCase match {
-      case proto.RDDRelation.RelationTypeCase.MAP_PARTITIONS =>
-        val mapPartitions = rel.getMapPartitions
-        val input = planner.transformRelation(mapPartitions.getInput)
-        val hashSeed = if (mapPartitions.hasPythonHashSeed) {
-          Some(mapPartitions.getPythonHashSeed)
-        } else {
-          None
-        }
-        val func = SimplePythonFunction(
-          command = mapPartitions.getCommand.toByteArray.toImmutableArraySeq,
-          envVars = workerEnv(hashSeed),
-          pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
-          pythonExec = planner.pythonExec,
-          pythonVer = mapPartitions.getPythonVer,
-          broadcastVars = new JArrayList[Broadcast[PythonBroadcast]](),
-          accumulator = sessionHolder.pythonAccumulator.orNull)
-        PythonRDDMapPartitions(
-          func,
-          mapPartitions.getIsBarrier,
-          mapPartitions.getOutputPairs,
-          input)
-
       case proto.RDDRelation.RelationTypeCase.VALUES =>
         PythonRDDValues(planner.transformRelation(rel.getValues.getInput))
 
@@ -143,6 +122,41 @@ private[connect] class RDDPlanner(planner: SparkConnectPlanner) {
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
     }
+  }
+
+  /**
+   * The logical plan of a `MapPartitions` relation of a Python function of eval type NON_UDF, a
+   * function of the RDD API: its output type tells the values that it writes (`value`) from the
+   * pairs that it writes before a shuffle (`key` and `value`), and it runs in a stage of
+   * `profile`, the resource profile of the relation, if it has one.
+   */
+  def transformMapPartitions(
+      udf: proto.PythonUDF,
+      isBarrier: Boolean,
+      profile: Option[ResourceProfile],
+      input: LogicalPlan): LogicalPlan = {
+    val outputPairs = planner.transformDataType(udf.getOutputType) match {
+      case StructType(Array(StructField("value", BinaryType, _, _))) => false
+      case StructType(
+            Array(
+              StructField("key", IntegerType, false, _),
+              StructField("value", BinaryType, _, _))) =>
+        true
+      case other => throw InvalidInputErrors.rddMapPartitionsInvalidOutputType(other)
+    }
+    val hashSeed = if (udf.hasPythonHashSeed) Some(udf.getPythonHashSeed) else None
+    val func = SimplePythonFunction(
+      command = udf.getCommand.toByteArray.toImmutableArraySeq,
+      envVars = workerEnv(hashSeed),
+      // The includes of the function, as of the other Python functions of the session.
+      pythonIncludes = (udf.getAdditionalIncludesList.asScala.toSeq ++
+        sessionHolder.artifactManager.getPythonIncludes).asJava,
+      pythonExec = planner.pythonExec,
+      pythonVer = udf.getPythonVer,
+      broadcastVars = new JArrayList[Broadcast[PythonBroadcast]](),
+      accumulator = sessionHolder.pythonAccumulator.orNull)
+    val mapped = PythonRDDMapPartitions(func, isBarrier, outputPairs, input)
+    profile.map(PythonRDDWithResources(_, mapped)).getOrElse(mapped)
   }
 
   /**

@@ -1660,6 +1660,11 @@
           "PythonUserDefinedType requires all the three fields: python_class, serialized_python_class and sql_type."
         ]
       },
+      "RDD_MAP_PARTITIONS_INVALID_OUTPUT_TYPE" : {
+        "message" : [
+          "The output type of a Python function of eval type NON_UDF must be a struct of one binary column `value`, or of an int column `key` that is not null and a binary column `value`, but it is <dataType>."
+        ]
+      },
       "RDD_PARALLELIZE_INVALID_DATA" : {
         "message" : [
           "The data of an RDD to parallelize must have one binary column, but its schema is <schema>."

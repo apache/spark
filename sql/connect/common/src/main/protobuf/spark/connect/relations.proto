@@ -1068,8 +1068,22 @@ message RepartitionByExpression {
   optional int32 num_partitions = 3;
 }
 
+// A Python function of the partitions of `input`, of the eval type of its `PythonUDF`:
+//
+// - SQL_MAP_PANDAS_ITER_UDF and SQL_MAP_ARROW_ITER_UDF: mapInPandas and mapInArrow, whose output
+//   type is the struct of the columns of the output.
+// - NON_UDF: a function of the RDD API of the Python client (see `RDDRelation`), which the
+//   Python worker runs as the PythonRDD of Spark Classic runs it. The command is the tuple of the
+//   function, the profiler, the deserializer and the serializer that Spark Classic pickles with
+//   cloudpickle for its PythonRDD. The worker reads each row of `input`, of one or two binary or
+//   string columns, as an element (or as a pair of elements for two columns) of byte arrays, and
+//   writes byte arrays. The output type is `struct<value: binary>`, of one column of what the
+//   function writes, or `struct<key: int not null, value: binary>`, of the pairs that the
+//   function writes in turn, as `RDD.partitionBy` writes the partition index (a long of 8 bytes
+//   in big-endian order) and the batch of each pair.
 message MapPartitions {
-  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow.
+  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow and the
+  // functions of the RDD API.
   Relation input = 1;
 
   // (Required) Input user-defined function.
@@ -1363,54 +1377,28 @@ message Zip {
 // An RDD is a relation whose rows hold its elements in the columns that the Python RDD API
 // declares, for instance one binary column of pickled batches of elements. Its partitions are the
 // partitions of the RDD, so these relations keep the partitioning of Spark Classic's RDDs: the
-// partitions of their inputs, the empty partitions included, in the order of the elements.
+// partitions of their inputs, the empty partitions included, in the order of the elements. The
+// functions of RDDs are `MapPartitions` relations of Python functions of eval type NON_UDF, and
+// their shuffles `RepartitionByExpression`s of `DirectShufflePartitionID`.
 message RDDRelation {
   oneof relation_type {
-    MapPartitions map_partitions = 1;
-    Values values = 2;
-    Union union = 3;
-    ZipPartitions zip_partitions = 4;
-    Cartesian cartesian = 5;
-    Coalesce coalesce = 6;
-    Parallelize parallelize = 7;
-    FromDataFrame from_data_frame = 8;
-    ToDataFrame to_data_frame = 9;
-    Elements elements = 10;
-    WithResources with_resources = 11;
-  }
-
-  // A Python function of the index and of the elements of each partition of `input`, run as the
-  // PythonRDD of Spark Classic runs it: the Python worker reads each row of `input` as an element
-  // (or as a pair of elements for two columns) of byte arrays, and writes byte arrays. The output
-  // has one binary column, `value`, or, with `output_pairs`, the columns `key` (int) and `value`
-  // (binary) of the pairs that the function writes in turn, as `RDD.partitionBy` writes the
-  // partition index (a long of 8 bytes in big-endian order) and the batch of each pair.
-  message MapPartitions {
-    // (Required) The input RDD, with one or two binary or string columns.
-    Relation input = 1;
-
-    // (Required) The function, as Spark Classic pickles it for its PythonRDD: a tuple of the
-    // function, the profiler, the deserializer and the serializer, pickled with cloudpickle.
-    bytes command = 2;
-
-    // (Required) The version of Python of the client, as "major.minor".
-    string python_ver = 3;
-
-    // (Optional) Whether the partitions are computed in a barrier stage.
-    bool is_barrier = 4;
-
-    // (Optional) The PYTHONHASHSEED of the Python workers, so that they hash strings as the
-    // client does: for instance, to find the partition of a key. The server's when not set.
-    optional string python_hash_seed = 5;
-
-    // (Optional) Whether the function writes pairs of keys and values.
-    bool output_pairs = 6;
+    Values values = 1;
+    Union union = 2;
+    ZipPartitions zip_partitions = 3;
+    Cartesian cartesian = 4;
+    Coalesce coalesce = 5;
+    Parallelize parallelize = 6;
+    FromDataFrame from_data_frame = 7;
+    ToDataFrame to_data_frame = 8;
+    Elements elements = 9;
+    WithResources with_resources = 10;
   }
 
   // The `value` column of the rows of `input`, whose columns are `key` and `value`: for instance,
-  // the pairs that a `MapPartitions` with `output_pairs` writes, moved to the partitions of their
-  // keys by a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy`
-  // shuffles the batches of its pairs.
+  // the pairs that the function of a `MapPartitions` of the output type
+  // `struct<key: int not null, value: binary>` writes, moved to the partitions of their keys by a
+  // `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy` shuffles the
+  // batches of its pairs.
   message Values {
     // (Required) The input RDD.
     Relation input = 1;
