@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.lang.{Integer => JInteger}
+import java.nio.file.Files
 import java.sql.Timestamp
 import java.util.{Locale, UUID}
 
@@ -2346,6 +2347,42 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  test("SPARK-62038: restart evicts state that the cutoff of the previous run kept") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("lt"))
+      .withWatermark("lt", "1 second")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rt"))
+      .withWatermark("rt", "1 second")
+    def joined(seconds: Int): DataFrame = left
+      .join(right, expr(s"leftKey = rightKey AND lt > rt - INTERVAL $seconds SECONDS"),
+        "left_outer")
+      .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
+
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      withTempDir { checkpointDir =>
+        val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+        testStream(joined(10))(
+          start,
+          MultiAddData(leftInput, (1, 20L))(rightInput, (9, 20L)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (8, 27L))(rightInput, (9, 27L)),
+          CheckNewAnswer(),
+          // The watermark is 26 and the cutoff 16, so lt = 20 stays in state.
+          AddData(rightInput, (9, 28L)),
+          CheckNewAnswer(),
+          StopStream)
+        // The restarted query cuts off at 21, above the 16 of the previous run. An upgrade that
+        // raises a cutoff, such as SPARK-61985, restarts the same way.
+        testStream(joined(5))(
+          start,
+          AddData(rightInput, (9, 29L)),
+          CheckNewAnswer(Row(1, 20L, null)))
+      }
+    }
+  }
 }
 
 /** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
@@ -2939,6 +2976,83 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     )
   }
 
+  // A left semi join over a union. Only the first union input has a watermark, so the second
+  // one, when it has no data in a micro-batch, is an empty relation the optimizer could prune.
+  private def leftSemiJoinOverUnion(): (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)],
+      MemoryStream[(Int, Int)], DataFrame) = {
+    val input1 = MemoryStream[(Int, Int)]
+    val input2 = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    def withTime(input: MemoryStream[(Int, Int)]): DataFrame =
+      input.toDF().toDF("lk", "t").select($"lk", timestamp_seconds($"t").as("lt"))
+    val left = withTime(input1).withWatermark("lt", "10 seconds").union(withTime(input2))
+    val right = rightInput.toDF().toDF("rk", "s")
+      .select($"rk", timestamp_seconds($"s").as("rt"))
+    val joined = left.join(right, expr("lk = rk AND lt = rt"), "left_semi")
+      .select($"lk", $"lt".cast("long"))
+    (input1, input2, rightInput, joined)
+  }
+
+  private def assertNumJoins(expected: Int): AssertOnQuery = AssertOnQuery { q =>
+    val plan = q.lastExecution.executedPlan
+    assert(plan.collect { case j: StreamingSymmetricHashJoinExec => j }.size == expected, plan)
+    true
+  }
+
+  test("SPARK-62057: left semi join over a union whose input starts late") {
+    val (input1, input2, rightInput, joined) = leftSemiJoinOverUnion()
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      testStream(joined)(
+        MultiAddData(input1, (1, 5))(rightInput, (1, 5)),
+        CheckNewAnswer((1, 5L)),
+        // The join is pushed below the union, one per input, also while input2 has no data.
+        assertNumJoins(2),
+        MultiAddData(input2, (2, 6))(rightInput, (2, 6)),
+        CheckNewAnswer((2, 6L)),
+        MultiAddData(input1, (3, 7))(rightInput, (3, 7)),
+        CheckNewAnswer((3, 7L)),
+        assertNumJoins(2),
+        MultiAddData(input2, (4, 8))(rightInput, (4, 8)),
+        CheckNewAnswer((4, 8L)))
+    }
+  }
+
+  test("SPARK-62057: a checkpoint without the conf keeps pruning empty union inputs") {
+    val key = SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key
+    withTempDir { checkpointDir =>
+      val (input1, _, rightInput, joined) = leftSemiJoinOverUnion()
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        // Write the checkpoint as earlier versions do: the empty input2 is pruned.
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath,
+            additionalConfs = Map(key -> "true")),
+          MultiAddData(input1, (1, 5))(rightInput, (1, 5)),
+          CheckNewAnswer((1, 5L)),
+          assertNumJoins(1),
+          StopStream)
+
+        // Remove the conf from the offset log, as in a checkpoint written before it existed.
+        new File(checkpointDir, "offsets").listFiles().foreach { file =>
+          if (file.getName.endsWith(".crc")) {
+            assert(file.delete())
+          } else {
+            val content = Files.readString(file.toPath)
+            val updated = content.replace(s""""$key":"true",""", "")
+              .replace(s""","$key":"true"""", "")
+            assert(!updated.contains(key))
+            Files.writeString(file.toPath, updated)
+          }
+        }
+
+        // The legacy value applies, so the plan keeps a single join and finds its state.
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          MultiAddData(input1, (3, 7))(rightInput, (3, 7)),
+          CheckNewAnswer((3, 7L)),
+          assertNumJoins(1))
+      }
+    }
+  }
 }
 
 /** Adds tests that are specific to state format V1-V3 (not compatible with V4). */

@@ -34,7 +34,11 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   // Exclude rules for 4.5.x from 4.4.0 (add 4.5-specific filters below as needed).
-  lazy val v45excludes: Seq[Problem => Boolean] = v44excludes
+  lazy val v45excludes: Seq[Problem => Boolean] = v44excludes ++ Seq(
+    // [SPARK-60775][SQL][PYTHON] Add SparkSession.getOrCreateDataFrame
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.SparkSession.getOrCreateDataFrame")
+  )
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(

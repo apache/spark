@@ -838,3 +838,16 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(warnings.exists(_.contains("first")) && warnings.exists(_.contains("second")))
   }
 }
+
+/** `bucket` over integers. */
+private trait IntBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+}
+
+/** Called through `produceResult`, whose call falls back to `eval`. */
+private object ProduceResultBucketFunction extends IntBucketFunction {
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getInt(1), input.getInt(0))
+}

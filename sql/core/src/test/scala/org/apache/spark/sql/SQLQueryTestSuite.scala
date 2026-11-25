@@ -937,6 +937,9 @@ class SQLQueryTestSuite extends SharedSparkSession
       val sortedWindowQuery = "SELECT a, b, SUM(b) OVER (ORDER BY a) AS cumulative_sum FROM " +
         "t1 ORDER BY a, b;"
 
+      val describeTableQuery = "EXECUTE IMMEDIATE 'DESCRIBE t1'"
+      val describeColumnQuery = "EXECUTE IMMEDIATE 'DESCRIBE t1 a'"
+
       assert(!isSemanticallySorted(spark.sql(unsortedSelectQuery).logicalPlan))
       assert(!isSemanticallySorted(spark.sql(unsortedJoinQuery).logicalPlan))
       assert(!isSemanticallySorted(spark.sql(unsortedDistinctQuery).logicalPlan))
@@ -947,6 +950,8 @@ class SQLQueryTestSuite extends SharedSparkSession
       assert(isSemanticallySorted(spark.sql(sortedAggQuery).logicalPlan))
       assert(isSemanticallySorted(spark.sql(sortedWindowQuery).logicalPlan))
       assert(isSemanticallySorted(spark.sql(sortedDistinctQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(describeTableQuery).queryExecution.analyzed))
+      assert(isSemanticallySorted(spark.sql(describeColumnQuery).queryExecution.analyzed))
     }
   }
 }
