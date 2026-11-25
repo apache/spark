@@ -1158,11 +1158,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
         Row(12, 2, null, null, null), Row(3, 3, 9, 3, "e")))
       assert(cursorTasks(forward) > 0, "Expected the cursor scan")
 
-      // Buffered scan: with a tolerance of 2, only trade 11 has a quote close enough.
-      val buffered = asOfJoin("inner", "backward", Some(2))
-      assert(isGenerated(buffered))
-      checkAnswer(buffered, Seq(Row(11, 1, 10, 1, "c")))
-      assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
+      // With a tolerance of 2, only trade 11 has a quote close enough, with either scan.
+      val tolerance = asOfJoin("inner", "backward", Some(2))
+      assert(isGenerated(tolerance))
+      checkAnswer(tolerance, Seq(Row(11, 1, 10, 1, "c")))
+      assert(cursorTasks(tolerance) > 0, "Expected the cursor scan")
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
+        val buffered = asOfJoin("inner", "backward", Some(2))
+        assert(isGenerated(buffered))
+        checkAnswer(buffered, Seq(Row(11, 1, 10, 1, "c")))
+        assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
+      }
 
       // Nearest joins keep the interpreted scan.
       val nearest = asOfJoin("inner", "nearest", None)
