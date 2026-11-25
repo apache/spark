@@ -13013,12 +13013,11 @@ class KeyGroupedPartitioningSuite
       test(s"FULL OUTER keyed partitioning: USING aggregate with $name") {
         withSQLConf(fullOuterKeyedConfs :+
             (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive): _*) {
-          val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+          val cols = Array(Column.create("id", IntegerType))
           createTable("fo1", cols, Array(identity("id")))
           createTable("fo2", cols, Array(identity("id")))
-          sql("INSERT INTO testcat.ns.fo1 VALUES " +
-            "(NULL, 'ln'), (1, 'l1'), (2, 'l2a'), (2, 'l2b')")
-          sql("INSERT INTO testcat.ns.fo2 VALUES (NULL, 'rn'), (2, 'r2'), (3, 'r3')")
+          sql("INSERT INTO testcat.ns.fo1 VALUES (NULL), (1), (2), (2)")
+          sql("INSERT INTO testcat.ns.fo2 VALUES (NULL), (2), (3)")
           val df = sql(
             s"""SELECT /*+ $hint */ id, count(*)
                |FROM testcat.ns.fo1 l FULL OUTER JOIN testcat.ns.fo2 r USING (id)
@@ -13044,20 +13043,19 @@ class KeyGroupedPartitioningSuite
     .foreach { case (name, partition, keyType, keys) =>
       test(s"FULL OUTER keyed partitioning: $name transform and merged-key consumers") {
         withSQLConf(fullOuterKeyedConfs: _*) {
-          val cols = Array(Column.create("k", keyType), Column.create("data", StringType))
+          val cols = Array(Column.create("k", keyType))
           Seq("fo1", "fo2", "fo3").foreach(createTable(_, cols, Array(partition)))
           sql(s"INSERT INTO testcat.ns.fo1 VALUES " +
-            s"(${keys(0)}, 'l0'), (${keys(1)}, 'l1'), (${keys(2)}, 'l2a'), (${keys(2)}, 'l2b')")
+            s"(${keys(0)}), (${keys(1)}), (${keys(2)}), (${keys(2)})")
           sql(s"INSERT INTO testcat.ns.fo2 VALUES " +
-            s"(${keys(2)}, 'r2'), (${keys(3)}, 'r3'), (${keys(4)}, 'r4')")
-          sql(s"INSERT INTO testcat.ns.fo3 VALUES (${keys(1)}, 't1'), (${keys(5)}, 't5')")
+            s"(${keys(2)}), (${keys(3)}), (${keys(4)})")
+          sql(s"INSERT INTO testcat.ns.fo3 VALUES (${keys(1)}), (${keys(5)})")
+          val join = "FROM testcat.ns.fo1 l FULL OUTER JOIN testcat.ns.fo2 r ON l.k = r.k"
           Seq("coalesce(l.k, r.k)", "coalesce(r.k, l.k)").foreach { merged =>
-            val joined = s"SELECT $merged AS k FROM testcat.ns.fo1 l " +
-              "FULL OUTER JOIN testcat.ns.fo2 r ON l.k = r.k"
+            val joined = s"SELECT $merged AS k $join"
             checkFullOuterKeyedQuery(s"SELECT k, count(*) FROM ($joined) GROUP BY k")
           }
-          val joined = "SELECT coalesce(l.k, r.k) AS k FROM testcat.ns.fo1 l " +
-            "FULL OUTER JOIN testcat.ns.fo2 r ON l.k = r.k"
+          val joined = s"SELECT coalesce(l.k, r.k) AS k $join"
           checkFullOuterKeyedQuery(
             s"SELECT k, count(*) OVER (PARTITION BY k) FROM ($joined)")
           checkFullOuterKeyedQuery(s"SELECT k, count(*) FROM ($joined) j " +
