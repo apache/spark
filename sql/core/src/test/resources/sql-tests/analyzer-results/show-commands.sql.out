@@ -73,3 +73,178 @@ ShowCollationsCommand UTF8_BINARY
 SHOW COLLATIONS LIKE 'non_existing_collation_pattern'
 -- !query analysis
 ShowCollationsCommand non_existing_collation_pattern
+
+
+-- !query
+CREATE DATABASE show_listing_db
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [show_listing_db]
+
+
+-- !query
+CREATE TABLE show_listing_db.show_listing_table(id INT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`show_listing_db`.`show_listing_table`, false
+
+
+-- !query
+SHOW SCHEMAS LIKE 'show_listing*'
+-- !query analysis
+ShowNamespacesCommand show_listing*, [namespace#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog)
+
+
+-- !query
+DECLARE show_listing_schema = 'show_listing_db'
+-- !query analysis
+CreateVariable default(show_listing_db, sql=''show_listing_db''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.show_listing_schema
+
+
+-- !query
+SHOW TABLES IN IDENTIFIER(show_listing_schema) LIKE 'show_listing*'
+-- !query analysis
+ShowTables show_listing*, [namespace#x, tableName#x, isTemporary#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [show_listing_db]
+
+
+-- !query
+DROP TEMPORARY VARIABLE show_listing_schema
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.show_listing_schema
+
+
+-- !query
+SHOW TABLES IN show_listing_db AS JSON
+-- !query analysis
+ShowTablesJsonCommand false, [json_metadata#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [show_listing_db]
+
+
+-- !query
+SHOW TABLES IN show_listing_missing_db AS JSON
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "schemaName" : "`spark_catalog`.`show_listing_missing_db`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION show_listing_db.show_listing_function() RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.show_listing_db.show_listing_function, INT, 1, false, false, false, false
+
+
+-- !query
+SHOW USER FUNCTIONS IN show_listing_db
+-- !query analysis
+ShowFunctionsCommand show_listing_db, true, false, [function#x]
+
+
+-- !query
+SHOW SYSTEM FUNCTIONS LIKE 'abs'
+-- !query analysis
+ShowFunctionsCommand default, abs, false, true, [function#x]
+
+
+-- !query
+SHOW FUNCTIONS LIKE show_listing_db.show_listing_function
+-- !query analysis
+ShowFunctionsCommand show_listing_db, show_listing_function, true, true, [function#x]
+
+
+-- !query
+SHOW PROCEDURES IN show_listing_db
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_CATALOG_ABILITY.PROCEDURES",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "plugin" : "spark_catalog"
+  }
+}
+
+
+-- !query
+SHOW VIEWS IN show_listing_db.nested_namespace
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "namespace" : "`show_listing_db`.`nested_namespace`"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.keepCommandOutputSchema=true
+-- !query analysis
+SetCommand (spark.sql.legacy.keepCommandOutputSchema,Some(true))
+
+
+-- !query
+SHOW TABLES IN show_listing_db
+-- !query analysis
+ShowTables [database#x, tableName#x, isTemporary#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [show_listing_db]
+
+
+-- !query
+SHOW NAMESPACES LIKE 'show_listing*'
+-- !query analysis
+ShowNamespacesCommand show_listing*, [databaseName#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog)
+
+
+-- !query
+SET spark.sql.legacy.useV1Command=true
+-- !query analysis
+SetCommand (spark.sql.legacy.useV1Command,Some(true))
+
+
+-- !query
+SHOW TABLES IN show_listing_db
+-- !query analysis
+ShowTablesCommand show_listing_db, [database#x, tableName#x, isTemporary#x], false
+
+
+-- !query
+RESET spark.sql.legacy.useV1Command
+-- !query analysis
+ResetCommand spark.sql.legacy.useV1Command
+
+
+-- !query
+RESET spark.sql.legacy.keepCommandOutputSchema
+-- !query analysis
+ResetCommand spark.sql.legacy.keepCommandOutputSchema
+
+
+-- !query
+DROP FUNCTION show_listing_db.show_listing_function
+-- !query analysis
+DropFunctionCommand spark_catalog.show_listing_db.show_listing_function, false, false
+
+
+-- !query
+DROP TABLE show_listing_db.show_listing_table
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), show_listing_db.show_listing_table
+
+
+-- !query
+DROP DATABASE show_listing_db
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [show_listing_db]
