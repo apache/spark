@@ -398,10 +398,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
       // The bloom filter's subquery reads a DSv2 scan again, so only a scan that
       // `isRepeatableRead` counts, with or without a selective `Filter` above it. A pushed limit,
-      // for example, lets the source pick other rows on a second read. The pushed filters it
-      // records must be simple, as the condition of a `Filter` must.
+      // for example, lets the source pick other rows on a second read. A side found only through
+      // the scan's recorded pushed filters needs them to be simple, as the condition of a
+      // `Filter` must be. Under a selective `Filter` they need not be, so a V2 file scan with a
+      // pushed partition `LIKE` and a selective residual `Filter` is still found here, though
+      // `canEvaluateAgain` rejects it for a key whose DPP filters are all dropped.
       case scan: DataSourceV2ScanRelation
-          if !scan.isRepeatableRead || !scan.pushedFilters.forall(isSimpleExpression) => None
+          if !scan.isRepeatableRead ||
+            (!hasHitSelectiveFilter && !scan.pushedFilters.forall(isSimpleExpression)) => None
       // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
       // does with its partition filters, so a selective one counts as a selective `Filter` does.
       // If the scan's `reflectsFullyPushedDownFilters` is false, `V2ScanRelationPushDown` can put

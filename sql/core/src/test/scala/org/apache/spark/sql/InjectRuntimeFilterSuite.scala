@@ -2268,13 +2268,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       }
       // Runs `query` under V1 and V2, with DPP off and on. Checks that DPP adds its filter only
       // when on, that the bloom filters check `withoutDpp`, or `withDroppedDpp` when the shuffle
-      // join drops the DPP filter, and that the query returns `expected`.
+      // join drops the DPP filter, and that the query returns `expected`. Under V2 without DPP,
+      // the bloom filters check `v2WithoutDpp` if it is given.
       def check(
           query: String,
           withoutDpp: Seq[String],
           withDroppedDpp: Seq[String],
           expected: Seq[Row],
-          checkPlan: LogicalPlan => Unit = _ => ()): Unit = {
+          checkPlan: LogicalPlan => Unit = _ => (),
+          v2WithoutDpp: Option[Seq[String]] = None): Unit = {
         for (v1Sources <- Seq("parquet", "")) {
           withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> v1Sources) {
             createViews()
@@ -2283,13 +2285,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                 val df = sql(query)
                 val optimized = df.queryExecution.optimizedPlan
                 val clue = s"`$query` with dpp = $dpp, v1 sources '$v1Sources':\n$optimized"
-                assert(optimized.exists(_.isInstanceOf[DataSourceV2ScanRelation]) ===
-                  v1Sources.isEmpty, clue)
+                val v2 = v1Sources.isEmpty
+                assert(optimized.exists(_.isInstanceOf[DataSourceV2ScanRelation]) === v2, clue)
                 assert(optimized.exists(_.expressions.exists(
                   _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, clue)
-                assert(bloomFilterKeyNames(optimized) ==
-                  (if (dpp) withDroppedDpp else withoutDpp), clue)
-                if (v1Sources.isEmpty) {
+                assert(bloomFilterKeyNames(optimized) == (if (dpp) withDroppedDpp
+                  else if (v2) v2WithoutDpp.getOrElse(withoutDpp) else withoutDpp), clue)
+                if (v2) {
                   // The dimension's scan takes a selective filter on its partition columns in
                   // fully.
                   assert(optimized.exists {
@@ -2312,23 +2314,34 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
-          // A bloom filter's subquery takes only simple filters, which `LIKE` is not, pushed into
-          // the scan or not. For a key with a dropped DPP filter, the filters must pass
-          // `cannotFail`, which does not take `RLIKE`, pushed into the scan or not.
+          // A `Filter`, and the pushed filters of a V2 scan with no selective `Filter` above it,
+          // must be simple for a bloom filter, which `LIKE` is not. For a key with a dropped DPP
+          // filter, the filters must pass `cannotFail`, which does not take `RLIKE` or `LIKE`,
+          // pushed into the scan or not.
           Seq(
             ("d.dp = 1", (p: Int) => p % 2 == 1, Seq("part"), Seq("part")),
             ("d.ds RLIKE '^a'", (p: Int) => p < 5, Seq("part"), Nil),
             ("d.ds RLIKE '^a' AND d.v > 2", (p: Int) => p == 3 || p == 4, Seq("part"), Nil),
-            ("d.ds LIKE 'a_' AND d.v > 2", (p: Int) => p == 3 || p == 4, Nil, Nil),
             ("d.dp = 1 AND d.ds LIKE 'a_'", (p: Int) => p == 1 || p == 3, Nil, Nil)
           ).foreach { case (condition, keeps, withoutDpp, withDroppedDpp) =>
             check(s"SELECT f.id FROM rf_fact f JOIN rf_dim d ON f.part = d.k WHERE $condition",
               withoutDpp, withDroppedDpp, factRows(keeps))
           }
+          // V1 keeps the `LIKE` in its `Filter`, so it builds no bloom filter. V2 takes the `LIKE`
+          // in fully and keeps the selective `v > 2` above its scan, which is then a creation
+          // side without DPP. With a dropped DPP filter, `cannotFail` rejects the pushed `LIKE`.
+          check("SELECT f.id FROM rf_fact f JOIN rf_dim d ON f.part = d.k " +
+            "WHERE d.ds LIKE 'a_' AND d.v > 2", Nil, Nil, factRows(p => p == 3 || p == 4),
+            v2WithoutDpp = Some(Seq("part")))
 
           // A variant extraction pushed into the V2 scan builds it at another site, with new
           // output attributes. That scan records its pushed filters too, so they count, and must
           // pass `cannotFail`.
+          val pushedVariant: LogicalPlan => Unit = plan => assert(plan.exists {
+            case r: DataSourceV2ScanRelation =>
+              r.output.exists(_.name == "j") && r.output.intersect(r.relation.output).isEmpty
+            case _ => false
+          }, s"expected a scan with a pushed variant extraction:\n$plan")
           Seq(
             ("d.dp = 1", (p: Int) => p % 2 == 1, Seq("part"), Seq("part")),
             ("d.ds RLIKE '^a' AND d.v > 2", (p: Int) => p == 3 || p == 4, Seq("part"), Nil)
@@ -2336,12 +2349,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             check("SELECT f.id, variant_get(d.j, '$.a', 'int') FROM rf_fact f " +
               s"JOIN rf_dim d ON f.part = d.k WHERE $condition", withoutDpp, withDroppedDpp,
               (0 until 100).filter(i => keeps(i % 10)).map(i => Row(i.toLong, i % 10)),
-              plan => assert(plan.exists {
-                case r: DataSourceV2ScanRelation =>
-                  r.output.exists(_.name == "j") && r.output.intersect(r.relation.output).isEmpty
-                case _ => false
-              }, s"expected a scan with a pushed variant extraction:\n$plan"))
+              pushedVariant)
           }
+          check("SELECT f.id, variant_get(d.j, '$.a', 'int') FROM rf_fact f " +
+            "JOIN rf_dim d ON f.part = d.k WHERE d.ds LIKE 'a_' AND d.v > 2", Nil, Nil,
+            (0 until 100).filter(i => i % 10 == 3 || i % 10 == 4).map(i => Row(i.toLong, i % 10)),
+            pushedVariant, v2WithoutDpp = Some(Seq("part")))
 
           // A side found through pushed filters that a later check rejects does not stop the
           // search: the join that side is in gives the bloom filter from its other side, which the
