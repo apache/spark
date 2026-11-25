@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.{BufferedInputStream, DataInputStream, DataOutputStream, InputStream, InterruptedIOException, IOException}
+import java.net.{InetSocketAddress, StandardSocketOptions}
 import java.nio.ByteBuffer
 import java.nio.channels.{CancelledKeyException, ClosedSelectorException, SelectionKey}
 import java.util.concurrent.TimeUnit
@@ -71,8 +72,9 @@ object PythonExternalLookupProtocol {
  * and worker reuse, and uses non-blocking I/O on the worker's selector, through [[WorkerChannel]].
  *
  * The worker is used from one thread at a time, except [[destroy]], which any thread may call:
- * it is the only call that the interrupt and completion listeners and a close from another thread
- * make. A worker that is released or destroyed is not used again.
+ * it is the only call that the interrupt listener and a close from another thread make. The
+ * completion listener closes the reader, which may close the worker gracefully, on the thread
+ * that made the reader's last call. A worker that is released or destroyed is not used again.
  *
  * @param func the planned lookup reader, pickled, with the Python environment of the data source
  * @param context the task that the worker runs in
@@ -316,6 +318,13 @@ private[spark] object PythonExternalLookupWorker extends Logging {
       sqlConf.pythonUDFWorkerIdleTimeoutSeconds, sqlConf.pythonUDFWorkerKillOnIdleTimeout,
       bufferSize)
     try {
+      // As the worker does on its side, in `disable_nagle`. Otherwise a cancel that reaches the
+      // worker after the end of its response, which the worker does not answer, would hold the
+      // next message until the worker's delayed acknowledgement, about 40 ms on Linux. A Unix
+      // domain socket has no such delay.
+      if (worker.channel.getLocalAddress.isInstanceOf[InetSocketAddress]) {
+        worker.channel.setOption[java.lang.Boolean](StandardSocketOptions.TCP_NODELAY, true)
+      }
       // The worker runs no profiler: its results would travel through an accumulator that no
       // executor-side path reads.
       lookupWorker.initialize(

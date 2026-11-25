@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.net.{InetSocketAddress, StandardSocketOptions}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,15 +28,17 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
-import org.apache.spark.api.python.{PythonException, SimplePythonFunction}
-import org.apache.spark.internal.config.Python.PYTHON_WORKER_REUSE
+import org.apache.spark.api.python.{BasePythonRunner, PythonException, SimplePythonFunction}
+import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_TASK_KILL_TIMEOUT, PYTHON_WORKER_REUSE}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.{AnalysisException, Encoders}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.PreparedExternalLookupJoin
-import org.apache.spark.sql.connector.read.ExternalLookupResultCursor
+import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookupResultCursor}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.python.PythonExternalLookupReaderFactory
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -58,6 +61,11 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
   // session, so that the process ids of one test do not depend on another.
   private val poolId = new AtomicInteger(0)
 
+  // The tests of timeouts and of worker reuse assume these values, which are the defaults.
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(PYTHON_TASK_KILL_TIMEOUT.key, "2s")
+    .set(PYTHON_WORKER_REUSE.key, "true")
+
   private def lookupSourceScript: String =
     s"""
        |import os
@@ -74,6 +82,13 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |    def __init__(self, options):
        |        self.options = options
        |
+       |    def __setstate__(self, state):
+       |        # Runs when the worker loads the planned reader, as it starts.
+       |        self.__dict__.update(state)
+       |        if "startSeconds" in self.options:
+       |            mark(self.options, "start")
+       |            time.sleep(float(self.options["startSeconds"]))
+       |
        |    def selectLookupPredicates(self, candidates):
        |        return [i for i, c in enumerate(candidates) if c.attribute == ("id",)][:1]
        |
@@ -82,12 +97,21 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |        behavior = self.options.get("behavior", "")
        |        pid = os.getpid()
        |        partition = TaskContext.get().partitionId()
+       |        if behavior in ("hang", "trickle"):
+       |            mark(self.options, behavior)
+       |        if behavior == "hang":
+       |            time.sleep(float(self.options.get("seconds", "30")))
+       |        if behavior == "rlimit":
+       |            import resource
+       |            mark(self.options, f"rlimit {resource.getrlimit(resource.RLIMIT_AS)[0]}")
        |        yielded = 0
        |        try:
        |            for ordinal, (key,) in enumerate(parameters):
        |                if key < 0:
        |                    continue
        |                for i in range(matches):
+       |                    if behavior == "trickle":
+       |                        time.sleep(0.05)
        |                    if behavior == "block" and yielded == 1:
        |                        time.sleep(float(self.options.get("seconds", "30")))
        |                    if behavior == "sleep" and yielded == 0:
@@ -106,6 +130,8 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |            time.sleep(float(self.options.get("seconds", "30")))
        |        if behavior == "fail":
        |            raise ValueError("close failed on purpose")
+       |        if behavior == "exit":
+       |            os._exit(1)
        |
        |class $dataSourceName(DataSource):
        |    def schema(self):
@@ -270,7 +296,7 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
             reader.close()
           }
         }
-        // spark.python.task.killTimeout is 2 seconds by default.
+        // spark.python.task.killTimeout is 2 seconds in the suite.
         assert(closeMillis >= 1500 && closeMillis < 20000, s"the close took $closeMillis ms")
         // The killed worker ran no finally; a new worker served the next request and the close.
         assert(eventuallyDead(firstPid))
@@ -289,7 +315,7 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
         val failure = caught(reader.close())
         (pid, failure, (System.nanoTime() - start) / 1000000)
       }
-      // spark.python.task.killTimeout is 2 seconds by default.
+      // spark.python.task.killTimeout is 2 seconds in the suite.
       assert(closeMillis >= 1500 && closeMillis < 20000, s"the close took $closeMillis ms")
       checkError(
         exception = failure.asInstanceOf[AnalysisException],
@@ -315,6 +341,19 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
       assert(failure.getMessage.contains("ValueError: close failed on purpose"), failure)
       assert(events(markerDir).map(_._2) === Seq("finally 1", "close"))
       assert(eventuallyDead(pid))
+    }
+  }
+
+  test("a worker that exits during the graceful close fails the close as a crash") {
+    withLookup("closeBehavior" -> "exit")() { (factory, markerDir) =>
+      val failure = inTask() { _ =>
+        val reader = factory.createReader()
+        readAll(reader.lookupBatch(parameterRows(Seq(1L))))
+        caught(reader.close())
+      }
+      assert(failure.isInstanceOf[SparkException], failure)
+      assert(failure.getMessage.contains("Python worker exited unexpectedly (crashed)"), failure)
+      assert(events(markerDir).map(_._2) === Seq("finally 1", "close"))
     }
   }
 
@@ -412,6 +451,65 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
     }
   }
 
+  test("a cursor closed on another thread is read to its end before the next request") {
+    withLookup("matches" -> "3")(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") {
+      (factory, _) =>
+        val next = inTask() { _ =>
+          val reader = factory.createReader()
+          try {
+            val cursor = reader.lookupBatch(parameterRows(Seq(1L)))
+            assert(cursor.next())
+            // Another thread only marks the cursor closed: the rest of its response is unread.
+            ThreadUtils.awaitResult(Future(cursor.close())(ExecutionContext.global), 60.seconds)
+            readAll(reader.lookupBatch(parameterRows(Seq(-1L, 2L))))
+          } finally {
+            reader.close()
+          }
+        }
+        assert(next.map(r => (r.ordinal, r.id, r.matchIndex)) ===
+          Seq((1, 2L, 0), (1, 2L, 1), (1, 2L, 2)))
+    }
+  }
+
+  test("a close from another thread while the worker starts destroys that worker") {
+    withLookup("startSeconds" -> "3")() { (factory, markerDir) =>
+      inTask() { _ =>
+        val reader = factory.createReader()
+        // The worker loads the reader for 3 seconds, and another thread closes the reader then.
+        val closing = Future {
+          Thread.sleep(1000)
+          reader.close()
+        }(ExecutionContext.global)
+        Try(reader.lookupBatch(parameterRows(Seq(1L))))
+        ThreadUtils.awaitResult(closing, 60.seconds)
+      }
+      val pid = events(markerDir).collectFirst { case (pid, "start") => pid }.get
+      assert(eventuallyDead(pid))
+    }
+  }
+
+  test("a close from another thread while a cancelled response drains frees the memory") {
+    withLookup("matches" -> "2", "behavior" -> "block", "seconds" -> "30")(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") { (factory, _) =>
+      val memoryAfter = inTask() { _ =>
+        val before = ArrowUtils.rootAllocator.getAllocatedMemory
+        val reader = factory.createReader()
+        val cursor = reader.lookupBatch(parameterRows(Seq(1L)))
+        assert(cursor.next())
+        // The close of the cursor waits for the rest of the response, which blocks in Python,
+        // and another thread closes the reader meanwhile, which ends that wait.
+        val closing = Future {
+          Thread.sleep(500)
+          reader.close()
+        }(ExecutionContext.global)
+        Try(cursor.close())
+        ThreadUtils.awaitResult(closing, 60.seconds)
+        ArrowUtils.rootAllocator.getAllocatedMemory - before
+      }
+      assert(memoryAfter === 0)
+    }
+  }
+
   test("a reader registers one interrupt and one completion listener") {
     withLookup()() { (factory, _) =>
       val counts = inTask() { context =>
@@ -426,6 +524,80 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
       val (before, afterCreate, afterRequests) = counts
       assert(afterCreate === ((before._1 + 1, before._2 + 1)))
       assert(afterRequests === afterCreate)
+    }
+  }
+
+  test("a task killed during a lookup ends with its worker, without the reader's close()") {
+    // A lookup that blocks in Python, killed with and without interrupting the task thread, and
+    // one that keeps sending rows, killed without the interrupt.
+    Seq(("hang", true), ("hang", false), ("trickle", false)).foreach { case (behavior, interrupt) =>
+      withLookup("behavior" -> behavior, "seconds" -> "60", "matches" -> "100000")(
+          SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") { (factory, markerDir) =>
+        val sc = spark.sparkContext
+        val group = s"python-lookup-kill-$behavior-$interrupt"
+        val job = Future {
+          sc.setJobGroup(group, group, interruptOnCancel = interrupt)
+          try {
+            inTask() { _ =>
+              val reader = factory.createReader()
+              readAll(reader.lookupBatch(parameterRows(Seq(1L))))
+            }
+          } finally {
+            sc.clearJobGroup()
+          }
+        }(ExecutionContext.global)
+        eventually(timeout(60.seconds), interval(50.millis)) {
+          assert(events(markerDir).exists(_._2 == behavior))
+        }
+        val Seq((pid, _)) = events(markerDir)
+        val start = System.nanoTime()
+        sc.cancelJobGroup(group)
+        val failure = caught(ThreadUtils.awaitResult(job, 60.seconds))
+        assert(Utils.stackTraceToString(failure).contains("cancelled"), failure)
+        // The job fails at once; the task ends with its worker.
+        assert(eventuallyDead(pid), interrupt)
+        val millis = (System.nanoTime() - start) / 1000000
+        if (interrupt || behavior == "trickle") {
+          // The interrupt ends the wait for the worker at once, and the next read of a response
+          // finds the task killed.
+          assert(millis < 1500, s"the worker of the killed task ended after $millis ms")
+        } else {
+          // The interrupt listener destroys the worker after the kill timeout, 2 seconds.
+          assert(millis >= 1500 && millis < 20000,
+            s"the worker of the killed task ended after $millis ms")
+        }
+        // Python ran neither the generator's finally nor close().
+        assert(events(markerDir) === Seq(pid -> behavior), (behavior, interrupt))
+      }
+    }
+  }
+
+  test("a task killed between lookups ends its worker without the reader's close()") {
+    withLookup()() { (factory, markerDir) =>
+      val sc = spark.sparkContext
+      val group = "python-lookup-kill-between-lookups"
+      val job = Future {
+        sc.setJobGroup(group, group, interruptOnCancel = true)
+        try {
+          inTask() { _ =>
+            val reader = factory.createReader()
+            readAll(reader.lookupBatch(parameterRows(Seq(1L))))
+            // The kill interrupts the task here, outside a call of the reader.
+            Thread.sleep(60000)
+          }
+        } finally {
+          sc.clearJobGroup()
+        }
+      }(ExecutionContext.global)
+      eventually(timeout(60.seconds), interval(50.millis)) {
+        assert(events(markerDir).map(_._2) === Seq("finally 1"))
+      }
+      val Seq((pid, _)) = events(markerDir)
+      sc.cancelJobGroup(group)
+      caught(ThreadUtils.awaitResult(job, 60.seconds))
+      assert(eventuallyDead(pid))
+      // The completion listener destroyed the worker: Python ran no close().
+      assert(events(markerDir).map(_._2) === Seq("finally 1"))
     }
   }
 
@@ -445,6 +617,55 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
       }
       assert(during > before)
       assert(after === before)
+    }
+  }
+
+  test("the JVM side of a lookup worker over TCP turns off Nagle's algorithm") {
+    withLookup()() { (factory, _) =>
+      val noDelays = inTask() { _ =>
+        // A new worker, and then the same worker from the pool.
+        (1 to 2).map { _ =>
+          val reader = factory.createReader()
+          try {
+            readAll(reader.lookupBatch(parameterRows(Seq(1L))))
+            val channel = currentWorker(reader).worker.channel
+            channel.getLocalAddress match {
+              case _: InetSocketAddress =>
+                Some(channel.getOption(StandardSocketOptions.TCP_NODELAY).booleanValue())
+              // A Unix domain socket has no Nagle's algorithm.
+              case _ => None
+            }
+          } finally {
+            reader.close()
+          }
+        }
+      }
+      assert(noDelays.forall(_.forall(identity)), noDelays)
+    }
+  }
+
+  test("a lookup worker gets the memory limit of the task's Python workers") {
+    assume(!Utils.isWindows && !Utils.isMac)
+    withLookup("behavior" -> "rlimit")() { (factory, markerDir) =>
+      val sc = spark.sparkContext
+      // The scheduler sets this for a task when spark.executor.pyspark.memory is set, and the
+      // number of tasks per executor that the memory is split by, always.
+      sc.setLocalProperty(ResourceProfile.PYSPARK_MEMORY_LOCAL_PROPERTY, "32768")
+      val maxTasks = try {
+        inTask() { context =>
+          val reader = factory.createReader()
+          try readAll(reader.lookupBatch(parameterRows(Seq(1L)))) finally reader.close()
+          context.getLocalProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY).toInt
+        }
+      } finally {
+        sc.setLocalProperty(ResourceProfile.PYSPARK_MEMORY_LOCAL_PROPERTY, null)
+      }
+      val limits = events(markerDir).collect {
+        case (_, event) if event.startsWith("rlimit ") => event.stripPrefix("rlimit ").toLong
+      }
+      // The limit of a Python UDF worker of the same task, as BasePythonRunner computes it.
+      val expectedMb = BasePythonRunner.getWorkerMemoryMb(Some(32768L), maxTasks).get
+      assert(limits === Seq(expectedMb * 1024 * 1024))
     }
   }
 
@@ -556,6 +777,33 @@ class PythonExternalLookupSimpleWorkerSuite extends PythonExternalLookupTestBase
       assert(eventuallyDead(pids.head))
     }
   }
+
+  test("a simple Python worker waits longer than the authentication timeout for requests") {
+    val conf = SparkEnv.get.conf
+    val authTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
+    conf.set(PYTHON_AUTH_SOCKET_TIMEOUT.key, "1s")
+    try {
+      withLookup()() { (factory, markerDir) =>
+        val ids = inTask() { _ =>
+          val reader = factory.createReader()
+          try {
+            // Each request, and the close, comes after a pause longer than the timeout.
+            Seq(1L, 2L).flatMap { key =>
+              Thread.sleep(2500)
+              readAll(reader.lookupBatch(parameterRows(Seq(key)))).map(_.id)
+            }
+          } finally {
+            Thread.sleep(2500)
+            reader.close()
+          }
+        }
+        assert(ids === Seq(1L, 2L))
+        assert(events(markerDir).map(_._2) === Seq("finally 1", "finally 1", "close"))
+      }
+    } finally {
+      conf.set(PYTHON_AUTH_SOCKET_TIMEOUT.key, s"${authTimeout}s")
+    }
+  }
 }
 
 object PythonExternalLookupWorkerSuite {
@@ -597,6 +845,16 @@ object PythonExternalLookupWorkerSuite {
       f.get(context).asInstanceOf[java.util.Stack[_]].size()
     }
     (size("onCompleteCallbacks"), size("onInterruptCallbacks"))
+  }
+
+  /**
+   * The current worker of a reader, which is private to its package, read by reflection, as
+   * `listenerCounts` reads the listeners of a task.
+   */
+  def currentWorker(reader: ExternalLookupReader): PythonExternalLookupWorker = {
+    val field = reader.getClass.getDeclaredFields.find(_.getName.endsWith("worker")).get
+    field.setAccessible(true)
+    field.get(reader).asInstanceOf[PythonExternalLookupWorker]
   }
 
   /** Whether the process exits within 30 seconds. */

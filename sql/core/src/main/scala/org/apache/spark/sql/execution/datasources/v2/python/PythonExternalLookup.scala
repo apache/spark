@@ -134,9 +134,11 @@ class PythonExternalLookupReaderFactory(
  *
  * The calls that use the worker or the Arrow memory hold `ioLock`, which a close from another
  * thread never waits for: when a call holds it, the close destroys the worker, which ends the
- * call, and the call releases the memory when it ends. Arrow memory is read and freed only while
- * `ioLock` is held: a cursor copies each row out of it in `next()`, so a close from any thread,
- * at any time, never frees the memory of a row that Spark may still read.
+ * call, and leaves the rest to the call. Every release of `ioLock` goes through [[unlock]]:
+ * after a close, it destroys the worker, also one that the call started after the close, and
+ * releases the memory, and it checks for a close again after unlocking. Arrow memory is read and
+ * freed only while `ioLock` is held: a cursor copies each row out of it in `next()`, so a close
+ * from any thread, at any time, never frees the memory of a row that Spark may still read.
  *
  * The reader registers one interrupt listener, which destroys the worker if the task has not
  * completed within `spark.python.task.killTimeout` after it was killed, also when the task thread
@@ -222,11 +224,11 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
           }
         }
       } finally {
-        try releaseMemory() finally ioLock.unlock()
+        unlock()
       }
     } else {
       // A call is in progress on another thread. Destroying the worker ends it, and the call
-      // releases the memory when it ends.
+      // finishes the close when it releases `ioLock`.
       Option(worker).foreach(_.destroy())
     }
   }
@@ -241,12 +243,7 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
       ownerThread = Thread.currentThread()
       call
     } finally {
-      // A close from another thread during the call left the memory to the call.
-      try {
-        if (closed.get()) releaseMemory()
-      } finally {
-        ioLock.unlock()
-      }
+      unlock()
     }
   }
 
@@ -255,7 +252,23 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
     (Thread.currentThread() eq ownerThread)
 
   private[python] def tryLock(): Boolean = ioLock.tryLock()
-  private[python] def unlock(): Unit = ioLock.unlock()
+
+  /**
+   * Releases `ioLock`, after finishing a close that another thread made while it was held. That
+   * close sets `closed` before it tries the lock, so a close that this check misses either takes
+   * the lock itself, or finds `closed` set by the check after unlocking.
+   */
+  private[python] def unlock(): Unit = {
+    try {
+      if (closed.get()) finishClose()
+    } finally {
+      ioLock.unlock()
+    }
+    if (closed.get() && !ioLock.isHeldByCurrentThread && ioLock.tryLock()) {
+      try finishClose() finally ioLock.unlock()
+    }
+  }
+
   private[python] def isClosed: Boolean = closed.get()
   private[python] def readerAllocator = allocator
   private[python] def numValueColumns: Int = factory.readSchema.length
@@ -277,9 +290,11 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
         current.destroy()
         throw e
       case e: IOException =>
+        // A close from another thread destroyed the worker first: the failure is that close,
+        // not a crash.
+        val destroyedByClose = closed.get() && current.isReleasedOrClosed
         current.destroy()
-        // After a close from another thread, the failure is that close, not a crash.
-        if (closed.get()) throw e else throw current.ioError(e)
+        if (destroyedByClose) throw e else throw current.ioError(e)
       case e: Throwable =>
         current.destroy()
         throw e
@@ -332,6 +347,11 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
         }
       }
     }, killTimeoutMs, TimeUnit.MILLISECONDS)
+  }
+
+  /** Destroys the worker, unless it is released, and releases the memory, holding `ioLock`. */
+  private def finishClose(): Unit = {
+    try Option(worker).foreach(_.destroy()) finally releaseMemory()
   }
 
   /** Releases the Arrow memory, once, holding `ioLock`. */

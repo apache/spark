@@ -22,11 +22,11 @@ import sys
 import tempfile
 import threading
 import unittest
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import List
 from unittest import mock
 
-from pyspark.errors import PySparkException
+from pyspark.errors import PySparkException, PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.datasource import DataSourceLookupReader
 from pyspark.sql.types import (
@@ -84,7 +84,7 @@ class EchoLookupReader(DataSourceLookupReader):
 
 
 class OrdinalLookupReader(DataSourceLookupReader):
-    """Returns one row, with the ordinal that is the first parameter's field `ordinal`."""
+    """Returns one row, with the fixed ordinal given to its constructor."""
 
     def __init__(self, ordinal) -> None:
         self.ordinal = ordinal
@@ -270,15 +270,15 @@ class LookupWorkerClient:
         batches = list(self.start_response())
         return batches, self.end_response()
 
-    def lookup_error(self, *rows) -> PySparkException:
+    def lookup_error(self, *rows, error_type: type = PySparkException) -> Exception:
         """
-        Sends a request whose response fails, and returns the failure, once the response's
-        Arrow stream has ended, as the JVM expects.
+        Sends a request whose response fails, and returns the failure, of `error_type`, once the
+        response's Arrow stream has ended, as the JVM expects.
         """
         self.send_request(self.parameters(*rows))
         list(self.start_response())
         self.thread.join(30)
-        assert isinstance(self.error, PySparkException), repr(self.error)
+        assert isinstance(self.error, error_type), repr(self.error)
         return self.error
 
     def close(self) -> int:
@@ -406,6 +406,28 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
         error = client.lookup_error((1,))
         self.assertEqual(error.getCondition(), "DATA_SOURCE_RETURN_SCHEMA_MISMATCH")
 
+    def test_tuple_form_rounds_decimals_and_fails_on_values_that_do_not_fit(self):
+        # The worker converts the results, so a value that does not fit fails in Python.
+        read_schema = StructType(
+            [
+                StructField("d", DecimalType(10, 2)),
+                StructField("s", StructType([StructField("x", LongType(), False)])),
+            ]
+        )
+        client = self.client(
+            PairLookupReader((0, (Decimal("1.005"), (1,)))), read_schema=read_schema
+        )
+        batches, _ = client.lookup((1,))
+        # Rounded to the scale, half to even.
+        self.assertEqual(self.rows(batches), [{"ordinal": 0, "d": Decimal("1.00"), "s": {"x": 1}}])
+        for row, error_type in [
+            ((Decimal("123456789.12"), (1,)), InvalidOperation),
+            ((Decimal("1.00"), (None,)), PySparkValueError),
+        ]:
+            with self.subTest(row=row):
+                client = self.client(PairLookupReader((0, row)), read_schema=read_schema)
+                client.lookup_error((1,), error_type=error_type)
+
     def test_lookup_must_return_an_iterator(self):
         client = self.client(ListLookupReader())
         error = client.lookup_error((1,))
@@ -450,6 +472,25 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
         self.assertEqual([r["name"] for r in self.rows(batches)], ["named 1"])
         self.assertEqual(client.close(), 0)
         self.assertIsNone(client.error)
+
+    def test_turns_off_nagle_without_duplicating_the_socket(self):
+        # On Windows, `os.dup` cannot duplicate the socket handle that a worker started without
+        # the daemon writes to. The socket stays open and keeps serving, over TCP and over a
+        # Unix domain socket.
+        for tcp in (True, False):
+            with mock.patch("os.dup", side_effect=OSError("os.dup of a socket handle")):
+                client = self.client(EchoLookupReader(), tcp=tcp)
+                if tcp:
+                    self.assertNotEqual(
+                        client.python_socket.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY),
+                        0,
+                    )
+                for key in (1, 3):
+                    batches, status = client.lookup((key,))
+                    self.assertEqual(status, client.protocol.STATUS_COMPLETE)
+                    self.assertEqual([r["name"] for r in self.rows(batches)], [f"named {key}"])
+                self.assertEqual(client.close(), 0)
+                self.assertIsNone(client.error, tcp)
 
     def test_planned_object_must_be_a_lookup_reader(self):
         client = LookupWorkerClient(42, StructType([StructField("param_0", LongType())]))

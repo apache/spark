@@ -254,13 +254,16 @@ def disable_nagle(outfile: IO) -> None:
     write waits until the JVM acknowledges the earlier one, and the JVM, which sends nothing while
     it waits for the rest of the response, delays that acknowledgement, by about 40 ms on Linux,
     so each request would take at least that long. A Unix domain socket has no such delay.
+
+    The socket object wraps the descriptor of `outfile` without `os.dup`, which cannot duplicate
+    a socket handle on Windows, and is detached so that the socket stays open.
     """
-    sock = socket.socket(fileno=os.dup(outfile.fileno()))
+    sock = socket.socket(fileno=outfile.fileno())
     try:
         if sock.family in (socket.AF_INET, socket.AF_INET6):
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     finally:
-        sock.close()
+        sock.detach()
 
 
 def _main(infile: IO, outfile: IO) -> None:
@@ -338,6 +341,9 @@ if __name__ == "__main__":
         ),
         os.environ.get("PYTHON_WORKER_FACTORY_SECRET"),
     )
+    # The authentication timeout applies to the connection only. Between requests the JVM may
+    # send nothing for long, as the streaming source runner and the foreachBatch worker allow.
+    sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     buffer_size = int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
