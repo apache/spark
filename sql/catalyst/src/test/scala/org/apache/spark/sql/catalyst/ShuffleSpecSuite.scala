@@ -915,8 +915,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
     val a = $"a".int
     val spec = KeyedShuffleSpec(KeyedPartitioning(
-      Seq(TransformExpression(function, Seq(Literal(4), a), fromBucketTransform = true)),
-      Seq(InternalRow(1))),
+      Seq(bucketTransform(function, 4, a)), Seq(InternalRow(1))),
       ClusteredDistribution(Seq(a)))
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning)
