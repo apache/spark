@@ -257,21 +257,32 @@ class ModuleDefinitionsTests(unittest.TestCase):
         )
         self.assertNotIn(modules.lint_python, changed_modules)
 
-    def test_test_infrastructure_python_files_select_root(self):
+    def test_test_infrastructure_python_files_select_build(self):
         for filename in (
             "dev/run-tests.py",
             "dev/is-changed.py",
-            "dev/pip-sanity-check.py",
             "dev/sparktestsupport/modules.py",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.build, changed_modules)
+                self.assertIn(modules.lint_python, changed_modules)
+                # build escalates to the full run.
+                self.assertIn(modules.root, determine_modules_to_test(changed_modules))
+        # These unit tests run in every `precondition` job, so they do not need build.
+        changed_modules = determine_modules_for_files(
+            ["dev/sparktestsupport/tests/test_modules.py"]
+        )
+        self.assertIn(modules.lint_python, changed_modules)
+        self.assertNotIn(modules.build, changed_modules)
+        self.assertNotIn(modules.root, changed_modules)
+
+    def test_python_files_without_an_owning_module_select_root(self):
+        for filename in (
+            "dev/pip-sanity-check.py",
             "sql/gen-sql-api-docs.py",
             "sql/gen-sql-config-docs.py",
             "sql/gen-sql-functions-docs.py",
         ):
             with self.subTest(filename=filename):
                 self.assertIn(modules.root, determine_modules_for_files([filename]))
-        # These unit tests run in every `precondition` job, so they do not need root.
-        changed_modules = determine_modules_for_files(
-            ["dev/sparktestsupport/tests/test_modules.py"]
-        )
-        self.assertIn(modules.lint_python, changed_modules)
-        self.assertNotIn(modules.root, changed_modules)

@@ -1942,6 +1942,13 @@ build = Module(
     source_file_regexes=[
         ".*pom.xml",
         "dev/test-dependencies.sh",
+        # The test infrastructure itself. A bug here can break or silently skip tests in
+        # every job, and only a full run exercises it. These are listed explicitly because
+        # lint-python also claims the .py files, so they would no longer fall through to root.
+        r"dev/run-tests\.py$",
+        r"dev/is-changed\.py$",
+        # The unit tests in tests/ run in every `precondition` job, so they do not need build.
+        r"dev/sparktestsupport/(?!tests/)",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
 )
@@ -2053,19 +2060,12 @@ root = Module(
     name="root",
     dependencies=[build, core],  # Changes to build should trigger all tests.
     source_file_regexes=[
-        # The test infrastructure itself. A bug here can break or silently skip tests in
-        # every job, and only a full run exercises it. Files that no module claims also
-        # select root, so this list only matters for files another module claims too,
-        # such as the .py files that lint-python claims.
-        r"dev/run-tests\.py$",
-        r"dev/is-changed\.py$",
         # These belong to a PySpark packaging module and to docs respectively. They stay on
         # root, as they were before lint-python claimed every .py file, until a module owns
-        # them.
+        # them. Files that no module claims also select root, so this list only matters for
+        # files another module claims too, such as the .py files that lint-python claims.
         r"dev/pip-sanity-check\.py$",
         r"sql/gen-sql-[^/]*\.py$",
-        # The unit tests in tests/ run in every `precondition` job, so they do not need root.
-        r"dev/sparktestsupport/(?!tests/)",
     ],
     # In order to run all of the tests, enable every test profile:
     build_profile_flags=list(
