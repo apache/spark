@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, PLAN_EXPRESSION, WITH_EXPRESSION}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -606,12 +606,32 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   /**
    * Runs the finish-analysis rules on the plan of a default value and constant-folds it. A `With`,
-   * which NULLIF and BETWEEN build, is not foldable, so its definitions are inlined first, as for
-   * the expressions of a command.
+   * which NULLIF and BETWEEN build, is not foldable, so it is folded first by `foldWiths`.
    */
   private[sql] def finishAnalysisAndFold(plan: LogicalPlan): LogicalPlan =
-    ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(plan)
-      .mapExpressions(RewriteWithExpression.inlineCommandWiths))
+    ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(plan).mapExpressions(foldWiths))
+
+  /**
+   * `e` with each `With` that evaluates to a constant replaced by its value. Each definition is
+   * evaluated once, as `With.eval` does, and the value is substituted at its references, so no
+   * definition is copied. A `With` that does not fold, or fails to, is left to `ConstantFolding`.
+   */
+  private def foldWiths(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With if w.defs.forall(_.child.foldable) =>
+        try {
+          val values = w.defs.map(d => d.id -> evalToLiteral(d.child)).toMap
+          val child = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+            case ref: CommonExpressionRef if values.contains(ref.id) => values(ref.id)
+          }
+          if (child.foldable) evalToLiteral(child) else w
+        } catch {
+          case NonFatal(_) => w
+        }
+    }
+
+  private def evalToLiteral(e: Expression): ExprLiteral =
+    ExprLiteral.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
 
   /**
    * This is a FunctionCatalog for performing analysis using built-in functions only. It is a helper
