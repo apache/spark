@@ -1048,6 +1048,15 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     plans.toSeq
   }
 
+  /** Runs `check` with the write requirements config unset, then with it set to false. */
+  private def withWriteRequirementsDisabled(check: => Unit): Unit = {
+    assert(!spark.conf.contains(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key))
+    check
+    withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
+      check
+    }
+  }
+
   test("SPARK-61646: write required distribution and ordering") {
     assume(shouldTestPandasUDFs)
     val dataSource = createUserDefinedPythonDataSource(
@@ -1080,7 +1089,27 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
 
   test("SPARK-61646: write requirements are not requested when disabled") {
     assume(shouldTestPandasUDFs)
-    // `requiredDistribution` raises, so the write only succeeds if it is never called.
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName, writeRequirementsDataSourceScript(""))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withWriteRequirementsDisabled {
+      withTempDir { dir =>
+        val df = spark.range(0, 10, 1, 3).toDF("id")
+        val writes = executedPlans {
+          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }.flatMap(_.collect { case a: AppendDataExec => a.write })
+        // The planner's requirement handling is skipped entirely, not just given no requirements.
+        assert(writes.nonEmpty)
+        assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
+        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
+      }
+    }
+  }
+
+  test("SPARK-61646: write requirement methods fail the write when disabled") {
+    assume(shouldTestPandasUDFs)
+    // `requiredDistribution` raises, so the expected error shows it was never called.
     val dataSource = createUserDefinedPythonDataSource(
       dataSourceName,
       writeRequirementsDataSourceScript(
@@ -1088,22 +1117,15 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
           |        raise AssertionError("should not be called")""".stripMargin))
     spark.dataSource.registerPython(dataSourceName, dataSource)
 
-    def check(): Unit = withTempDir { dir =>
-      val df = spark.range(0, 10, 1, 3).toDF("id")
-      val writes = executedPlans {
-        df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
-      }.flatMap(_.collect { case a: AppendDataExec => a.write })
-      // The planner's requirement handling is skipped entirely, not just given no requirements.
-      assert(writes.nonEmpty)
-      assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
-      checkAnswer(spark.read.json(dir.getAbsolutePath), df)
-    }
-
-    // Off by default, and when disabled explicitly.
-    assert(!spark.conf.contains(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key))
-    check()
-    withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
-      check()
+    withWriteRequirementsDisabled {
+      withTempDir { dir =>
+        val error = intercept[AnalysisException] {
+          spark.range(10).write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }
+        assert(error.getMessage.contains("DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED"))
+        assert(error.getMessage.contains("implements requiredDistribution()"))
+        assert(dir.listFiles().isEmpty)
+      }
     }
   }
 

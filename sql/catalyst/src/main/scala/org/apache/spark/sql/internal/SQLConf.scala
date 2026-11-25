@@ -7757,8 +7757,9 @@ object SQLConf {
       .internal()
       .doc("When true, honor the distribution and ordering required by a Python datasource " +
         "writer, at the cost of running the Python worker one additional time during planning. " +
-        "Applies to batch writes only.")
-      .version("4.4.0")
+        "Applies to batch writes only. When false, a batch write fails if its writer overrides " +
+        "any of the requirement methods.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)

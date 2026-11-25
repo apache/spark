@@ -1663,6 +1663,11 @@ class BasePythonDataSourceTestsMixin:
                 SortOrder(("value",), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
                 [None, 2, 1],
             ),
+            (
+                "write_req_nulls_last",
+                SortOrder(("value",), SortDirection.ASCENDING, NullOrdering.NULLS_LAST),
+                [1, 2, None],
+            ),
         ]
         for name, order, expected in cases:
             with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
@@ -1678,58 +1683,65 @@ class BasePythonDataSourceTestsMixin:
             self._register_write_requirements_source(
                 "write_req_nested", d, distribution=ClusteredDistribution((("s", "k"),))
             )
-            df = self._write_df().selectExpr("key", "value", "named_struct('k', key) AS s")
+            df = self._write_df().selectExpr(
+                "key", "value", "named_struct('k', key, 'v', value) AS s"
+            )
             with self.sql_conf(self._write_conf()):
                 df.write.format("write_req_nested").mode("append").save()
             # Clustering by the nested field `s.k`, which equals `key`, co-locates each key.
+            # Clustering by the whole struct `s` would not, as `s.v` varies within a key.
             tasks = self._read_tasks(d)
             for rows in tasks:
                 self.assertEqual(len({key for key, _ in rows}), 1)
+            self.assertEqual(len(tasks), 2)
             self.assertEqual(sum(len(rows) for rows in tasks), 6)
 
     def test_write_requirements_use_writer_inputs(self):
         # The planning writer gets the write's schema, options and overwrite flag: it clusters
         # by the column named in an option, and only when all three are what the write passed.
         # The option is set and read with different casing, as option keys are case-insensitive.
-        with tempfile.TemporaryDirectory(prefix="write_req_inputs") as d:
+        for mode in ["append", "overwrite"]:
+            name = f"write_req_inputs_{mode}"
+            expected_overwrite = mode == "overwrite"
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix=name) as d:
 
-            class InputsWriter(DataSourceWriter):
-                def __init__(self, schema, options, overwrite):
-                    self.schema = schema
-                    self.options = options
-                    self.overwrite = overwrite
+                class InputsWriter(DataSourceWriter):
+                    def __init__(self, schema, options, overwrite):
+                        self.schema = schema
+                        self.options = options
+                        self.overwrite = overwrite
 
-                def write(self, iterator):
-                    from pyspark import TaskContext
+                    def write(self, iterator):
+                        from pyspark import TaskContext
 
-                    rows = [[row.key, row.value] for row in iterator]
-                    output = os.path.join(d, f"{TaskContext.get().partitionId()}.json")
-                    with open(output, "w") as f:
-                        json.dump(rows, f)
-                    return WriterCommitMessage()
+                        rows = [[row.key, row.value] for row in iterator]
+                        output = os.path.join(d, f"{TaskContext.get().partitionId()}.json")
+                        with open(output, "w") as f:
+                            json.dump(rows, f)
+                        return WriterCommitMessage()
 
-                def requiredDistribution(self):
-                    assert self.schema.fieldNames() == ["key", "value"], self.schema
-                    assert self.overwrite is True, self.overwrite
-                    return ClusteredDistribution(((self.options["cluster_by"],),))
+                    def requiredDistribution(self):
+                        assert self.schema.fieldNames() == ["key", "value"], self.schema
+                        assert self.overwrite is expected_overwrite, self.overwrite
+                        return ClusteredDistribution(((self.options["cluster_by"],),))
 
-            class InputsDataSource(DataSource):
-                @classmethod
-                def name(cls):
-                    return "write_req_inputs"
+                class InputsDataSource(DataSource):
+                    @classmethod
+                    def name(cls):
+                        return name
 
-                def writer(self, schema, overwrite):
-                    return InputsWriter(schema, self.options, overwrite)
+                    def writer(self, schema, overwrite):
+                        return InputsWriter(schema, self.options, overwrite)
 
-            self.spark.dataSource.register(InputsDataSource)
-            with self.sql_conf(self._write_conf()):
-                writer = self._write_df().write.format("write_req_inputs")
-                writer.option("Cluster_By", "key").mode("overwrite").save()
-            tasks = self._read_tasks(d)
-            for rows in tasks:
-                self.assertEqual(len({key for key, _ in rows}), 1)
-            self.assertEqual(len(tasks), 2)
-            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+                self.spark.dataSource.register(InputsDataSource)
+                with self.sql_conf(self._write_conf()):
+                    writer = self._write_df().write.format(name)
+                    writer.option("Cluster_By", "key").mode(mode).save()
+                tasks = self._read_tasks(d)
+                for rows in tasks:
+                    self.assertEqual(len({key for key, _ in rows}), 1)
+                self.assertEqual(len(tasks), 2)
+                self.assertEqual(sum(len(rows) for rows in tasks), 6)
 
     def test_write_requirements_planned_once(self):
         # Spark reads each requirement separately, but asks the Python writer only once per write.
@@ -1795,7 +1807,8 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.createDataFrame(
             [("a", v) for v in range(40)], "key string, value int"
         ).repartition(4)
-        for strict in [True, False]:
+        # None leaves distributionStrictlyRequired unset, which must default to strict.
+        for strict in [True, False, None]:
             name = f"write_req_strict_{str(strict).lower()}"
             with self.subTest(strict=strict), tempfile.TemporaryDirectory(prefix=name) as d:
                 self._register_write_requirements_source(
@@ -1810,10 +1823,10 @@ class BasePythonDataSourceTestsMixin:
                 tasks = self._read_tasks(d)
                 self.assertEqual(sum(len(rows) for rows in tasks), 40)
                 # Only a best-effort distribution may split the key across tasks.
-                if strict:
-                    self.assertEqual(len(tasks), 1)
-                else:
+                if strict is False:
                     self.assertGreater(len(tasks), 1)
+                else:
+                    self.assertEqual(len(tasks), 1)
 
     def test_write_invalid_strictly_required(self):
         with tempfile.TemporaryDirectory(prefix="write_req_bad_strict") as d:
@@ -1887,19 +1900,33 @@ class BasePythonDataSourceTestsMixin:
             )
 
     def test_write_requirements_disabled(self):
+        # With the config off, a writer that asks for nothing keeps the input layout.
         with tempfile.TemporaryDirectory(prefix="write_req_disabled") as d:
-            self._register_write_requirements_source(
-                "write_req_disabled",
-                d,
-                distribution=ClusteredDistribution((("key",),)),
-                ordering=[SortOrder(("value",), SortDirection.DESCENDING)],
-            )
+            self._register_write_requirements_source("write_req_disabled", d)
             df = self._write_df()
             with self.sql_conf(self._write_conf(enabled=False)):
                 df.write.format("write_req_disabled").mode("append").save()
                 expected = self._input_tasks(df)
-            # With the config off the requirements are ignored: the input layout is untouched.
             self.assertEqual(self._read_tasks(d), expected)
+
+        # A writer that overrides any requirement method fails rather than have it ignored.
+        cases = [
+            ("requiredDistribution", dict(distribution=ClusteredDistribution((("key",),)))),
+            ("distributionStrictlyRequired", dict(strictly_required=True)),
+            ("requiredNumPartitions", dict(num_partitions=2)),
+            ("advisoryPartitionSizeInBytes", dict(advisory_size=1)),
+            ("requiredOrdering", dict(ordering=[SortOrder(("value",))])),
+        ]
+        for method, requirements in cases:
+            name = f"write_req_disabled_{method.lower()}"
+            with self.subTest(method=method), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, **requirements)
+                with self.sql_conf(self._write_conf(enabled=False)):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED", str(cm.exception))
+                self.assertIn(f"implements {method}()", str(cm.exception))
+                self.assertEqual(os.listdir(d), [])
 
     def test_write_requirements_skipped_for_streaming(self):
         # The requirements come from the batch writer, which this streaming-only sink lacks,

@@ -870,6 +870,8 @@ private class UserDefinedPythonDataSourceWriteRunner(
 
     dataOut.writeBoolean(isStreaming)
     dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
+    // So that a batch writer's requirement methods are rejected, not ignored, when disabled.
+    dataOut.writeBoolean(SQLConf.get.pythonWriteDistributionAndOrdering)
   }
 
   override protected def receiveFromPython(

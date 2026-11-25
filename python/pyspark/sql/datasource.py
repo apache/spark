@@ -1076,7 +1076,7 @@ class SortDirection(Enum):
     """
     The direction of a sort order used for write-side required ordering.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
     """
 
     ASCENDING = "ascending"
@@ -1087,7 +1087,7 @@ class NullOrdering(Enum):
     """
     Where null values are placed relative to non-null values in a sort order.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
     """
 
     NULLS_FIRST = "nulls_first"
@@ -1099,7 +1099,7 @@ class SortOrder:
     """
     A single sort expression used by :meth:`DataSourceWriter.requiredOrdering`.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
 
     Parameters
     ----------
@@ -1131,7 +1131,7 @@ class Distribution(ABC):
     The base class for distributions returned by
     :meth:`DataSourceWriter.requiredDistribution`.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
 
     See Also
     --------
@@ -1148,7 +1148,7 @@ class UnspecifiedDistribution(Distribution):
 
     This is the default: Spark writes each input partition as it is.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
     """
 
 
@@ -1160,7 +1160,7 @@ class ClusteredDistribution(Distribution):
 
     Spark satisfies this with a hash repartition on the clustering columns.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
 
     Parameters
     ----------
@@ -1185,7 +1185,7 @@ class OrderedDistribution(Distribution):
 
     Spark satisfies this with a range repartition on the ordering expressions.
 
-    .. versionadded:: 4.4.0
+    .. versionadded:: 4.5.0
 
     Parameters
     ----------
@@ -1220,14 +1220,15 @@ class DataSourceWriter(ABC):
         example one output file per partition value.
 
         This method is called once during query planning, and only when
-        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true.
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true;
+        while it is false, a batch write fails if the writer overrides this method.
         It is not called for streaming writes. Spark calls it on a writer that
         :meth:`DataSource.writer` creates during planning, separate from the writer
         that writes the data, so avoid side effects in :meth:`DataSource.writer`.
         By default it returns :class:`UnspecifiedDistribution`, meaning Spark writes
         each input partition as it is.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -1264,7 +1265,12 @@ class DataSourceWriter(ABC):
 
         Ignored when the required distribution is :class:`UnspecifiedDistribution`.
 
-        .. versionadded:: 4.4.0
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -1282,7 +1288,12 @@ class DataSourceWriter(ABC):
         requires a distribution other than :class:`UnspecifiedDistribution`;
         the query fails at planning time otherwise.
 
-        .. versionadded:: 4.4.0
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -1304,7 +1315,12 @@ class DataSourceWriter(ABC):
 
         Be careful with large values: they reduce write parallelism.
 
-        .. versionadded:: 4.4.0
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -1323,13 +1339,14 @@ class DataSourceWriter(ABC):
         example to avoid keeping one open file handle per key.
 
         This method is called once during query planning, and only when
-        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true.
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true;
+        while it is false, a batch write fails if the writer overrides this method.
         It is not called for streaming writes. Spark calls it on a writer that
         :meth:`DataSource.writer` creates during planning, separate from the writer
         that writes the data, so avoid side effects in :meth:`DataSource.writer`.
         By default it returns an empty list, meaning no ordering is required.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------
