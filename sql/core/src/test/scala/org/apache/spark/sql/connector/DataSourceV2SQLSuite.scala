@@ -4638,6 +4638,28 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH cutoff AS MATERIALIZED (SELECT $ts2Literal AS ts, 42 AS n) " +
           s"SELECT tt.id, cutoff.n FROM t $asOfCutoff AS tt, cutoff"),
         Seq(Row(7, 42), Row(8, 42)))
+      // A MATERIALIZED CTE that the subquery reads is evaluated for the subquery, and once more
+      // for all the references of the rest of the query.
+      withUserDefinedFunction("countEvaluations" -> true) {
+        // Identity udf that tracks the number of times it is called.
+        val countAcc = sparkContext.longAccumulator("CallCount")
+        spark.udf.register("countEvaluations", (x: Int) => {
+          countAcc.add(1)
+          x
+        })
+        val countedCutoff = "cutoff AS MATERIALIZED (SELECT CASE WHEN " +
+          s"countEvaluations(max(id)) > 0 THEN $ts2Literal END AS ts FROM $t1)"
+        Seq(
+          s"WITH $countedCutoff SELECT * FROM t $asOfCutoff" -> 1,
+          (s"WITH $countedCutoff SELECT tt.id FROM t $asOfCutoff AS tt, cutoff AS c1, " +
+            "cutoff AS c2 WHERE c1.ts = c2.ts") -> 2
+        ).foreach { case (query, evaluations) =>
+          countAcc.setValue(0)
+          // Run the query only once, as each run evaluates the CTE again.
+          QueryTest.checkAnswer(sql(query), rowsAsOfTs2, checkToRDD = false)
+          assert(countAcc.value == evaluations)
+        }
+      }
       checkAnswer(
         sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) " +
           s"SELECT * FROM t TIMESTAMP AS OF (SELECT CASE WHEN max(n) = 3 THEN $ts2Literal " +
@@ -4699,29 +4721,31 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH cutoff AS (SELECT $ts1Literal AS ts) SELECT (WITH $cutoff $existsAsOfCutoff)"),
         Row(2))
 
-      // The scalar subquery returns one row, or NULL for no row.
-      val tooManyRows = s"WITH cutoff AS (SELECT $ts1Literal AS ts UNION ALL " +
-        s"SELECT $ts2Literal) SELECT * FROM t $asOfCutoff"
-      checkError(
-        exception = intercept[SparkException] {
-          sql(tooManyRows).collect()
-        },
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        ExpectedContext(
-          fragment = "(SELECT ts FROM cutoff)",
-          start = tooManyRows.indexOf("(SELECT ts FROM cutoff)"),
-          stop = tooManyRows.indexOf("(SELECT ts FROM cutoff)") + 22))
-      checkError(
-        exception = analysisException(s"WITH cutoff AS (SELECT $ts2Literal AS ts WHERE false) " +
-          s"SELECT * FROM t $asOfCutoff"),
-        condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
-        parameters = Map("expr" -> "\"NULL\""))
-      checkError(
-        exception = analysisException("WITH cutoff AS (SELECT CAST(NULL AS TIMESTAMP) AS ts) " +
-          s"SELECT * FROM t $asOfCutoff"),
-        condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
-        parameters = Map("expr" -> "\"NULL\""))
+      // The scalar subquery returns one row, or NULL for no row, also when the time travel is in
+      // a subquery expression, which the analysis of the query around it evaluates.
+      Seq(s"SELECT * FROM t $asOfCutoff", existsAsOfCutoff).foreach { query =>
+        val tooManyRows =
+          s"WITH cutoff AS (SELECT $ts1Literal AS ts UNION ALL SELECT $ts2Literal) $query"
+        checkError(
+          exception = intercept[SparkException] {
+            sql(tooManyRows).collect()
+          },
+          condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+          parameters = Map.empty,
+          ExpectedContext(
+            fragment = "(SELECT ts FROM cutoff)",
+            start = tooManyRows.indexOf("(SELECT ts FROM cutoff)"),
+            stop = tooManyRows.indexOf("(SELECT ts FROM cutoff)") + 22))
+        Seq(
+          s"WITH cutoff AS (SELECT $ts2Literal AS ts WHERE false) $query",
+          s"WITH cutoff AS (SELECT CAST(NULL AS TIMESTAMP) AS ts) $query"
+        ).foreach { nullTimestamp =>
+          checkError(
+            exception = analysisException(nullTimestamp),
+            condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+            parameters = Map("expr" -> "\"NULL\""))
+        }
+      }
     }
   }
 
