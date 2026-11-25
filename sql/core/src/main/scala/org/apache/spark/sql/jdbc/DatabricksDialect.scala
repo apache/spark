@@ -38,7 +38,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
   }
 
   // The remote side is Spark SQL, so pushed casts give Spark's result.
-  override def truncateFractionalValue(expr: String): Option[String] = Some(expr)
+  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+    Some(expr)
 
   override def castsDatetimeToNumericLikeSpark: Boolean = true
 

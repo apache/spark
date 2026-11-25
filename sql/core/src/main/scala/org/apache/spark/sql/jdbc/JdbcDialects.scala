@@ -474,8 +474,11 @@ abstract class JdbcDialect extends Serializable with Logging {
           case LongType => "BIGINT"
           case _ => dataType.typeName
         })
-        val value = truncateFraction(expr, exprDataType)
-          .getOrElse(cannotPushCast(exprDataType, dataType))
+        val value = exprDataType match {
+          case d: DecimalType if d.scale == 0 => expr
+          case f: FractionalType =>
+            truncateFractionalValue(expr, f).getOrElse(cannotPushCast(exprDataType, dataType))
+        }
         s"CAST($value AS $databaseTypeDefinition)"
       } else {
         // TODO(SPARK-62090): casts from other types still spell unmapped targets with Spark's
@@ -486,13 +489,6 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
       from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
-
-    // `expr`, of fractional type `from`, truncated toward zero for a cast to an integral type, or
-    // None if the database can't truncate it. Spark truncates, but many databases round.
-    protected def truncateFraction(expr: String, from: DataType): Option[String] = from match {
-      case d: DecimalType if d.scale == 0 => Some(expr)
-      case _ => truncateFractionalValue(expr)
-    }
 
     protected def cannotPushCast(from: DataType, to: DataType): Nothing =
       throw new UnsupportedOperationException(
@@ -583,12 +579,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    * is pushed down matches Spark, which truncates rather than rounds. Dialects for databases that
    * round such casts return the database's truncating function, and dialects for databases whose
    * cast already truncates return `expr` unchanged. The default returns `None`, so Spark evaluates
-   * casts that drop a fraction instead of pushing them down.
+   * casts that drop a fraction instead of pushing them down. Casts from a `DECIMAL` with scale 0
+   * have no fraction to drop and are pushed down without calling this.
    * @param expr The SQL string of the value being cast.
+   * @param from The type of the value being cast.
    * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
    */
   @Since("4.4.0")
-  def truncateFractionalValue(expr: String): Option[String] = None
+  def truncateFractionalValue(expr: String, from: FractionalType): Option[String] = None
 
   /**
    * Whether the database converts TIMESTAMP and TIME values to numbers as Spark does, for example

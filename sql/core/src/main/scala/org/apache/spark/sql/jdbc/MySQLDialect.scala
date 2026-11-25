@@ -53,7 +53,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // MySQL rounds when casting to an integral type. It has no single argument TRUNCATE, so the
   // number of decimal places to keep is passed explicitly.
-  override def truncateFractionalValue(expr: String): Option[String] = Some(s"TRUNCATE($expr, 0)")
+  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+    Some(s"TRUNCATE($expr, 0)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getErrorCode == 1146
@@ -136,7 +137,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // of range, so only casts from DECIMALs whose every value fits the target are pushed.
         case (d: DecimalType, t: IntegralType)
             if fractionalToIntegral && d.precision - d.scale <= maxIntegerDigits(t) =>
-          val value = truncateFraction(expr, d).getOrElse(cannotPushCast(d, t))
+          val value = if (d.scale == 0) expr else truncateFractionalValue(expr, d).get
           s"CAST($value AS SIGNED)"
         case (_, _: IntegralType) if fractionalToIntegral => cannotPushCast(exprDataType, dataType)
         case _ => super.visitCast(expr, exprDataType, dataType)
