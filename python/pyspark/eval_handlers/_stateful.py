@@ -413,6 +413,29 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             )
 
 
+def _pandas_rows_with_grouping_keys(
+    batch: pa.RecordBatch | pa.Table,
+    data_pandas: list[pd.Series | pd.DataFrame],
+    key_offsets: list[int],
+) -> Iterator[tuple[tuple, tuple]]:
+    import pandas as pd
+    import pyarrow as pa
+
+    # Nullable integer columns can become floats (rounding BIGINT keys) or pd.NA
+    # (which cannot be compared when regrouping rows). Read those keys from Arrow.
+    key_columns = [batch.column(offset) for offset in key_offsets]
+    nullable_integer_keys = [
+        column if column.null_count and pa.types.is_integer(column.type) else None
+        for column in key_columns
+    ]
+    for row_index, row in enumerate(pd.concat(data_pandas, axis=1).itertuples(index=False)):
+        key = tuple(
+            row[offset] if column is None else column[row_index].as_py()
+            for offset, column in zip(key_offsets, nullable_integer_keys)
+        )
+        yield key, row
+
+
 class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_TRANSFORM_WITH_STATE_PANDAS_UDF (``transformWithStateInPandas``): regroup the input
     rows by grouping key into bounded pandas DataFrame chunks, invoke the UDF once per key
@@ -485,9 +508,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                     timezone=self._runner_conf.timezone,
                     prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                 )
-                for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
-                    batch_key = tuple(row[o] for o in self._key_offsets)
-                    yield (batch_key, row)
+                yield from _pandas_rows_with_grouping_keys(batch, data_pandas, self._key_offsets)
 
         def generate_data_batches() -> Iterator[tuple]:
             """
@@ -662,12 +683,14 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
                 assert not (has_data and has_init)
 
                 if has_data:
-                    for row in pd.concat(to_pandas(data_table), axis=1).itertuples(index=False):
-                        batch_key = tuple(row[o] for o in self._key_offsets)
+                    for batch_key, row in _pandas_rows_with_grouping_keys(
+                        data_table, to_pandas(data_table), self._key_offsets
+                    ):
                         yield (batch_key, row, None)
                 elif has_init:
-                    for row in pd.concat(to_pandas(init_table), axis=1).itertuples(index=False):
-                        batch_key = tuple(row[o] for o in self._init_key_offsets)
+                    for batch_key, row in _pandas_rows_with_grouping_keys(
+                        init_table, to_pandas(init_table), self._init_key_offsets
+                    ):
                         yield (batch_key, None, row)
 
         empty_dataframe = pd.DataFrame()
