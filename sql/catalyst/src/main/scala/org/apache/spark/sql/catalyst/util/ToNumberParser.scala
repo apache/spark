@@ -117,8 +117,14 @@ object ToNumberParser {
  * @param numberFormat the format string describing the expected inputs.
  * @param errorOnFail true if evaluation should throw an exception if the input string fails to
  *                    match the format string. Otherwise, returns NULL instead.
+ * @param legacyFormatZeroAsBlank true to restore the results of Spark 4.3 and earlier, which leave
+ *                                out the ones digit of a zero value for some format strings with no
+ *                                digits after the decimal point, such as '999'.
  */
-class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Serializable {
+class ToNumberParser(
+    numberFormat: String,
+    errorOnFail: Boolean,
+    legacyFormatZeroAsBlank: Boolean = false) extends Serializable {
   import ToNumberParser._
 
   // Consumes the format string and produce a sequence of input tokens expected from each input
@@ -761,6 +767,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       case _: DecimalPoint =>
         reachedDecimalPoint = true
       case _ =>
+    }
+    // The zero stripping above leaves no digits for a zero value, and without digits after the
+    // decimal point the ones digit could be left out entirely, so keep a single zero digit. For
+    // formats where the decimal point or zero padding already renders the zero, this changes
+    // nothing.
+    if (!legacyFormatZeroAsBlank && beforeDecimalPoint.isEmpty && afterDecimalPoint.isEmpty &&
+      numFormatDigitsBeforeDecimalPoint > 0 && numFormatDigitsAfterDecimalPoint == 0) {
+      beforeDecimalPoint = ZERO_DIGIT.toString
     }
     // If there were more digits in the provided input string (before or after the decimal point)
     // than specified in the format string, this is an overflow.

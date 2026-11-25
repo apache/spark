@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
@@ -56,7 +57,17 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: DataTypeAstBuilder
 
-  protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+  protected def parse[T](command: String)(toResult: SqlBaseParser => T): T =
+    parse(command, withOptionalReferences = false)(toResult)
+
+  /**
+   * Parses `command` like [[parse]], with optional references (`x?`) from the start if
+   * `withOptionalReferences`, i.e. if `command` is the text that a parameter substitution
+   * returned for a statement that it parsed with optional references, see
+   * `ParameterSubstitution.parsedWithOptionalReferences`.
+   */
+  protected def parse[T](command: String, withOptionalReferences: Boolean)(
+      toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
@@ -68,6 +79,9 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
 
     // Use shared parser configuration to ensure consistency.
     AbstractParser.configureParser(parser, command, tokenStream, conf)
+    if (withOptionalReferences) {
+      AbstractParser.restartWithOptionalReferences(parser, tokenStream)
+    }
 
     try {
       AbstractParser.executeWithTwoStageStrategy(parser, tokenStream, toResult)
@@ -366,10 +380,38 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 }
 
 /**
- * The post-processor checks the unclosed bracketed comment.
+ * The post-processor checks the unclosed bracketed comment. As the listener that every parse
+ * registers, it also counts the `?` tokens that the parse uses as positional parameter markers,
+ * see [[positionalParameterMarkerCount]], instead of a listener of its own for that, which would
+ * add a listener class to the dispatch of every parse event.
  */
 case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStream)
     extends SqlBaseParserBaseListener {
+
+  /**
+   * The number of `?` tokens that the parse used as positional parameter markers. A parse that
+   * uses a `?` in another way, e.g. as the free text of a `SET` command, uses fewer of them than
+   * the statement has. A parse can also use every `?` as a marker and still fail, as
+   * `SELECT ? FROM t WHERE` does. See [[AbstractParser.executeWithTwoStageStrategy]].
+   */
+  var positionalParameterMarkerCount: Int = 0
+
+  override def enterEveryRule(ctx: ParserRuleContext): Unit = {
+    // The parser enters a rule without a parent when it starts to parse the statement, which it
+    // does once in each attempt of a parsing strategy.
+    if (ctx.getParent == null) {
+      positionalParameterMarkerCount = 0
+    }
+  }
+
+  override def exitPosParameterLiteral(ctx: SqlBaseParser.PosParameterLiteralContext): Unit = {
+    positionalParameterMarkerCount += 1
+  }
+
+  override def exitPositionalParameterMarkerRule(
+      ctx: SqlBaseParser.PositionalParameterMarkerRuleContext): Unit = {
+    positionalParameterMarkerCount += 1
+  }
 
   override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
     checkUnclosedComment(tokenStream, command)
@@ -500,11 +542,16 @@ object AbstractParser extends Logging {
     parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
     parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
     parser.file_type_enabled = conf.isFileTypeEnabled
+    parser.optional_references_enabled = conf.optionalReferencesEnabled
   }
 
   /**
    * Executes a parsing operation using the standard two-stage parsing strategy. This ensures
    * consistent error handling and performance optimization across all parsers.
+   *
+   * If optional references (`x?`) are enabled, the operation is executed again with optional
+   * references if it fails without using every `?` as a positional parameter marker, or if it
+   * succeeds but stops before a `?` it did not parse, see [[restartWithOptionalReferences]].
    *
    * @param parser
    *   The configured SqlBaseParser to use
@@ -516,6 +563,91 @@ object AbstractParser extends Logging {
    *   The result of the parsing operation
    */
   def executeWithTwoStageStrategy[T](
+      parser: SqlBaseParser,
+      tokenStream: CommonTokenStream,
+      parseOperation: SqlBaseParser => T): T = {
+    if (!parser.optional_references_enabled) {
+      executeWithSllThenLl(parser, tokenStream, parseOperation)
+    } else {
+      val result = Try(executeWithSllThenLl(parser, tokenStream, parseOperation))
+      val hasOtherQuestion = result match {
+        case Success(_) =>
+          // A rule that does not end at the end of the statement stops before a `?` that it
+          // cannot parse, see `spark.sql.legacy.parseQueryWithoutEof`. A `?` that a successful
+          // operation does parse stays what it is, including in the free text of commands such
+          // as `SET key=a?b`.
+          tokenStream.LA(1) != Token.EOF &&
+          questions(tokenStream).exists(_.getTokenIndex >= tokenStream.index())
+        case Failure(_) =>
+          // The statement has a syntax error at a `?`, or before it, or a rule that accepts any
+          // tokens such as `SET .*?` parsed the `?` of a statement that is then not valid.
+          positionalParameterMarkerCount(parser) < questions(tokenStream).length
+      }
+      if (hasOtherQuestion && restartWithOptionalReferences(parser, tokenStream)) {
+        executeWithSllThenLl(parser, tokenStream, parseOperation)
+      } else {
+        result.get
+      }
+    }
+  }
+
+  /** The number of positional parameter markers that the last parse of `parser` used. */
+  private[parser] def positionalParameterMarkerCount(parser: SqlBaseParser): Int = {
+    parser.getParseListeners.asScala
+      .collectFirst { case processor: UnclosedCommentProcessor =>
+        processor.positionalParameterMarkerCount
+      }
+      .getOrElse {
+        throw SparkException.internalError("The parser has no UnclosedCommentProcessor.")
+      }
+  }
+
+  /**
+   * Prepares `parser` to parse the statement of `tokenStream` again with optional references
+   * (`x?`), where a `?` after a name part of a reference marks that name part as optional.
+   * Returns false if optional references are disabled or the statement has no `?`. The parser is
+   * then not prepared to parse the statement again.
+   *
+   * A statement is parsed without optional references first, where a `?` is a positional
+   * parameter marker. It is parsed with them only if that fails, or does not reach a `?`, so a
+   * statement that is valid without optional references keeps its meaning. For example, the `?`
+   * of `c IN (SELECT ?)` stays a parameter marker. With optional references, `select?` could also
+   * be a reference to a column named `select`.
+   */
+  private[parser] def restartWithOptionalReferences(
+      parser: SqlBaseParser,
+      tokenStream: CommonTokenStream): Boolean = {
+    val questionTokens = if (parser.optional_references_enabled) questions(tokenStream) else Nil
+    questionTokens.foreach {
+      _.asInstanceOf[WritableToken].setType(SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
+    }
+    if (questionTokens.nonEmpty) {
+      tokenStream.seek(0)
+      parser.reset()
+    }
+    questionTokens.nonEmpty
+  }
+
+  /**
+   * Returns true if [[restartWithOptionalReferences]] prepared the statement of `tokenStream` for
+   * optional references.
+   */
+  private[parser] def parsedWithOptionalReferences(tokenStream: CommonTokenStream): Boolean = {
+    tokenStream.fill()
+    tokenStream.getTokens.asScala.exists(
+      _.getType == SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
+  }
+
+  /**
+   * Returns the `?` tokens of the statement of `tokenStream` that were not prepared for optional
+   * references by [[restartWithOptionalReferences]].
+   */
+  private[parser] def questions(tokenStream: CommonTokenStream): Seq[Token] = {
+    tokenStream.fill()
+    tokenStream.getTokens.asScala.filter(_.getType == SqlBaseParser.QUESTION).toSeq
+  }
+
+  private def executeWithSllThenLl[T](
       parser: SqlBaseParser,
       tokenStream: CommonTokenStream,
       parseOperation: SqlBaseParser => T): T = {

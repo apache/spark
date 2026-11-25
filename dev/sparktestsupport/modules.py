@@ -100,7 +100,6 @@ ignored_file_patterns = (
     "/dev/check-protos.py",
     "/dev/connect-jvm-client-mima-check",
     "/dev/lint-python",
-    "/dev/lint-r*",
     "/dev/lint-scala",
     "/dev/mima",
     "/dev/reformat-python",
@@ -1998,6 +1997,18 @@ lint_java = Module(
         r"dev/spark-test-image/lint/",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/lint-java")],
+)
+
+lint_r = Module(
+    name="lint-r",
+    dependencies=[],
+    source_file_regexes=[
+        # dev/lint-r lints R/pkg and, if needed, installs SparkR from R/.
+        "R/",
+        r"dev/lint-r(\.R)?$",
+        "dev/spark-test-image/lint/",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-r")],
 )
 
 yarn = Module(

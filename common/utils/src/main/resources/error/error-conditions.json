@@ -3119,6 +3119,11 @@
         "message" : [
           "<message>"
         ]
+      },
+      "WRITE" : {
+        "message" : [
+          "Write rows to the table <tableName>."
+        ]
       }
     },
     "sqlState" : "HV000"
@@ -6316,6 +6321,24 @@
     ],
     "sqlState" : "2200N"
   },
+  "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR" : {
+    "message" : [
+      "JDBC external engine permission error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
+    ],
+    "subClass" : {
+      "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
+        "message" : [
+          "The error occurred during output schema resolution."
+        ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
+        ]
+      }
+    },
+    "sqlState" : "42501"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
@@ -7239,6 +7262,29 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTIONAL_REFERENCE_NOT_SUPPORTED" : {
+    "message" : [
+      "The `?` optional-reference operator is not supported in <context>."
+    ],
+    "subClass" : {
+      "IN_DDL" : {
+        "message" : [
+          "Column and parameter defaults, generation expressions, CHECK constraints, table options, and metric view definitions must not contain optional references."
+        ]
+      },
+      "IN_DML" : {
+        "message" : [
+          "Statements that modify existing rows, and conditions that select the rows to replace, must not contain optional references."
+        ]
+      },
+      "IN_PARTITION_SPEC" : {
+        "message" : [
+          "Partition specifications must not contain optional references."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
     "message" : [
       "The value of <paramName> cannot be more than one character, but got <actualValue>."
@@ -7442,6 +7488,14 @@
   "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
     "message" : [
       "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED" : {
+    "message" : [
+      "Changing the comment of a struct field nested under consecutive arrays or maps is not supported.",
+      "The comments on <columnPath> in the pipeline's declared or inferred schema differ from the comments on the table.",
+      "Declare the table's full schema with the comments the table currently has to keep them, or drop the table and full refresh it so that it is re-created with the new comments."
     ],
     "sqlState" : "0A000"
   },
@@ -8806,6 +8860,13 @@
         ]
       }
     },
+    "sqlState" : "XXKST"
+  },
+  "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED" : {
+    "message" : [
+      "Cannot restart the stream-stream join because the state store <storeName> would read the stored timestamp column <storedColumn> as <newColumn>.",
+      "Revert the changes to the join or start the query with a new checkpoint."
+    ],
     "sqlState" : "XXKST"
   },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
@@ -10709,6 +10770,12 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ],
     "sqlState" : "42K0E"
+  },
+  "UNUSED_SQL_PARAMETER_VALUES" : {
+    "message" : [
+      "The statement has <numMarkers> positional parameter marker(s) but <numValues> value(s) were supplied. In a statement with optional references, a `?` that follows an identifier or a non-reserved keyword where the syntax allows a reference is an optional reference, not a parameter marker."
+    ],
+    "sqlState" : "07001"
   },
   "USER_DEFINED_FUNCTIONS" : {
     "message" : [

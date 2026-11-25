@@ -57,7 +57,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#7), dynamicpruningexpression(ws_sold_date_sk#7 IN dynamicpruning#8)]
 PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk)]
-ReadSchema: struct<ws_sold_time_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
+ReadSchema: struct<ws_sold_time_sk:bigint,ws_ship_mode_sk:bigint,ws_warehouse_sk:bigint,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 5]
 Input [7]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantity#4, ws_ext_sales_price#5, ws_net_paid#6, ws_sold_date_sk#7]
@@ -71,7 +71,7 @@ Output [2]: [sm_ship_mode_sk#9, sm_carrier#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/ship_mode]
 PushedFilters: [In(sm_carrier, [BARIAN              ,DHL                 ]), IsNotNull(sm_ship_mode_sk)]
-ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
+ReadSchema: struct<sm_ship_mode_sk:bigint,sm_carrier:string>
 
 (5) ColumnarToRow [codegen id : 1]
 Input [2]: [sm_ship_mode_sk#9, sm_carrier#10]
@@ -86,7 +86,7 @@ Input [2]: [sm_ship_mode_sk#9, sm_carrier#10]
 
 (8) BroadcastExchange
 Input [1]: [sm_ship_mode_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_mode_sk#2]
@@ -103,7 +103,7 @@ Output [2]: [t_time_sk#11, t_time#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_time:int>
+ReadSchema: struct<t_time_sk:bigint,t_time:int>
 
 (12) ColumnarToRow [codegen id : 2]
 Input [2]: [t_time_sk#11, t_time#12]
@@ -118,7 +118,7 @@ Input [2]: [t_time_sk#11, t_time#12]
 
 (15) BroadcastExchange
 Input [1]: [t_time_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (16) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -148,7 +148,7 @@ Output [7]: [w_warehouse_sk#16, w_warehouse_name#17, w_warehouse_sq_ft#18, w_cit
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
-ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
+ReadSchema: struct<w_warehouse_sk:bigint,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
 
 (22) ColumnarToRow [codegen id : 4]
 Input [7]: [w_warehouse_sk#16, w_warehouse_name#17, w_warehouse_sq_ft#18, w_city#19, w_county#20, w_state#21, w_country#22]
@@ -159,7 +159,7 @@ Condition : isnotnull(w_warehouse_sk#16)
 
 (24) BroadcastExchange
 Input [7]: [w_warehouse_sk#16, w_warehouse_name#17, w_warehouse_sq_ft#18, w_city#19, w_county#20, w_state#21, w_country#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
 
 (25) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_warehouse_sk#3]
@@ -195,7 +195,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#175), dynamicpruningexpression(cs_sold_date_sk#175 IN dynamicpruning#8)]
 PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk)]
-ReadSchema: struct<cs_sold_time_sk:int,cs_ship_mode_sk:int,cs_warehouse_sk:int,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
+ReadSchema: struct<cs_sold_time_sk:bigint,cs_ship_mode_sk:bigint,cs_warehouse_sk:bigint,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
 
 (31) ColumnarToRow [codegen id : 11]
 Input [7]: [cs_sold_time_sk#169, cs_ship_mode_sk#170, cs_warehouse_sk#171, cs_quantity#172, cs_sales_price#173, cs_net_paid_inc_tax#174, cs_sold_date_sk#175]
@@ -301,7 +301,7 @@ Output [3]: [d_date_sk#13, d_year#14, d_moy#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (52) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#13, d_year#14, d_moy#15]
@@ -312,7 +312,7 @@ Condition : ((isnotnull(d_year#14) AND (d_year#14 = 2001)) AND isnotnull(d_date_
 
 (54) BroadcastExchange
 Input [3]: [d_date_sk#13, d_year#14, d_moy#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6]
 
 Subquery:2 Hosting operator id = 30 Hosting Expression = cs_sold_date_sk#175 IN dynamicpruning#8
 
