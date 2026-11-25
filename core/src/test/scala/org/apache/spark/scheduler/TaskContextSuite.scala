@@ -629,7 +629,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
     val failure = new TaskContextSuite.FakeTaskFailureException
     withSparkEnv(stopped = false) {
-      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.WARN)) {
+      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.ERROR)) {
         val e = intercept[TaskContextSuite.FakeTaskFailureException] {
           context.runTaskWithListeners(taskThrowing(failure))
         }
@@ -641,7 +641,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       Seq("failure listener" -> Seq(failure), "completion listener" -> Seq(failure)))
     assert(appender.loggingEvents.size === 1)
     val event = appender.loggingEvents.head
-    assert(event.getLevel === Level.WARN)
+    assert(event.getLevel === Level.ERROR)
     assert(event.getMessage.getFormattedMessage.startsWith(
       "Task 4 in stage 1.2 (partition 3) failed. Its task listeners run next"))
   }
@@ -703,8 +703,48 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       })
     failures.foreach { case (name, failure) =>
       val events = runFailingTask(stopped = Some(false), name)(failure)
-      assert(events.map(_.getLevel) === Seq(Level.WARN), name)
+      assert(events.map(_.getLevel) === Seq(Level.ERROR), name)
     }
+  }
+
+  test("SPARK-61025: an InterruptedException on a task that was not killed is logged before the " +
+    "task listeners run, as the executor reports it as an error") {
+    val events = runFailingTask(stopped = Some(false), "InterruptedException")(
+      _ => new InterruptedException("interrupted"))
+    assert(events.map(_.getLevel) === Seq(Level.ERROR))
+    assert(events.head.getThrown.isInstanceOf[InterruptedException])
+  }
+
+  test("SPARK-61025: the task failure is not logged before the task listeners run if the " +
+    "SparkEnv the task started with is stopped, although a running one replaced it") {
+    sc = new SparkContext("local", "test")
+    val env = SparkEnv.get
+    val failure = new TaskContextSuite.FakeTaskFailureException
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet,
+      serializedTaskMetrics =
+        env.closureSerializer.newInstance().serialize(TaskMetrics.registered).array()) {
+      override def runTask(context: TaskContext): Int = {
+        // As when the local SparkContext the task started under stops and a new one starts
+        // while the task still runs.
+        env.isStopped = true
+        SparkEnv.set(mockSparkEnv(stopped = false))
+        throw failure
+      }
+    }
+    val appender = new LogAppender("restarted SparkContext")
+    try {
+      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.ERROR)) {
+        val e = intercept[TaskContextSuite.FakeTaskFailureException] {
+          task.run(0, 0, null, 1, null, Option.empty)
+        }
+        assert(e eq failure)
+        assert(e.getSuppressed.isEmpty)
+      }
+    } finally {
+      env.isStopped = false
+      SparkEnv.set(env)
+    }
+    assert(appender.loggingEvents.isEmpty)
   }
 
   test("SPARK-61025: the task failure is not logged before the task listeners run once the " +
@@ -742,7 +782,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val appender = new FailingAppender("failed. Its task listeners run next", logFailure)
     val failure = new TaskContextSuite.FakeTaskFailureException
     withSparkEnv(stopped = false) {
-      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.WARN)) {
+      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.ERROR)) {
         val e = intercept[TaskContextSuite.FakeTaskFailureException] {
           context.runTaskWithListeners(taskThrowing(failure))
         }
@@ -764,13 +804,15 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
    */
   private def withSparkEnv(stopped: Option[Boolean])(f: => Unit): Unit = {
     val previous = SparkEnv.get
-    SparkEnv.set(stopped.map { stopped =>
-      val env = mock(classOf[SparkEnv])
-      when(env.conf).thenReturn(new SparkConf(false))
-      when(env.isStopped).thenReturn(stopped)
-      env
-    }.orNull)
+    SparkEnv.set(stopped.map(mockSparkEnv).orNull)
     try f finally SparkEnv.set(previous)
+  }
+
+  private def mockSparkEnv(stopped: Boolean): SparkEnv = {
+    val env = mock(classOf[SparkEnv])
+    when(env.conf).thenReturn(new SparkConf(false))
+    when(env.isStopped).thenReturn(stopped)
+    env
   }
 
   private def withSparkEnv(stopped: Boolean)(f: => Unit): Unit = withSparkEnv(Some(stopped))(f)
@@ -779,6 +821,10 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
    * Runs a task whose body throws the failure `failure` builds, under a `SparkEnv` as
    * `withSparkEnv` installs it, and returns the events `TaskFailureLogger` logged. `prepare` sets
    * up the context before the task runs.
+   *
+   * Also checks that the task rethrows its own failure with nothing suppressed, so that a logger
+   * that throws, which `runTaskWithListeners` reports as a suppressed exception, cannot pass for
+   * one that decides not to log.
    */
   private def runFailingTask(
       stopped: Option[Boolean],
@@ -788,11 +834,17 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val context = TaskContext.empty()
     prepare(context)
     val appender = new LogAppender(name)
+    var thrown: Throwable = null
     withSparkEnv(stopped) {
-      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.WARN)) {
-        intercept[Throwable] {
-          context.runTaskWithListeners(newTask(_ => throw failure(context)))
+      withLogAppender(appender, Seq(taskFailureLoggerName), Some(Level.ERROR)) {
+        val rethrown = intercept[Throwable] {
+          context.runTaskWithListeners(newTask { _ =>
+            thrown = failure(context)
+            throw thrown
+          })
         }
+        assert(rethrown eq thrown, name)
+        assert(rethrown.getSuppressed.isEmpty, name)
       }
     }
     appender.loggingEvents.toSeq

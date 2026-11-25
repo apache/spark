@@ -1053,8 +1053,8 @@ private[spark] class Executor(
           task.context.invokePostStatusUpdateListeners()
         }
       } catch {
-        // Keep the branches below in sync with `Executor.isReportedAsError`, which logs the
-        // failure before the task listeners run.
+        // Keep the branches below in sync with `Executor.isReportedAsError`, which
+        // `TaskFailureLogger` uses to log the failure before the task listeners run.
         case t: TaskKilledException =>
           logInfo(log"Executor killed ${MDC(TASK_NAME, taskName)}," +
             log" reason: ${MDC(REASON, t.reason)}")

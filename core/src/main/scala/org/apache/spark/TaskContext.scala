@@ -233,7 +233,16 @@ abstract class TaskContext extends Serializable {
   private[spark] def invokePostStatusUpdateListeners(): Unit
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
-  private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
+  private[spark] def runTaskWithListeners[T](task: Task[T]): T =
+    runTaskWithListeners(task, SparkEnv.get)
+
+  /**
+   * Runs a task with this context, ensuring failure and completion listeners get triggered.
+   *
+   * @param env the `SparkEnv` the task started with, which a restarted local SparkContext does
+   *            not replace for this task.
+   */
+  private[spark] def runTaskWithListeners[T](task: Task[T], env: SparkEnv): T = {
     try {
       // SPARK-44818 - Its possible that taskThread has not been initialized when kill is initially
       // called with interruptThread=true. We do set the reason and eventually will set it on the
@@ -247,7 +256,7 @@ abstract class TaskContext extends Serializable {
         // Log the error first. The executor logs it only once the listeners have run, which a
         // listener that crashes or hangs the executor prevents.
         try {
-          TaskFailureLogger.logBeforeListeners(this, e)
+          TaskFailureLogger.logBeforeListeners(this, e, env)
         } catch {
           case t: Throwable =>
             e.addSuppressed(t)
@@ -431,20 +440,23 @@ abstract class TaskContext extends Serializable {
 private[spark] object TaskFailureLogger extends Logging {
 
   /**
-   * Logs `error` at warning level with its stack trace, unless the executor is not going to
-   * report it as an error either, see `Executor.isReportedAsError`, or is stopping, in which
-   * case it logs the error without the stack trace (SPARK-19147).
+   * Logs `error` at error level with its stack trace, the level the executor reports it at,
+   * unless the executor is not going to report it as an error either, see
+   * `Executor.isReportedAsError`, or is stopping, in which case it logs the error without the
+   * stack trace (SPARK-19147).
+   *
+   * @param env the `SparkEnv` the task started with. Like the executor, this decides from it
+   *            whether the executor is stopping, rather than from the current one, which a
+   *            restarted local SparkContext replaces. A null one, from a caller that runs the
+   *            task without a SparkEnv, counts as stopping.
    */
-  def logBeforeListeners(context: TaskContext, error: Throwable): Unit = {
-    // A task cannot start without a SparkEnv, so a missing one means that `SparkContext.stop`
-    // cleared it in local mode while the task was still running.
-    val env = SparkEnv.get
+  def logBeforeListeners(context: TaskContext, error: Throwable, env: SparkEnv): Unit = {
     val reportedAsError = env != null && !env.isStopped &&
       Executor.isReportedAsError(error, context, env.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
     if (reportedAsError) {
       val stage = log"${MDC(STAGE_ID, context.stageId())}." +
         log"${MDC(STAGE_ATTEMPT_ID, context.stageAttemptNumber())}"
-      logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
+      logError(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
         log" (partition ${MDC(PARTITION_ID, context.partitionId())}) failed. Its task " +
         log"listeners run next; the executor reports the failure once they have run.", error)
     }
