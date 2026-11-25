@@ -7046,6 +7046,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN =
+    buildConf("spark.sql.optimizer.propagateEmptyRelationCanPruneStreamingUnionChildren")
+      .internal()
+      .doc("Allow PropagateEmptyRelation to remove the empty children of a streaming Union, " +
+        "such as a source without data in a micro-batch. This flag is to restore prior " +
+        "behavior for streaming queries whose checkpoint was written with it.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
