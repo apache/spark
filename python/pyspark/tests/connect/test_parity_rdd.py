@@ -21,6 +21,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from unittest import mock
 
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.errors.exceptions.connect import PythonException
@@ -267,29 +268,27 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
     def test_commands_do_not_import_the_client(self):
         # The Python workers of the server load the commands of the RDD API, which must not import
         # the Spark Connect client: every worker would then import grpc, protobuf and pyarrow.
-        rdds = [
-            self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max),
-            self.sc.range(10).map(lambda x: (x, -x)).sortByKey(numPartitions=2),
-            self.sc.range(10).zipWithIndex().groupByKey(),
-            self.spark.range(3).rdd.map(lambda r: r.id),
-        ]
+        from pyspark.core.connect import rdd as connect_rdd
+
         commands = []
 
-        from google.protobuf.message import Message
+        class RecordingSerializer(connect_rdd.CloudPickleSerializer):
+            # The serializer of the commands, which records them.
+            def dumps(self, obj):
+                command = super().dumps(obj)
+                commands.append(command)
+                return command
 
-        def collect(message):
-            # The functions of RDDs, of the MapPartitions relations of their Python functions.
-            if message.DESCRIPTOR.name == "PythonUDF" and message.eval_type == 0:
-                commands.append(message.command)
-            for field, value in message.ListFields():
-                if field.message_type is not None:
-                    # A message, or the messages of a repeated field (the keys of a map field).
-                    for child in [value] if isinstance(value, Message) else value:
-                        if isinstance(child, Message):
-                            collect(child)
-
-        for rdd in rdds:
-            collect(rdd._df._plan.plan(self.spark.client))
+        with mock.patch.object(connect_rdd, "CloudPickleSerializer", RecordingSerializer):
+            rdds = [
+                self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max),
+                self.sc.range(10).map(lambda x: (x, -x)).sortByKey(numPartitions=2),
+                self.sc.range(10).zipWithIndex().groupByKey(),
+                self.spark.range(3).rdd.map(lambda r: r.id),
+            ]
+            for rdd in rdds:
+                # Building the plan of each RDD pickles its commands.
+                self.assertIsNotNone(rdd._df)
         self.assertGreater(len(commands), 4)
         code = """
 import sys
