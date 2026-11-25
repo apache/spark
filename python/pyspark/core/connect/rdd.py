@@ -76,7 +76,11 @@ from pyspark.core.connect import _runtime
 from pyspark.core.rdd import RDD as RDDFacade
 from pyspark.core.rdd import BoundedFloat, Partitioner
 from pyspark.core.rdd import RDDBarrier as RDDBarrierFacade
-from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    UnsupportedOperationException,
+)
 from pyspark.join import (
     python_cogroup,
     python_full_outer_join,
@@ -168,10 +172,11 @@ def _local_data_relation(ctx: "SparkContext", values: Sequence[bytes]) -> pb2.Re
     import pyarrow as pa
 
     from pyspark.sql.connect.plan import LocalRelation, LogicalPlan
-    from pyspark.sql.types import BinaryType, StructField, StructType
 
     table = pa.Table.from_arrays([pa.array(values, pa.large_binary())], names=["value"])
-    local = LocalRelation(table, schema=StructType([StructField("value", BinaryType())]).json())
+    # The schema of the Arrow data, even without rows, is the one of the relation: a schema in the
+    # plan would make the server analyze a projection to it.
+    local = LocalRelation(table)
     session = ctx._session
     plan: LogicalPlan = local
     # Data below the default threshold of the cache is sent in the plan without asking the
@@ -217,10 +222,13 @@ def _with_resources(
     return _RDDRelationPlan.dataframe(ctx, fill, df)
 
 
-def _load(deserializer: Serializer, table: "pa.Table") -> Iterator[Any]:
-    """The elements in the ``data`` column of the rows of ``RDDRelation.Elements``."""
+def _load(deserializer: Serializer, table: "pa.Table") -> List[Any]:
+    """The elements in the ``data`` column of the rows of ``RDDRelation.Elements``, in order."""
+    elements: List[Any] = []
     for data in table.column(1).to_pylist():
-        yield from deserializer.load_stream(io.BytesIO(data))
+        # Extended from the stream of the row, without a generator of the elements in between.
+        elements.extend(deserializer.load_stream(io.BytesIO(data)))
+    return elements
 
 
 class RDD(RDDFacade, Generic[T_co]):
@@ -243,9 +251,12 @@ class RDD(RDDFacade, Generic[T_co]):
         jrdd_deserializer: Serializer = AutoBatchedSerializer(CPickleSerializer()),
         num_partitions: Optional[int] = None,
         server_partitioner: Optional[Tuple[int, int]] = None,
+        has_shuffle: bool = False,
     ) -> None:
         self._df_val = df
         self.is_cached = False
+        # The storage level that ``persist`` assigned.
+        self._storage_level: Optional[StorageLevel] = None
         self.is_checkpointed = False
         self.has_resource_profile = False
         # The facade declares ``ctx`` as Spark Classic's SparkContext; see ``_cctx``.
@@ -267,6 +278,10 @@ class RDD(RDDFacade, Generic[T_co]):
         # partitioned the elements, while the RDD keeps that partitioning on the server: as with
         # the partitioners of the RDDs of Spark Classic, unions of RDDs with the same one keep it.
         self._server_partitioner = server_partitioner
+        # Whether computing the RDD can run a shuffle (see ``_pin_plan``).
+        self._has_shuffle = has_shuffle
+        # The DataFrame of the elements before ``getNumPartitions`` pinned it, for its plan.
+        self._lineage_df: Optional["ConnectDataFrame"] = None
 
     @classmethod
     def _from_dataframe(cls, df: "ConnectDataFrame") -> "RDD[Any]":
@@ -277,7 +292,8 @@ class RDD(RDDFacade, Generic[T_co]):
             relation.from_data_frame.input.CopyFrom(_relation(df, session))
 
         rdd_df = _RDDRelationPlan.dataframe(ctx, fill, df)
-        return RDD(rdd_df, ctx, BatchedSerializer(CPickleSerializer()))
+        # The plan of the DataFrame can have shuffles.
+        return RDD(rdd_df, ctx, BatchedSerializer(CPickleSerializer()), has_shuffle=True)
 
     # -- Internals -----------------------------------------------------------------------------
 
@@ -314,9 +330,51 @@ class RDD(RDDFacade, Generic[T_co]):
         num_partitions: Optional[int] = None,
         server_partitioner: Optional[Tuple[int, int]] = None,
     ) -> "RDD[Any]":
-        """A new RDD of the relation that ``fill`` writes."""
+        """A new RDD of the relation that ``fill`` writes, of this RDD."""
         df = _RDDRelationPlan.dataframe(self._cctx, fill, self._df)
-        return RDD(df, self._cctx, jrdd_deserializer, num_partitions, server_partitioner)
+        return RDD(
+            df,
+            self._cctx,
+            jrdd_deserializer,
+            num_partitions,
+            server_partitioner,
+            has_shuffle=self._has_shuffle,
+        )
+
+    def _pin_plan(self) -> Optional[Tuple["ConnectDataFrame", int]]:
+        """
+        The DataFrame of the elements of this RDD planned once on the server, and its number of
+        partitions, when the RDD computes shuffles: the jobs on that plan then share the outputs
+        of the shuffles, as the jobs on an RDD of Spark Classic do, instead of each computing them
+        again. ``None`` for an RDD that computes no shuffle, since its jobs compute only their
+        partitions, and for a persisted RDD, whose jobs share the planned RDD of its cache.
+        """
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        if (
+            not self._has_shuffle
+            or self.is_cached
+            or isinstance(self._elements_df._plan, CachedRemoteRelation)
+        ):
+            return None
+        return self._cctx._pin(self._elements_df)
+
+    def _pinned(self: "RDD[T]") -> "RDD[T]":
+        """
+        This RDD planned once on the server (see ``_pin_plan``), for an action that runs several
+        jobs on it, as ``take`` and ``toLocalIterator`` do.
+        """
+        pinned = self._pin_plan()
+        if pinned is None:
+            return self
+        df, num_partitions = pinned
+        rdd: "RDD[T]" = RDD(
+            df, self._cctx, self._jrdd_deserializer, num_partitions, self._server_partitioner
+        )
+        rdd.partitioner = self.partitioner
+        if self._resource_profile is not None:
+            rdd.withResources(self._resource_profile)
+        return rdd
 
     def _pickled(self: "RDD[T]") -> "RDD[T]":
         return self._reserialize(AutoBatchedSerializer(CPickleSerializer()))
@@ -372,7 +430,17 @@ class RDD(RDDFacade, Generic[T_co]):
         Persist the RDD through :meth:`DataFrame.persist` of its DataFrame, which the jobs of
         the RDDs computed from this one then read.
         """
+        # As in Spark Classic, the storage level of an RDD cannot change once it is assigned.
+        if self._storage_level is not None and storageLevel != self._storage_level:
+            raise UnsupportedOperationException(
+                errorClass="CANNOT_CHANGE_STORAGE_LEVEL",
+                messageParameters={
+                    "old_level": str(self._storage_level),
+                    "new_level": str(storageLevel),
+                },
+            )
         self.is_cached = True
+        self._storage_level = storageLevel
         # The DataFrame of the elements, so that the resource profile of the RDD, which can be
         # set later, does not change the DataFrame to unpersist.
         self._elements_df.persist(storageLevel)
@@ -380,6 +448,7 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def unpersist(self: "RDD[T]", blocking: bool = False) -> "RDD[T]":
         self.is_cached = False
+        self._storage_level = None
         self._elements_df.unpersist(blocking)
         return self
 
@@ -434,7 +503,8 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def toDebugString(self) -> Optional[bytes]:
         """The extended plan of the DataFrame that computes this RDD."""
-        return self._df._explain_string(extended=True).encode("utf-8")
+        df = self._lineage_df if self._lineage_df is not None else self._df
+        return df._explain_string(extended=True).encode("utf-8")
 
     # -- Narrow transformations ---------------------------------------------------------------
 
@@ -531,6 +601,8 @@ class RDD(RDDFacade, Generic[T_co]):
         if num == 0 or self.getNumPartitions() == 0:
             return []
 
+        # The jobs that count and sample the elements share the shuffles of this RDD.
+        self = self._pinned()
         initialCount = self.count()
         if initialCount == 0:
             return []
@@ -668,6 +740,9 @@ class RDD(RDDFacade, Generic[T_co]):
     def zipWithIndex(self: "RDD[T]") -> "RDD[Tuple[T, int]]":
         starts = [0]
         if self.getNumPartitions() > 1:
+            # The job that counts the elements and the jobs of the zipped RDD share the shuffles
+            # of this RDD.
+            self = self._pinned()
             nums = self.mapPartitions(lambda it: [sum(1 for i in it)]).collect()
             for i in range(len(nums) - 1):
                 starts.append(starts[-1] + nums[i])
@@ -709,7 +784,17 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def getNumPartitions(self) -> int:
         if self._num_partitions is None:
-            self._num_partitions = self._cctx._num_partitions(self._df)
+            pinned = self._pin_plan()
+            if pinned is None:
+                self._num_partitions = self._cctx._num_partitions(self._df)
+            else:
+                # Planning an RDD with shuffles can compute them, as adaptive query execution
+                # does, so the RDD is computed from the pinned plan from now on, and its jobs share
+                # them, as Spark Classic plans an RDD once.
+                self._lineage_df = self._elements_df
+                self._set_df(pinned[0])
+                self._num_partitions = pinned[1]
+                self._has_shuffle = False
         return self._num_partitions
 
     def _memory_limit(self) -> int:
@@ -752,6 +837,7 @@ class RDD(RDDFacade, Generic[T_co]):
             BatchedSerializer(self.ctx._unbatched_serializer),
             num_partitions,
             server_partitioner,
+            has_shuffle=True,
         )
 
     def partitionBy(
@@ -893,6 +979,9 @@ class RDD(RDDFacade, Generic[T_co]):
                 self = self.coalesce(1)
             return self.mapPartitions(sortPartition, True)
 
+        # The jobs that count and sample the keys and the jobs of the sorted RDD share the
+        # shuffles of this RDD.
+        self = self._pinned()
         # first compute the boundary of each part via sampling: we want to partition
         # the key-space into bins such that the bins have roughly the same
         # number of (key, value) pairs falling into them
@@ -1050,7 +1139,9 @@ class RDD(RDDFacade, Generic[T_co]):
         num = None if left_num is None or right_num is None else left_num * right_num
         # Due to batching, we can't use the Java cartesian method.
         deserializer = CartesianDeserializer(self._jrdd_deserializer, other._jrdd_deserializer)
-        return self._new(cartesian, deserializer, num)
+        product = self._new(cartesian, deserializer, num)
+        product._has_shuffle = self._has_shuffle or other._has_shuffle
+        return product
 
     def zip(self: "RDD[T]", other: "RDDFacade[U]") -> "RDD[Tuple[T, U]]":
         if not isinstance(other, RDD):
@@ -1088,7 +1179,9 @@ class RDD(RDDFacade, Generic[T_co]):
             relation.zip_partitions.inputs.append(_relation(right_df, session))
 
         deserializer = PairDeserializer(self._jrdd_deserializer, other._jrdd_deserializer)
-        return self._new(zip_partitions, deserializer, num)
+        zipped = self._new(zip_partitions, deserializer, num)
+        zipped._has_shuffle = self._has_shuffle or other._has_shuffle
+        return zipped
 
     # -- Shuffle-based aggregation -------------------------------------------------------------
 
@@ -1267,19 +1360,21 @@ class RDD(RDDFacade, Generic[T_co]):
         as in Spark Classic.
         """
         num = self.getNumPartitions()
+        # The jobs of the partitions share the shuffles of this RDD.
+        rdd = self._pinned() if num > 1 else self
         if not prefetchPartitions:
             for split in range(num):
-                yield from self._collect([split])
+                yield from rdd._collect([split])
             return
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(self._collect, [0]) if num > 0 else None
+            future = executor.submit(rdd._collect, [0]) if num > 0 else None
             for split in range(num):
                 assert future is not None
                 items = future.result()
                 if split + 1 < num:
-                    future = executor.submit(self._collect, [split + 1])
+                    future = executor.submit(rdd._collect, [split + 1])
                 yield from items
 
     def foreach(self: "RDD[T]", f: Callable[[T], None]) -> None:
@@ -1449,6 +1544,9 @@ class RDD(RDDFacade, Generic[T_co]):
             if buckets < 1:
                 raise ValueError("number of buckets must be >= 1")
 
+            # The jobs that find the range and count the elements share the shuffles of this RDD.
+            self = self._pinned()
+
             # filter out non-comparable elements
             def comparable(x: Any) -> bool:
                 if x is None:
@@ -1598,6 +1696,9 @@ class RDD(RDDFacade, Generic[T_co]):
         items: List[T] = []
         totalParts = self.getNumPartitions()
         partsScanned = 0
+        # The jobs that scan more partitions when the first ones do not have enough elements
+        # share the shuffles of this RDD.
+        rdd = self._pinned() if num > 0 and totalParts > 1 else self
 
         while len(items) < num and partsScanned < totalParts:
             # The number of partitions to try in this iteration.
@@ -1629,7 +1730,7 @@ class RDD(RDDFacade, Generic[T_co]):
                     taken += 1
 
             p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
-            res = self.context.runJob(self, takeUpToNumLeft, p)
+            res = self.context.runJob(rdd, takeUpToNumLeft, p)
 
             items += res
             partsScanned += numPartsToTry
@@ -1930,7 +2031,7 @@ def _union(ctx: "SparkContext", rdds: Sequence[RDD[Any]], deserializer: Serializ
             relation.zip_partitions.concatenate = True
 
         df = _RDDRelationPlan.dataframe(ctx, concatenate, dfs[0])
-        return RDD(df, ctx, deserializer, common[0], common)
+        return RDD(df, ctx, deserializer, common[0], common, has_shuffle=True)
 
     dfs = [r._df for r in rdds]
 
@@ -1941,7 +2042,11 @@ def _union(ctx: "SparkContext", rdds: Sequence[RDD[Any]], deserializer: Serializ
     counts = [r._num_partitions for r in rdds]
     num = None if any(c is None for c in counts) else sum(cast(List[int], counts))
     return RDD(
-        _RDDRelationPlan.dataframe(ctx, union, dfs[0] if dfs else None), ctx, deserializer, num
+        _RDDRelationPlan.dataframe(ctx, union, dfs[0] if dfs else None),
+        ctx,
+        deserializer,
+        num,
+        has_shuffle=any(r._has_shuffle for r in rdds),
     )
 
 
@@ -2006,6 +2111,7 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
             self._prev_rdd = prev._prev_rdd  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
+        self._storage_level = None
         self.has_resource_profile = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
@@ -2019,6 +2125,7 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         self._locally_checkpointed = False
         self._resource_profile = None
         self._df_with_resources = None
+        self._lineage_df = None
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
         self._server_partitioner = (
             self._prev_rdd._server_partitioner if self.preservesPartitioning else None
@@ -2032,6 +2139,15 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
     @_num_partitions.setter
     def _num_partitions(self, value: Optional[int]) -> None:
         self._prev_rdd._num_partitions = value
+
+    @property
+    def _has_shuffle(self) -> bool:
+        # The shuffles of the RDD of the first function, which can be pinned meanwhile.
+        return self._prev_rdd._has_shuffle
+
+    @_has_shuffle.setter
+    def _has_shuffle(self, value: bool) -> None:
+        self._prev_rdd._has_shuffle = value
 
     def getNumPartitions(self) -> int:
         return self._prev_rdd.getNumPartitions()

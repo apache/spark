@@ -47,6 +47,7 @@ from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
+    from pyspark.core.rdd import RDD
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.session import SparkSession
@@ -162,6 +163,22 @@ class DataFrameReader(OptionUtils):
 
         return DataFrame(plan, self._client)
 
+    def _strings_of_rdd(
+        self, path: Union[PathOrPaths, "RDD[str]", "DataFrame"]
+    ) -> Union[PathOrPaths, "DataFrame"]:
+        """
+        The DataFrame of the strings of an RDD, which the readers of JSON, CSV and XML read as
+        Spark Classic reads an RDD of strings: an element that is not a string is read as its
+        ``str``. Any other ``path`` is itself.
+        """
+        from pyspark.sql.connect.session import _is_connect_rdd
+        from pyspark.sql.types import StringType
+
+        if not _is_connect_rdd(path):
+            return cast(Union[PathOrPaths, "DataFrame"], path)
+        strings = cast("RDD[Any]", path).map(lambda x: x if isinstance(x, str) else str(x))
+        return cast("DataFrame", self._client.createDataFrame(strings, StringType()))
+
     def table(self, tableName: str) -> "DataFrame":
         return self._df(Read(tableName, self._options))
 
@@ -180,7 +197,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: Union[PathOrPaths, "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -240,6 +257,7 @@ class DataFrameReader(OptionUtils):
 
         from pyspark.sql.connect.dataframe import DataFrame
 
+        path = self._strings_of_rdd(path)
         if isinstance(path, DataFrame):
             # Schema must be set explicitly here because the DataFrame path
             # bypasses load(), which normally calls self.schema(schema).
@@ -257,7 +275,7 @@ class DataFrameReader(OptionUtils):
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "path",
-                "expected_type": "str, list, or DataFrame",
+                "expected_type": "str, list, RDD, or DataFrame",
                 "arg_type": type(path).__name__,
             },
         )
@@ -313,7 +331,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: Union[PathOrPaths, "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -387,6 +405,7 @@ class DataFrameReader(OptionUtils):
 
         from pyspark.sql.connect.dataframe import DataFrame
 
+        path = self._strings_of_rdd(path)
         if isinstance(path, DataFrame):
             # Schema must be set explicitly here because the DataFrame path
             # bypasses load(), which normally calls self.schema(schema).
@@ -406,7 +425,7 @@ class DataFrameReader(OptionUtils):
 
     def xml(
         self,
-        path: Union[PathOrPaths, "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -455,6 +474,7 @@ class DataFrameReader(OptionUtils):
 
         from pyspark.sql.connect.dataframe import DataFrame
 
+        path = self._strings_of_rdd(path)
         if isinstance(path, DataFrame):
             # Schema must be set explicitly here because the DataFrame path
             # bypasses load(), which normally calls self.schema(schema).
@@ -472,7 +492,7 @@ class DataFrameReader(OptionUtils):
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "path",
-                "expected_type": "str, list, or DataFrame",
+                "expected_type": "str, list, RDD, or DataFrame",
                 "arg_type": type(path).__name__,
             },
         )

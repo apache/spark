@@ -31,6 +31,7 @@ message RDDCommand {
   oneof command_type {
     Describe describe = 1;
     GetContextInfo get_context_info = 2;
+    Pin pin = 3;
   }
 
   // Returns the number of partitions of an RDD in `RDDCommandResult.info`.
@@ -42,6 +43,17 @@ message RDDCommand {
   // Returns the properties of the server that the RDD API uses in
   // `RDDCommandResult.context_info`.
   message GetContextInfo {}
+
+  // Plans an RDD once and caches the plan in the session as `CheckpointCommand` caches a
+  // checkpoint, so that the jobs on the cached relation compute the RDD of the same physical plan
+  // and share the outputs of its shuffles, as the jobs on an RDD of Spark Classic do: for
+  // instance, the jobs of an action that runs several jobs, as `RDD.take` does. Returns the
+  // cached relation, which the client removes with `RemoveCachedRemoteRelationCommand`, in
+  // `RDDCommandResult.pinned`.
+  message Pin {
+    // (Required) The RDD.
+    Relation rdd = 1;
+  }
 }
 
 // The result of an [[RDDCommand]].
@@ -49,6 +61,7 @@ message RDDCommandResult {
   oneof result_type {
     Info info = 1;
     ContextInfo context_info = 2;
+    Pinned pinned = 3;
   }
 
   // The properties of an RDD (see `RDDCommand.Describe`).
@@ -70,5 +83,14 @@ message RDDCommandResult {
 
     // The memory of a Python worker for aggregation, `spark.python.worker.memory`.
     string python_worker_memory = 4;
+  }
+
+  // An RDD planned once (see `RDDCommand.Pin`).
+  message Pinned {
+    // The cached relation of the RDD.
+    CachedRemoteRelation relation = 1;
+
+    // The number of partitions.
+    int32 num_partitions = 2;
   }
 }

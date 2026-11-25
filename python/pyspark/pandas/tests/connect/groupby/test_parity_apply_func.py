@@ -26,7 +26,7 @@ class GroupbyParityApplyFuncTests(
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
+    @unittest.skip("Spark Connect does not support SparkContext.accumulator.")
     def test_apply_with_side_effect(self):
         super().test_apply_with_side_effect()
 

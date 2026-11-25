@@ -42,6 +42,7 @@ from pyspark.serializers import (
     CPickleSerializer,
     NoOpSerializer,
     PairDeserializer,
+    Serializer,
     UTF8Deserializer,
 )
 
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
     from pyspark.conf import SparkConf
     from pyspark.core.connect.rdd import RDD
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.dataframe import DataFrame
 
 
@@ -57,33 +59,6 @@ U = TypeVar("U")
 
 # Sentinel so default ``serializer`` is not recreated per call site (would break equality checks).
 _CONNECT_SC_SERIALIZER_ARG_UNSPECIFIED = object()
-
-
-class _JvmQuietStub:
-    """Minimal JVM stub so ``QuietTest`` can toggle log levels without a Java gateway."""
-
-    class org:
-        class apache:
-            class log4j:
-                class Level:
-                    FATAL = object()
-
-                class LogManager:
-                    @staticmethod
-                    def getRootLogger() -> Any:
-                        class _RootLogger:
-                            _lvl: Any = None
-
-                            def getLevel(self) -> Any:
-                                return self._lvl
-
-                            def setLevel(self, lvl: Any) -> None:
-                                self._lvl = lvl
-
-                        return _RootLogger()
-
-
-_JVM_QUIET_STUB = _JvmQuietStub()
 
 
 def _connect_remote_endpoint(master: Optional[str], conf_pairs: List[Tuple[str, str]]) -> str:
@@ -121,17 +96,17 @@ def _resource_uri(path: str) -> str:
 
 class SparkContext:
     """
-    Session-scoped SparkContext facade for Spark Connect (PySpark only).
+    The SparkContext of a Spark Connect session, for the RDD API of PySpark: the RDDs that it
+    creates are DataFrames of the session, which the Spark Connect server plans with internal
+    operators that compute the partitions of the RDDs of Spark Classic.
 
-    RDD elements are exchanged as pickled chunks in a binary column backed by Spark SQL /
-    Arrow execution (``mapInArrow``).
-
-    Besides ``SparkContext(connectSparkSession)`` (wrapper used by
-    :meth:`SparkSession.sparkContext <pyspark.sql.connect.session.SparkSession.sparkContext>`),
-    this constructor deliberately mirrors most of :class:`~pyspark.core.context.SparkContext`:
-    unrecognized classic ``master`` strings are ignored for gRPC routing and Spark Connect resolves
-    the endpoint via ``spark.remote``, ``SPARK_REMOTE``, or ``localhost`` (see helper
-    :func:`_connect_remote_endpoint`). JVM-only ``gateway`` / ``jsc`` arguments are rejected.
+    ``SparkContext(connectSparkSession)`` is the SparkContext of an existing session, as
+    :meth:`SparkSession.sparkContext <pyspark.sql.connect.session.SparkSession.sparkContext>`
+    returns it. Otherwise the constructor creates a new session on the Spark Connect server of
+    ``spark.remote`` in ``conf``, of ``master`` when it is an ``sc://`` URL, of ``SPARK_REMOTE``,
+    or else of the default port of localhost, and takes the arguments of Spark Classic's
+    :class:`~pyspark.core.context.SparkContext` that apply to a session. ``gateway`` and ``jsc``
+    are not supported.
     """
 
     def __new__(
@@ -237,22 +212,14 @@ class SparkContext:
             self._finalize_connect_sc_init()
             return
 
-        if batchSize != 0:
-            warnings.warn(
-                "`batchSize` is ignored by Spark Connect `SparkContext`",
-                UserWarning,
-                stacklevel=2,
-            )
-
-        if serializer is not _CONNECT_SC_SERIALIZER_ARG_UNSPECIFIED and (
-            serializer is None or type(serializer) is not CPickleSerializer
-        ):
-            warnings.warn(
-                "`serializer` is ignored by Spark Connect `SparkContext`; "
-                "`CloudPickleSerializer` is fixed for pickled RDD columns.",
-                UserWarning,
-                stacklevel=2,
-            )
+        # The serializer of the elements, in batches, as Spark Classic's SparkContext has it.
+        if serializer is not _CONNECT_SC_SERIALIZER_ARG_UNSPECIFIED:
+            self._unbatched_serializer = serializer
+        self._batchSize = batchSize  # -1 represents an unlimited batch size
+        if batchSize == 0:
+            self.serializer = AutoBatchedSerializer(self._unbatched_serializer)
+        else:
+            self.serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 
         for label, profiler in (
             ("profiler_cls", profiler_cls),
@@ -336,8 +303,8 @@ class SparkContext:
         return cls(conf=conf)
 
     # The serializers of the elements, as Spark Classic's SparkContext has them by default.
-    _unbatched_serializer = CPickleSerializer()
-    serializer = AutoBatchedSerializer(_unbatched_serializer)
+    _unbatched_serializer: Serializer = CPickleSerializer()
+    serializer: Serializer = AutoBatchedSerializer(_unbatched_serializer)
     _batchSize = 0
 
     @property
@@ -368,10 +335,6 @@ class SparkContext:
     def applicationId(self) -> str:
         """The ``spark.app.id`` of the application serving this Spark Connect session."""
         return cast(str, self._session.conf.get("spark.app.id"))
-
-    @property
-    def _jvm(self) -> Any:
-        return _JVM_QUIET_STUB
 
     @property
     def defaultParallelism(self) -> int:
@@ -592,6 +555,25 @@ class SparkContext:
 
         return int(self._execute_rdd_command(fill).info.num_partitions)
 
+    def _pin(self, df: "DataFrame") -> Tuple["ConnectDataFrame", int]:
+        """
+        A DataFrame of the RDD of ``df`` planned once on the server, and its number of partitions:
+        the jobs on it share the outputs of the shuffles of the RDD, as the jobs on an RDD of Spark
+        Classic do. The server keeps the plan until the DataFrame is garbage-collected, as it keeps
+        a checkpoint.
+        """
+        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        client = self._session.client
+
+        def fill(command: Any) -> None:
+            command.pin.rdd.CopyFrom(cast(Any, df)._plan.plan(client))
+
+        pinned = self._execute_rdd_command(fill).pinned
+        plan = CachedRemoteRelation(pinned.relation.relation_id, cast(Any, self._session))
+        return ConnectDataFrame(plan, cast(Any, self._session)), int(pinned.num_partitions)
+
     def _context_info(self) -> "pb2.RDDCommandResult.ContextInfo":
         """The properties of the server, fetched once per session."""
         s = cast(Any, self._session)
@@ -632,7 +614,7 @@ class SparkContext:
 
         table, _, _ = self._session.client.to_table(self._elements_plan(df, partitions), {})
         if partitions is None or len(partitions) <= 1:
-            return list(_load(deserializer, table))
+            return _load(deserializer, table)
         by_partition: Dict[int, List[Any]] = {}
         for index, data in zip(table.column(0).to_pylist(), table.column(1).to_pylist()):
             by_partition.setdefault(index, []).extend(deserializer.load_stream(io.BytesIO(data)))
@@ -645,7 +627,7 @@ class SparkContext:
 
         for table in self._session.client.to_table_as_iterator(self._elements_plan(df, None), {}):
             if not isinstance(table, StructType):
-                yield list(_load(deserializer, table))
+                yield _load(deserializer, table)
 
     # -- RDD sources ---------------------------------------------------------------------------
 
@@ -757,7 +739,7 @@ class SparkContext:
         """
         Read the elements saved by :meth:`~pyspark.core.connect.rdd.RDD.saveAsPickleFile` on
         Spark Connect, from comma-separated paths. The files of Spark Classic's
-        ``saveAsPickleFile`` cannot be read.
+        ``saveAsPickleFile`` cannot be read. The partitions are those of :meth:`textFile`.
         """
         df = self._session.read.parquet(*_input_paths(name))
         return self._with_min_partitions(self._rdd(df), minPartitions)
@@ -770,9 +752,14 @@ class SparkContext:
     ) -> "RDD[str]":
         """
         Read a text file, or comma-separated paths, through the Spark SQL text source, one
-        element per line. File splits follow the session's file source configurations;
-        ``minPartitions`` is honored as a minimum, which takes a job to count the lines of each
-        split, and keeps the lines in order.
+        element per line, in the order of the lines of each file.
+
+        The partitions are the file splits of the source, which follow the session's file source
+        configurations, such as ``spark.sql.files.maxPartitionBytes``. Unlike Spark Classic, the
+        source packs the splits of the largest files first, so the partitions of different files
+        are not in the order of their paths, and an empty file has no partition. ``minPartitions``
+        is honored as a minimum, which takes a job to count the lines of each split, and keeps the
+        lines in order.
         """
         df = self._session.read.text(_input_paths(name))
         rdd = self._rdd(df, UTF8Deserializer(use_unicode))
@@ -786,6 +773,7 @@ class SparkContext:
     ) -> "RDD[Tuple[str, str]]":
         """
         Each file becomes one ``(uri, text)`` element, read with ``read.text(wholetext=True)``.
+        The partitions are those of :meth:`textFile`.
         """
         from pyspark.sql.connect import functions as F
 
@@ -811,7 +799,8 @@ class SparkContext:
         """
         Read paths through the Spark SQL ``binaryFile`` source; each file becomes a
         ``(file_uri, content_bytes)`` element. Very large files remain subject to
-        ``spark.sql.sources.binaryFile.maxLength`` on the server.
+        ``spark.sql.sources.binaryFile.maxLength`` on the server. The partitions are those of
+        :meth:`textFile`.
         """
         rdd = self._rdd(
             self._binary_files_df(path), PairDeserializer(UTF8Deserializer(), NoOpSerializer())

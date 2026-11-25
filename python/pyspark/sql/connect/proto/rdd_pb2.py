@@ -39,7 +39,7 @@ from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_rel
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x17spark/connect/rdd.proto\x12\rspark.connect\x1a\x1dspark/connect/relations.proto"\xfd\x01\n\nRDDCommand\x12@\n\x08\x64\x65scribe\x18\x01 \x01(\x0b\x32".spark.connect.RDDCommand.DescribeH\x00R\x08\x64\x65scribe\x12T\n\x10get_context_info\x18\x02 \x01(\x0b\x32(.spark.connect.RDDCommand.GetContextInfoH\x00R\x0egetContextInfo\x1a\x35\n\x08\x44\x65scribe\x12)\n\x03rdd\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x03rdd\x1a\x10\n\x0eGetContextInfoB\x0e\n\x0c\x63ommand_type"\xa8\x03\n\x10RDDCommandResult\x12:\n\x04info\x18\x01 \x01(\x0b\x32$.spark.connect.RDDCommandResult.InfoH\x00R\x04info\x12P\n\x0c\x63ontext_info\x18\x02 \x01(\x0b\x32+.spark.connect.RDDCommandResult.ContextInfoH\x00R\x0b\x63ontextInfo\x1a-\n\x04Info\x12%\n\x0enum_partitions\x18\x01 \x01(\x05R\rnumPartitions\x1a\xc7\x01\n\x0b\x43ontextInfo\x12/\n\x13\x64\x65\x66\x61ult_parallelism\x18\x01 \x01(\x05R\x12\x64\x65\x66\x61ultParallelism\x12\x36\n\x17\x64\x65\x66\x61ult_parallelism_set\x18\x02 \x01(\x08R\x15\x64\x65\x66\x61ultParallelismSet\x12\x1d\n\nstart_time\x18\x03 \x01(\x03R\tstartTime\x12\x30\n\x14python_worker_memory\x18\x04 \x01(\tR\x12pythonWorkerMemoryB\r\n\x0bresult_typeB6\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
+    b'\n\x17spark/connect/rdd.proto\x12\rspark.connect\x1a\x1dspark/connect/relations.proto"\xe2\x02\n\nRDDCommand\x12@\n\x08\x64\x65scribe\x18\x01 \x01(\x0b\x32".spark.connect.RDDCommand.DescribeH\x00R\x08\x64\x65scribe\x12T\n\x10get_context_info\x18\x02 \x01(\x0b\x32(.spark.connect.RDDCommand.GetContextInfoH\x00R\x0egetContextInfo\x12\x31\n\x03pin\x18\x03 \x01(\x0b\x32\x1d.spark.connect.RDDCommand.PinH\x00R\x03pin\x1a\x35\n\x08\x44\x65scribe\x12)\n\x03rdd\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x03rdd\x1a\x10\n\x0eGetContextInfo\x1a\x30\n\x03Pin\x12)\n\x03rdd\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x03rddB\x0e\n\x0c\x63ommand_type"\xdc\x04\n\x10RDDCommandResult\x12:\n\x04info\x18\x01 \x01(\x0b\x32$.spark.connect.RDDCommandResult.InfoH\x00R\x04info\x12P\n\x0c\x63ontext_info\x18\x02 \x01(\x0b\x32+.spark.connect.RDDCommandResult.ContextInfoH\x00R\x0b\x63ontextInfo\x12@\n\x06pinned\x18\x03 \x01(\x0b\x32&.spark.connect.RDDCommandResult.PinnedH\x00R\x06pinned\x1a-\n\x04Info\x12%\n\x0enum_partitions\x18\x01 \x01(\x05R\rnumPartitions\x1a\xc7\x01\n\x0b\x43ontextInfo\x12/\n\x13\x64\x65\x66\x61ult_parallelism\x18\x01 \x01(\x05R\x12\x64\x65\x66\x61ultParallelism\x12\x36\n\x17\x64\x65\x66\x61ult_parallelism_set\x18\x02 \x01(\x08R\x15\x64\x65\x66\x61ultParallelismSet\x12\x1d\n\nstart_time\x18\x03 \x01(\x03R\tstartTime\x12\x30\n\x14python_worker_memory\x18\x04 \x01(\tR\x12pythonWorkerMemory\x1ap\n\x06Pinned\x12?\n\x08relation\x18\x01 \x01(\x0b\x32#.spark.connect.CachedRemoteRelationR\x08relation\x12%\n\x0enum_partitions\x18\x02 \x01(\x05R\rnumPartitionsB\r\n\x0bresult_typeB6\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
 )
 
 _globals = globals()
@@ -51,15 +51,19 @@ if not _descriptor._USE_C_DESCRIPTORS:
         "DESCRIPTOR"
     ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_RDDCOMMAND"]._serialized_start = 74
-    _globals["_RDDCOMMAND"]._serialized_end = 327
-    _globals["_RDDCOMMAND_DESCRIBE"]._serialized_start = 240
-    _globals["_RDDCOMMAND_DESCRIBE"]._serialized_end = 293
-    _globals["_RDDCOMMAND_GETCONTEXTINFO"]._serialized_start = 295
-    _globals["_RDDCOMMAND_GETCONTEXTINFO"]._serialized_end = 311
-    _globals["_RDDCOMMANDRESULT"]._serialized_start = 330
-    _globals["_RDDCOMMANDRESULT"]._serialized_end = 754
-    _globals["_RDDCOMMANDRESULT_INFO"]._serialized_start = 492
-    _globals["_RDDCOMMANDRESULT_INFO"]._serialized_end = 537
-    _globals["_RDDCOMMANDRESULT_CONTEXTINFO"]._serialized_start = 540
-    _globals["_RDDCOMMANDRESULT_CONTEXTINFO"]._serialized_end = 739
+    _globals["_RDDCOMMAND"]._serialized_end = 428
+    _globals["_RDDCOMMAND_DESCRIBE"]._serialized_start = 291
+    _globals["_RDDCOMMAND_DESCRIBE"]._serialized_end = 344
+    _globals["_RDDCOMMAND_GETCONTEXTINFO"]._serialized_start = 346
+    _globals["_RDDCOMMAND_GETCONTEXTINFO"]._serialized_end = 362
+    _globals["_RDDCOMMAND_PIN"]._serialized_start = 364
+    _globals["_RDDCOMMAND_PIN"]._serialized_end = 412
+    _globals["_RDDCOMMANDRESULT"]._serialized_start = 431
+    _globals["_RDDCOMMANDRESULT"]._serialized_end = 1035
+    _globals["_RDDCOMMANDRESULT_INFO"]._serialized_start = 659
+    _globals["_RDDCOMMANDRESULT_INFO"]._serialized_end = 704
+    _globals["_RDDCOMMANDRESULT_CONTEXTINFO"]._serialized_start = 707
+    _globals["_RDDCOMMANDRESULT_CONTEXTINFO"]._serialized_end = 906
+    _globals["_RDDCOMMANDRESULT_PINNED"]._serialized_start = 908
+    _globals["_RDDCOMMANDRESULT_PINNED"]._serialized_end = 1020
 # @@protoc_insertion_point(module_scope)

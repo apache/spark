@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.connect.rdd
 
+import java.util.UUID
+
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{DoNotCleanup, LogicalRDD, SQLExecution}
 import org.apache.spark.sql.execution.python.PythonRDDOperators
 
 /** Runs the commands of the RDD API of the Python client (see `RDDCommand` in rdd.proto). */
@@ -53,6 +55,28 @@ private[connect] class RDDCommandHandler(planner: SparkConnectPlanner) {
           // As PySpark reads it from the SparkConf: no config entry defines it.
           .setPythonWorkerMemory(sc.conf.get("spark.python.worker.memory", "512m"))
         proto.RDDCommandResult.newBuilder().setContextInfo(info).build()
+
+      case proto.RDDCommand.CommandTypeCase.PIN =>
+        // The files of the shuffles stay until the RDD is garbage-collected, as the files of the
+        // shuffles of an RDD of Spark Classic, rather than until the end of this command.
+        val dataset =
+          Dataset.ofRows(session, planner.transformRelation(command.getPin.getRdd), DoNotCleanup)
+        val qe = dataset.queryExecution
+        // The RDD of the physical plan, whose shuffles the jobs on the pinned plan then share.
+        // With adaptive query execution, planning it computes the outputs of the shuffles.
+        val rdd = SQLExecution.withNewExecutionId(qe, Some("pin")) {
+          qe.toRdd
+        }
+        val pinned = Dataset.ofRows(
+          session,
+          LogicalRDD.fromDataset(rdd, dataset, isStreaming = dataset.isStreaming))
+        val relationId = UUID.randomUUID().toString
+        planner.sessionHolder.cacheDataFrameById(relationId, pinned)
+        val result = proto.RDDCommandResult.Pinned
+          .newBuilder()
+          .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(relationId))
+          .setNumPartitions(rdd.getNumPartitions)
+        proto.RDDCommandResult.newBuilder().setPinned(result).build()
 
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)

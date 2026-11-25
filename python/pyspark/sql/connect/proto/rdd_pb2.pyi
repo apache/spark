@@ -84,17 +84,46 @@ class RDDCommand(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
+    class Pin(google.protobuf.message.Message):
+        """Plans an RDD once and caches the plan in the session as `CheckpointCommand` caches a
+        checkpoint, so that the jobs on the cached relation compute the RDD of the same physical plan
+        and share the outputs of its shuffles, as the jobs on an RDD of Spark Classic do: for
+        instance, the jobs of an action that runs several jobs, as `RDD.take` does. Returns the
+        cached relation, which the client removes with `RemoveCachedRemoteRelationCommand`, in
+        `RDDCommandResult.pinned`.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RDD_FIELD_NUMBER: builtins.int
+        @property
+        def rdd(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """(Required) The RDD."""
+        def __init__(
+            self,
+            *,
+            rdd: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["rdd", b"rdd"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["rdd", b"rdd"]) -> None: ...
+
     DESCRIBE_FIELD_NUMBER: builtins.int
     GET_CONTEXT_INFO_FIELD_NUMBER: builtins.int
+    PIN_FIELD_NUMBER: builtins.int
     @property
     def describe(self) -> global___RDDCommand.Describe: ...
     @property
     def get_context_info(self) -> global___RDDCommand.GetContextInfo: ...
+    @property
+    def pin(self) -> global___RDDCommand.Pin: ...
     def __init__(
         self,
         *,
         describe: global___RDDCommand.Describe | None = ...,
         get_context_info: global___RDDCommand.GetContextInfo | None = ...,
+        pin: global___RDDCommand.Pin | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -105,6 +134,8 @@ class RDDCommand(google.protobuf.message.Message):
             b"describe",
             "get_context_info",
             b"get_context_info",
+            "pin",
+            b"pin",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -116,11 +147,13 @@ class RDDCommand(google.protobuf.message.Message):
             b"describe",
             "get_context_info",
             b"get_context_info",
+            "pin",
+            b"pin",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal["describe", "get_context_info"] | None: ...
+    ) -> typing_extensions.Literal["describe", "get_context_info", "pin"] | None: ...
 
 global___RDDCommand = RDDCommand
 
@@ -185,32 +218,78 @@ class RDDCommandResult(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Pinned(google.protobuf.message.Message):
+        """An RDD planned once (see `RDDCommand.Pin`)."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RELATION_FIELD_NUMBER: builtins.int
+        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation:
+            """The cached relation of the RDD."""
+        num_partitions: builtins.int
+        """The number of partitions."""
+        def __init__(
+            self,
+            *,
+            relation: pyspark.sql.connect.proto.relations_pb2.CachedRemoteRelation | None = ...,
+            num_partitions: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "num_partitions", b"num_partitions", "relation", b"relation"
+            ],
+        ) -> None: ...
+
     INFO_FIELD_NUMBER: builtins.int
     CONTEXT_INFO_FIELD_NUMBER: builtins.int
+    PINNED_FIELD_NUMBER: builtins.int
     @property
     def info(self) -> global___RDDCommandResult.Info: ...
     @property
     def context_info(self) -> global___RDDCommandResult.ContextInfo: ...
+    @property
+    def pinned(self) -> global___RDDCommandResult.Pinned: ...
     def __init__(
         self,
         *,
         info: global___RDDCommandResult.Info | None = ...,
         context_info: global___RDDCommandResult.ContextInfo | None = ...,
+        pinned: global___RDDCommandResult.Pinned | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "context_info", b"context_info", "info", b"info", "result_type", b"result_type"
+            "context_info",
+            b"context_info",
+            "info",
+            b"info",
+            "pinned",
+            b"pinned",
+            "result_type",
+            b"result_type",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "context_info", b"context_info", "info", b"info", "result_type", b"result_type"
+            "context_info",
+            b"context_info",
+            "info",
+            b"info",
+            "pinned",
+            b"pinned",
+            "result_type",
+            b"result_type",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["info", "context_info"] | None: ...
+    ) -> typing_extensions.Literal["info", "context_info", "pinned"] | None: ...
 
 global___RDDCommandResult = RDDCommandResult

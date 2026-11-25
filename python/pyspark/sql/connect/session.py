@@ -709,6 +709,12 @@ class SparkSession:
                 method="ddl_parse", ddl_string=schema
             ).parsed
 
+        if is_rdd and isinstance(schema, DataType) and not isinstance(schema, StructType):
+            # As in Spark Classic, the elements of an RDD can be of any data type.
+            return self._create_dataframe_from_connect_rdd(
+                data, schema, samplingRatio, True if verifySchema is None else verifySchema
+            )
+
         if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
             if isinstance(schema, StructType):

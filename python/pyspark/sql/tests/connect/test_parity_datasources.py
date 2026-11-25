@@ -15,24 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.sql.tests.test_datasources import DataSourcesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_csv_sampling_ratio(self):
-        super().test_csv_sampling_ratio()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_json_sampling_ratio(self):
-        super().test_json_sampling_ratio()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_xml_sampling_ratio(self):
-        super().test_xml_sampling_ratio()
+    pass
 
 
 if __name__ == "__main__":

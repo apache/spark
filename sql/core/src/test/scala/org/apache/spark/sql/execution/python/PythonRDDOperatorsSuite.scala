@@ -171,6 +171,9 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
     val coalesced = PythonRDDCoalesce(2, parallelize(4, "a", "b", "c", "d"))
     assert(valuesOf(coalesced) === Seq(Seq("a", "b"), Seq("c", "d")))
     assert(valuesOf(PythonRDDCoalesce(8, parallelize(2, "a", "b"))) === Seq(Seq("a"), Seq("b")))
+    // Unlike the coalesce of a DataFrame, which makes a partition, as an RDD without partitions.
+    val empty = PythonRDDUnion(PythonRDDOperators.valueOutput(), Nil)
+    assert(valuesOf(PythonRDDCoalesce(1, empty)) === Seq.empty)
   }
 
   /** The frames of `data`, as PythonRDD writes them. */
@@ -196,6 +199,12 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
       Seq(0 -> Seq("a"), 1 -> Seq("b"), 2 -> Seq("c"), 3 -> Seq("d")))
     assert(elements(PythonRDDElements(Some(Seq(2, 0, 2)), input)) ===
       Seq(0 -> Seq("a"), 2 -> Seq("c")))
+    // As SparkContext.runJob, the partitions exist.
+    Seq(4, -1).foreach { p =>
+      val e = intercept[IllegalArgumentException](elements(PythonRDDElements(Some(Seq(p)), input)))
+      assert(e.getMessage ===
+        s"Attempting to access a non-existent partition: $p. Total number of partitions: 4")
+    }
 
     // The columns of a row in turn, and strings as their UTF-8 bytes: "e" with an acute accent
     // is two bytes.

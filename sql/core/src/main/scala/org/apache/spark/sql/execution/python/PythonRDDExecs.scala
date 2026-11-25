@@ -230,6 +230,24 @@ case class PythonRDDCartesianExec(output: Seq[Attribute], left: SparkPlan, right
       newRight: SparkPlan): PythonRDDCartesianExec = copy(left = newLeft, right = newRight)
 }
 
+/**
+ * Physical plan node of [[PythonRDDCoalesce]]: the partitions of the child grouped as
+ * `RDD.coalesce` without a shuffle groups them. Unlike `CoalesceExec`, it makes no partition of a
+ * child without partitions, as `RDD.coalesce`.
+ */
+case class PythonRDDCoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = UnknownPartitioning(numPartitions)
+
+  override protected def doExecute(): RDD[InternalRow] =
+    child.execute().coalesce(numPartitions, shuffle = false)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): PythonRDDCoalesceExec =
+    copy(child = newChild)
+}
+
 /** Physical plan node of [[PythonRDDParallelize]]. */
 case class PythonRDDParallelizeExec(numSlices: Int, output: Seq[Attribute], child: SparkPlan)
   extends UnaryExecNode {
@@ -325,6 +343,13 @@ case class PythonRDDElementsExec(
     val all = child.execute()
     val input = indices match {
       case Some(selected) =>
+        // As SparkContext.runJob, which runs a job on partitions that exist.
+        val numPartitions = all.getNumPartitions
+        selected.find(p => p < 0 || p >= numPartitions).foreach { p =>
+          throw new IllegalArgumentException(
+            s"Attempting to access a non-existent partition: $p. " +
+              s"Total number of partitions: $numPartitions")
+        }
         val keep = selected.toSet
         PartitionPruningRDD.create(all, keep.contains)
       case None => all

@@ -289,14 +289,18 @@ def eventually(
 
 class QuietTest:
     def __init__(self, sc):
-        self.log4j = sc._jvm.org.apache.log4j
+        # The SparkContext of Spark Connect has no JVM: the Spark Connect server logs.
+        jvm = getattr(sc, "_jvm", None)
+        self.log4j = None if jvm is None else jvm.org.apache.log4j
 
     def __enter__(self):
-        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
-        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
+        if self.log4j is not None:
+            self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
+            self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
+        if self.log4j is not None:
+            self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
 class PySparkBaseTestCase(unittest.TestCase):

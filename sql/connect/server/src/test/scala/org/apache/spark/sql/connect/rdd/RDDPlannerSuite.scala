@@ -18,16 +18,19 @@
 package org.apache.spark.sql.connect.rdd
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.atomic.AtomicInteger
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.resource.{ResourceProfileBuilder, TaskResourceRequests}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
@@ -191,6 +194,41 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
     val data = binaryData("a", "b")
     val expected = Dataset.ofRows(spark, transform(data)).queryExecution.toRdd.getNumPartitions
     assert(describe(data) === expected)
+  }
+
+  test("pin plans an RDD once, so that the jobs on it share its shuffles") {
+    val holder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val handler = new RDDCommandHandler(new SparkConnectPlanner(holder))
+    val pairs = createLocalRelationProto(
+      StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
+      Seq(InternalRow(1, "a".getBytes(UTF_8)), InternalRow(0, "b".getBytes(UTF_8))))
+    val shuffle = relation(_.getShuffleBuilder.setInput(pairs).setNumPartitions(3))
+    val command = proto.RDDCommand.newBuilder()
+    command.getPinBuilder.setRdd(relation(_.getValuesBuilder.setInput(shuffle)))
+
+    val mapStages = new AtomicInteger()
+    val listener = new SparkListener {
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+        if (event.stageInfo.shuffleDepId.isDefined) mapStages.incrementAndGet()
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val result = handler.handle(command.build()).getPinned
+      assert(result.getNumPartitions === 3)
+      val pinned = holder.getDataFrameOrThrow(result.getRelation.getRelationId)
+      assert(pinned.asInstanceOf[Dataset[_]].logicalPlan.isInstanceOf[LogicalRDD])
+      // Two jobs on the pinned plan.
+      for (_ <- 0 until 2) {
+        val values = pinned.collect().map(r => new String(r.getAs[Array[Byte]](0), UTF_8))
+        assert(values.toSeq === Seq("b", "a"))
+      }
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(mapStages.get() === 1)
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
   }
 
   test("context info") {

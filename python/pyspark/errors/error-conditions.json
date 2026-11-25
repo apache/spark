@@ -60,6 +60,11 @@
       "Argument `<arg_name>` cannot be None."
     ]
   },
+  "CANNOT_CHANGE_STORAGE_LEVEL": {
+    "message": [
+      "Cannot change storage level of an RDD after it was already assigned a level: <old_level> to <new_level>."
+    ]
+  },
   "CANNOT_CONFIGURE_SPARK_CONNECT": {
     "message": [
       "Spark Connect server cannot be configured: Existing [<existing_url>], New [<new_url>]."

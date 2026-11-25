@@ -233,6 +233,31 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         finally:
             self.spark.profile.clear()
 
+    def test_spark_context_serializer(self):
+        # A SparkContext created on Spark Connect pickles the elements with its serializer, in
+        # batches of its size, as in Spark Classic.
+        from pyspark.core.connect.context import SparkContext as ConnectSparkContext
+        from pyspark.serializers import BatchedSerializer, MarshalSerializer
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        # The constructor creates a new session on the server, which becomes the active one.
+        sc = ConnectSparkContext(appName="serializer", serializer=MarshalSerializer(), batchSize=2)
+        try:
+            self.assertIsInstance(sc.serializer, BatchedSerializer)
+            self.assertIsInstance(sc.serializer.serializer, MarshalSerializer)
+            self.assertEqual(sc.serializer.batchSize, 2)
+            rdd = sc.parallelize(range(10), 3)
+            self.assertIs(rdd._jrdd_deserializer.serializer, sc._unbatched_serializer)
+            self.assertEqual(rdd.map(lambda x: x * 2).collect(), [x * 2 for x in range(10)])
+            pairs = rdd.map(lambda x: (x % 3, x)).reduceByKey(lambda a, b: a + b)
+            self.assertEqual(sorted(pairs.collect()), [(0, 18), (1, 12), (2, 15)])
+        finally:
+            # Release the session without stop(), which also stops the local server of the tests.
+            sc._session.client.release_session()
+            sc._session.client.close()
+            ConnectSparkSession._set_default_and_active_session(self.spark)
+        self.assertEqual(self.sc.parallelize(range(3)).collect(), [0, 1, 2])
+
     def test_set_checkpoint_dir_not_supported(self):
         with self.assertRaises(PySparkNotImplementedError):
             self.sc.setCheckpointDir("/tmp/connect-rdd-checkpoint")

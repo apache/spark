@@ -1201,7 +1201,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.PythonRDDCartesianExec(
           p.output, planLater(p.left), planLater(p.right)) :: Nil
       case p: execution.python.PythonRDDCoalesce =>
-        execution.CoalesceExec(p.numPartitions, planLater(p.child)) :: Nil
+        execution.python.PythonRDDCoalesceExec(p.numPartitions, planLater(p.child)) :: Nil
       case p: execution.python.PythonRDDParallelize =>
         execution.python.PythonRDDParallelizeExec(p.numSlices, p.output, planLater(p.child)) :: Nil
       case p: execution.python.PythonRDDFromDataFrame =>

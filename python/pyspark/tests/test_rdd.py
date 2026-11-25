@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 from datetime import datetime, timedelta
 from glob import glob
 
@@ -95,6 +96,62 @@ class RDDTestsMixin:
         times_prefetch_next = next(times_iter_prefetch)
         self.assertTrue(times_next - times_head >= timedelta(seconds=2))
         self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
+
+    def test_actions_of_several_jobs_compute_shuffles_once(self):
+        # The jobs of an action run on one RDD, so they share the outputs of its shuffles.
+        with tempfile.TemporaryDirectory() as d:
+
+            def computed():
+                return len(os.listdir(d))
+
+            def record(x):
+                with open(os.path.join(d, "%d-%s" % (x, uuid.uuid4().hex)), "w"):
+                    pass
+                return x, x
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.toLocalIterator()), [(i, i) for i in range(8)])
+            self.assertEqual(computed(), 8)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(8, lambda k: k // 4)
+            self.assertEqual(sorted(rdd.take(5)), [(i, i) for i in range(5)])
+            self.assertEqual(computed(), 16)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(rdd.sortByKey(numPartitions=2).keys().collect(), list(range(8)))
+            self.assertEqual(computed(), 24)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.keys().zipWithIndex().values().collect()), list(range(8)))
+            self.assertEqual(computed(), 32)
+
+    def test_run_job_on_a_partition_that_does_not_exist(self):
+        rdd = self.sc.parallelize([1, 2, 3], 2)
+        for partition in [2, -1]:
+            with self.assertRaisesRegex(Exception, "non-existent partition: %d" % partition):
+                self.sc.runJob(rdd, lambda it: list(it), [partition])
+
+    def test_coalesce_of_rdd_without_partitions(self):
+        rdd = self.sc.emptyRDD().coalesce(1)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.glom().collect(), [])
+
+    def test_persist_with_another_storage_level(self):
+        rdd = self.sc.parallelize(range(4), 2).map(lambda x: x)
+        rdd.persist(StorageLevel.MEMORY_ONLY)
+        try:
+            rdd.persist(StorageLevel.MEMORY_ONLY)
+            with self.assertRaisesRegex(Exception, "Cannot change storage level"):
+                rdd.persist(StorageLevel.DISK_ONLY)
+            self.assertEqual(rdd.getStorageLevel(), StorageLevel.MEMORY_ONLY)
+        finally:
+            rdd.unpersist()
+        rdd.persist(StorageLevel.DISK_ONLY)
+        try:
+            self.assertEqual(rdd.getStorageLevel(), StorageLevel.DISK_ONLY)
+            self.assertEqual(rdd.collect(), [0, 1, 2, 3])
+        finally:
+            rdd.unpersist()
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
