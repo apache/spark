@@ -1150,9 +1150,11 @@ supports batch reads uses an ordinary join.
   inner join. Other join types fail with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE`.
 - **Lookup conditions.** The join condition must compare a column of the lookup table with an
   expression over the stream, using `=`, `<=>`, `<`, `<=`, `>` or `>=`. The lookup column must be
-  the bare column, with no cast or function applied to it: to compare values of different types,
-  cast the stream-side expression instead. For an inner join, the comparison may also be in a
-  `WHERE` clause above the join. The data source chooses which of these comparisons
+  the bare column, with no cast or function applied to it. To compare values of different types,
+  cast the stream-side expression to the type of the lookup column instead, but only if every
+  stream-side value fits that type exactly. Otherwise, the cast can fail, or change which rows
+  match, for example when it truncates a timestamp to a date. For an inner join, the comparison
+  may also be in a `WHERE` clause above the join. The data source chooses which of these comparisons
   it uses to find rows. Spark evaluates the rest of the condition on the returned rows.
 - **Column types.** Spark uses a comparison to look up rows only when data stores reliably compare
   the column type in the same way as Spark:
@@ -1161,12 +1163,16 @@ supports batch reads uses an ordinary join.
     `UTF8_BINARY`. `VARCHAR` is not used when
     `spark.sql.charVarchar.standardSemantics.enabled` is true.
   - `<`, `<=`, `>` and `>=`: integral types, `DECIMAL`, `DATE`, `TIMESTAMP` and `TIMESTAMP_NTZ`.
-    The stream-side expression must not be able to fail. For example, a widening cast or
-    `try_cast` is allowed.
+    The stream-side expression must not be able to fail. For example, a numeric widening cast,
+    such as `INT` to `BIGINT`, or a `try_cast` is allowed. A cast of a `DATE` or `TIMESTAMP_NTZ`
+    value to `TIMESTAMP`, or of a `DATE` value to `TIMESTAMP_NTZ`, can overflow, so Spark does not
+    use such a range to look up rows. This is also true when Spark adds the cast itself, to compare
+    the two types.
 
   Other types, such as `FLOAT`, `DOUBLE`, `CHAR` and strings with other collations, are never used
-  to look up rows. A join with no comparison that Spark can use fails with
-  `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE`. A join whose data source uses none of
+  to look up rows. A join with no condition, such as a cross join without a `WHERE` clause, fails
+  with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION`. A join whose condition has no
+  comparison that Spark can use fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE`. A join whose data source uses none of
   the comparisons fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE`.
 - **The lookup side.** The lookup side can be the table itself, or reach it through aliases,
   temporary views, views, `WITH` clauses, and projections and filters. Spark pushes a filter on
@@ -1305,8 +1311,8 @@ until its duration ends, not until its input ends. So by default each request ho
 row, and Spark sends it as soon as it reads the row. Keys that repeat are served from the cache.
 To send fewer requests, raise `spark.sql.join.externalLookup.realTimeMode.maxBatchRows`. A row
 then waits until its request is full, until the key of a range lookup changes, or until the batch
-ends, even when its key is cached. The cache lives for one batch. As in a micro-batch, Spark loads
-the lookup table's definition once per batch, and `current_timestamp()` is fixed for the batch.
+ends, even when its key is cached. The cache lives for one batch. As in a micro-batch,
+`current_timestamp()` is fixed for the batch.
 
 ###### Data Sources that Serve Lookups
 
