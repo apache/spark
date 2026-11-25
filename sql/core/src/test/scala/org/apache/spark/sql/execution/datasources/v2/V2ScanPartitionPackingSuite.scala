@@ -118,6 +118,15 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
       Some(Seq(Seq(0, 1), Seq(2, 3))))
     // As for files, the cap is suggested: inputs that do not fit together stay apart.
     assert(V2ScanPartitionPacking(30, 0, Some(1), Some(2)).pack(inputs(30, 30, 30), 1).isEmpty)
+    // Unlike for files, the cap's target is never smaller than the first. Inputs of 60, 60 and
+    // 70 MB make 20 groups at 128 MB, and a cap of 17 would otherwise target 2020 / 17 = 119 MB
+    // and leave all 30 apart. A cap of 15 targets 135 MB.
+    val mb = 1024L * 1024
+    val mixed = inputs(Seq.fill(10)(Seq(60 * mb, 60 * mb, 70 * mb)).flatten: _*)
+    Seq(None -> 20, Some(19) -> 20, Some(17) -> 20, Some(15) -> 15).foreach { case (cap, num) =>
+      assert(V2ScanPartitionPacking(128 * mb, 4 * mb, Some(1), cap).pack(mixed, 1).map(_.size) ===
+        Some(num), s"maxPartitionNum=$cap")
+    }
   }
 
   test("missing, mixed and negative sizes require an explicit count fallback") {

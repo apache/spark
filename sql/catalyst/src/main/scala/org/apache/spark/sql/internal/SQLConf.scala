@@ -3737,11 +3737,13 @@ object SQLConf {
       .doc("The suggested (not guaranteed) maximum number of packed tasks for a V2 scan. As " +
         s"with ${FILES_MAX_PARTITION_NUM.key}, if packing by size gives more tasks than this, " +
         "Spark packs the scan's inputs again with a target of their total size divided by this " +
-        s"value, ignoring ${V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key}. A scan with an " +
+        s"value, ignoring ${V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key}, but never with a " +
+        "smaller target than the first. A scan with an " +
         "input that reports no valid size, such as a scan of a Python data source or of a " +
         "connector whose inputs do not implement HasPartitionStatistics, " +
         "is grouped by count into at most this many tasks of consecutive inputs, which cannot " +
-        "bound the bytes per task; when unset, such a scan's inputs are left as they are. " +
+        "bound the bytes per task; when unset, such a scan's inputs are left as they are, " +
+        "except that partitions that runtime filtering emptied still join a neighboring task. " +
         "Scans of file-based V2 sources are left to the spark.sql.files.* settings. Takes " +
         s"effect when ${V2_SCAN_PARTITION_PACKING_ENABLED.key} is true.")
       .version("4.5.0")

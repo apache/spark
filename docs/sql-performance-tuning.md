@@ -722,8 +722,9 @@ Reported sizes are estimates, so this is not a bound on runtime memory or CPU. A
 `spark.sql.files.maxPartitionNum`, when packing by size gives more tasks than
 `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum`, Spark packs the inputs again with a
 target of the scan's total size divided by that cap, ignoring
-`spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes`. If any input of a scan reports no
-valid size, Spark leaves the scan's inputs as they are, unless
+`spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes`. Unlike for files, that target is
+never smaller than the first one, which could only give more tasks. If any input of a scan reports
+no valid size, Spark leaves the scan's inputs as they are, unless
 `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set. Then it groups all of the scan's
 inputs by count into at most that many tasks, which balances input counts, not bytes. This applies
 to any eligible V2 scan with such an input, such as a scan of a Python data source or of a connector
@@ -744,9 +745,7 @@ round-robin repartition can place rows differently. Packing can reduce useful pa
 map tasks limit how finely AQE can split a skewed shuffle partition, for skew joins and rebalances
 alike. Under AQE, a local shuffle read with one mapper per task over a packed shuffle no longer
 reports the scan's keyed layout, so where an operator needs that layout, AQE keeps the full shuffle
-read. With the experimental local pipelined shuffle (`spark.sql.shuffle.localPipelined.enabled`), a
-plan with a packed shuffle keeps regular shuffles, even when the node merges nothing. The default is
-off; connectors that already size their inputs need not enable it.
+read. The default is off; connectors that already size their inputs need not enable it.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -792,9 +791,9 @@ off; connectors that already size their inputs need not enable it.
     <td>
       Suggested maximum count of packed tasks for a scan. As with
       <code>spark.sql.files.maxPartitionNum</code>, if packing by size gives more tasks, Spark packs
-      the inputs again by the scan's total size divided by this value. A scan with an input that
-      reports no valid size is grouped by count into at most this many tasks. Never applies to scans
-      of file-based V2 sources.
+      the inputs again by the scan's total size divided by this value, but never with a smaller
+      target than the first. A scan with an input that reports no valid size is grouped by count
+      into at most this many tasks. Never applies to scans of file-based V2 sources.
     </td>
     <td>4.5.0</td>
   </tr>

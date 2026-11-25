@@ -92,6 +92,8 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
       override def numRows(): OptionalLong = OptionalLong.empty()
       override def filesCount(): OptionalLong = OptionalLong.empty()
     }
+    // Above maxPartitionNum, the inputs keep the first target as a floor, which files do not.
+    // These cases don't reach that difference.
     val mb = 1024L * 1024
     // (sizes, maxPartitionBytes, openCostInBytes, minPartitionNum, maxPartitionNum)
     val fixed = Seq(

@@ -373,7 +373,8 @@ disabled by default. Inputs are packed in the order the scan reads them, which f
 V2 bucketing enabled is the order of their partition keys. Return `OptionalLong.empty()` when the
 size is unknown. If any input of a scan reports no size, Spark leaves the scan's inputs unchanged,
 unless `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, in which case Spark
-groups them by count. When packing by size gives more tasks than that setting, Spark packs the
+groups them by count. Partitions that runtime filtering emptied still join a neighboring task.
+When packing by size gives more tasks than that setting, Spark packs the
 inputs again to approach it, as `spark.sql.files.maxPartitionNum` does for files.
 See [DataSource V2 Scan Partition Packing](sql-performance-tuning.html#datasource-v2-scan-partition-packing)
 for size limits, opening costs and parallelism settings. Packing uses the existing inputs and
