@@ -17,20 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
 import org.apache.spark.sql.catalyst.catalog.{ClusterBySpec, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, TypeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 
 /**
@@ -115,8 +112,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case UnsetViewProperties(ResolvedViewIdentifier(ident), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident, keys, ifExists, isView = true)
 
-    case DescribeNamespace(ResolvedV1Database(db), extended, output) if conf.useV1Command =>
-      DescribeDatabaseCommand(db, extended, output)
+    case describeNamespace: DescribeNamespace =>
+      DescribeCommandHelper.rewriteDescribeNamespace(
+        describeNamespace, useV1Command = conf.useV1Command)
 
     case SetNamespaceProperties(ResolvedV1Database(db), properties) if conf.useV1Command =>
       AlterDatabasePropertiesCommand(db, properties)
@@ -127,52 +125,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
 
-    // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(
-        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
-        isExtended,
-        output) =>
-      DescribeTableCommand(resolvedChild, ident, Map.empty, isExtended, output)
+    case describeRelation: DescribeRelation =>
+      DescribeCommandHelper.rewriteDescribeRelation(describeRelation)
 
-    case DescribeTablePartition(
-        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
-        UnresolvedPartitionSpec(spec, _),
-        isExtended,
-        output) =>
-      DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
+    case describeTablePartition: DescribeTablePartition =>
+      DescribeCommandHelper.rewriteDescribeTablePartition(describeTablePartition)
 
-    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
-    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
-    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
-    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
-    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
-    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
-    case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
-      val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
-        .map(quoteIfNeeded).mkString(".")
-      throw QueryCompilationErrors.descPartitionNotAllowedOnView(quoted)
-
-    case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
-      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
-      // typically resolves the column to an `Attribute` here. We also accept the legacy
-      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
-      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
-      val nameParts = DescribeColumn.extractColumnNameParts(column)
-      DescribeColumnCommand(ident, nameParts, isExtended, output)
-
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
-      column match {
-        case u: UnresolvedAttribute =>
-          throw QueryCompilationErrors.columnNotFoundError(u.name)
-        case a: Attribute =>
-          DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
-        case _ =>
-          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
-      }
+    case describeColumn: DescribeColumn =>
+      DescribeCommandHelper.rewriteDescribeColumn(describeColumn)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -415,15 +375,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
-      DescribeFunctionCommand(v1Func.info, extended)
-
-    case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
-      if (isSessionCatalog(catalog)) {
-        DescribeFunctionCommand(func.asInstanceOf[V1Function].info, extended)
-      } else {
-        throw QueryCompilationErrors.missingCatalogFunctionsAbilityError(catalog)
-      }
+    case describeFunction: DescribeFunction =>
+      DescribeCommandHelper.rewriteDescribeFunction(describeFunction)
 
     case d @ DropFunction(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
       // Builtin or temp function - throw appropriate error

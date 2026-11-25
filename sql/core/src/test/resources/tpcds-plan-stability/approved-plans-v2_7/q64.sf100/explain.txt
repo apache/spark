@@ -216,7 +216,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#12), dynamicpruningexpression(ss_sold_date_sk#12 IN dynamicpruning#13)]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_cdemo_sk), IsNotNull(ss_promo_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_addr_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_cdemo_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_promo_sk:int,ss_ticket_number:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_customer_sk:bigint,ss_cdemo_sk:bigint,ss_hdemo_sk:bigint,ss_addr_sk:bigint,ss_store_sk:bigint,ss_promo_sk:bigint,ss_ticket_number:bigint,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 1]
 Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_ticket_number#8, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12]
@@ -238,7 +238,7 @@ Output [3]: [sr_item_sk#15, sr_ticket_number#16, sr_returned_date_sk#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
-ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
+ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
 (7) ColumnarToRow [codegen id : 3]
 Input [3]: [sr_item_sk#15, sr_ticket_number#16, sr_returned_date_sk#17]
@@ -274,7 +274,7 @@ Output [4]: [cs_item_sk#18, cs_order_number#19, cs_ext_list_price#20, cs_sold_da
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_order_number)]
-ReadSchema: struct<cs_item_sk:int,cs_order_number:int,cs_ext_list_price:decimal(7,2)>
+ReadSchema: struct<cs_item_sk:bigint,cs_order_number:bigint,cs_ext_list_price:decimal(7,2)>
 
 (15) ColumnarToRow [codegen id : 5]
 Input [4]: [cs_item_sk#18, cs_order_number#19, cs_ext_list_price#20, cs_sold_date_sk#21]
@@ -300,7 +300,7 @@ Output [6]: [cr_item_sk#22, cr_order_number#23, cr_refunded_cash#24, cr_reversed
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
 PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
-ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2),cr_reversed_charge:decimal(7,2),cr_store_credit:decimal(7,2)>
+ReadSchema: struct<cr_item_sk:bigint,cr_order_number:bigint,cr_refunded_cash:decimal(7,2),cr_reversed_charge:decimal(7,2),cr_store_credit:decimal(7,2)>
 
 (21) ColumnarToRow [codegen id : 7]
 Input [6]: [cr_item_sk#22, cr_order_number#23, cr_refunded_cash#24, cr_reversed_charge#25, cr_store_credit#26, cr_returned_date_sk#27]
@@ -359,7 +359,7 @@ Input [3]: [cs_item_sk#18, sale#36, refund#37]
 
 (33) BroadcastExchange
 Input [1]: [cs_item_sk#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=7]
 
 (34) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_item_sk#1]
@@ -389,7 +389,7 @@ Output [3]: [s_store_sk#40, s_store_name#41, s_zip#42]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_name), IsNotNull(s_zip)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string,s_zip:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_name:string,s_zip:string>
 
 (40) ColumnarToRow [codegen id : 12]
 Input [3]: [s_store_sk#40, s_store_name#41, s_zip#42]
@@ -400,7 +400,7 @@ Condition : ((isnotnull(s_store_sk#40) AND isnotnull(s_store_name#41)) AND isnot
 
 (42) BroadcastExchange
 Input [3]: [s_store_sk#40, s_store_name#41, s_zip#42]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=8]
 
 (43) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_store_sk#6]
@@ -425,7 +425,7 @@ Output [6]: [c_customer_sk#43, c_current_cdemo_sk#44, c_current_hdemo_sk#45, c_c
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_first_sales_date_sk), IsNotNull(c_first_shipto_date_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk), IsNotNull(c_current_addr_sk)]
-ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int,c_first_shipto_date_sk:int,c_first_sales_date_sk:int>
+ReadSchema: struct<c_customer_sk:bigint,c_current_cdemo_sk:bigint,c_current_hdemo_sk:bigint,c_current_addr_sk:bigint,c_first_shipto_date_sk:bigint,c_first_sales_date_sk:bigint>
 
 (48) ColumnarToRow [codegen id : 15]
 Input [6]: [c_customer_sk#43, c_current_cdemo_sk#44, c_current_hdemo_sk#45, c_current_addr_sk#46, c_first_shipto_date_sk#47, c_first_sales_date_sk#48]
@@ -457,7 +457,7 @@ Output [2]: [d_date_sk#49, d_year#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int>
 
 (55) ColumnarToRow [codegen id : 17]
 Input [2]: [d_date_sk#49, d_year#50]
@@ -468,7 +468,7 @@ Condition : isnotnull(d_date_sk#49)
 
 (57) BroadcastExchange
 Input [2]: [d_date_sk#49, d_year#50]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=11]
 
 (58) BroadcastHashJoin [codegen id : 19]
 Left keys [1]: [c_first_sales_date_sk#48]
@@ -506,7 +506,7 @@ Output [2]: [cd_demo_sk#53, cd_marital_status#54]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status)]
-ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string>
+ReadSchema: struct<cd_demo_sk:bigint,cd_marital_status:string>
 
 (66) ColumnarToRow [codegen id : 21]
 Input [2]: [cd_demo_sk#53, cd_marital_status#54]
@@ -563,7 +563,7 @@ Output [1]: [p_promo_sk#57]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
 PushedFilters: [IsNotNull(p_promo_sk)]
-ReadSchema: struct<p_promo_sk:int>
+ReadSchema: struct<p_promo_sk:bigint>
 
 (79) ColumnarToRow [codegen id : 27]
 Input [1]: [p_promo_sk#57]
@@ -574,7 +574,7 @@ Condition : isnotnull(p_promo_sk#57)
 
 (81) BroadcastExchange
 Input [1]: [p_promo_sk#57]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=15]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=15]
 
 (82) BroadcastHashJoin [codegen id : 30]
 Left keys [1]: [ss_promo_sk#7]
@@ -591,7 +591,7 @@ Output [2]: [hd_demo_sk#58, hd_income_band_sk#59]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
+ReadSchema: struct<hd_demo_sk:bigint,hd_income_band_sk:bigint>
 
 (85) ColumnarToRow [codegen id : 28]
 Input [2]: [hd_demo_sk#58, hd_income_band_sk#59]
@@ -602,7 +602,7 @@ Condition : (isnotnull(hd_demo_sk#58) AND isnotnull(hd_income_band_sk#59))
 
 (87) BroadcastExchange
 Input [2]: [hd_demo_sk#58, hd_income_band_sk#59]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=16]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=16]
 
 (88) BroadcastHashJoin [codegen id : 30]
 Left keys [1]: [ss_hdemo_sk#4]
@@ -640,7 +640,7 @@ Output [5]: [ca_address_sk#62, ca_street_number#63, ca_street_name#64, ca_city#6
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
-ReadSchema: struct<ca_address_sk:int,ca_street_number:string,ca_street_name:string,ca_city:string,ca_zip:string>
+ReadSchema: struct<ca_address_sk:bigint,ca_street_number:string,ca_street_name:string,ca_city:string,ca_zip:string>
 
 (96) ColumnarToRow [codegen id : 32]
 Input [5]: [ca_address_sk#62, ca_street_number#63, ca_street_name#64, ca_city#65, ca_zip#66]
@@ -697,7 +697,7 @@ Output [1]: [ib_income_band_sk#72]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/income_band]
 PushedFilters: [IsNotNull(ib_income_band_sk)]
-ReadSchema: struct<ib_income_band_sk:int>
+ReadSchema: struct<ib_income_band_sk:bigint>
 
 (109) ColumnarToRow [codegen id : 38]
 Input [1]: [ib_income_band_sk#72]
@@ -708,7 +708,7 @@ Condition : isnotnull(ib_income_band_sk#72)
 
 (111) BroadcastExchange
 Input [1]: [ib_income_band_sk#72]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=20]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=20]
 
 (112) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [hd_income_band_sk#59]
@@ -738,7 +738,7 @@ Output [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
+ReadSchema: struct<i_item_sk:bigint,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (118) ColumnarToRow [codegen id : 40]
 Input [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
@@ -753,7 +753,7 @@ Input [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
 
 (121) BroadcastExchange
 Input [2]: [i_item_sk#74, i_product_name#77]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=21]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=21]
 
 (122) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [ss_item_sk#1]
@@ -797,7 +797,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#118), dynamicpruningexpression(ss_sold_date_sk#118 IN dynamicpruning#119)]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_cdemo_sk), IsNotNull(ss_promo_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_addr_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_cdemo_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_promo_sk:int,ss_ticket_number:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_customer_sk:bigint,ss_cdemo_sk:bigint,ss_hdemo_sk:bigint,ss_addr_sk:bigint,ss_store_sk:bigint,ss_promo_sk:bigint,ss_ticket_number:bigint,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
 (130) ColumnarToRow [codegen id : 44]
 Input [12]: [ss_item_sk#107, ss_customer_sk#108, ss_cdemo_sk#109, ss_hdemo_sk#110, ss_addr_sk#111, ss_store_sk#112, ss_promo_sk#113, ss_ticket_number#114, ss_wholesale_cost#115, ss_list_price#116, ss_coupon_amt#117, ss_sold_date_sk#118]
@@ -1160,7 +1160,7 @@ Output [3]: [i_item_sk#74, i_current_price#75, i_color#76]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string>
+ReadSchema: struct<i_item_sk:bigint,i_current_price:decimal(7,2),i_color:string>
 
 (211) ColumnarToRow [codegen id : 1]
 Input [3]: [i_item_sk#74, i_current_price#75, i_color#76]
@@ -1203,7 +1203,7 @@ Output [2]: [d_date_sk#38, d_year#39]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int>
 
 (218) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#38, d_year#39]
@@ -1214,7 +1214,7 @@ Condition : ((isnotnull(d_year#39) AND (d_year#39 = 1999)) AND isnotnull(d_date_
 
 (220) BroadcastExchange
 Input [2]: [d_date_sk#38, d_year#39]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=34]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=34]
 
 Subquery:3 Hosting operator id = 131 Hosting Expression = ReusedSubquery Subquery scalar-subquery#14, [id=#1]
 
@@ -1230,7 +1230,7 @@ Output [2]: [d_date_sk#123, d_year#124]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int>
 
 (222) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#123, d_year#124]
@@ -1241,6 +1241,6 @@ Condition : ((isnotnull(d_year#124) AND (d_year#124 = 2000)) AND isnotnull(d_dat
 
 (224) BroadcastExchange
 Input [2]: [d_date_sk#123, d_year#124]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=35]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=35]
 
 
