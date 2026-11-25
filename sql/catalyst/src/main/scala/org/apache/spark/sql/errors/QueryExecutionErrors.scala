@@ -20,6 +20,7 @@ package org.apache.spark.sql.errors
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
+import java.sql.SQLException
 import java.time.DateTimeException
 import java.util.Locale
 import java.util.concurrent.TimeoutException
@@ -1195,6 +1196,39 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2087",
       messageParameters = Map("n" -> n.toString(), "jdbcNumPartitions" -> jdbcNumPartitions))
+  }
+
+  def jdbcExternalEngineSyntaxError(
+      jdbcQuery: String,
+      cause: SQLException,
+      isSchemaResolution: Boolean): SparkException = {
+    jdbcExternalEngineError(
+      "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR", jdbcQuery, cause, isSchemaResolution)
+  }
+
+  def jdbcExternalEnginePermissionError(
+      jdbcQuery: String,
+      cause: SQLException,
+      isSchemaResolution: Boolean): SparkException = {
+    jdbcExternalEngineError(
+      "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR", jdbcQuery, cause, isSchemaResolution)
+  }
+
+  private def jdbcExternalEngineError(
+      condition: String,
+      jdbcQuery: String,
+      cause: SQLException,
+      isSchemaResolution: Boolean): SparkException = {
+    val subClass =
+      if (isSchemaResolution) "DURING_OUTPUT_SCHEMA_RESOLUTION" else "DURING_QUERY_EXECUTION"
+    new SparkException(
+      errorClass = s"$condition.$subClass",
+      messageParameters = Map(
+        "jdbcQuery" -> jdbcQuery,
+        "externalEngineError" -> cause.getMessage.replaceAll("\\.+$", ""),
+        "externalEngineSqlState" ->
+          Option(cause.getSQLState).filter(_.nonEmpty).getOrElse("unknown")),
+      cause = cause)
   }
 
   def multiActionAlterError(tableName: String): Throwable = {
@@ -3662,7 +3696,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       transform: String,
       columnType: DataType,
       inputTypes: Seq[DataType],
-      key: Expression): Throwable = {
+      key: Expression,
+      cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
       messageParameters = Map(
@@ -3671,7 +3706,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "inputTypes" -> inputTypes.map(toSQLType).mkString("(", ", ", ")"),
         "key" -> toSQLExpr(key),
         "keyType" -> toSQLType(key.dataType)),
-      cause = null)
+      cause = cause)
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
