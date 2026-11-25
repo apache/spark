@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -88,5 +90,32 @@ class ResolveUnionSuite extends AnalysisTest {
       case lambdaFunction: LambdaFunction => lambdaFunction.arguments.map(_.name)
     }).flatten
     assert(lambdaVariableNames == Seq("x_0", "x_1"))
+  }
+
+  test("UnionByNameTransformer builds new columns with the given alias function") {
+    val left = LocalRelation(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("b", IntegerType)())
+    val right = LocalRelation(
+      AttributeReference("b", IntegerType)(),
+      AttributeReference("c", StringType)())
+    val aliasNames = mutable.ArrayBuffer.empty[String]
+
+    val aligned = UnionByNameTransformer.alignChildrenByName(
+      left = left,
+      leftOutput = left.output,
+      right = right,
+      rightOutput = right.output,
+      allowMissingCol = true,
+      newAlias = (child, name) => {
+        aliasNames += name
+        Alias(child, name)()
+      })
+
+    assert(aliasNames.toSeq == Seq("a", "c"))
+    assert(aligned.leftOutput == aligned.left.output)
+    assert(aligned.rightOutput == aligned.right.output)
+    assert(aligned.leftOutput.map(_.name) == Seq("a", "b", "c"))
+    assert(aligned.rightOutput.map(_.name) == Seq("a", "b", "c"))
   }
 }
