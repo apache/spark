@@ -20,17 +20,19 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.BuildRight
+import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, Project}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class SingleJoinSuite extends SharedSparkSession {
+class SingleJoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits.toRichColumn
 
   private val EnsureRequirements = new EnsureRequirements()
@@ -202,4 +204,51 @@ class SingleJoinSuite extends SharedSparkSession {
     right,
     Some(EqualTo(emptyFrame.col("c").expr, right.col("c").expr)),
     Seq.empty)
+
+  // Runs `f` with single joins on and both broadcast thresholds at 1000 bytes. Then in the queries
+  // below the outer side, two rows of `VALUES`, is small enough to broadcast, and the subquery
+  // side, `range(0, 1000)` (8000 bytes), is not.
+  private def withNonEquiScalarSubqueryConf(aqeEnabled: Boolean)(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000")(f)
+  }
+
+  // The join type and build side of each BroadcastNestedLoopJoinExec in the plan of `df`: with
+  // AQE, the initial plan before `df` runs and the final plan after.
+  private def nestedLoopJoins(df: DataFrame): Seq[(JoinType, BuildSide)] =
+    collect(df.queryExecution.executedPlan) {
+      case j: BroadcastNestedLoopJoinExec => (j.joinType, j.buildSide)
+    }
+
+  Seq(true, false).foreach { aqeEnabled =>
+    // A correlated scalar subquery whose correlation is not an equality becomes a LeftSingle join
+    // without equi-join keys. Its left side is the outer query, the only side small enough to
+    // broadcast, but BroadcastNestedLoopJoinExec can't build the left side of a LeftSingle join.
+    test("SPARK-61505: non-equi scalar subquery with a small outer side builds the subquery " +
+        s"side, AQE enabled: $aqeEnabled") {
+      withNonEquiScalarSubqueryConf(aqeEnabled) {
+        val df = sql("SELECT a, (SELECT id FROM range(0, 1000) WHERE id < l.a) AS s " +
+          "FROM VALUES (0), (1) AS l(a)")
+        assert(nestedLoopJoins(df) === Seq((LeftSingle, BuildRight)))
+        checkAnswer(df, Seq(Row(0, null), Row(1, 0L)))
+        assert(nestedLoopJoins(df) === Seq((LeftSingle, BuildRight)))
+      }
+    }
+
+    test("SPARK-61505: non-equi scalar subquery with a small outer side checks for too many " +
+        s"rows, AQE enabled: $aqeEnabled") {
+      withNonEquiScalarSubqueryConf(aqeEnabled) {
+        // For a = 2 the subquery returns the ids 0 and 1.
+        val df = sql("SELECT a, (SELECT id FROM range(0, 1000) WHERE id < l.a) AS s " +
+          "FROM VALUES (0), (2) AS l(a)")
+        checkError(
+          exception = intercept[SparkRuntimeException](df.collect()),
+          condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+          parameters = Map.empty)
+      }
+    }
+  }
 }

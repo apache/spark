@@ -2527,3 +2527,59 @@ DROP TABLE time_narrow_tbl
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.time_narrow_tbl
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query analysis
+Project [width_bucket(12:00:00, 09:00:00, 17:00:00, cast(8 as bigint)) AS width_bucket(TIME '12:00:00', TIME '09:00:00', TIME '17:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'09:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query analysis
+Project [width_bucket(09:00:00, 09:00:00, 17:00:00, cast(8 as bigint)) AS width_bucket(TIME '09:00:00', TIME '09:00:00', TIME '17:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'17:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query analysis
+Project [width_bucket(17:00:00, 09:00:00, 17:00:00, cast(8 as bigint)) AS width_bucket(TIME '17:00:00', TIME '09:00:00', TIME '17:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'08:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query analysis
+Project [width_bucket(08:00:00, 09:00:00, 17:00:00, cast(8 as bigint)) AS width_bucket(TIME '08:00:00', TIME '09:00:00', TIME '17:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'17:00:00', TIME'09:00:00', 8)
+-- !query analysis
+Project [width_bucket(12:00:00, 17:00:00, 09:00:00, cast(8 as bigint)) AS width_bucket(TIME '12:00:00', TIME '17:00:00', TIME '09:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'12:00:00', CAST(TIME'09:00:00' AS TIME(3)), CAST(TIME'17:00:00' AS TIME(9)), 8)
+-- !query analysis
+Project [width_bucket(12:00:00, cast(09:00:00 as time(3)), cast(17:00:00 as time(9)), cast(8 as bigint)) AS width_bucket(TIME '12:00:00', CAST(TIME '09:00:00' AS TIME(3)), CAST(TIME '17:00:00' AS TIME(9)), 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(CAST(null AS TIME), TIME'09:00:00', TIME'17:00:00', 8)
+-- !query analysis
+Project [width_bucket(cast(null as time(6)), 09:00:00, 17:00:00, cast(8 as bigint)) AS width_bucket(CAST(NULL AS TIME(6)), TIME '09:00:00', TIME '17:00:00', 8)#xL]
++- OneRowRelation
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'09:00:00', 8)
+-- !query analysis
+Project [width_bucket(12:00:00, 09:00:00, 09:00:00, cast(8 as bigint)) AS width_bucket(TIME '12:00:00', TIME '09:00:00', TIME '09:00:00', 8)#xL]
++- OneRowRelation

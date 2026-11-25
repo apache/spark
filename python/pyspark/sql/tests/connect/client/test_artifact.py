@@ -178,6 +178,88 @@ class ArtifactTestsMixin:
             ).create()
         )
 
+    def check_list_files_and_archives(self, spark_session):
+        with tempfile.TemporaryDirectory(prefix="check_list_files_and_archives") as d:
+            file_path = os.path.join(d, "my_listed_file.txt")
+            with open(file_path, "w") as f:
+                f.write("listed")
+            pyfile_path = os.path.join(d, "my_listed_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 1")
+            archive_dir = os.path.join(d, "my_listed_archive")
+            os.mkdir(archive_dir)
+            with open(os.path.join(archive_dir, "my_file.txt"), "w") as f:
+                f.write("listed")
+            archive_path = shutil.make_archive(archive_dir, "zip", d, "my_listed_archive")
+
+            spark_session.addArtifacts(file_path, file=True)
+            spark_session.addArtifacts(pyfile_path, pyfile=True)
+            spark_session.addArtifacts(f"{archive_path}#my_listed_files", archive=True)
+            # Adding a file again does not list it twice.
+            spark_session.addArtifacts(file_path, file=True)
+
+            files = spark_session.listFiles()
+            archives = spark_session.listArchives()
+            # Python files are files, and archives are not.
+            self.assertEqual(
+                sorted(os.path.basename(p) for p in files if "my_listed_" in p),
+                ["my_listed_file.txt", "my_listed_pyfile.py"],
+            )
+            listed_archives = [p for p in archives if "my_listed_" in p]
+            self.assertEqual(len(listed_archives), 1)
+            # The fragment that names the directory of the unpacked archive is kept.
+            self.assertTrue(
+                listed_archives[0].endswith("/my_listed_archive.zip#my_listed_files"),
+                listed_archives[0],
+            )
+
+    def test_list_files_and_archives(self):
+        self.check_list_files_and_archives(self.spark)
+
+        # A session does not list the files and archives of the other sessions, and can add the
+        # same ones.
+        other_session = SparkSession.builder.remote(
+            f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+        ).create()
+        self.assertFalse(any("my_listed_" in p for p in other_session.listFiles()))
+        self.assertFalse(any("my_listed_" in p for p in other_session.listArchives()))
+        # With the legacy flag, as before Spark 4.5, it lists those of every session.
+        other_session.conf.set("spark.sql.legacy.listAllSessionsResources", "true")
+        try:
+            self.assertTrue(any("my_listed_file" in p for p in other_session.listFiles()))
+            self.assertTrue(any("my_listed_archive" in p for p in other_session.listArchives()))
+        finally:
+            other_session.conf.unset("spark.sql.legacy.listAllSessionsResources")
+        self.check_list_files_and_archives(other_session)
+
+    def test_list_files_and_archives_added_with_sql(self):
+        spark_session = SparkSession.builder.remote(
+            f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+        ).create()
+        with tempfile.TemporaryDirectory(prefix="test_list_files_added_with_sql") as d:
+            file_path = os.path.join(d, "my_sql_file.txt")
+            with open(file_path, "w") as f:
+                f.write("listed")
+            archive_dir = os.path.join(d, "my_sql_archive")
+            os.mkdir(archive_dir)
+            with open(os.path.join(archive_dir, "my_file.txt"), "w") as f:
+                f.write("listed")
+            archive_path = shutil.make_archive(archive_dir, "zip", d, "my_sql_archive")
+
+            spark_session.sql(f"ADD FILE '{file_path}'")
+            spark_session.sql(f"ADD ARCHIVE '{archive_path}'")
+
+            self.assertEqual(
+                [os.path.basename(p) for p in spark_session.listFiles() if "my_sql_" in p],
+                ["my_sql_file.txt"],
+            )
+            self.assertEqual(
+                [os.path.basename(p) for p in spark_session.listArchives() if "my_sql_" in p],
+                ["my_sql_archive.zip"],
+            )
+            self.assertFalse(any("my_sql_" in p for p in self.spark.listFiles()))
+            self.assertFalse(any("my_sql_" in p for p in self.spark.listArchives()))
+
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
 class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
@@ -446,6 +528,21 @@ class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
         actualHash = self.artifact_manager.cache_artifact(blob)
         self.assertEqual(actualHash, expected_hash)
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
+
+    def test_native_data_source_package(self):
+        with tempfile.TemporaryDirectory(prefix="test_native_data_source_package") as d:
+            package_path = os.path.join(d, "my_source.sparkpkg")
+            with open(package_path, "wb") as f:
+                f.write(b"package")
+            requests = list(
+                self.artifact_manager._create_requests(
+                    package_path, pyfile=False, archive=False, file=False
+                )
+            )
+            self.assertEqual(len(requests), 1)
+            artifacts = requests[0].batch.artifacts
+            self.assertEqual(len(artifacts), 1)
+            self.assertEqual(artifacts[0].name, os.path.join("files", "my_source.sparkpkg"))
 
     def test_add_not_existing_artifact(self):
         with tempfile.TemporaryDirectory(prefix="test_add_not_existing_artifact") as d:

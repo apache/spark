@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, Union, UpdatableSketch, UpdatableSummary}
+import org.apache.datasketches.tuple.{Intersection, Sketch, Sketches, Summary, Union, UpdatableSketch, UpdatableSummary}
 
 /**
  * Sealed trait representing the internal state of tuple sketch aggregation operations.
@@ -30,11 +30,20 @@ sealed trait TupleSketchState[S <: Summary] {
 
 case class UpdatableTupleSketchBuffer[U, S <: UpdatableSummary[U]](sketch: UpdatableSketch[U, S])
     extends TupleSketchState[S] {
-  override def serialize(): Array[Byte] = sketch.compact.toByteArray
-  override def eval(): Array[Byte] = sketch.compact.toByteArray
+  override def serialize(): Array[Byte] = trimmedSketch.toByteArray
+  override def eval(): Array[Byte] = trimmedSketch.toByteArray
 
   /** Returns compact form of the sketch, needed for merge operations that require Sketch type. */
   def compactSketch: Sketch[S] = sketch.compact
+
+  /**
+   * Returns the compact form trimmed to the nominal number of entries, as `Union.getResult` does,
+   * so that the result does not depend on the plan or on the order of the input rows.
+   */
+  private def trimmedSketch: Sketch[S] = {
+    sketch.trim()
+    sketch.compact
+  }
 }
 
 case class UnionTupleAggregationBuffer[S <: Summary](union: Union[S])
@@ -45,8 +54,22 @@ case class UnionTupleAggregationBuffer[S <: Summary](union: Union[S])
 
 case class IntersectionTupleAggregationBuffer[S <: Summary](intersection: Intersection[S])
     extends TupleSketchState[S] {
-  override def serialize(): Array[Byte] = intersection.getResult.toByteArray
-  override def eval(): Array[Byte] = intersection.getResult.toByteArray
+  override def serialize(): Array[Byte] = {
+    // An untouched intersection represents no contribution, not an empty sketch.
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArray
+    } else {
+      Array.emptyByteArray
+    }
+  }
+
+  override def eval(): Array[Byte] = {
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArray
+    } else {
+      Sketches.createEmptySketch[S]().toByteArray
+    }
+  }
 }
 
 case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSketchState[S] {

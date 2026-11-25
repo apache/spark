@@ -221,6 +221,7 @@ class ExecutorPodsAllocator(
     // transfer the scheduler backend known executor requests from the newlyCreatedExecutors
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
+    schedulerKnownNewlyCreatedExecs.filterInPlace((k, _) => schedulerKnownExecs.contains(k))
     schedulerKnownNewlyCreatedExecs ++=
       newlyCreatedExecutors.filter { case (k, _) => schedulerKnownExecs.contains(k) }
         .map { case (k, v) => (k, v._1) }
@@ -535,8 +536,10 @@ class ExecutorPodsAllocator(
         newExecutorId.toString,
         applicationId,
         driverPod,
-        resourceProfileId)
-      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
+        resourceProfileId,
+        Option(secMgr.getSecretKey()),
+        secMgr.getEnvironmentForSslRpcPasswordsFromSparkConf)
+      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf,
         kubernetesClient, rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod
       val podWithAttachedContainer = new PodBuilder(executorPod.pod)

@@ -18,8 +18,10 @@
 import array
 import ctypes
 import datetime
+import json
 import os
 import pickle
+import re
 import sys
 import unittest
 from dataclasses import asdict, dataclass
@@ -48,6 +50,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     DecimalType,
     DoubleType,
+    FileType,
+    FileTypeMode,
     FloatType,
     Geography,
     GeographyType,
@@ -74,6 +78,7 @@ from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
+    _check_no_char_varchar,
     _create_row,
     _infer_type,
     _make_type_verifier,
@@ -657,6 +662,194 @@ class TypesTestsMixin:
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
 
+    def test_check_no_char_varchar(self):
+        from pyspark.testing.objects import ExamplePointUDT
+
+        _check_no_char_varchar(StringType(), "Python UDF return types")
+        _check_no_char_varchar(ArrayType(StringType()), "Python UDF return types")
+
+        cases = [
+            CharType(3),
+            VarcharType(8),
+            ArrayType(CharType(5)),
+            MapType(VarcharType(4), StringType()),
+            MapType(StringType(), VarcharType(4)),
+            MapType(StringType(), ArrayType(CharType(3))),
+            StructType([StructField("c", CharType(3))]),
+        ]
+        for dt in cases:
+            with self.subTest(dt=dt.simpleString()):
+                with self.assertRaises(PySparkNotImplementedError) as pe:
+                    _check_no_char_varchar(dt, "Python UDF return types")
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                    messageParameters={
+                        "feature": "Python UDF return types",
+                        "data_type": dt.simpleString(),
+                    },
+                )
+
+        class CharStorageUDT(ExamplePointUDT):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("x", CharType(3))])
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            _check_no_char_varchar(CharStorageUDT(), "Python UDF return types")
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": CharStorageUDT().simpleString(),
+            },
+        )
+
+    def test_char_varchar_type_collations(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        self.assertEqual(CharType(4).simpleString(), "char(4)")
+        self.assertEqual(CharType(4, "UTF8_LCASE").simpleString(), "char(4) collate UTF8_LCASE")
+        self.assertEqual(VarcharType(6).simpleString(), "varchar(6)")
+        self.assertEqual(
+            VarcharType(6, "UNICODE_CI").simpleString(), "varchar(6) collate UNICODE_CI"
+        )
+
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+            StructType(
+                [
+                    StructField(
+                        "mixed",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
+            StructType([StructField("", ArrayType(CharType(4, "UTF8_LCASE")))]),
+            StructType(
+                [
+                    StructField(
+                        "",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
+        ]
+        for data_type in data_types:
+            self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))
+
+        compatibility_schema = StructType(
+            [
+                StructField("plain", CharType(3)),
+                StructField("binary", CharType(4, "UTF8_BINARY")),
+                StructField(
+                    "nested",
+                    ArrayType(VarcharType(6, "UNICODE_CI")),
+                ),
+            ]
+        )
+        self.assertEqual(
+            compatibility_schema.jsonValue(),
+            {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "plain",
+                        "type": "char(3)",
+                        "nullable": True,
+                        "metadata": {},
+                    },
+                    {
+                        "name": "binary",
+                        "type": "char(4)",
+                        "nullable": True,
+                        "metadata": {
+                            "__CHAR_VARCHAR_COLLATIONS": {"binary": "spark.UTF8_BINARY"},
+                        },
+                    },
+                    {
+                        "name": "nested",
+                        "type": {
+                            "type": "array",
+                            "elementType": "varchar(6)",
+                            "containsNull": True,
+                        },
+                        "nullable": True,
+                        "metadata": {
+                            "__CHAR_VARCHAR_COLLATIONS": {"nested.element": "icu.UNICODE_CI"},
+                        },
+                    },
+                ],
+            },
+        )
+
+        mixed_field = StructField(
+            "mixed",
+            MapType(StringType("UTF8_LCASE"), CharType(4, "UNICODE_CI")),
+        )
+        self.assertEqual(
+            mixed_field.getCollationMetadata(),
+            {"mixed.key": "spark.UTF8_LCASE"},
+        )
+        self.assertEqual(
+            mixed_field.getCharVarcharCollationMetadata(),
+            {"mixed.value": "icu.UNICODE_CI"},
+        )
+        mixed_metadata = mixed_field.jsonValue()["metadata"]
+        self.assertEqual(
+            mixed_field.getCollationsMap(mixed_metadata),
+            {"mixed.key": "UTF8_LCASE"},
+        )
+        self.assertEqual(
+            mixed_field.getCharVarcharCollationsMap(mixed_metadata),
+            {"mixed.value": "UNICODE_CI"},
+        )
+
+    def test_standalone_collated_char_varchar_json_is_current_reader_only(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        standalone = CharType(4, "UTF8_LCASE")
+        self.assertEqual(standalone.jsonValue(), "char(4) collate UTF8_LCASE")
+        self.assertEqual(_parse_datatype_json_string(standalone.json()), standalone)
+
+        field_json = StructType([StructField("c", standalone)]).jsonValue()["fields"][0]
+        self.assertEqual(field_json["type"], "char(4)")
+        self.assertEqual(
+            field_json["metadata"]["__CHAR_VARCHAR_COLLATIONS"],
+            {"c": "spark.UTF8_LCASE"},
+        )
+
+    def test_char_varchar_json_rejects_trailing_tokens(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        for data_type in [
+            "char(4) collate UTF8_LCASE junk",
+            "varchar(6) collate UNICODE_CI junk",
+        ]:
+            with self.subTest(data_type=data_type):
+                self.assertRaises(
+                    PySparkValueError,
+                    lambda: _parse_datatype_json_string(json.dumps(data_type)),
+                )
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
@@ -762,6 +955,231 @@ class TypesTestsMixin:
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
             assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_rejects_inline_and_metadata_collations(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        for data_type, metadata_collation in [
+            ("char(4) collate UTF8_LCASE", "spark.UTF8_LCASE"),
+            ("varchar(6) collate UTF8_LCASE", "icu.UNICODE_CI"),
+        ]:
+            schema_json = {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "c",
+                        "type": data_type,
+                        "nullable": True,
+                        "metadata": {
+                            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"c": metadata_collation},
+                        },
+                    }
+                ],
+            }
+            self.assertRaises(
+                PySparkTypeError,
+                lambda: _parse_datatype_json_string(json.dumps(schema_json)),
+            )
+
+        collations_on_char_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "c",
+                    "type": "char(4)",
+                    "nullable": True,
+                    "metadata": {
+                        _COLLATIONS_METADATA_KEY: {"c": "spark.UTF8_LCASE"},
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(json.dumps(collations_on_char_json)),
+        )
+
+        char_varchar_collations_on_decimal_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "d",
+                    "type": "decimal(10,2)",
+                    "nullable": True,
+                    "metadata": {
+                        _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"d": "spark.UTF8_LCASE"},
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(
+                json.dumps(char_varchar_collations_on_decimal_json)
+            ),
+        )
+
+    def test_char_varchar_collation_metadata_key_collision_is_rejected(self):
+        from pyspark.sql.types import _CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+
+        field = StructField(
+            "c",
+            CharType(4, "UTF8_LCASE"),
+            metadata={_CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"caller": "value"}},
+        )
+        with self.assertRaises(PySparkTypeError) as pe:
+            field.jsonValue()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+            messageParameters={"metadataKey": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+        )
+
+    def test_schema_rejects_malformed_char_varchar_collation_metadata(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        def schema_json(metadata_value):
+            return json.dumps(
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "name": "c",
+                            "type": "char(4)",
+                            "nullable": True,
+                            "metadata": {
+                                _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: metadata_value,
+                            },
+                        }
+                    ],
+                }
+            )
+
+        cases = [
+            (
+                "caller",
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"caller"'},
+            ),
+            (
+                {"c": 1},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": "1"},
+            ),
+            (
+                {"c": "spark."},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"spark."'},
+            ),
+            (
+                {"c": ".UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '".UTF8_LCASE"'},
+            ),
+            (
+                {"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+                {"fieldPath": "typo"},
+            ),
+        ]
+        for metadata_value, error_class, message_parameters in cases:
+            with self.assertRaises(PySparkTypeError) as pe:
+                _parse_datatype_json_string(schema_json(metadata_value))
+            self.check_error(
+                exception=pe.exception,
+                errorClass=error_class,
+                messageParameters=message_parameters,
+            )
+
+    def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):
+        # Reduced independent reader copied from the relevant parser branches at base
+        # 389de941f002a5c92e22dc3ed0f65af602a174db. It intentionally does not use any
+        # current parsing helper, so unknown metadata exercises the preceding-reader contract.
+        def preceding_read_type(value):
+            if isinstance(value, str):
+                if match := re.fullmatch(r"char\((\d+)\)", value):
+                    return CharType(int(match.group(1)))
+                if match := re.fullmatch(r"varchar\((\d+)\)", value):
+                    return VarcharType(int(match.group(1)))
+                raise AssertionError(f"unsupported pinned-reader type: {value}")
+
+            if value["type"] == "array":
+                return ArrayType(preceding_read_type(value["elementType"]), value["containsNull"])
+            if value["type"] == "map":
+                return MapType(
+                    preceding_read_type(value["keyType"]),
+                    preceding_read_type(value["valueType"]),
+                    value["valueContainsNull"],
+                )
+            if value["type"] == "struct":
+                return StructType([preceding_read_field(field) for field in value["fields"]])
+            raise AssertionError(f"unsupported pinned-reader type: {value}")
+
+        def preceding_read_field(value):
+            return StructField(
+                value["name"],
+                preceding_read_type(value["type"]),
+                value.get("nullable", True),
+                value.get("metadata"),
+            )
+
+        schema = StructType(
+            [
+                StructField("c", CharType(4, "UTF8_LCASE")),
+                StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                StructField(
+                    "mapped",
+                    MapType(
+                        CharType(3, "UTF8_BINARY"),
+                        VarcharType(5, "UTF8_LCASE"),
+                    ),
+                ),
+                StructField(
+                    "nestedStruct",
+                    StructType([StructField("c", CharType(2, "UNICODE_CI"))]),
+                ),
+            ]
+        )
+        preceding_schema = preceding_read_type(json.loads(schema.json()))
+        self.assertEqual(preceding_schema["c"].dataType, CharType(4))
+        self.assertEqual(
+            preceding_schema["nested"].dataType,
+            ArrayType(VarcharType(6)),
+        )
+        self.assertEqual(
+            preceding_schema["mapped"].dataType,
+            MapType(CharType(3), VarcharType(5)),
+        )
+        nested_struct = preceding_schema["nestedStruct"].dataType
+        self.assertEqual(nested_struct["c"].dataType, CharType(2))
+
+        metadata_key = "__CHAR_VARCHAR_COLLATIONS"
+        self.assertEqual(
+            preceding_schema["c"].metadata[metadata_key],
+            {"c": "spark.UTF8_LCASE"},
+        )
+        self.assertEqual(
+            preceding_schema["nested"].metadata[metadata_key],
+            {"nested.element": "icu.UNICODE_CI"},
+        )
+        self.assertEqual(
+            preceding_schema["mapped"].metadata[metadata_key],
+            {
+                "mapped.key": "spark.UTF8_BINARY",
+                "mapped.value": "spark.UTF8_LCASE",
+            },
+        )
+        self.assertEqual(
+            nested_struct["c"].metadata[metadata_key],
+            {"c": "icu.UNICODE_CI"},
+        )
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
@@ -943,8 +1361,8 @@ class TypesTestsMixin:
             ("geography(SRID:ANY)", GeographyType("ANY")),
             ("geography(srid:any)", GeographyType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -976,9 +1394,9 @@ class TypesTestsMixin:
             "geography(SRID0)",
             "geography(SRID:4326, ALG)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_geometry_json_serde(self):
         from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
@@ -989,8 +1407,8 @@ class TypesTestsMixin:
             ("geometry(SRID:ANY)", GeometryType("ANY")),
             ("geometry(srid:any)", GeometryType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -1020,9 +1438,9 @@ class TypesTestsMixin:
             "geometry(SRID:0,)",
             "geometry(SRID0)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_udt(self):
         from pyspark.sql.types import _infer_type, _make_type_verifier, _parse_datatype_json_string
@@ -2068,7 +2486,11 @@ class TypesTestsMixin:
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
+            CharType(10, "UTF8_BINARY"),
+            CharType(10, "UTF8_LCASE"),
             VarcharType(10),
+            VarcharType(10, "UTF8_BINARY"),
+            VarcharType(10, "UNICODE_CI"),
             BinaryType(),
             BooleanType(),
             DateType(),
@@ -2277,8 +2699,9 @@ class TypesTestsMixin:
 
     def test_timestamp_nanos_type_python_udf(self):
         # SPARK-57462: a Python UDF with a nanosecond return type exercises makeFromJava
-        # (Python -> JVM). useArrow=False forces the classic Py4J path; the Arrow-based UDF path
-        # is not yet implemented for these types. The value round-trips at microsecond resolution.
+        # (Python -> JVM). useArrow=False forces the classic Py4J path; the Arrow-based UDF path is
+        # covered by test_timestamp_nanos_type_arrow_udf. The value round-trips at microsecond
+        # resolution.
         from pyspark.sql.functions import udf
 
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
@@ -2354,36 +2777,189 @@ class TypesTestsMixin:
             # SparkRuntimeException); assert that condition rather than any failure.
             self.assertIn("TIMESTAMP_NANOS_PYTHON_MAP_KEY", str(pe.exception))
 
-    def test_timestamp_nanos_type_arrow_conversion_unsupported(self):
-        # SPARK-57462: Arrow/pandas value conversion for the nanosecond timestamp types is a pending
-        # follow-up; until then the classic read (toPandas) and write (createDataFrame from a pandas
-        # DataFrame) paths must reject an explicit nanosecond schema deterministically, naming the
-        # offending leaf type, rather than silently mis-handle the value. (The Connect data path is
-        # asserted separately in the parity suite.)
+    def test_timestamp_nanos_type_arrow_conversion(self):
+        # SPARK-57462 follow-up: the Arrow / pandas value path carries the nanosecond timestamp
+        # types as an Arrow timestamp[ns], so -- unlike the microsecond-resolution
+        # datetime.datetime boundary used by collect() / Python UDFs -- DataFrame.toPandas and
+        # createDataFrame from a pandas DataFrame preserve full nanosecond precision (pandas
+        # datetime64[ns]). The session time zone is pinned so the timezone-aware LTZ value is
+        # deterministic.
         import pandas as pd
 
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            # Read path: toPandas keeps the sub-microsecond digits.
+            pdf = self.spark.sql(
+                "SELECT CAST('2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ(9)) AS ts"
+            ).toPandas()
+            self.assertEqual("datetime64[ns]", str(pdf["ts"].dtype))
+            self.assertEqual(pd.Timestamp("2020-01-02 03:04:05.123456789"), pdf["ts"][0])
+            # The sub-microsecond digits survive; datetime.datetime could not carry them.
+            self.assertEqual(789, pdf["ts"][0].nanosecond)
+
+            # Write path: a datetime64[ns] pandas column round-trips its nanoseconds back to Spark,
+            # for both the NTZ and the timezone-aware LTZ nanosecond types.
+            ns_string = "2020-01-02 03:04:05.123456789"
+            in_pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series([ns_string]))})
+            self.assertEqual("datetime64[ns]", str(in_pdf["ts"].dtype))
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(in_pdf, schema)
+                self.assertEqual(schema, df.schema)
+                # The stored value keeps all nine fractional digits (checked server-side).
+                self.assertEqual(
+                    ns_string,
+                    df.select(F.col("ts").cast("string")).first()[0],
+                )
+                # ... and a full pandas -> Spark -> pandas round-trip is lossless.
+                self.assertEqual(pd.Timestamp(ns_string), df.toPandas()["ts"][0])
+
+    def test_timestamp_nanos_type_arrow_conversion_non_utc(self):
+        # SPARK-57462 follow-up: a naive Arrow timestamp[ns] column ingested as the timezone-aware
+        # LTZ nanosecond type under a non-UTC session time zone must be localized to that zone
+        # (assume_timezone), exactly like TimestampType -- otherwise it is silently read as UTC and
+        # the instant is off by the session offset. This exercises the createDataFrame from a
+        # pyarrow.Table path (createDataFrame from a pandas DataFrame uses a different, already
+        # covered converter). NTZ is the control: it stays a naive wall clock either way.
+        import pandas as pd
+        import pyarrow as pa
+
+        ns_string = "2020-06-15 12:30:00.123456789"
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            table = pa.table({"ts": pa.array([pd.Timestamp(ns_string)], type=pa.timestamp("ns"))})
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(table, schema)
+                self.assertEqual(schema, df.schema)
+                # Rendered in the session time zone the wall clock is unchanged: NTZ carries no
+                # zone, and LTZ interpreted the naive input in the session zone (not UTC -- which
+                # would shift it by the session offset).
+                self.assertEqual(ns_string, df.select(F.col("ts").cast("string")).first()[0])
+                # Nanoseconds survive the Arrow round-trip.
+                self.assertEqual(789, df.toPandas()["ts"][0].nanosecond)
+
+    def test_timestamp_nanos_type_nested_arrow_conversion(self):
+        # SPARK-57462 follow-up: to_arrow_type carries the nanosecond precision tag on nested Arrow
+        # fields (array element, struct field, map value), so a nested nanosecond value ingested
+        # through the Arrow value path keeps its declared (non-9) precision rather than being
+        # silently reconstructed at a different precision (e.g. a dropped tag on a nested
+        # map<_, NTZNanos(7)> -> precision 9). Exercises createDataFrame from a pyarrow.Table -- the
+        # Spark Connect createDataFrame path -- for both the NTZ and the timezone-aware LTZ
+        # nanosecond types at a non-9 precision.
+        import pandas as pd
+        import pyarrow as pa
+
+        ns_string = "2020-01-02 03:04:05.123456789"
+        ts = pd.Timestamp(ns_string)
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type in (TimestampNTZNanosType(7), TimestampLTZNanosType(8)):
+                arrow_ns = pa.timestamp("ns")
+                table = pa.table(
+                    {
+                        "arr": pa.array([[ts, ts]], type=pa.list_(arrow_ns)),
+                        "st": pa.array([{"a": ts}], type=pa.struct([("a", arrow_ns)])),
+                        "mp": pa.array([[("k", ts)]], type=pa.map_(pa.string(), arrow_ns)),
+                    }
+                )
+                schema = StructType(
+                    [
+                        StructField("arr", ArrayType(nanos_type)),
+                        StructField("st", StructType([StructField("a", nanos_type)])),
+                        StructField("mp", MapType(StringType(), nanos_type)),
+                    ]
+                )
+                df = self.spark.createDataFrame(table, schema)
+                # The declared non-9 precision survives on every nested field -- the precision tag
+                # is not dropped, so nothing (including the map value) is silently widened to
+                # precision 9.
+                self.assertEqual(schema, df.schema)
+                # The value round-trips to the declared nanosecond type without corruption. The
+                # first seven fractional digits are shared by precisions 7/8/9, so this holds
+                # regardless of how the reader floors the sub-microsecond remainder.
+                row = df.selectExpr(
+                    "cast(arr[0] as string) as a0",
+                    "cast(st.a as string) as sa",
+                    "cast(mp['k'] as string) as mv",
+                ).first()
+                self.assertTrue(row.a0.startswith("2020-01-02 03:04:05.1234567"), row.a0)
+                self.assertTrue(row.sa.startswith("2020-01-02 03:04:05.1234567"), row.sa)
+                self.assertTrue(row.mv.startswith("2020-01-02 03:04:05.1234567"), row.mv)
+
+    def test_timestamp_nanos_type_arrow_conversion_floors_to_precision(self):
+        # Arrow timestamp[ns] carries nine fractional digits; a lower declared precision must floor
+        # them, or values equal at that precision compare and group as different.
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (
+                TimestampNTZNanosType(7),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456712"],
+                "2020-01-02 03:04:05.1234567",
+            ),
+            (
+                TimestampLTZNanosType(8),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456781"],
+                "2020-01-02 03:04:05.12345678",
+            ),
+            # Pre-epoch values floor toward -inf, not toward zero.
+            (
+                TimestampNTZNanosType(7),
+                ["1969-12-31 23:59:59.999999999", "1969-12-31 23:59:59.999999901"],
+                "1969-12-31 23:59:59.9999999",
+            ),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type, values, floored in cases:
+                pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series(values))})
+                table = pa.table({"ts": pa.array(pdf["ts"], type=pa.timestamp("ns"))})
+                schema = StructType([StructField("ts", nanos_type)])
+                floored_literal = f"CAST('{floored}' AS {nanos_type.simpleString()})"
+                for data in (pdf, table):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(1, df.distinct().count())
+                    self.assertEqual(2, df.where(f"ts = {floored_literal}").count())
+                    self.assertEqual([pd.Timestamp(floored)] * 2, list(df.toPandas()["ts"]))
+
+    def test_timestamp_nanos_type_arrow_udf(self):
+        # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
+        # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the
+        # Arrow value path (the reject previously blocked returning nanoseconds from an Arrow UDF).
+        # A microsecond-precision value round-trips: the Arrow encoding carries nanoseconds, but the
+        # datetime.datetime Python boundary is microsecond-resolution.
+        from pyspark.sql.functions import udf
+
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
-            schema = StructType([StructField("ts", TimestampNTZNanosType(9))])
-            value = datetime.datetime(2020, 1, 2, 3, 4, 5, 123456)
-
-            # Read path: DataFrame.toPandas().
-            df = self.spark.createDataFrame([(value,)], schema)
-            with self.assertRaises(PySparkTypeError) as pe:
-                df.toPandas()
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
+            value = datetime.datetime(2021, 6, 7, 8, 9, 10, 123456)
+            df = self.spark.createDataFrame(
+                [(value,)], StructType([StructField("ts", TimestampNTZNanosType(9))])
             )
-
-            # Write path: createDataFrame from a pandas DataFrame with an explicit nanos schema.
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(pd.DataFrame({"ts": [value]}), schema)
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
-            )
+            identity_udf = udf(lambda x: x, returnType=TimestampNTZNanosType(9), useArrow=True)
+            row = df.select(identity_udf("ts").alias("out")).first()
+            self.assertEqual(value, row.out)
 
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
@@ -2632,9 +3208,9 @@ class TypesTestsMixin:
         )
 
         # check parse_json
-        for key, json, obj in expected_values:
-            self.assertEqual(VariantVal.parseJson(json).toJson(), json)
-            self.assertEqual(VariantVal.parseJson(json).toPython(), obj)
+        for key, json_value, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json_value).toJson(), json_value)
+            self.assertEqual(VariantVal.parseJson(json_value).toPython(), obj)
 
         # compare the parse_json in Spark vs python. `json_str` contains all of `expected_values`.
         parse_json_spark_output = variants[0]
@@ -3043,6 +3619,25 @@ class TypesTestsMixin:
             StructType([StructField("a", TimeType(6))]),
         )
 
+    def test_file_type_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("file"), FileType())
+        self.assertEqual(DataType.fromDDL("file external"), FileType.external())
+        self.assertEqual(
+            DataType.fromDDL(
+                "a file external, b file, c array<file external>, d map<string, file external>, "
+                "e struct<x: file external>"
+            ),
+            StructType(
+                [
+                    StructField("a", FileType.external()),
+                    StructField("b", FileType()),
+                    StructField("c", ArrayType(FileType.external())),
+                    StructField("d", MapType(StringType(), FileType.external())),
+                    StructField("e", StructType([StructField("x", FileType.external())])),
+                ]
+            ),
+        )
+
     # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
     # `fromDDL`'s behavior.
     def test_spark48834_from_ddl_matches_udf_schema_string(self):
@@ -3124,6 +3719,24 @@ class TypesTestsMixin:
 
 
 class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
+    def test_from_json_does_not_mutate_collation_metadata(self):
+        import copy
+
+        for data_type in [
+            StringType("UTF8_LCASE"),
+            ArrayType(StringType("UNICODE_CI")),
+            MapType(StringType("UTF8_LCASE"), StringType("UNICODE_CI")),
+            StructType([StructField("nested", StringType("UTF8_LCASE"))]),
+        ]:
+            with self.subTest(data_type=data_type):
+                schema = StructType([StructField("s", data_type, metadata={"comment": "keep"})])
+                payload = schema.jsonValue()
+                original = copy.deepcopy(payload)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+
     # regression test for SPARK-6055
     def test_data_type_eq(self):
         lt = LongType()
@@ -3156,6 +3769,124 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         v3 = VarcharType(10)
         self.assertEqual(v1, v3)
         self.assertFalse(v1 is v3)
+
+    def test_file_type(self):
+        external, unknown = FileType.external(), FileType()
+        self.assertEqual(FileTypeMode.UNKNOWN, unknown.mode)
+        self.assertEqual(FileTypeMode.EXTERNAL, external.mode)
+        self.assertEqual(external, FileType(FileTypeMode.EXTERNAL))
+        # The mode is part of the type identity.
+        self.assertNotEqual(external, unknown)
+        self.assertNotEqual(hash(external), hash(unknown))
+
+        self.assertEqual("file external", external.simpleString())
+        self.assertEqual("file", unknown.simpleString())
+        self.assertEqual("file", FileType.typeName())
+        self.assertEqual("FileType(FileTypeMode.EXTERNAL)", repr(external))
+        self.assertEqual("FileType()", repr(unknown))
+        self.assertEqual("file external", DataType._get_jvm_type_name(external))
+        self.assertEqual('"file external"', external.json())
+        self.assertEqual('"file unknown"', unknown.json())
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            FileType("external")  # type: ignore[arg-type]
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "mode",
+                "expected_type": "FileTypeMode",
+                "arg_type": "str",
+            },
+        )
+
+    def test_file_type_json(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
+
+        # Outside a struct field, the JSON carries the mode, and a plain "file" is unknown.
+        for json_value, expected in [
+            ("file external", FileType.external()),
+            ("file unknown", FileType()),
+            ("file", FileType()),
+        ]:
+            with self.subTest(json_value=json_value):
+                self.assertEqual(expected, _parse_datatype_json_value(json_value))
+        for dt in [FileType(), FileType.external(), ArrayType(FileType.external())]:
+            with self.subTest(dt=dt):
+                self.assertEqual(dt, _parse_datatype_json_string(dt.json()))
+        for json_value in ["file other", "file external unknown", "files"]:
+            with self.subTest(json_value=json_value):
+                with self.assertRaises(PySparkValueError) as pe:
+                    _parse_datatype_json_value(json_value)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CANNOT_PARSE_DATATYPE",
+                    messageParameters={"msg": json_value},
+                )
+        # Outside a struct field, a plain "file" in an array or a map is unknown too.
+        self.assertEqual(
+            ArrayType(FileType()),
+            _parse_datatype_json_value(
+                {"type": "array", "elementType": "file", "containsNull": True}
+            ),
+        )
+        self.assertEqual(
+            MapType(StringType(), FileType()),
+            _parse_datatype_json_value(
+                {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "file",
+                    "valueContainsNull": True,
+                }
+            ),
+        )
+
+        # In a struct field, and in an array or map of one, an external file is the plain "file"
+        # and a plain "file" is read as external. An unknown file keeps its mode.
+        schema = StructType(
+            [
+                StructField("a", FileType.external()),
+                StructField("b", FileType()),
+                StructField("c", ArrayType(FileType.external())),
+                StructField("d", MapType(StringType(), FileType.external())),
+                StructField("e", StructType([StructField("x", FileType.external())])),
+                StructField("k", MapType(FileType.external(), IntegerType())),
+            ]
+        )
+        fields = schema.jsonValue()["fields"]
+        self.assertEqual("file", fields[0]["type"])
+        self.assertEqual("file unknown", fields[1]["type"])
+        self.assertEqual("file", fields[2]["type"]["elementType"])
+        self.assertEqual("file", fields[3]["type"]["valueType"])
+        self.assertEqual("file", fields[4]["type"]["fields"][0]["type"])
+        self.assertEqual("file", fields[5]["type"]["keyType"])
+        self.assertEqual(schema, _parse_datatype_json_string(schema.json()))
+        self.assertEqual(
+            StructField("f", FileType.external()),
+            StructField.fromJson({"name": "f", "type": "file"}),
+        )
+        self.assertEqual(
+            StructField("f", ArrayType(FileType.external())),
+            StructField.fromJson(
+                {
+                    "name": "f",
+                    "type": {"type": "array", "elementType": "file", "containsNull": True},
+                }
+            ),
+        )
+
+    def test_file_type_json_with_collations(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        # A field that has both a collated string and an external file in a map.
+        field = StructField("m", MapType(StringType("UNICODE"), FileType.external()))
+        json_value = field.jsonValue()
+        self.assertEqual("string", json_value["type"]["keyType"])
+        self.assertEqual("file", json_value["type"]["valueType"])
+        self.assertEqual({"m.key": "icu.UNICODE"}, json_value["metadata"]["__COLLATIONS"])
+        schema = StructType([field])
+        self.assertEqual(schema, _parse_datatype_json_string(schema.json()))
 
     def test_timestamp_nanos_type_precision(self):
         for cls in [TimestampNTZNanosType, TimestampLTZNanosType]:
@@ -3382,6 +4113,19 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(list(r), [1, 2, 3])
         self.assertEqual([v for v in r], [1, 2, 3])
 
+    def test_variant_builder_size_limit(self):
+        from pyspark.sql.variant_utils import VariantBuilder
+
+        for json_str in ['"%s"' % ("a" * 100), '{"%s": 1}' % ("k" * 100)]:
+            with self.assertRaises(PySparkValueError) as pe:
+                VariantBuilder(size_limit=64).build(json_str)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": "64"},
+            )
+
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
@@ -3605,7 +4349,29 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_file_type_json_matches_jvm(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        jvm_data_type = self.spark._jvm.org.apache.spark.sql.types.DataType
+        for dt in [
+            FileType(),
+            FileType.external(),
+            ArrayType(FileType.external()),
+            StructType(
+                [
+                    StructField("a", FileType.external()),
+                    StructField("b", FileType()),
+                    StructField("c", ArrayType(FileType.external())),
+                    StructField("d", MapType(StringType(), FileType.external())),
+                    StructField("k", MapType(FileType.external(), IntegerType())),
+                ]
+            ),
+        ]:
+            with self.subTest(dt=dt):
+                jvm_json = jvm_data_type.fromJson(dt.json()).json()
+                # The JVM does not sort the keys, so the parsed JSON is compared.
+                self.assertEqual(json.loads(dt.json()), json.loads(jvm_json))
+                self.assertEqual(dt, _parse_datatype_json_string(jvm_json))
 
 
 if __name__ == "__main__":

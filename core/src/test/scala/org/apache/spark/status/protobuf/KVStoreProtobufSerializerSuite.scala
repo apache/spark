@@ -22,6 +22,8 @@ import java.util.Date
 import scala.collection.mutable
 import scala.io.Source
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
@@ -31,9 +33,36 @@ import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 import org.apache.spark.util.Utils.tryWithResource
+import org.apache.spark.util.kvstore.{LevelDB, RocksDB}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
+
+  test("SPARK-59169: log a warning once per class when no ProtobufSerDe is found") {
+    KVStoreProtobufSerializer.resetMissedClassesForTesting()
+    val appender = new LogAppender("KVStoreProtobufSerializer fallback warning")
+    withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
+      serializer.serialize(FallbackTestData("a"))
+      serializer.serialize(FallbackTestData("b"))
+    }
+    val warnings = appender.loggingEvents
+      .filter(_.getLevel == Level.WARN)
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains(classOf[FallbackTestData].getName))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("No Protobuf SerDe found for class"))
+  }
+
+  test("SPARK-59169: no warning for KVStore bookkeeping classes without ProtobufSerDe") {
+    KVStoreProtobufSerializer.resetMissedClassesForTesting()
+    val appender = new LogAppender("KVStoreProtobufSerializer by-design fallback")
+    withLogAppender(appender, loggerNames = Seq(classOf[KVStoreProtobufSerializer].getName)) {
+      assert(KVStoreProtobufSerializer.getSerializer(classOf[RocksDB.TypeAliases]).isEmpty)
+      assert(KVStoreProtobufSerializer.getSerializer(classOf[LevelDB.TypeAliases]).isEmpty)
+    }
+    val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
+    assert(warnings.isEmpty)
+  }
 
   test("All the string fields must be optional to avoid NPE") {
     val protoFile = getWorkspaceFilePath(
@@ -1703,3 +1732,5 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 }
+
+private[protobuf] case class FallbackTestData(value: String)

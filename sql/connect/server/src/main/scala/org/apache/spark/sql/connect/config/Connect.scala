@@ -20,6 +20,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.internal.SQLConf.buildConf
@@ -53,7 +54,9 @@ object Connect {
     buildStaticConf("spark.connect.grpc.interceptor.classes")
       .doc(
         "Comma separated list of class names that must " +
-          "implement the io.grpc.ServerInterceptor interface.")
+          "implement the io.grpc.ServerInterceptor interface. When authentication is enabled " +
+          "these interceptors run after it, so they only see calls that have already been " +
+          "authenticated and cannot supply the Authorization header themselves.")
       .version("3.4.0")
       .stringConf
       .createOptional
@@ -340,6 +343,18 @@ object Connect {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("2s")
+
+  val CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED =
+    buildConf(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
+      .doc(
+        "When true, the Spark Connect JVM client resolves eligible Maven dependencies on the " +
+          "server when it advertises support. Dependencies that specify repositories are always " +
+          "resolved on the client. When false, the JVM client resolves all Maven dependencies " +
+          "locally. This is a client routing preference, not a server-side enforcement setting.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val CONNECT_SESSION_PLAN_CACHE_SIZE =
     buildStaticConf("spark.connect.session.planCache.maxSize")

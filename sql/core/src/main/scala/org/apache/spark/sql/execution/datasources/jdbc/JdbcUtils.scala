@@ -55,11 +55,6 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JdbcUtils extends Logging with SQLConfHelper {
 
-  // Marks an NTZ column to read (resp. write) as wall-clock. Distinct keys so a read marker on the
-  // resolved schema can't force wall-clock on a later write to a different dialect.
-  private[sql] val READ_TIMESTAMP_NTZ_WALL_CLOCK = "read_timestamp_ntz_wall_clock"
-  private[sql] val WRITE_TIMESTAMP_NTZ_WALL_CLOCK = "write_timestamp_ntz_wall_clock"
-
   /**
    * Returns true if the table already exists in the JDBC database.
    */
@@ -193,6 +188,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (isTimestampNTZ) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
   }
 
+  // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
+  // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
+  // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
+  def resolveTimestampType(
+      isTimestampNTZ: Boolean, scale: Int, preferTimestampNanos: Boolean): DataType = {
+    if (preferTimestampNanos &&
+      scale >= TimestampNTZNanosType.MIN_PRECISION &&
+      scale <= TimestampNTZNanosType.MAX_PRECISION &&
+      conf.timestampNanosTypesEnabled) {
+      getTimestampNanosType(isTimestampNTZ, scale)
+    } else getTimestampType(isTimestampNTZ)
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -206,8 +214,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       precision: Int,
       scale: Int,
       signed: Boolean,
-      isTimestampNTZ: Boolean,
-      preferTimestampNanos: Boolean = false): DataType = sqlType match {
+      options: JDBCOptions): DataType = sqlType match {
     case java.sql.Types.BIGINT => if (signed) LongType else DecimalType(20, 0)
     case java.sql.Types.BINARY => BinaryType
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
@@ -249,17 +256,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
         val timePrecision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
           else TimeType.DEFAULT_PRECISION
         TimeType(timePrecision)
-      } else getTimestampType(isTimestampNTZ)
+      } else getTimestampType(options.preferTimestampNTZ)
     case java.sql.Types.TIMESTAMP =>
-      // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
-      // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
-      // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
-      if (preferTimestampNanos &&
-        scale >= TimestampNTZNanosType.MIN_PRECISION &&
-        scale <= TimestampNTZNanosType.MAX_PRECISION &&
-        conf.timestampNanosTypesEnabled) {
-        getTimestampNanosType(isTimestampNTZ, scale)
-      } else getTimestampType(isTimestampNTZ)
+      resolveTimestampType(options.preferTimestampNTZ, scale, options.preferTimestampNanos)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR
@@ -288,9 +287,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(conn, statement.executeQuery(), dialect,
-          isTimestampNTZ = options.preferTimestampNTZ,
-          preferTimestampNanos = options.preferTimestampNanos))
+        Some(getSchema(conn, statement.executeQuery(), dialect, options))
       } catch {
         case _: SQLException => None
       } finally {
@@ -304,8 +301,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
+   * @param options The JDBC options, which control how column types are mapped.
    * @param alwaysNullable If true, all the columns are nullable.
-   * @param isTimestampNTZ If true, all timestamp columns are interpreted as TIMESTAMP_NTZ.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
    */
@@ -313,9 +310,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn: Connection,
       resultSet: ResultSet,
       dialect: JdbcDialect,
-      alwaysNullable: Boolean = false,
-      isTimestampNTZ: Boolean = false,
-      preferTimestampNanos: Boolean = false): StructType = {
+      options: JDBCOptions,
+      alwaysNullable: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -354,16 +350,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case _ =>
       }
       metadata.putBoolean("isSigned", isSigned)
-      metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
-      metadata.putBoolean("preferTimestampNanos", preferTimestampNanos)
+      metadata.putBoolean("isTimestampNTZ", options.preferTimestampNTZ)
+      metadata.putBoolean("preferTimestampNanos", options.preferTimestampNanos)
+      metadata.putBoolean(
+        JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ, options.zonelessTimestampAsNTZ)
       metadata.putLong("scale", fieldScale)
       metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ,
-            preferTimestampNanos))
+          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, options))
+      // Only an input to the dialect's type mapping, so keep it out of the schema.
+      metadata.remove(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
@@ -375,18 +374,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def resultSetToRows(
       resultSet: ResultSet,
-      schema: StructType): Iterator[Row] = {
-    resultSetToRows(resultSet, schema, NoopDialect)
+      schema: StructType,
+      options: Option[JDBCOptions]): Iterator[Row] = {
+    resultSetToRows(resultSet, schema, NoopDialect, options)
   }
 
   def resultSetToRows(
       resultSet: ResultSet,
       schema: StructType,
-      dialect: JdbcDialect): Iterator[Row] = {
+      dialect: JdbcDialect,
+      options: Option[JDBCOptions]): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
-    val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
+    val internalRows = resultSetToSparkInternalRows(
+      resultSet, dialect, schema, inputMetrics, options = options)
     internalRows.map(fromRow)
   }
 
@@ -395,10 +397,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics,
-      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
+      options: Option[JDBCOptions]): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
-      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
+      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema, options)
       private[this] val mutableRow =
         new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
@@ -451,15 +454,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   private def makeGetters(
       dialect: JdbcDialect,
-      schema: StructType): Array[JDBCValueGetter] = {
+      schema: StructType,
+      options: Option[JDBCOptions]): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
+    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata, options))
   }
 
   private def makeGetter(
       dt: DataType,
       dialect: JdbcDialect,
-      metadata: Metadata): JDBCValueGetter = dt match {
+      metadata: Metadata,
+      options: Option[JDBCOptions]): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
     case _: TimeType => JDBCValueGetter.TimeGetter
@@ -478,7 +483,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if metadata.contains(READ_TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
@@ -503,7 +508,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn: Connection,
       dialect: JdbcDialect,
       dataType: DataType,
-      metadata: Metadata): JDBCValueSetter = dataType match {
+      options: JDBCOptions): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setInt(pos + 1, row.getInt(pos))
@@ -549,7 +554,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
-    case TimestampNTZType if metadata.contains(WRITE_TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if options.timestampNTZAsWallClock =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>
@@ -723,7 +728,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = conn.prepareStatement(insertStmt)
-      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, f.metadata))
+      val setters =
+        rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, options))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
 
@@ -920,11 +926,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
-    val rddSchema = StructType(df.schema.map { field =>
-      val builder = new MetadataBuilder().withMetadata(field.metadata)
-      dialect.updateExtraColumnMetaForWrite(field.dataType, builder)
-      field.copy(metadata = builder.build())
-    })
+    val rddSchema = df.schema
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 

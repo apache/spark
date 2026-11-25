@@ -111,6 +111,31 @@ class CountMinSketchAggSuite extends SparkFunSuite {
 
   testDataType[Array[Byte]](BinaryType, Seq.fill(100) { rand.nextString(1).getBytes() })
 
+  // TIME is physically a long of nanos-of-day, so it sketches exactly like an integral column.
+  testDataType[Long](TimeType(), Seq.fill(100) { rand.nextInt(10).toLong * 1000000000L })
+
+  // The full nanos-of-day is hashed: TIME(9) values that differ only below a microsecond stay
+  // distinct (a regression truncating to micros before hashing would merge them and fail here).
+  testDataType[Long](TimeType(9), {
+    val noon = 12L * 3600 * 1000000000L
+    Seq.fill(40)(noon) ++ Seq.fill(30)(noon + 1L) ++ Seq.fill(30)(noon + 2L)
+  })
+
+  test("count_min_sketch accepts TIME but rejects DATE/TIMESTAMP (no implicit coercion)") {
+    // A TIME column is accepted as the value to sketch.
+    val timeAgg = new CountMinSketchAgg(BoundReference(0, TimeType(6), nullable = true),
+      Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
+    assert(timeAgg.checkInputDataTypes().isSuccess)
+
+    // CountMinSketchAgg is ExpectsInputTypes (not ImplicitCastInputTypes), so DATE/TIMESTAMP inputs
+    // are not coerced to STRING or TIME -- they are analysis errors regardless of member order.
+    Seq(DateType, TimestampType, TimestampNTZType).foreach { dt =>
+      val agg = new CountMinSketchAgg(BoundReference(0, dt, nullable = true),
+        Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
+      assert(agg.checkInputDataTypes().isFailure, s"$dt should be rejected, not coerced")
+    }
+  }
+
   test("serialize and de-serialize") {
     // Check empty serialize and de-serialize
     val agg = cms(epsOfTotalCount, confidence, seed)

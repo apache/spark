@@ -484,8 +484,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
@@ -509,8 +511,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
@@ -894,8 +898,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -912,8 +916,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -931,7 +935,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -949,8 +953,8 @@ object functions {
    * configured with default lgConfigK value.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return
@@ -965,7 +969,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return
@@ -5288,7 +5292,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5304,7 +5308,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5320,7 +5324,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5339,7 +5343,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5355,7 +5359,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5533,7 +5537,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5549,7 +5553,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5565,7 +5569,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -6783,6 +6787,20 @@ object functions {
    *   Returns a column that evaluates to a string.
    */
   def xxh3_128(col: Column): Column = Column.fn("xxh3_128", col)
+
+  /**
+   * Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+   * algorithm. The result matches `FARM_FINGERPRINT` in BigQuery / GoogleSQL and does not change
+   * across Spark versions. String input is hashed as its UTF-8 bytes.
+   *
+   * @param col
+   *   the column to fingerprint, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def farm_fingerprint(col: Column): Column = Column.fn("farm_fingerprint", col)
 
   /**
    * Returns null if the condition is true, and throws an exception otherwise.
@@ -11575,6 +11593,11 @@ object functions {
    * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
+   *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11592,6 +11615,11 @@ object functions {
    * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
+   *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11608,6 +11636,11 @@ object functions {
   /**
    * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
    * a single value or an array.
+   *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL. When a rank array already
+   * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
+   * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
+   * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
@@ -11627,6 +11660,11 @@ object functions {
    * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
    * can be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type BIGINT, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3L, NULL)` is accepted, but `array(3, NULL)` fails.
+   *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
    * @param quantile
@@ -11644,6 +11682,11 @@ object functions {
    * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
    * be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type FLOAT, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3.0F, NULL)` is accepted, but `array(3.0, NULL)` fails.
+   *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
    * @param quantile
@@ -11660,6 +11703,11 @@ object functions {
   /**
    * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
    * can be a single value or an array.
+   *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL. When a quantile
+   * array already has element type DOUBLE, NULL elements are treated as zero, returning the rank
+   * of zero. A NULL-containing array that needs an implicit element cast fails analysis. For
+   * example, SQL `array(3.0D, NULL)` is accepted, but `array(3.0, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
@@ -12597,7 +12645,8 @@ object functions {
    * @param s
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
    *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
-   *   a string, date, timestamp, or numeric.
+   *   a string, date, timestamp, or numeric. A numeric input is cast to a string and then parsed
+   *   with `fmt`.
    * @param fmt
    *   A date time pattern detailing the format of `s` when `s` is a string. A column that
    *   evaluates to a string.
@@ -12656,6 +12705,7 @@ object functions {
    *
    * @param s
    *   Column values to convert. A column that evaluates to a string, date, timestamp, or numeric.
+   *   A numeric input is cast to a string and then parsed with `format`.
    * @param format
    *   Format to use to convert timestamp values. A column that evaluates to a string.
    * @group datetime_funcs
@@ -13297,7 +13347,8 @@ object functions {
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
    * @param ts
-   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   *   A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p
+   *   in [7, 9]) value to bucket.
    * @group datetime_funcs
    * @since 4.2.0
    * @return
@@ -13319,7 +13370,8 @@ object functions {
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
    * @param ts
-   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   *   A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p
+   *   in [7, 9]) value to bucket.
    * @param origin
    *   Alignment anchor. Must be the same type as `ts` and must be foldable.
    * @group datetime_funcs
@@ -18700,13 +18752,13 @@ object functions {
   def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
 
   /**
-   * Aggregate function: returns the element-wise sum of float vectors in a group.
+   * Aggregate function: returns the element-wise sum of float or double vectors in a group.
    * @param col
    *   input vector column. A column that evaluates to an array.
    * @group vector_funcs
    * @since 4.3.0
    * @return
-   *   Returns a column that evaluates to an array.
+   *   Returns a column that evaluates to an array with the same element type as the input.
    */
   def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 

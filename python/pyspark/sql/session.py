@@ -41,6 +41,7 @@ from typing import (
     no_type_check,
     overload,
 )
+from urllib.parse import urlparse
 
 from pyspark.conf import SparkConf
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -2267,10 +2268,21 @@ class SparkSession(SparkConversionMixin):
         .. versionchanged:: 4.0.0
             Supports Spark Classic.
 
+        .. versionchanged:: 4.4.0
+            Supports native data source packages (``.sparkpkg`` files).
+
         Parameters
         ----------
         *path : tuple of str
-            Artifact's URIs to add.
+            Artifact's URIs to add. A native data source package (a ``.sparkpkg`` file) makes
+            the native data sources it contains available to the session. The call fails for a
+            file that is not a valid package, for a package whose version Spark does not
+            support, or that has no library for the platform of the driver; the session then
+            does not get the package. With ``spark.sql.dataSource.native.enabled`` set to false,
+            such a file is added as a file of the session, without the check. A package that is
+            rejected also stops the rest of the call: without Spark Connect, the packages are
+            added first, one at a time, so only the packages before it are added; with Spark
+            Connect, the paths are added one at a time, so the paths before it are added.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
             The pyfiles are directly inserted into the path when executing Python functions
@@ -2292,6 +2304,18 @@ class SparkSession(SparkConversionMixin):
                     "condition": "True together",
                 },
             )
+        # Native data source packages are artifacts of the session in the JVM, whatever the
+        # flags, as with Spark Connect. The JVM resolves file URIs, such as
+        # file:///tmp/a.sparkpkg, but resolves a relative path against its own working directory,
+        # so it gets an absolute path instead. Anything else is a path, such as C:/a.sparkpkg on
+        # Windows, or a file name with a colon, such as a:1.sparkpkg.
+        for p in path:
+            if p.endswith(".sparkpkg"):
+                if urlparse(p).scheme == "file":
+                    self._jsparkSession.addArtifact(p)
+                else:
+                    self._jsparkSession.addArtifact(os.path.abspath(p))
+        path = tuple(p for p in path if not p.endswith(".sparkpkg"))
         for p in path:
             normalized_path = os.path.abspath(p)
             target_dir = os.path.join(
@@ -2320,6 +2344,93 @@ class SparkSession(SparkConversionMixin):
                 self._sc.addFile(p)
 
     addArtifact = addArtifacts
+
+    def listFiles(self) -> List[str]:
+        """
+        Returns the paths of the files added to resources, as :attr:`SparkContext.listFiles`.
+
+        These are the files added with :meth:`SparkSession.addArtifacts` with ``file`` or
+        ``pyfile`` set, or with the ``ADD FILE`` SQL statement, and those added to the
+        :class:`SparkContext`, such as with ``--files``. Without Spark Connect, these are all the
+        files added to the :class:`SparkContext`, also by other sessions. With Spark Connect, these
+        are the files added to this session and those added to the server outside of any session,
+        but not those of the other sessions, which servers before Spark 4.5 also list. A file
+        uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
+        server, and one added with ``ADD FILE`` as :attr:`SparkContext.listFiles` lists it, such as
+        by the path it was added with when the server runs in local mode.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        list of str
+            The paths of the files, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listArchives`
+
+        Examples
+        --------
+        With Spark Classic in local mode, a file is listed by the path it was added with.
+
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['file:/tmp/my_file.txt']
+
+        With Spark Connect, the file is uploaded, and listed as the URI of its copy on the server.
+
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/files/my_file.txt']
+        """
+        return self._sc.listFiles
+
+    def listArchives(self) -> List[str]:
+        """
+        Returns the paths of the archives added to resources, as
+        :attr:`SparkContext.listArchives`.
+
+        These are the archives added with :meth:`SparkSession.addArtifacts` with ``archive`` set,
+        or with the ``ADD ARCHIVE`` SQL statement, and those added to the :class:`SparkContext`,
+        such as with ``--archives``. A path keeps the fragment, such as ``#name``, that it was
+        added with. Without Spark Connect, these are all the archives added to the
+        :class:`SparkContext`, also by other sessions. With Spark Connect, these are the archives
+        added to this session and those added to the server outside of any session, but not those
+        of the other sessions, which servers before Spark 4.5 also list. An archive uploaded with
+        :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
+        added with ``ADD ARCHIVE`` as :attr:`SparkContext.listArchives` lists it, such as by the
+        path it was added with when the server runs in local mode.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        list of str
+            The paths of the archives, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listFiles`
+
+        Examples
+        --------
+        With Spark Classic in local mode, an archive is listed by the path it was added with.
+
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['file:/tmp/my_archive.zip#my_files']
+
+        With Spark Connect, the archive is uploaded, and listed as the URI of its copy on the
+        server.
+
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/archives/my_archive.zip#my_files']
+        """
+        return self._sc.listArchives
 
     @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:

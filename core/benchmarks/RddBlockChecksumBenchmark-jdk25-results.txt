@@ -2,45 +2,45 @@
 RDD block store-time checksum overhead
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 64k long rows, spark.rdd.compress=false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-serialize only (feature off)                        526            528           2          0.0     2630379.4       1.0X
-serialize + CRC32C checksum (feature on)            535            536           1          0.0     2675305.0       1.0X
+serialize only (feature off)                        482            488          12          0.0     2409705.3       1.0X
+serialize + CRC32C checksum (feature on)            486            488           2          0.0     2430197.9       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 64k long rows, spark.rdd.compress=true:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-serialize only (feature off)                        677            679           2          0.0     3384636.6       1.0X
-serialize + CRC32C checksum (feature on)            677            680           3          0.0     3384642.1       1.0X
+serialize only (feature off)                        637            640           3          0.0     3183441.1       1.0X
+serialize + CRC32C checksum (feature on)            659            664           5          0.0     3293308.6       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 8k x 128B records, spark.rdd.compress=false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ---------------------------------------------------------------------------------------------------------------------------
-serialize only (feature off)                           201            202           1          0.0     1003481.9       1.0X
-serialize + CRC32C checksum (feature on)               212            213           2          0.0     1057749.3       1.1X
+serialize only (feature off)                           185            186           1          0.0      926790.5       1.0X
+serialize + CRC32C checksum (feature on)               193            194           1          0.0      965296.2       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 8k x 128B records, spark.rdd.compress=true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 --------------------------------------------------------------------------------------------------------------------------
-serialize only (feature off)                          303            304           1          0.0     1514780.6       1.0X
-serialize + CRC32C checksum (feature on)              305            305           0          0.0     1522793.0       1.0X
+serialize only (feature off)                          284            285           2          0.0     1419082.4       1.0X
+serialize + CRC32C checksum (feature on)              285            285           0          0.0     1424381.5       1.0X
 
 
 ================================================================================================
 Raw checksum algorithm over 4 MiB (reference)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Checksum algorithm:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ADLER32                                             380            384           9          0.0     1485607.5       1.0X
-CRC32                                                95             95           1          0.0      370285.3       4.0X
-CRC32C                                               52             52           0          0.0      201622.1       7.4X
+ADLER32                                             386            386           0          0.0     1506516.8       1.0X
+CRC32                                                84             84           1          0.0      328536.0       4.6X
+CRC32C                                               46             46           1          0.0      178420.9       8.4X
 
 

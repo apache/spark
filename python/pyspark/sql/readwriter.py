@@ -423,7 +423,7 @@ class DataFrameReader(OptionUtils):
         ...     spark.createDataFrame(
         ...         [{"age": 25, "name": "Alice"}]
         ...     ).write.mode("overwrite").format("json").save(d2)
-        ...     spark.read.json([d1, d2]).show()
+        ...     spark.read.json([d1, d2]).sort("name").show()
         +---+-----+
         |age| name|
         +---+-----+

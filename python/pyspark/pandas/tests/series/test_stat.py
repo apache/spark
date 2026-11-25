@@ -348,6 +348,46 @@ class SeriesStatMixin:
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
 
+        # A Series has no columns axis; pandas raises too.
+        for axis in [1, "columns"]:
+            with self.assertRaisesRegex(ValueError, "Series does not support columns axis."):
+                psser.rank(axis=axis)
+        with self.assertRaisesRegex(ValueError, "No axis named 2"):
+            psser.rank(axis=2)
+        self.assert_eq(pser.rank(axis="index"), psser.rank(axis="index").sort_index())
+
+        # pct=True
+        pser = pd.Series([1, 2, 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(pct=True), psser.rank(pct=True).sort_index())
+
+        # na_option
+        pser = pd.Series([1, float("nan"), 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(na_option="top"), psser.rank(na_option="top").sort_index())
+        self.assert_eq(pser.rank(na_option="bottom"), psser.rank(na_option="bottom").sort_index())
+        self.assert_eq(
+            pser.rank(pct=True, na_option="top"),
+            psser.rank(pct=True, na_option="top").sort_index(),
+        )
+        self.assert_eq(
+            pser.rank(na_option="top", ascending=False),
+            psser.rank(na_option="top", ascending=False).sort_index(),
+        )
+        self.assert_eq(
+            pser.rank(na_option="bottom", ascending=False),
+            psser.rank(na_option="bottom", ascending=False).sort_index(),
+        )
+
+        # axis=0 is accepted (no-op for Series)
+        pser = pd.Series([1, 2, 3, 1], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(axis=0), psser.rank(axis=0).sort_index())
+
+        # invalid na_option
+        with self.assertRaisesRegex(ValueError, "na_option must be one of"):
+            psser.rank(na_option="bad")
+
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")

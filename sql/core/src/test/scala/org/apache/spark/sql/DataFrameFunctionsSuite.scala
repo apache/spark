@@ -23,10 +23,10 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -359,6 +359,37 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         checkAnswer(
           nestedDf.select(nullif(col("c.provider"), lower(lit("ERROR_MULTIPLE_PROVIDERS")))),
           Seq(Row(null), Row("openai")))
+      }
+    }
+  }
+
+  test("nullif keeps the coerced type of its first argument") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
+          // The analyzers apply different comparison coercions to binary concat. Exercise result
+          // typing under each analyzer independently. Pure single-pass does not support the RDD
+          // deserialization check performed by the suite's checkAnswer helper.
+          Seq(false, true).foreach { singlePassResolverEnabled =>
+            withSQLConf(
+              SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key ->
+                singlePassResolverEnabled.toString) {
+              QueryTest.checkAnswer(
+                sql("SELECT nullif(concat(X'61', X'62'), 'z')"),
+                Row("ab") :: Nil,
+                checkToRDD = false)
+            }
+          }
+
+          val result = sql("SELECT nullif(1, 2.1D)")
+          checkAnswer(result, Row(1))
+          assert(result.schema.head.dataType == IntegerType)
+        }
       }
     }
   }
@@ -697,6 +728,25 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("xxh3_128(a)", "xxh3_128(b)"),
       Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
+  }
+
+  test("SPARK-61770: misc farm_fingerprint function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6)), (null, null))
+      .toDF("a", "b")
+    val expected = Seq(Row(228873345217803866L, 8673355959317488908L), Row(null, null))
+    checkAnswer(df.select(farm_fingerprint($"a"), farm_fingerprint($"b")), expected)
+    checkAnswer(df.selectExpr("farm_fingerprint(a)", "farm_fingerprint(b)"), expected)
+    // A string and its UTF-8 bytes produce the same fingerprint.
+    checkAnswer(
+      df.filter($"a".isNotNull).select(farm_fingerprint($"a".cast("binary"))),
+      Row(228873345217803866L))
+    // Non-ASCII text is hashed as UTF-8: the CJK string U+6570 U+636E, same value as its bytes.
+    val cjk = new String(Array(0x6570, 0x636e), 0, 2)
+    checkAnswer(Seq(cjk).toDF("s").select(farm_fingerprint($"s")), Row(-7555523796863189993L))
+    // Collation is ignored: 'ABC' under UTF8_LCASE hashes like plain 'ABC', not like 'abc'.
+    checkAnswer(
+      sql("SELECT farm_fingerprint('ABC' COLLATE UTF8_LCASE), farm_fingerprint('abc')"),
+      Row(228873345217803866L, 2640714258260161385L))
   }
 
   test("misc aes function") {
@@ -1401,6 +1451,94 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     assert(fieldNames.toSeq === Seq("arr_1", "arr_2"))
 
     checkAnswer(res, Row(Seq(Row(1, 3), Row(2, 4))))
+  }
+
+  testWithWholeStageCodegenOnAndOff("arrays_zip with map key expressions") { codegen =>
+    val factoryMode = if (codegen.toBoolean) "CODEGEN_ONLY" else "NO_CODEGEN"
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+      def checkZip(result: DataFrame, names: Seq[String], expected: Seq[Row]): Unit = {
+        val fields = names.map(StructField(_, IntegerType, nullable = true))
+        val expectedSchema = StructType(Seq(StructField(
+          "zipped", ArrayType(StructType(fields), containsNull = false), nullable = true)))
+        assert(result.schema === expectedSchema)
+        checkAnswer(result, expected)
+      }
+
+      // Range keeps the map values and key selection from becoming a local relation.
+      val df = spark.range(2).selectExpr(
+        "map('temp', array(cast(id as int) + 1, cast(id as int) + 2), " +
+          "'hum', array(3, 4)) as readings",
+        "if(id = 0, 'temp', 'hum') as metric")
+      val dynamicRows = Seq(
+        Row(Seq(Row(1, 3), Row(2, 4))),
+        Row(Seq(Row(3, 3), Row(4, 4))))
+      val tempRows = Seq(
+        Row(Seq(Row(1, 3), Row(2, 4))),
+        Row(Seq(Row(2, 3), Row(3, 4))))
+
+      checkZip(
+        df.selectExpr("arrays_zip(readings[metric], readings['hum']) as zipped"),
+        Seq("0", "hum"), dynamicRows)
+      checkZip(
+        df.selectExpr("arrays_zip(readings[concat('te', 'mp')], readings['hum']) as zipped"),
+        Seq("0", "hum"), tempRows)
+      checkZip(
+        df.selectExpr("arrays_zip(readings[cast(null as string)], readings['hum']) as zipped"),
+        Seq("0", "hum"), Seq(Row(null), Row(null)))
+      checkZip(
+        df.selectExpr("arrays_zip(readings['temp'], readings.hum) as zipped"),
+        Seq("temp", "hum"), tempRows)
+      checkZip(
+        df.select(arrays_zip(expr("readings[metric]").as("selected"),
+          expr("readings['hum']")).as("zipped")),
+        Seq("selected", "hum"), dynamicRows)
+
+      val typedKeyRows = Seq(
+        Row(Seq(Row(1), Row(2))),
+        Row(Seq(Row(2), Row(3))))
+      Seq("1", "DATE '2020-01-02'", "TIMESTAMP '2020-01-02 03:04:05'", "X'CAFE'")
+        .foreach { key =>
+          withClue(s"map key: $key") {
+            val typedMap = spark.range(2).selectExpr(
+              s"map($key, array(cast(id as int) + 1, cast(id as int) + 2)) as readings")
+            checkZip(typedMap.selectExpr(s"arrays_zip(readings[$key]) as zipped"),
+              Seq("0"), typedKeyRows)
+          }
+        }
+    }
+  }
+
+  test("arrays_zip with implicitly collated map keys in views") {
+    withSQLConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      withTable("arrays_zip_names_table") {
+        sql("CREATE TABLE arrays_zip_names_table " +
+          "(m MAP<STRING COLLATE UTF8_BINARY, ARRAY<INT>>) USING parquet")
+        sql("INSERT INTO arrays_zip_names_table VALUES (map('a', array(1)))")
+        // The view's default collation adds a cast even to the direct literal key.
+        withView("arrays_zip_names_view") {
+          sql("CREATE VIEW arrays_zip_names_view DEFAULT COLLATION UTF8_LCASE AS " +
+            "SELECT to_json(arrays_zip(m['a'])) AS x FROM arrays_zip_names_table")
+          Seq((false, false), (false, true), (true, false)).foreach {
+            case (singlePass, tentative) =>
+              withSQLConf(
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key ->
+                  tentative.toString) {
+                withClue(s"singlePass=$singlePass, tentative=$tentative") {
+                  // Forced single-pass analysis does not support RDD deserialization.
+                  QueryTest.checkAnswer(
+                    sql("SELECT x FROM arrays_zip_names_view"),
+                    Row("""[{"0":1}]""") :: Nil,
+                    checkToRDD = false)
+                }
+              }
+          }
+        }
+      }
+    }
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
@@ -2163,6 +2301,9 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         Timestamp.valueOf("2018-01-02 00:00:00")))))
 
     // test invalid data types
+    val nanosSeqStartType =
+      "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or " +
+        "\"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\" or \"DATE\")"
     checkError(
       exception = intercept[AnalysisException] {
         Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
@@ -2171,7 +2312,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2185,7 +2326,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2199,7 +2340,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2500,6 +2641,48 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 28, "array_position(array(1), '1')"))
     )
+  }
+
+  test("SPARK-59992: coalesce over element_at with a null index is not simplified away") {
+    // Under ANSI, element_at was marked non-nullable for a non-null array regardless of the
+    // index, so the optimizer dropped the coalesce and the null index leaked through.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT coalesce(element_at(array('a', 'b'), CAST(nullif(id, 0) AS INT)), 'z'), " +
+          "coalesce(array('a', 'b')[CAST(nullif(id, 0) AS INT) - 1], 'z') FROM range(2)"),
+        Seq(Row("z", "z"), Row("a", "a")))
+    }
+  }
+
+  test("SPARK-60755: element_at and array index compile when the result is not nullable") {
+    // The first element cannot be NULL, but the array can contain NULL.
+    val df = spark.range(2).selectExpr("id", "if(id = 0, 'a', NULL) AS s")
+    val notNullable = "element_at(array(coalesce(s, 'z'), s), 1)"
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkAnswer(df.selectExpr(notNullable), Seq(Row("a"), Row("z")))
+        checkAnswer(df.where(s"$notNullable = 'z'").select("id"), Seq(Row(1)))
+        // The ordering of `TakeOrderedAndProjectExec` has no interpreted fallback.
+        checkAnswer(df.orderBy(expr(notNullable).desc).limit(1).select("id"), Seq(Row(1)))
+      }
+    }
+    // Under ANSI, an out-of-bounds index raises an error, so the result is not nullable.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.where("element_at(array(s), 5) = 'x'").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "element_at(array(s), 5)", start = 0, stop = 22))
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.selectExpr("array(s)[5]").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "array(s)[5]", start = 0, stop = 10))
+    }
   }
 
   test("element_at function") {
@@ -6166,6 +6349,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-60508: nested higher-order functions capturing lambda variables") {
+    // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
+    // expressions below.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        "SELECT array(1, 5) AS xs1, array(3, 2) AS xs2, array(1, 2, 3, 4, 5) AS ys")
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "IF(x1 > x2, filter(ys, y -> y > x1), filter(ys, y -> y > x2))) FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "CASE WHEN x1 > x2 THEN filter(ys, y -> y > x1) ELSE filter(ys, y -> y > x2) END) " +
+          "FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "exists(ys, y -> y > x1) OR exists(ys, y -> y > x2)) FROM t"),
+        Row(Seq(true, true)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
+        Row(Seq(false, false)))
+
+      // The functions capturing the same variable are still simplified into one.
+      val df = sql("SELECT transform(xs1, x -> " +
+        "exists(ys, y -> y > x) AND exists(ys, y -> y > x)) FROM t")
+      checkAnswer(df, Row(Seq(true, false)))
+      assert(df.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case e: ArrayExists => e
+      }).size == 1)
+    }
+  }
+
   test("from_json - invalid schema string") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -6518,6 +6735,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     assert(r2.length == 2)
     assert(r2.exists(_.isNaN))
     assert(r2.exists(isPositiveZero))
+  }
+
+  test("SPARK-59602: array_distinct normalizes nested floating-point values") {
+    val result = Seq(Seq(Seq(-0.0d), Seq(0.0d))).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Seq[Double]](0)
+
+    assert(result.length == 1)
+    assert(isPositiveZero(result.head.head))
   }
 
   test("SPARK-54918: array_distinct normalizes -0.0 to +0.0") {

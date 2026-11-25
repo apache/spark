@@ -184,7 +184,7 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(cteRelations.size == 1)
 
     // The CTE definition is wrapped in SubqueryAlias
-    val cteDefinition = cteRelations.head._2
+    val cteDefinition = cteRelations.head.plan
     val namedStreamingRelations = cteDefinition.collect {
       case n: NamedStreamingRelation => n
     }
@@ -601,6 +601,26 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(!relationChanges.head.changelogContext.computeUpdates())
   }
 
+  test("SPARK-60557: STREAM(t) CHANGES is an unbounded change feed, not an alias") {
+    parsePlan("SELECT * FROM STREAM(t) CHANGES") match {
+      case Project(_, NamedStreamingRelation(changes: RelationChanges, Unassigned)) =>
+        assert(changes.relation == UnresolvedRelation(Seq("t"), isStreaming = true))
+        assert(changes.changelogContext.range().isInstanceOf[ChangelogRange.UnboundedRange])
+      case other =>
+        fail(s"Expected an unaliased, unbounded streaming change feed, but got: $other")
+    }
+  }
+
+  test("SPARK-60557: STREAM(t) AS changes keeps changes as an alias") {
+    parsePlan("SELECT * FROM STREAM(t) AS changes") match {
+      case Project(_, SubqueryAlias(alias, NamedStreamingRelation(relation, Unassigned))) =>
+        assert(alias.name == "changes")
+        assert(relation == UnresolvedRelation(Seq("t"), isStreaming = true))
+      case other =>
+        fail(s"Expected a streaming relation aliased as changes, but got: $other")
+    }
+  }
+
   test("STREAM t CHANGES FROM VERSION") {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
@@ -642,6 +662,34 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(relationChanges.size == 1)
   }
 
+  test("SPARK-60525: STREAM t CHANGES wraps RelationChanges directly in NamedStreamingRelation") {
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (trailing clauses, expectedSourceName)
+      ("", Unassigned),
+      ("AS tbl", Unassigned),
+      (wm, Unassigned),
+      (s"$wm AS tbl", Unassigned),
+      ("IDENTIFIED BY src1", UserProvided("src1")),
+      ("IDENTIFIED BY src1 AS tbl", UserProvided("src1")),
+      (s"IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (clauses, expectedSourceName) =>
+      val query = s"SELECT * FROM STREAM t CHANGES FROM VERSION 1 $clauses"
+      val namedStreamingRelations = parsePlan(query).collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+      assert(namedStreamingRelations.head.child.isInstanceOf[RelationChanges],
+        s"Expected NamedStreamingRelation to directly wrap RelationChanges in: $query")
+    }
+  }
+
   test("STREAM t CHANGES with WITH options") {
     val plan = parsePlan(
       "SELECT * FROM STREAM t CHANGES FROM VERSION 1 " +
@@ -653,6 +701,26 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(relationChanges.head.changelogContext.computeUpdates())
   }
 
+  test("STREAM(t) CHANGES is equivalent to the non-parenthesized form") {
+    val clauses = """CHANGES FROM VERSION 1
+                    |WITH (deduplicationMode = 'none', computeUpdates = 'true')
+                    |IDENTIFIED BY my_source
+                    |WATERMARK event_time DELAY OF INTERVAL 1 MINUTE
+                    |AS src""".stripMargin
+    comparePlans(
+      parsePlan(s"SELECT * FROM STREAM t $clauses"),
+      parsePlan(s"SELECT * FROM STREAM(t) $clauses"))
+  }
+
+  test("STREAM table-valued functions do not support CHANGES") {
+    Seq(
+      "SELECT * FROM STREAM range(1) CHANGES FROM VERSION 1",
+      "SELECT * FROM STREAM(range(1)) CHANGES FROM VERSION 1"
+    ).foreach { query =>
+      interceptParseException(parsePlan)(query)(None)
+    }
+  }
+
   test("STREAM t CHANGES - error: subquery in timestamp") {
     checkError(
       intercept[AnalysisException] {
@@ -661,6 +729,19 @@ class StreamRelationParserSuite extends AnalysisTest {
             "FROM TIMESTAMP (SELECT MAX(ts) FROM other_table)")
       },
       condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
+  }
+
+  test("STREAM t CHANGES - error: column reference in timestamp") {
+    val sql = "SELECT * FROM STREAM t CHANGES FROM TIMESTAMP col_name"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "STREAM t CHANGES FROM TIMESTAMP col_name",
+        start = 14,
+        stop = 53))
   }
 
   test("Parse Exception: IDENTIFIED BY on non-streaming table") {

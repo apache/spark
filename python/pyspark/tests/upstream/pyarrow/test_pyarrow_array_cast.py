@@ -525,6 +525,13 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                         ("float64:special", "int32"): "[2147483647, -2147483648, 0, None]@int32",
                     }
                 )
+                if LooseVersion(pa.__version__) >= LooseVersion("26.0.0"):
+                    overrides.update(
+                        {
+                            ("float32:standard", "uint16"): "[0, 1, 0, None]@uint16",
+                            ("float64:special", "int32"): "[-1, 0, 0, None]@int32",
+                        }
+                    )
 
         return overrides
 

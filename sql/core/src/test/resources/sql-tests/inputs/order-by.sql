@@ -68,5 +68,28 @@ SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES
 -- Priority of aliases when replacing them in ORDER BY should be determined by name
 SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM VALUES(1) GROUP BY col1+1 ORDER BY col1+1;
 
+-- Window and aggregate functions are rejected in ORDER BY and DISTRIBUTE BY keys of a query without
+-- GROUP BY.
+SELECT a FROM testData ORDER BY max(a) OVER (), a;
+SELECT a FROM testData ORDER BY a, max(a) OVER ();
+SELECT a FROM testData ORDER BY a, max(a);
+SELECT a FROM testData DISTRIBUTE BY max(a) OVER (), a;
+SELECT a FROM testData DISTRIBUTE BY a, max(a) OVER ();
+-- A window function in a middle key, multiple window keys, and a window function nested in an
+-- expression.
+SELECT a FROM testData ORDER BY a, max(a) OVER (), b;
+SELECT a FROM testData ORDER BY max(a) OVER (), min(a) OVER ();
+SELECT a FROM testData ORDER BY a, 1 + max(a) OVER ();
+SELECT a FROM testData ORDER BY b, sum(a);
+-- SORT BY, and DISTRIBUTE BY with aggregate functions.
+SELECT a FROM testData SORT BY max(a) OVER (), a;
+SELECT a FROM testData SORT BY a, max(a) OVER ();
+SELECT a FROM testData DISTRIBUTE BY max(a), a;
+SELECT a FROM testData DISTRIBUTE BY a, max(a);
+SELECT a FROM testData DISTRIBUTE BY a, max(a) OVER () SORT BY a;
+-- Aggregate functions are allowed in every ORDER BY key on top of an Aggregate.
+SELECT a FROM testData GROUP BY a ORDER BY max(b), a;
+SELECT a FROM testData GROUP BY a ORDER BY a, max(b);
+
 -- Clean up
 DROP VIEW IF EXISTS testData;

@@ -29,6 +29,7 @@ import sys
 import time
 from array import array
 from collections.abc import Iterable
+from enum import Enum
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -39,6 +40,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -114,6 +116,8 @@ __all__ = [
     "VariantVal",
     "GeographyType",
     "GeometryType",
+    "FileType",
+    "FileTypeMode",
 ]
 
 
@@ -232,6 +236,7 @@ class DataType:
                 YearMonthIntervalType,
                 TimeType,
                 AnyTimestampNanoType,
+                FileType,
             ),
         ):
             return dataType.simpleString()
@@ -324,47 +329,84 @@ class StringType(AtomicType):
 
 
 class CharType(AtomicType):
-    """Char data type
+    """Char data type.
+
+    A standalone collated ``CharType`` writes its collation inline in JSON. An older Python
+    reader may accept only the ``char(n)`` prefix and silently drop the collation; a current reader
+    is required to preserve it. Within a ``StructField``, schema JSON stores the collation in field
+    metadata and emits an uncollated ``char(n)`` type so older readers can still read it.
 
     Parameters
     ----------
     length : int
         the length limitation.
+    collation : str, optional
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, collation: Optional[str] = None):
         self.length = length
+        self.collation = collation
 
     def simpleString(self) -> str:
-        return "char(%d)" % (self.length)
+        if self.collation is None:
+            return "char(%d)" % (self.length)
+
+        return "char(%d) collate %s" % (self.length, self.collation)
 
     def jsonValue(self) -> str:
-        return "char(%d)" % (self.length)
+        return self.simpleString()
 
     def __repr__(self) -> str:
-        return "CharType(%d)" % (self.length)
+        if self.collation is None:
+            return "CharType(%d)" % (self.length)
+
+        return "CharType(%d, '%s')" % (self.length, self.collation)
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collation is None or self.collation == "UTF8_BINARY"
 
 
 class VarcharType(AtomicType):
-    """Varchar data type
+    """Varchar data type.
+
+    A standalone collated ``VarcharType`` writes its collation inline in JSON. An older Python
+    reader may accept only the ``varchar(n)`` prefix and silently drop the collation; a current
+    reader is required to preserve it. Within a ``StructField``, schema JSON stores the collation
+    in field metadata and emits an uncollated ``varchar(n)`` type so older readers can still
+    read it.
 
     Parameters
     ----------
     length : int
         the length limitation.
+    collation : str, optional
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, collation: Optional[str] = None):
         self.length = length
+        self.collation = collation
 
     def simpleString(self) -> str:
-        return "varchar(%d)" % (self.length)
+        if self.collation is None:
+            return "varchar(%d)" % (self.length)
+
+        return "varchar(%d) collate %s" % (self.length, self.collation)
 
     def jsonValue(self) -> str:
-        return "varchar(%d)" % (self.length)
+        return self.simpleString()
 
     def __repr__(self) -> str:
-        return "VarcharType(%d)" % (self.length)
+        if self.collation is None:
+            return "VarcharType(%d)" % (self.length)
+
+        return "VarcharType(%d, '%s')" % (self.length, self.collation)
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collation is None or self.collation == "UTF8_BINARY"
 
 
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
@@ -567,16 +609,23 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
 
     ``datetime.datetime`` is microsecond-resolution, so values crossing the Python boundary as
     ``datetime.datetime`` -- :meth:`DataFrame.collect`, :meth:`DataFrame.toLocalIterator`, and
-    Python UDF arguments -- are truncated to microseconds, as are ``datetime.datetime`` values
-    supplied to :meth:`SparkSession.createDataFrame` from Python lists/rows. The value stored by
-    Spark keeps full precision; only this Python boundary is microsecond-resolution. A ``map``
-    with keys of this type that differ only below a microsecond would collapse to one entry, so
-    that conversion raises rather than silently dropping an entry.
+    classic (``useArrow=False``) Python UDF arguments -- are truncated to microseconds, as are
+    ``datetime.datetime`` values supplied to :meth:`SparkSession.createDataFrame` from Python
+    lists/rows. Arrow-optimized Python UDFs (``useArrow=True``) instead carry the value on the
+    Arrow path described below. The value stored by Spark keeps full precision; only this Python
+    boundary is microsecond-resolution. A ``map`` with keys of this type that differ only below a
+    microsecond would collapse to one entry, so that conversion raises rather than silently
+    dropping an entry.
 
-    Arrow- and pandas-based conversion for these types -- :meth:`DataFrame.toPandas`,
-    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame``, Arrow-based UDFs, and the
-    Spark Connect data path -- is not yet supported and raises
-    ``UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION``; it is planned as a follow-up.
+    Arrow-based conversion -- :meth:`DataFrame.toPandas` and
+    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame`` with Arrow enabled
+    (``spark.sql.execution.arrow.pyspark.enabled``), including the Spark Connect data path --
+    carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond precision
+    (pandas ``datetime64[ns]``); input with more digits than the declared precision is floored to
+    it. Because that Arrow encoding counts nanoseconds since the epoch in
+    a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years 1677 to 2262)
+    cannot be carried on this path. With Arrow disabled, :meth:`DataFrame.toPandas` falls back to
+    :meth:`DataFrame.collect` and, like it, truncates to microseconds.
 
     .. versionadded:: 4.4.0
     """
@@ -1169,11 +1218,17 @@ class ArrayType(DataType):
         json: Dict[str, Any],
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
+        charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+        remainingCharVarcharPaths: Optional[Set[str]] = None,
+        inStructField: bool = False,
     ) -> "ArrayType":
         elementType = _parse_datatype_json_value(
             json["elementType"],
-            "element" if fieldPath == "" else fieldPath + ".element",
+            _append_field_to_path(fieldPath, "element"),
             collationsMap,
+            charVarcharCollationsMap,
+            remainingCharVarcharPaths,
+            inStructField,
         )
         return ArrayType(elementType, json["containsNull"])
 
@@ -1311,12 +1366,25 @@ class MapType(DataType):
         json: Dict[str, Any],
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
+        charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+        remainingCharVarcharPaths: Optional[Set[str]] = None,
+        inStructField: bool = False,
     ) -> "MapType":
         keyType = _parse_datatype_json_value(
-            json["keyType"], "key" if fieldPath == "" else fieldPath + ".key", collationsMap
+            json["keyType"],
+            _append_field_to_path(fieldPath, "key"),
+            collationsMap,
+            charVarcharCollationsMap,
+            remainingCharVarcharPaths,
+            inStructField,
         )
         valueType = _parse_datatype_json_value(
-            json["valueType"], "value" if fieldPath == "" else fieldPath + ".value", collationsMap
+            json["valueType"],
+            _append_field_to_path(fieldPath, "value"),
+            collationsMap,
+            charVarcharCollationsMap,
+            remainingCharVarcharPaths,
+            inStructField,
         )
         return MapType(
             keyType,
@@ -1410,23 +1478,45 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
-        collationMetadata = self.getCollationMetadata()
-        metadata = (
-            self.metadata
-            if not collationMetadata
-            else {**self.metadata, _COLLATIONS_METADATA_KEY: collationMetadata}
-        )
+        if _CHAR_VARCHAR_COLLATIONS_METADATA_KEY in self.metadata:
+            raise PySparkTypeError(
+                errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+                messageParameters={"metadataKey": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+            )
+        string_metadata = self.getCollationMetadata()
+        char_varchar_metadata = self.getCharVarcharCollationMetadata()
+        metadata = dict(self.metadata)
+        if string_metadata:
+            metadata[_COLLATIONS_METADATA_KEY] = string_metadata
+        if char_varchar_metadata:
+            metadata[_CHAR_VARCHAR_COLLATIONS_METADATA_KEY] = char_varchar_metadata
 
         return {
             "name": self.name,
-            "type": self._dataTypeJsonValue(collationMetadata),
+            "type": self._dataTypeJsonValue(string_metadata, char_varchar_metadata),
             "nullable": self.nullable,
             "metadata": metadata,
         }
 
-    def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
-        if not collationMetadata:
-            return self.dataType.jsonValue()
+    def _dataTypeJsonValue(
+        self,
+        string_metadata: Dict[str, str],
+        char_varchar_metadata: Dict[str, str],
+    ) -> Union[str, Dict[str, Any]]:
+        # An external file in a field is the plain "file", the form of a schema written without a
+        # mode. Only the field's own type and its array and map types are visited, as in
+        # `removeCollations`, since a nested struct writes its own fields.
+        def hasExternalFile(dt: DataType) -> bool:
+            if isinstance(dt, ArrayType):
+                return hasExternalFile(dt.elementType)
+            elif isinstance(dt, MapType):
+                return hasExternalFile(dt.keyType) or hasExternalFile(dt.valueType)
+            else:
+                return isinstance(dt, FileType) and dt.mode == FileTypeMode.EXTERNAL
+
+        if not string_metadata and not char_varchar_metadata:
+            if not hasExternalFile(self.dataType):
+                return self.dataType.jsonValue()
 
         def removeCollations(dt: DataType) -> DataType:
             # Only recurse into map and array types as any child struct type
@@ -1439,71 +1529,113 @@ class StructField(DataType):
                     removeCollations(dt.valueType),
                     dt.valueContainsNull,
                 )
-            elif isinstance(dt, StringType):
-                return StringType()
             elif isinstance(dt, VarcharType):
                 return VarcharType(dt.length)
             elif isinstance(dt, CharType):
                 return CharType(dt.length)
+            elif isinstance(dt, StringType):
+                return StringType()
             else:
                 return dt
 
+        def fileTypeJson(dt: DataType) -> Union[str, Dict[str, Any]]:
+            if isinstance(dt, ArrayType):
+                return {
+                    "type": dt.typeName(),
+                    "elementType": fileTypeJson(dt.elementType),
+                    "containsNull": dt.containsNull,
+                }
+            elif isinstance(dt, MapType):
+                return {
+                    "type": dt.typeName(),
+                    "keyType": fileTypeJson(dt.keyType),
+                    "valueType": fileTypeJson(dt.valueType),
+                    "valueContainsNull": dt.valueContainsNull,
+                }
+            elif isinstance(dt, FileType) and dt.mode == FileTypeMode.EXTERNAL:
+                return "file"
+            else:
+                return dt.jsonValue()
+
         # As we want to be backwards compatible we should remove all collations information from the
         # json and only keep that information in the metadata.
-        return removeCollations(self.dataType).jsonValue()
+        dataType = (
+            removeCollations(self.dataType)
+            if string_metadata or char_varchar_metadata
+            else self.dataType
+        )
+        if not hasExternalFile(dataType):
+            return dataType.jsonValue()
+        return fileTypeJson(dataType)
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
         metadata = json.get("metadata")
-        collationsMap = {}
-        if metadata and _COLLATIONS_METADATA_KEY in metadata:
-            collationsMap = metadata[_COLLATIONS_METADATA_KEY]
-            for key, value in collationsMap.items():
-                nameParts = value.split(".")
-                assert len(nameParts) == 2
-                provider, name = nameParts[0], nameParts[1]
-                _assert_valid_collation_provider(provider)
-                collationsMap[key] = name
-
+        collationsMap = _parse_collation_metadata_map(metadata, _COLLATIONS_METADATA_KEY)
+        charVarcharCollationsMap = _parse_collation_metadata_map(
+            metadata, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+        )
+        if metadata:
             metadata = {
-                key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
+                key: value
+                for key, value in metadata.items()
+                if key not in (_COLLATIONS_METADATA_KEY, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
             }
+
+        remaining: Set[str] = set(charVarcharCollationsMap)
+        parsed_type = _parse_datatype_json_value(
+            json["type"],
+            json["name"],
+            collationsMap,
+            charVarcharCollationsMap,
+            remaining,
+            inStructField=True,
+        )
+        if remaining:
+            raise PySparkTypeError(
+                errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+                messageParameters={"fieldPath": min(remaining)},
+            )
 
         return StructField(
             json["name"],
-            _parse_datatype_json_value(json["type"], json["name"], collationsMap),
+            parsed_type,
             json.get("nullable", True),
             metadata,
         )
 
     def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
-        if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
-            return {}
+        """Return STRING-only collations from ``__COLLATIONS`` in field metadata.
 
-        collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
-        collationsMap: Dict[str, str] = {}
+        CHAR/VARCHAR collations are stored separately and are not returned here.
+        Use :meth:`getCharVarcharCollationsMap` for ``__CHAR_VARCHAR_COLLATIONS``.
+        """
+        return _parse_collation_metadata_map(metadata, _COLLATIONS_METADATA_KEY)
 
-        for key, value in collationMetadata.items():
-            nameParts = value.split(".")
-            assert len(nameParts) == 2
-            provider, name = nameParts[0], nameParts[1]
-            _assert_valid_collation_provider(provider)
-            collationsMap[key] = name
-
-        return collationsMap
+    def getCharVarcharCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
+        """Return CHAR/VARCHAR collations from ``__CHAR_VARCHAR_COLLATIONS`` metadata."""
+        return _parse_collation_metadata_map(metadata, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
 
     def getCollationMetadata(self) -> Dict[str, str]:
+        """Return field paths and collations for plain STRING types."""
+        return self._getCollationMetadata(self._isCollatedPlainString)
+
+    def getCharVarcharCollationMetadata(self) -> Dict[str, str]:
+        """Return field paths and collations for CHAR/VARCHAR types."""
+        return self._getCollationMetadata(self._isCollatedCharVarchar)
+
+    def _getCollationMetadata(self, include: Callable[[DataType], bool]) -> Dict[str, str]:
         def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
-                processDataType(dt.elementType, fieldPath + ".element")
+                processDataType(dt.elementType, _append_field_to_path(fieldPath, "element"))
             elif isinstance(dt, MapType):
-                processDataType(dt.keyType, fieldPath + ".key")
-                processDataType(dt.valueType, fieldPath + ".value")
-            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+                processDataType(dt.keyType, _append_field_to_path(fieldPath, "key"))
+                processDataType(dt.valueType, _append_field_to_path(fieldPath, "value"))
+            elif include(dt):
                 collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
         def processDataType(dt: DataType, fieldPath: str) -> None:
-            if self._isCollatedString(dt):
+            if include(dt):
                 collationMetadata[fieldPath] = self.schemaCollationValue(dt)
             else:
                 visitRecursively(dt, fieldPath)
@@ -1512,11 +1644,15 @@ class StructField(DataType):
         visitRecursively(self.dataType, self.name)
         return collationMetadata
 
-    def _isCollatedString(self, dt: DataType) -> bool:
+    def _isCollatedCharVarchar(self, dt: DataType) -> bool:
+        return isinstance(dt, (CharType, VarcharType)) and dt.collation is not None
+
+    def _isCollatedPlainString(self, dt: DataType) -> bool:
         return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
 
     def schemaCollationValue(self, dt: DataType) -> str:
-        assert isinstance(dt, StringType)
+        assert isinstance(dt, (StringType, CharType, VarcharType))
+        assert dt.collation is not None
         collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
@@ -2028,6 +2164,86 @@ class VariantType(AtomicType):
         return {"value": variant.value, "metadata": variant.metadata}
 
 
+class FileTypeMode(Enum):
+    """
+    The mode of a :class:`FileType`.
+
+    ``EXTERNAL`` files are simple references whose lifecycle is independent of the table.
+    ``UNKNOWN`` is used while the mode is not yet determined, such as for the result of a cast or
+    of a function.
+
+    .. versionadded:: 4.4.0
+    """
+
+    EXTERNAL = "external"
+    UNKNOWN = "unknown"
+
+
+class FileType(DataType):
+    """
+    File data type, representing a reference to a file, with metadata describing the file.
+
+    In SQL the type is named ``FILE``. A table column must be declared as ``FILE EXTERNAL``,
+    while the signature of a function declares a plain ``FILE``. The mode is part of the type
+    identity: ``FileType()`` and ``FileType.external()`` are different types.
+
+    The JSON form carries the mode, as ``"file external"`` or ``"file unknown"``, except that an
+    external file directly in a struct field, or in an array or map of one, is the plain
+    ``"file"``. A plain ``"file"`` is read as external in a struct field and as unknown elsewhere.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    mode : :class:`FileTypeMode`, optional
+        The mode of the file. Defaults to ``FileTypeMode.UNKNOWN``.
+
+    Notes
+    -----
+    FILE is behind the ``spark.sql.fileType.enabled`` preview flag (disabled by default); while it
+    is off, DDL, casts and tables holding FILE raise an error. FILE values are not supported in
+    PySpark yet: they cannot be created, collected or converted to Arrow.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import FileType
+    >>> FileType.external().simpleString()
+    'file external'
+    >>> FileType().json()
+    '"file unknown"'
+    """
+
+    def __init__(self, mode: FileTypeMode = FileTypeMode.UNKNOWN):
+        if not isinstance(mode, FileTypeMode):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "mode",
+                    "expected_type": "FileTypeMode",
+                    "arg_type": type(mode).__name__,
+                },
+            )
+        self.mode = mode
+
+    @classmethod
+    def external(cls) -> "FileType":
+        """Returns an external :class:`FileType`."""
+        return cls(FileTypeMode.EXTERNAL)
+
+    def simpleString(self) -> str:
+        if self.mode == FileTypeMode.EXTERNAL:
+            return "file external"
+        return "file"
+
+    def jsonValue(self) -> str:
+        return "file %s" % self.mode.value
+
+    def __repr__(self) -> str:
+        if self.mode == FileTypeMode.EXTERNAL:
+            return "FileType(FileTypeMode.EXTERNAL)"
+        return "FileType()"
+
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
@@ -2429,8 +2645,8 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
     "interval": CalendarIntervalType,
 }
 
-_LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
-_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)(?:\s+collate\s+(\w+))?")
+_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)(?:\s+collate\s+(\w+))?")
 _STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
@@ -2438,6 +2654,7 @@ _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _TIME = re.compile(r"time\(\s*(\d+)\s*\)")
 _TIMESTAMP_NTZ_PRECISION = re.compile(r"timestamp_ntz\(\s*(\d+)\s*\)")
 _TIMESTAMP_LTZ_PRECISION = re.compile(r"timestamp_ltz\(\s*(\d+)\s*\)")
+_FILE = re.compile(r"file(?:\s+(external|unknown))?")
 _GEOMETRY = re.compile(r"^geometry$")
 _GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
 _GEOGRAPHY = re.compile(r"^geography$")
@@ -2446,6 +2663,7 @@ _GEOGRAPHY_CRS_ALG = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*,\s*(\w+)\s*\)
 _GEOGRAPHY_ALG = re.compile(r"geography\(\s*(\w+)\s*\)")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
+_CHAR_VARCHAR_COLLATIONS_METADATA_KEY = "__CHAR_VARCHAR_COLLATIONS"
 
 
 def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
@@ -2582,15 +2800,39 @@ def _parse_parameterized_timestamp_type(precision: int, ntz: bool) -> DataType:
     return TimestampNTZNanosType(precision) if ntz else TimestampLTZNanosType(precision)
 
 
+def _append_field_to_path(base_path: str, field_name: str) -> str:
+    return field_name if not base_path else f"{base_path}.{field_name}"
+
+
 def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
     collationsMap: Optional[Dict[str, str]] = None,
+    charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+    remainingCharVarcharPaths: Optional[Set[str]] = None,
+    inStructField: bool = False,
 ) -> DataType:
+    in_string = collationsMap is not None and fieldPath in collationsMap
+    in_char_varchar = charVarcharCollationsMap is not None and fieldPath in charVarcharCollationsMap
+    if in_string and in_char_varchar:
+        raise PySparkTypeError(
+            errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+            messageParameters={"jsonType": str(json_value)},
+        )
+    json_type = json_value["type"] if isinstance(json_value, dict) else json_value
+    if in_string:
+        assert collationsMap is not None
+        _assert_valid_type_for_collation(fieldPath, json_type, collationsMap)
+    if in_char_varchar:
+        assert charVarcharCollationsMap is not None
+        _assert_valid_type_for_char_varchar_collation(
+            fieldPath, json_type, charVarcharCollationsMap
+        )
+
     if not isinstance(json_value, dict):
         if json_value in _all_mappable_types.keys():
-            if collationsMap is not None and fieldPath in collationsMap:
-                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
+            if in_string:
+                assert collationsMap is not None
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
             return _all_mappable_types[json_value]()
@@ -2602,6 +2844,12 @@ def _parse_datatype_json_value(  # type: ignore[return]
             return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=True)
         elif m := _TIMESTAMP_LTZ_PRECISION.fullmatch(json_value):
             return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=False)
+        elif m := _FILE.fullmatch(json_value):
+            # A plain "file" has no mode, as in a schema written without one: in a struct field
+            # it is an external file, elsewhere an unknown one.
+            if m.group(1) == "external" or (m.group(1) is None and inStructField):
+                return FileType.external()
+            return FileType()
         elif m := _INTERVAL_DAYTIME.match(json_value):
             inverted_fields = DayTimeIntervalType._inverted_fields
             first_field = inverted_fields.get(m.group(1))
@@ -2618,10 +2866,22 @@ def _parse_datatype_json_value(  # type: ignore[return]
             return YearMonthIntervalType(first_field, second_field)
         elif m := _STRING_WITH_COLLATION.match(json_value):
             return StringType(m.group(1))
-        elif m := _LENGTH_CHAR.match(json_value):
-            return CharType(int(m.group(1)))
-        elif m := _LENGTH_VARCHAR.match(json_value):
-            return VarcharType(int(m.group(1)))
+        elif m := _LENGTH_CHAR.fullmatch(json_value):
+            collation = m.group(2)
+            if in_char_varchar:
+                assert charVarcharCollationsMap is not None
+                collation = charVarcharCollationsMap[fieldPath]
+                if remainingCharVarcharPaths is not None:
+                    remainingCharVarcharPaths.discard(fieldPath)
+            return CharType(int(m.group(1)), collation)
+        elif m := _LENGTH_VARCHAR.fullmatch(json_value):
+            collation = m.group(2)
+            if in_char_varchar:
+                assert charVarcharCollationsMap is not None
+                collation = charVarcharCollationsMap[fieldPath]
+                if remainingCharVarcharPaths is not None:
+                    remainingCharVarcharPaths.discard(fieldPath)
+            return VarcharType(int(m.group(1)), collation)
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
         elif _GEOMETRY_CRS.match(json_value):
@@ -2650,14 +2910,25 @@ def _parse_datatype_json_value(  # type: ignore[return]
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            if collationsMap is not None and fieldPath in collationsMap:
-                _assert_valid_type_for_collation(fieldPath, tpe, collationsMap)
-
             complex_type = _all_complex_types[tpe]
             if complex_type is ArrayType:
-                return ArrayType.fromJson(json_value, fieldPath, collationsMap)
+                return ArrayType.fromJson(
+                    json_value,
+                    fieldPath,
+                    collationsMap,
+                    charVarcharCollationsMap,
+                    remainingCharVarcharPaths,
+                    inStructField,
+                )
             elif complex_type is MapType:
-                return MapType.fromJson(json_value, fieldPath, collationsMap)
+                return MapType.fromJson(
+                    json_value,
+                    fieldPath,
+                    collationsMap,
+                    charVarcharCollationsMap,
+                    remainingCharVarcharPaths,
+                    inStructField,
+                )
             return StructType.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
@@ -2668,10 +2939,62 @@ def _parse_datatype_json_value(  # type: ignore[return]
             )
 
 
+def _parse_collation_metadata_map(metadata: Optional[Dict[str, Any]], key: str) -> Dict[str, str]:
+    if not metadata or key not in metadata:
+        return {}
+
+    raw = metadata[key]
+    if key == _CHAR_VARCHAR_COLLATIONS_METADATA_KEY:
+        if not isinstance(raw, dict):
+            raise _invalid_char_varchar_collation_metadata(raw)
+        parsed: Dict[str, str] = {}
+        for path, value in raw.items():
+            name_parts = value.split(".") if isinstance(value, str) else None
+            if name_parts is None or len(name_parts) != 2:
+                raise _invalid_char_varchar_collation_metadata(value)
+            provider, name = name_parts
+            if not provider or not name:
+                raise _invalid_char_varchar_collation_metadata(value)
+            _assert_valid_collation_provider(provider)
+            parsed[path] = name
+        return parsed
+
+    parsed = {}
+    for path, value in raw.items():
+        nameParts = value.split(".")
+        assert len(nameParts) == 2
+        provider, name = nameParts[0], nameParts[1]
+        _assert_valid_collation_provider(provider)
+        parsed[path] = name
+    return parsed
+
+
+def _invalid_char_varchar_collation_metadata(invalid: Any) -> PySparkTypeError:
+    return PySparkTypeError(
+        errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        messageParameters={"value": json.dumps(invalid, separators=(",", ":"))},
+    )
+
+
 def _assert_valid_type_for_collation(
     fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
 ) -> None:
     if fieldPath in collationMap and fieldType != "string":
+        raise PySparkTypeError(
+            errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+            messageParameters={"jsonType": fieldType},
+        )
+
+
+def _assert_valid_type_for_char_varchar_collation(
+    fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
+) -> None:
+    char_match = _LENGTH_CHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
+    varchar_match = _LENGTH_VARCHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
+    is_uncollated_char_varchar = (char_match is not None and char_match.group(2) is None) or (
+        varchar_match is not None and varchar_match.group(2) is None
+    )
+    if fieldPath in collationMap and not is_uncollated_char_varchar:
         raise PySparkTypeError(
             errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             messageParameters={"jsonType": fieldType},
@@ -3051,6 +3374,19 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return False
 
 
+def _check_no_char_varchar(dt: DataType, feature: str) -> None:
+    """Reject CHAR/VARCHAR at Python/Arrow host boundaries.
+
+    CHAR/VARCHAR are SQL types. Host APIs must declare STRING instead.
+    Nested struct/array/map and UDT storage types are included.
+    """
+    if _has_type(dt, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={"feature": feature, "data_type": dt.simpleString()},
+        )
+
+
 def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
     """Return the key type of the first map (depth-first) whose key carries a nanosecond timestamp
     type, or ``None`` if ``dt`` contains no such map.
@@ -3080,34 +3416,6 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
         return None
     elif isinstance(dt, UserDefinedType):
         return _first_timestamp_nanos_map_key_type(dt.sqlType())
-    else:
-        return None
-
-
-def _first_timestamp_nanos_type(dt: DataType) -> Optional["DataType"]:
-    """Return the first nanosecond-capable timestamp type (depth-first) that ``dt`` is or contains,
-    or ``None`` if it contains none.
-
-    The Arrow / pandas / Connect value conversion for :class:`TimestampNTZNanosType` /
-    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Callers reject such a
-    schema up front rather than mis-handle the value; the returned leaf type feeds the error
-    message, consistent with :func:`~pyspark.sql.pandas.types.to_arrow_type`, which reports the
-    offending leaf. This is the "find the node" companion to the ``_has_type`` boolean check.
-    """
-    if isinstance(dt, AnyTimestampNanoType):
-        return dt
-    elif isinstance(dt, ArrayType):
-        return _first_timestamp_nanos_type(dt.elementType)
-    elif isinstance(dt, MapType):
-        return _first_timestamp_nanos_type(dt.keyType) or _first_timestamp_nanos_type(dt.valueType)
-    elif isinstance(dt, StructType):
-        for field in dt.fields:
-            found = _first_timestamp_nanos_type(field.dataType)
-            if found is not None:
-                return found
-        return None
-    elif isinstance(dt, UserDefinedType):
-        return _first_timestamp_nanos_type(dt.sqlType())
     else:
         return None
 

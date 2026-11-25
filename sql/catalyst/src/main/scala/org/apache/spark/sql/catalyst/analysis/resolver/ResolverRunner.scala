@@ -18,7 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.AnalysisContext
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  MaterializedCTECheck,
+  NanosTimestampSubtractionCheck,
+  OptionalReferences
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
@@ -38,7 +43,9 @@ class ResolverRunner(
    * These checks are not part of the legacy analyzer's `extendedResolutionChecks`.
    */
   private val singlePassOnlyResolutionChecks: Seq[LogicalPlan => Unit] = Seq(
-    NonDeterministicExpressionCheck
+    NonDeterministicExpressionCheck,
+    MaterializedCTECheck,
+    NanosTimestampSubtractionCheck
   )
 
   /**
@@ -80,6 +87,7 @@ class ResolverRunner(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
     val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
+    OptionalReferences.markResolvedNullReference(plan, resolvedPlan)
 
     runValidator(resolvedPlan)
 

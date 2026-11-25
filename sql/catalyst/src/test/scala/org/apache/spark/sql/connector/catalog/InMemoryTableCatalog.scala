@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Proced
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -219,11 +220,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean,
       numRowsPerSplit: Int,
-      id: String): InMemoryBaseTable = {
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT
+  ): InMemoryBaseTable = {
     // scalastyle:on argcount
     new InMemoryTable(name, columns, partitioning, properties, constraints, distribution,
       ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
-      numRowsPerSplit, id)
+      numRowsPerSplit, id, schemaAlignmentConfig)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -260,9 +263,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     table.increaseVersion()
-    val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      CatalogV2Util.structTypeToV2Columns(schema))
+      InMemoryTableCatalog.alteredColumns(table.columns(), schema, changes))
     val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
     val newTable = table match {
       case _: InMemoryTable | _: InMemoryTableWithV2Filter =>
@@ -275,7 +277,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
-    newTable.setVersion(currentVersion)
+    newTable.copyTableStateFrom(table)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())
@@ -476,6 +478,26 @@ object InMemoryTableCatalog {
   def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
     if ("true".equalsIgnoreCase(tableProperties.get(SIMULATE_FAILED_CREATE_PROPERTY))) {
       throw new IllegalStateException("Manual create table failure.")
+    }
+  }
+
+  /**
+   * Returns the columns of `schema`, the schema that `changes` make of a table with `columns`.
+   * The columns that no change refers to are kept as they are, since converting a column to a
+   * StructField and back loses what a StructField does not hold, such as a connector expression
+   * or an identity column spec.
+   */
+  def alteredColumns(
+      columns: Array[Column],
+      schema: StructType,
+      changes: Seq[TableChange]): Array[Column] = {
+    val changedNames = changes.collect {
+      case change: TableChange.ColumnChange => change.fieldNames().head
+    }.toSet
+    val unchangedColumns = columns.filterNot(col => changedNames.contains(col.name))
+      .map(col => col.name -> col).toMap
+    CatalogV2Util.structTypeToV2Columns(schema).map { col =>
+      unchangedColumns.getOrElse(col.name, col)
     }
   }
 }

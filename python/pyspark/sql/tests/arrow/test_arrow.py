@@ -1894,6 +1894,15 @@ class ArrowTestsMixin:
                     self.assertEqual(t.num_rows, 10000)
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
 
+    def test_toArrow_with_compression_codec_empty_data_buffers(self):
+        # SPARK-60816: All strings are null, so the data buffer of the column is empty.
+        df = self.spark.range(3).selectExpr("CAST(NULL AS STRING) AS s")
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    self.assertEqual(df.toArrow().to_pydict(), {"s": [None] * 3})
+
     def test_toPandas_double_nested_array_empty_outer(self):
         schema = StructType([StructField("data", ArrayType(ArrayType(StringType())))])
         df = self.spark.createDataFrame([Row(data=[])], schema=schema)

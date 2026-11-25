@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import org.scalatest.time.SpanSugar._
 
@@ -63,14 +63,68 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     // Exception should be detected in analysis phase first when we resolve a schema from
     // through JDBC by sending SELECT * FROM (<subquery>) [LIMIT 1][WHERE 1=0] query.
-    checkErrorMatchPVals(
-      ex,
+    checkError(
+      exception = ex,
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      sqlState = Some("42000"),
       parameters = Map(
         "jdbcQuery" -> "SELECT \\* FROM \\(.*",
-        "externalEngineError" -> "[\\s\\S]*"
-      )
+        "externalEngineError" -> "[\\s\\S]+",
+        "externalEngineSqlState" -> ".+"
+      ),
+      matchPVals = true
     )
+    ex.getCause match {
+      case cause: SQLException =>
+        val expectedSqlState =
+          Option(cause.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
+        assertResult(expectedSqlState) {
+          ex.getMessageParameters.get("externalEngineSqlState")
+        }
+      case other =>
+        fail(s"Expected SQLException cause, but got: $other")
+    }
+  }
+
+  test("SPARK-61982: Wrap external engine permission error") {
+    withRestrictedUser { restrictedUrl =>
+      val ex = intercept[SparkException] {
+        spark.read.format("jdbc")
+          .option("url", restrictedUrl)
+          .option("dbtable", "tbl_shared").load()
+      }
+      checkError(
+        exception = ex,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = Some("42501"),
+        parameters = Map(
+          "jdbcQuery" -> "SELECT \\* FROM tbl_shared WHERE 1=0",
+          "externalEngineError" -> "[\\s\\S]+",
+          "externalEngineSqlState" -> ".+"),
+        matchPVals = true)
+      assert(ex.getCause.isInstanceOf[SQLException])
+    }
+  }
+
+  test("SPARK-61982: Wrap external engine permission error during query execution") {
+    db.restrictedUserSessionInitStatement.foreach { switchToRestrictedUser =>
+      withRestrictedUser { _ =>
+        // Schema resolution skips sessionInitStatement, so only the data query is denied.
+        val df = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "tbl_shared")
+          .option("sessionInitStatement", switchToRestrictedUser).load()
+        checkError(
+          exception = intercept[SparkException](df.collect()),
+          condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_QUERY_EXECUTION",
+          sqlState = Some("42501"),
+          parameters = Map(
+            "jdbcQuery" -> ".*tbl_shared.*",
+            "externalEngineError" -> "[\\s\\S]+",
+            "externalEngineSqlState" -> ".+"),
+          matchPVals = true)
+      }
+    }
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {

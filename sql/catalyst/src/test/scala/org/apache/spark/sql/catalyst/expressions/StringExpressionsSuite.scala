@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.util.IllegalFormatConversionException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
@@ -25,8 +26,12 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1059,6 +1064,48 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
+  test("default trim uses collation-aware space matching") {
+    val nbsp = 0xA0.toChar.toString
+    val source = nbsp + "abc" + nbsp
+
+    // Case-insensitive ICU collations treat NBSP as equal to ASCII space, so the default
+    // (unary) trim removes it, matching the explicit two-argument form with a space trim string.
+    for (collationName <- Seq("UNICODE_CI", "UNICODE_CI_AI", "en_CI")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+      val space = Literal.create(" ", StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), "abc" + nbsp)
+      checkEvaluation(StringTrimRight(src), nbsp + "abc")
+      checkEvaluation(StringTrim(src), "abc")
+
+      // The unary form matches the explicit two-argument form with a space trim string.
+      checkEvaluation(StringTrimLeft(src), StringTrimLeft(src, space).eval())
+      checkEvaluation(StringTrimRight(src), StringTrimRight(src, space).eval())
+      checkEvaluation(StringTrim(src), StringTrim(src, space).eval())
+
+      // Mixed padding of NBSP and ASCII space is fully trimmed.
+      val mixed = Literal.create(nbsp + " abc " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrim(mixed), "abc")
+
+      // A string consisting solely of space separators trims to empty.
+      val allSpaces = Literal.create(nbsp + " " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrimLeft(allSpaces), "")
+      checkEvaluation(StringTrimRight(allSpaces), "")
+      checkEvaluation(StringTrim(allSpaces), "")
+    }
+
+    // Case-sensitive collations keep the existing binary behavior: NBSP is preserved.
+    for (collationName <- Seq("UNICODE", "UTF8_BINARY", "UTF8_LCASE")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), source)
+      checkEvaluation(StringTrimRight(src), source)
+      checkEvaluation(StringTrim(src), source)
+    }
+  }
+
   test("LTRIM") {
     val s = $"a".string.at(0)
     checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
@@ -1138,6 +1185,63 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(FormatString(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("FormatString with decimal arguments") {
+    checkEvaluation(FormatString(Literal("%f"), Literal(Decimal("1.5"))), "1.500000")
+    checkEvaluation(FormatString(Literal("%.2f"), Literal(Decimal("1234.5"))), "1234.50")
+    checkEvaluation(FormatString(Literal("%,.2f"), Literal(Decimal("1234.5"))), "1,234.50")
+    checkEvaluation(FormatString(Literal("%e"), Literal(Decimal("1.5"))), "1.500000e+00")
+    checkEvaluation(FormatString(Literal("%g"), Literal(Decimal("1.5"))), "1.50000")
+
+    // %a is not supported for decimals: Formatter accepts it only for float and double.
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%a"), Literal(Decimal("1.5"))), "a != java.math.BigDecimal")
+
+    // Not routed through a double, so digits beyond double precision survive.
+    checkEvaluation(
+      FormatString(Literal("%.20f"), Literal(Decimal("0.10000000000000000001"))),
+      "0.10000000000000000001")
+
+    // %s is unchanged, because Decimal.toString already delegates to the same BigDecimal string.
+    checkEvaluation(FormatString(Literal("%s"), Literal(Decimal(12, 18, 10))), "1.2E-9")
+
+    // %h hashes whatever object reaches Formatter, so it pins the conversion down: this is
+    // java.math.BigDecimal.hashCode (31 * unscaledValue + scale, scale sensitive), not
+    // Decimal.hashCode, which follows Double hashing and would print 3fc00000 here.
+    checkEvaluation(FormatString(Literal("%h"), Literal(Decimal("1.50"))), "122c")
+
+    checkEvaluation(
+      FormatString(Literal("%f"), Literal.create(null, DecimalType(10, 2))), "null")
+
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%f"), Literal(1)), "f != java.lang.Integer")
+  }
+
+  test("FormatString with a decimal-backed UDT argument") {
+    // The generated row accessors use the UDT's underlying sqlType, so codegen sees a Decimal
+    // just like interpreted evaluation does. Both paths must convert it.
+    val udt = new DecimalWrapperUDT
+    val arg = Literal.create(udt.serialize(DecimalWrapper(Decimal("1.5"))), udt)
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+    checkEvaluation(FormatString(Literal("%f"), Literal.create(null, udt)), "null")
+  }
+
+  test("FormatString with an object-typed decimal argument") {
+    val arg = Literal.fromObject(Decimal("1.5"))
+    assert(arg.dataType === ObjectType(classOf[Decimal]))
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+  }
+
+  test("FormatString with a decimal under a broader object type") {
+    val objType = ObjectType(classOf[Object])
+    val ref = BoundReference(0, objType, nullable = true)
+    checkEvaluation(FormatString(Literal("%f"), ref), "1.500000", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "1.5", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "abc", create_row("abc"))
+    checkEvaluation(FormatString(Literal("%f"), ref), "null", create_row(null))
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
@@ -1537,6 +1641,54 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  for ((expression, expected) <- Seq(
+      (ToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (TryToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (ToCharacter(Literal(Decimal(12)), Literal("99")), "12"))) {
+    test(s"number format evaluator copies isolate parser state: ${expression.prettyName}") {
+      checkEvaluation(expression, expected)
+      val first = expression.freshCopyIfContainsStatefulExpression()
+      val second = expression.freshCopyIfContainsStatefulExpression()
+      assert(first ne expression)
+      assert(second ne first)
+      checkEvaluation(first, expected)
+      checkEvaluation(second, expected)
+      val contexts = Seq(first, second).map { copy =>
+        val context = new CodegenContext
+        copy.genCode(context)
+        context.references.collect { case parser: ToNumberParser => parser }.toSeq
+      }
+      assert(contexts.forall(_.size == 1))
+      assert(contexts.head.head ne contexts.last.head)
+      checkEvaluation(expression.withNewChildren(Seq(
+        Literal.create(null, expression.children.head.dataType), Literal("99"))), null)
+    }
+
+    test(s"number format expressions preserve constant folding: ${expression.prettyName}") {
+      val copies = Seq(expression,
+        expression.freshCopyIfContainsStatefulExpression(),
+        expression.freshCopyIfContainsStatefulExpression())
+      copies.foreach { copy =>
+        assert(copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), OneRowRelation())
+        val optimized = ConstantFolding(project).asInstanceOf[Project]
+        assert(optimized.projectList.head.asInstanceOf[Alias].child ==
+          Literal.create(expected, expression.dataType))
+      }
+
+      val input = AttributeReference("input", expression.children.head.dataType)()
+      val nonFoldable = expression.withNewChildren(Seq(input, Literal("99")))
+      val nonFoldableCopies = Seq(nonFoldable,
+        nonFoldable.freshCopyIfContainsStatefulExpression(),
+        nonFoldable.freshCopyIfContainsStatefulExpression())
+      nonFoldableCopies.foreach { copy =>
+        assert(!copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), LocalRelation(input))
+        assert(ConstantFolding(project) === project)
+      }
+    }
   }
 
   test("ToNumber: positive tests") {
@@ -2175,6 +2327,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("ToCharacter: zero value with no digits after the decimal point") {
+    def toChar(decimal: Decimal, format: String): Expression = {
+      val expr = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      expr
+    }
+    // (input, format, result, result with the legacy config)
+    Seq(
+      (Decimal(0), "9", "0", " "),
+      (Decimal(0), "999", "  0", "   "),
+      (Decimal("0.00"), "999", "  0", "   "),
+      (Decimal(0), "9G999", "    0", "     "),
+      (Decimal(0), "$999", "$  0", "$   "),
+      (Decimal(0), "999S", "  0+", "+   "),
+      (Decimal(0), "S999", "  +0", "   +"),
+      (Decimal(0), "999MI", "  0 ", "    "),
+      (Decimal(0), "999PR", "  0  ", "     "),
+      // These formats already rendered the zero, so the legacy config does not change them.
+      (Decimal(0), "099", "000", "000"),
+      (Decimal(0), "999.", "  0 ", "  0 "),
+      (Decimal(0), "999.9", "  0.0", "  0.0")
+    ).foreach { case (decimal, format, expected, expectedLegacy) =>
+      checkEvaluation(toChar(decimal, format), expected)
+      withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+        checkEvaluation(toChar(decimal, format), expectedLegacy)
+      }
+    }
+    val legacyExpr = withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+      toChar(Decimal(0), "999")
+    }
+    // The config value is captured when the expression is built, not when it is evaluated.
+    checkEvaluation(legacyExpr, "   ")
+    val rebuilt = legacyExpr.withNewChildren(
+      Seq(Literal(Decimal(0), DecimalType(20, 0)), legacyExpr.children(1)))
+    assert(rebuilt ne legacyExpr)
+    checkEvaluation(rebuilt, "   ")
+    val defaultExpr = toChar(Decimal(0), "999")
+    assert(!defaultExpr.semanticEquals(legacyExpr))
+    assert(defaultExpr.toString == legacyExpr.toString)
+  }
+
   test("find in set") {
     checkEvaluation(
       FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)
@@ -2493,4 +2686,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`normalize`",
         "form" -> "'NFE'"))
   }
+}
+
+private case class DecimalWrapper(d: Decimal)
+
+private class DecimalWrapperUDT extends UserDefinedType[DecimalWrapper] {
+  override def sqlType: DataType = DecimalType(10, 2)
+
+  override def serialize(obj: DecimalWrapper): Any = obj.d
+
+  override def deserialize(datum: Any): DecimalWrapper = datum match {
+    case d: Decimal => DecimalWrapper(d)
+  }
+
+  override def userClass: Class[DecimalWrapper] = classOf[DecimalWrapper]
 }

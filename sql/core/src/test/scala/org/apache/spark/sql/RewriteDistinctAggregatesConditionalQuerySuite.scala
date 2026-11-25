@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Expression, If, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Join, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -52,6 +54,46 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     // The Expand rewrite adds gid-routing filters to every distinct aggregate; we only
     // care about user-condition filters introduced by the IF/CASE canonicalization.
     aggregateExprs.flatMap(_.filter).exists(_.references.exists(_.name != "gid"))
+  }
+
+  private def orLeaves(expr: Expression): Seq[Expression] = expr match {
+    case Or(left, right) => orLeaves(left) ++ orLeaves(right)
+    case other => Seq(other)
+  }
+
+  private def existenceJoinCount(plan: LogicalPlan): Int = {
+    plan.collect { case Join(_, _, _: ExistenceJoin, _, _) => () }.size
+  }
+
+  /**
+   * Conf on must keep the conf-off ExistenceJoin count. The union guard copies each
+   * filter into the Expand key, and RewritePredicateSubquery builds one join per copy.
+   * When `stayUnnormalized` is set, the IF/CASE condition must not become a FILTER.
+   */
+  private def assertSameExistenceJoinCount(
+      sqlText: String,
+      expectedJoins: Int,
+      stayUnnormalized: Boolean = false): Unit = {
+    val (expectedRows, joinsOff) = withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val df = spark.sql(sqlText)
+      (df.collect(), existenceJoinCount(df.queryExecution.optimizedPlan))
+    }
+    assert(joinsOff == expectedJoins,
+      s"conf off produced $joinsOff existence joins, expected $expectedJoins")
+    withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+      val df = spark.sql(sqlText)
+      checkAnswer(df, expectedRows)
+      val plan = df.queryExecution.optimizedPlan
+      val joinsOn = existenceJoinCount(plan)
+      assert(joinsOn == expectedJoins,
+        s"conf on produced $joinsOn existence joins, expected $expectedJoins:\n$plan")
+      if (stayUnnormalized) {
+        assert(!hasUserConditionFilter(plan),
+          "predicate-subquery condition should not become a FILTER clause")
+      }
+    }
   }
 
   test("rewrite COUNT(DISTINCT IF(cond, col, NULL)) correctness") {
@@ -186,7 +228,7 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
-  test("multiple conditional distinct counts collapse and produce correct results") {
+  test("different bases skip the conditional rewrite and keep correct results") {
     withTempView("t") {
       spark.range(5)
         .selectExpr(
@@ -209,6 +251,14 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           |FROM t GROUP BY key""".stripMargin
 
       checkRewriteAndResult(conditionalSql, filterSql)
+
+      // col2 and col3 are different distinct children, so normalization does not
+      // reduce the group count and the gate keeps the original IFs.
+      withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        val plan = spark.sql(conditionalSql).queryExecution.optimizedPlan
+        assert(!hasUserConditionFilter(plan),
+          "different bases should not produce a user-condition FILTER clause")
+      }
     }
   }
 
@@ -280,6 +330,127 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
+  test("guard: high-cardinality base with low-selectivity disjoint predicates") {
+    withTempView("t") {
+      // ord is unique (high-cardinality base); each predicate matches ~1% of rows and
+      // they are disjoint. This is the workload shape that regressed before the
+      // union-of-filters guard: the guarded key must stay bounded by the pre-rewrite
+      // plan's cardinality while the Expand stays collapsed.
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 3, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 3)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
+  test("guard: mixed overlapping windows and disjoint flags") {
+    withTempView("t") {
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 30 as int) as day",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      // Overlapping windows (day < 10 is a subset of day < 30) plus disjoint selective flags in
+      // the same query: the union guard must keep every count correct.
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT IF(day < 10, ord, NULL)),
+          |  COUNT(DISTINCT IF(day < 30, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 7, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord) FILTER (WHERE day < 10),
+          |  COUNT(DISTINCT ord) FILTER (WHERE day < 30),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 7)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
+  test("guard: nullable condition that is NULL for some rows") {
+    withTempView("t") {
+      // Literal IF(NULL, ...) is folded to CAST(NULL AS ...) by SimplifyConditionals
+      // before Distinct Aggregate Rewrite, so it never reaches the union guard. A
+      // predicate over a nullable column that is NULL for some rows does.
+      spark.range(50)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket",
+          "case when id % 3 = 0 then cast(null as int) else cast(id % 5 as int) end as flag")
+        .createOrReplaceTempView("t")
+
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(flag > 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin
+      val withoutRewriteRows = withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+        spark.sql(sqlText).collect()
+      }
+      withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        checkAnswer(spark.sql(sqlText), withoutRewriteRows)
+
+        val plan = spark.sql(sqlText).queryExecution.optimizedPlan
+        val expand = plan.collectFirst { case e: Expand => e }.getOrElse(
+          fail(s"expected Expand in optimized plan:\n$plan"))
+        assert(expand.projections.size == 1,
+          s"expected 1 distinct group, got ${expand.projections.size}")
+        val guard = expand.projections.head.collectFirst {
+          case i @ If(_, trueValue, falseValue)
+              if falseValue.foldable && falseValue.eval() == null &&
+                trueValue.references.exists(_.name == "ord") => i
+        }.getOrElse(fail(s"no union guard over ord in Expand:\n$plan"))
+        val leaves = orLeaves(guard.predicate)
+        assert(leaves.exists(_.references.exists(_.name == "flag")),
+          s"guard misses flag predicate: ${guard.predicate}")
+        assert(leaves.exists(_.references.exists(_.name == "bucket")),
+          s"guard misses bucket predicate: ${guard.predicate}")
+      }
+    }
+  }
+
+  test("guard: mixed filtered and unfiltered counts on the same base") {
+    withTempView("t") {
+      spark.range(1000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+
+      // The unfiltered count needs ord over ALL rows, so the shared Expand key must
+      // stay unguarded; the filtered counts ride along via their flag columns.
+      checkRewriteAndResult(
+        """SELECT key,
+          |  COUNT(DISTINCT ord),
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT ord),
+          |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0)
+          |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
   test("rewrite is present in optimized plan") {
     withTempView("t") {
       spark.range(2)
@@ -302,6 +473,61 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
       }
 
       assert(hasFilter, "Optimized plan should contain user-condition FILTER clause")
+    }
+  }
+
+  private def servingLogFixture(f: => Unit): Unit = {
+    withTempView("serving_log", "models") {
+      spark.range(20).selectExpr(
+        "id % 3 as key",
+        "id as request_id",
+        "case when id % 11 = 0 then null else id % 5 end as user_id",
+        "id % 4 as model",
+        "id % 3 as tier",
+        "id % 7 as priority",
+        "id * 10 as tokens").createOrReplaceTempView("serving_log")
+      spark.range(2).selectExpr(
+        "id as model",
+        "id % 2 as tier").createOrReplaceTempView("models")
+      f
+    }
+  }
+
+  test("guard: EXISTS, IN, and NOT IN filters are not joined twice") {
+    servingLogFixture {
+      // Another distinct aggregate forces the Expand path. Each predicate subquery
+      // is its own filtered group; guarding it would join the dimension table twice.
+      val sqlText =
+        """SELECT key,
+          |  SUM(DISTINCT tokens),
+          |  COUNT(DISTINCT request_id) FILTER (WHERE EXISTS (
+          |    SELECT 1 FROM models WHERE serving_log.model = models.model)),
+          |  COUNT(DISTINCT user_id) FILTER (WHERE tier IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)),
+          |  COUNT(DISTINCT priority) FILTER (WHERE user_id NOT IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model))
+          |FROM serving_log GROUP BY key""".stripMargin
+      assertSameExistenceJoinCount(sqlText, expectedJoins = 3)
+    }
+  }
+
+  test("guard: IF and CASE conditions with predicate subqueries stay un-normalized") {
+    servingLogFixture {
+      // Same base, so a subquery-blind normalize would collapse these into one group.
+      // That group cannot be guarded, and Expand would project the raw request_id.
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(EXISTS (
+          |    SELECT 1 FROM models WHERE serving_log.model = models.model),
+          |    request_id, NULL)),
+          |  COUNT(DISTINCT CASE WHEN tier IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)
+          |    THEN request_id END),
+          |  COUNT(DISTINCT CASE WHEN user_id NOT IN (
+          |    SELECT tier FROM models WHERE models.model = serving_log.model)
+          |    THEN request_id ELSE NULL END)
+          |FROM serving_log GROUP BY key""".stripMargin
+      assertSameExistenceJoinCount(sqlText, expectedJoins = 3, stayUnnormalized = true)
     }
   }
 }

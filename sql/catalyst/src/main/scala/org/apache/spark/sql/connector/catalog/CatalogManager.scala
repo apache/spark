@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{METADATA_JSON, REASON}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
@@ -380,8 +381,7 @@ private[sql] class DefaultCatalogManager(
    * list (the only thing returned here) is unaffected. Moving the read inside the CM lock
    * would re-introduce the SPARK-56939 lock-order inversion this helper exists to avoid.
    *
-   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
-   * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
+   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]])
    * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
    */
   override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] = {
@@ -710,7 +710,8 @@ private[sql] object CatalogManager extends Logging {
       case Right(entries) => Some(entries)
       case Left(reason) =>
         logWarning(
-          s"Invalid stored SQL path metadata: $reason. Raw payload: $storedPathStr")
+          log"Invalid stored SQL path metadata: ${MDC(REASON, reason)}. " +
+            log"Raw payload: ${MDC(METADATA_JSON, storedPathStr)}")
         None
     }
   }

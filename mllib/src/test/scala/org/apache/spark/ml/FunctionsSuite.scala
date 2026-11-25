@@ -24,9 +24,9 @@ import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.ml.VectorPosExplode
-import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
-import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.catalyst.expressions.ml.{VectorPosExplode, VectorScaleShift}
+import org.apache.spark.sql.functions.{col, typedLit, unwrap_udt, wrap_udt}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
@@ -254,6 +254,131 @@ class FunctionsSuite extends MLTest {
         .collect()
     }
     assert(error.getMessage.contains("vectors with non-matching sizes"))
+  }
+
+  test("test vector_scale_shift") {
+    val df = Seq(
+      (Vectors.dense(1.0, 2.0), Array(2.0, 3.0), Array(4.0, 5.0)),
+      (Vectors.sparse(2, Seq((0, 1.0))), Array(2.0, 3.0), null),
+      (Vectors.dense(1.0, 2.0), null, Array(4.0, 5.0)),
+      (Vectors.sparse(2, Seq((0, 1.0))), Array(2.0, 3.0), Array(0.0, 0.0)),
+      (Vectors.sparse(2, Seq((0, 1.0))), null, null),
+      (null, Array(2.0, 3.0), Array(4.0, 5.0)))
+      .toDF("vector", "scale", "shift")
+
+    assert(df.schema("scale").dataType === ArrayType(DoubleType, containsNull = false))
+    assert(df.schema("shift").dataType === ArrayType(DoubleType, containsNull = false))
+    val transformed = df.select(vector_scale_shift($"vector", $"scale", $"shift"))
+    assert(transformed.schema.head.dataType === new VectorUDT)
+    assert(transformed.collect().map(_.get(0)).toSeq === Seq(
+      Vectors.dense(6.0, 11.0),
+      Vectors.sparse(2, Seq((0, 2.0))),
+      Vectors.dense(5.0, 7.0),
+      Vectors.dense(2.0, 0.0),
+      Vectors.sparse(2, Seq((0, 1.0))),
+      null))
+
+    val expressions = transformed.queryExecution.analyzed
+      .flatMap(_.expressions.flatMap(_.collect { case v: VectorScaleShift => v }))
+    assert(expressions.map(_.prettyName).distinct === Seq("ml_vector_scale_shift"))
+
+    val constantResult = df.limit(1)
+      .select(vector_scale_shift(
+        $"vector",
+        Array(2.0, 3.0),
+        Array(4.0, 5.0)))
+      .first()
+      .getAs[Vector](0)
+    assert(constantResult === Vectors.dense(6.0, 11.0))
+
+    val cachedScaleResult = df.limit(1)
+      .select(vector_scale_shift($"vector", typedLit(Array(2.0, 3.0)), $"shift"))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedScaleResult === Vectors.dense(6.0, 11.0))
+
+    val cachedScaleWithNullShiftResult = df
+      .where($"scale".isNotNull && $"shift".isNull)
+      .select(vector_scale_shift($"vector", typedLit(Array(2.0, 3.0)), $"shift"))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedScaleWithNullShiftResult === Vectors.sparse(2, Seq((0, 2.0))))
+
+    val cachedShiftResult = df.limit(1)
+      .select(vector_scale_shift($"vector", $"scale", typedLit(Array(4.0, 5.0))))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedShiftResult === Vectors.dense(6.0, 11.0))
+
+    val nullScaleWithCachedShiftResult = df
+      .where($"scale".isNull && $"shift".isNotNull)
+      .select(vector_scale_shift($"vector", $"scale", typedLit(Array(4.0, 5.0))))
+      .first()
+      .getAs[Vector](0)
+    assert(nullScaleWithCachedShiftResult === Vectors.dense(5.0, 7.0))
+
+    val scaleOnlyConstantResult = df.limit(1)
+      .select(vector_scale_shift(
+        $"vector",
+        Array(2.0, 3.0),
+        null.asInstanceOf[Array[Double]]))
+      .first()
+      .getAs[Vector](0)
+    assert(scaleOnlyConstantResult === Vectors.dense(2.0, 6.0))
+
+    val shiftOnlyConstantResult = df.limit(1)
+      .select(vector_scale_shift(
+        $"vector",
+        null.asInstanceOf[Array[Double]],
+        Array(4.0, 5.0)))
+      .first()
+      .getAs[Vector](0)
+    assert(shiftOnlyConstantResult === Vectors.dense(5.0, 7.0))
+
+    val nullConstantsResult = df.limit(1)
+      .select(vector_scale_shift(
+        $"vector",
+        null.asInstanceOf[Array[Double]],
+        null.asInstanceOf[Array[Double]]))
+      .first()
+      .getAs[Vector](0)
+    assert(nullConstantsResult === Vectors.dense(1.0, 2.0))
+
+    val emptyConstantsResult = Seq(Tuple1(Vectors.dense(Array.emptyDoubleArray)))
+      .toDF("vector")
+      .select(vector_scale_shift($"vector", Array.emptyDoubleArray, Array.emptyDoubleArray))
+      .first()
+      .getAs[Vector](0)
+    assert(emptyConstantsResult === Vectors.dense(Array.emptyDoubleArray))
+
+    val specialValues = Seq(Double.NaN, Double.NegativeInfinity, Double.PositiveInfinity)
+    val specialValueRows = specialValues.flatMap { value =>
+      Seq(
+        (Vectors.dense(value), Array(1.0), Array(0.0)),
+        (Vectors.dense(1.0), Array(value), Array(0.0)),
+        (Vectors.dense(1.0), Array(1.0), Array(value)))
+    }
+    val specialValueResults = specialValueRows
+      .toDF("vector", "scale", "shift")
+      .select(vector_scale_shift($"vector", $"scale", $"shift"))
+      .collect()
+      .map(_.getAs[Vector](0)(0))
+    specialValueResults.zip(specialValues.flatMap(value => Seq.fill(3)(value)))
+      .foreach { case (actual, expected) =>
+        assert(java.lang.Double.compare(actual, expected) === 0)
+      }
+
+    Seq(
+      (Array(1.0, 2.0), Array(0.0)),
+      (Array(1.0), Array(0.0, 0.0))).foreach { case (scale, shift) =>
+      val error = intercept[IllegalArgumentException] {
+        Seq((Vectors.dense(1.0), scale, shift))
+          .toDF("vector", "scale", "shift")
+          .select(vector_scale_shift($"vector", $"scale", $"shift"))
+          .collect()
+      }
+      assert(error.getMessage.contains("inputs with non-matching sizes"))
+    }
   }
 
   test("test get_vector") {

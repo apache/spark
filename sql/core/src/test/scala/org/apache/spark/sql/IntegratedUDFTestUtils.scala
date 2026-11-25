@@ -37,7 +37,7 @@ import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, NullType, StringType, StructType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -187,6 +187,30 @@ object IntegratedUDFTestUtils extends SQLHelper {
             s"f = open('$path', 'wb');" +
             "f.write(CloudPickleSerializer().dumps((" +
             "lambda x: None if x is None else str(x), StringType())))"),
+        None,
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+      binaryPythonFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPythonFunc != null)
+    binaryPythonFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+  }
+
+  // A Python function that fails (ZeroDivisionError) on 0, to test that a UDF is not evaluated
+  // on rows that do not need it (e.g. in a COUNT-bug zero-row branch).
+  private lazy val pythonFuncFailOnZero: Array[Byte] = if (shouldTestPythonUDFs) {
+    var binaryPythonFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import LongType; " +
+            "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            "lambda x: None if x is None else 100 // x, LongType())))"),
         None,
         "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
       binaryPythonFunc = Files.readAllBytes(path.toPath)
@@ -508,6 +532,38 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Regular Python UDF"
+  }
+
+  /**
+   * A Python UDF that takes a long and returns `100 / x` as a long, failing with a
+   * ZeroDivisionError on 0 (and returning null on null). Use it to check that a UDF is not
+   * evaluated on rows that do not need its result, e.g. the matched rows of a COUNT-bug rewrite.
+   */
+  case class TestFailingPythonUDF(name: String) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pythonFuncFailOnZero.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = LongType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true) {
+
+      override def builder(e: Seq[Expression]): Expression = {
+        assert(e.length == 1, "Defined UDF only has one column")
+        new PythonUDFWithoutId(
+          super.builder(Cast(e.head, LongType) :: Nil).asInstanceOf[PythonUDF])
+      }
+    }
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Failing Python UDF"
   }
 
   def createUserDefinedPythonDataSource(
@@ -1605,6 +1661,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    */
   def registerTestUDF(testUDF: TestUDF, session: classic.SparkSession): Unit = testUDF match {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
+    case udf: TestFailingPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalaUDF =>
