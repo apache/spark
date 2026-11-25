@@ -145,12 +145,12 @@ class RpcDeadlines:
     because a timeout there would kill the execution with no recovery path.
 
     Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
-    blocking, non-reattachable ExecutePlan call issued from
-    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
-    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
-    performs independently -- so this call is given a bounded deadline. Without it the finalizer
-    can block forever if the release response is never delivered, which (on the foreachBatch
-    Connect path) stalls the streaming query indefinitely.
+    blocking, non-reattachable ExecutePlan call, issued by the thread that releases the
+    :class:`CachedRemoteRelation` objects that are garbage-collected. Unlike a query ExecutePlan, a
+    timeout here does not kill any recoverable execution -- it only abandons a best-effort cache
+    eviction that the server also performs independently -- so this call is given a bounded
+    deadline. Without it the thread can block forever if the release response is never delivered,
+    and stop releasing the other relations.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
