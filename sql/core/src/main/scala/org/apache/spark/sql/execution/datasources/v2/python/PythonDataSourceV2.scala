@@ -90,11 +90,11 @@ class PythonDataSourceV2 extends NamedTableProvider {
 
   // The lookups planned in Python, by the inputs of their planning call. A streaming query plans
   // its lookup joins again in every micro-batch, and once more when it starts, each time on a new
-  // scan builder of the same table. As with the read info of a batch read, a plan is reused only
-  // while filter and limit pushdown are off, which the key holds, so that a change of them plans
-  // again; with either on, each scan plans again in Python, as a batch read does. The key holds
-  // the schema and the candidates too, so that two lookups of one data source never share a plan.
-  // A planning call that fails is not cached, so it fails again.
+  // scan builder of the same table. As the read info of a batch read is reused while its scan
+  // pushes nothing, a plan is reused unless its planning call pushes filters into the lookup
+  // reader: Spark pushes no limit into a lookup. The key holds the pushdown configurations, so a
+  // change of them plans again, and the schema and the candidates, so that two lookups of one data
+  // source never share a plan. A planning call that fails is not cached, so it fails again.
   private val lookupPlans: Cache[PythonLookupPlanKey, PythonDataSourceLookupPlan] =
     CacheBuilder.newBuilder().maximumSize(PythonDataSourceV2.MAX_CACHED_PLANS).build()
 
@@ -107,7 +107,7 @@ class PythonDataSourceV2 extends NamedTableProvider {
       candidates: Array[Predicate]): PythonDataSourceLookupPlan = {
     val dataSource = getOrCreateDataSourceInPython(shortName, options, Some(schema))
     val planner = source.lookupPlanner(shortName, dataSource, schema, filters, candidates)
-    if (SQLConf.get.pythonFilterPushDown || SQLConf.get.pythonLimitPushDown) {
+    if (planner.pushesFilters) {
       planner.runInPython()
     } else {
       val key = planner.cacheKey

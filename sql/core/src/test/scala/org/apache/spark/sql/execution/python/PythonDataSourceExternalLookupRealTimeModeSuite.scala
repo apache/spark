@@ -176,22 +176,27 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
     spark.dataSource.registerPython(
       dataSourceName, createUserDefinedPythonDataSource(dataSourceName, lookupSourceScript))
     withTempDir { markerDir =>
-      val input = LowLatencyMemoryStream.singlePartition[Int]
-      val query = runStreamingQuery("python_lookup_rtm_off", joined(input, markerDir))
-      try {
-        input.addData(1)
-        eventually(timeout(60.seconds)) {
-          assert(query.exception.isDefined)
+      // Both lookup flags are pinned, so that the test checks the opt-in, not a default.
+      withSQLConf(
+          SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true",
+          SQLConf.PYTHON_EXTERNAL_LOOKUP_REAL_TIME_MODE_ENABLED.key -> "false") {
+        val input = LowLatencyMemoryStream.singlePartition[Int]
+        val query = runStreamingQuery("python_lookup_rtm_off", joined(input, markerDir))
+        try {
+          input.addData(1)
+          eventually(timeout(60.seconds)) {
+            assert(query.exception.isDefined)
+          }
+          checkError(
+            exception = query.exception.get.getCause.asInstanceOf[SparkThrowable],
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.PYTHON_REAL_TIME_MODE",
+            parameters = Map(
+              "table" -> s"`$dataSourceName`",
+              "config" -> "\"spark.sql.python.externalLookup.realTimeMode.enabled\""))
+          assert(requests(markerDir).isEmpty)
+        } finally {
+          query.stop()
         }
-        checkError(
-          exception = query.exception.get.getCause.asInstanceOf[SparkThrowable],
-          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.PYTHON_REAL_TIME_MODE",
-          parameters = Map(
-            "table" -> s"`$dataSourceName`",
-            "config" -> "\"spark.sql.python.externalLookup.realTimeMode.enabled\""))
-        assert(requests(markerDir).isEmpty)
-      } finally {
-        query.stop()
       }
     }
   }

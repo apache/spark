@@ -138,29 +138,18 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 
   /**
-   * (Driver-side) Run Python process to plan a lookup: create the lookup reader, push the
-   * `filters` down to it, select the lookup predicates among the `candidates` and get the maximum
-   * number of parameter rows per request, in the order in which Spark calls a Scala connector.
-   * Returns the planned reader, pickled for the executors, and the planning decisions.
+   * (Driver-side) The runner of a Python process that plans a lookup: it creates the lookup
+   * reader, pushes the `filters` down to it, selects the lookup predicates among the `candidates`
+   * and gets the maximum number of parameter rows per request, in the order in which Spark calls a
+   * Scala connector. It returns the planned reader, pickled for the executors, and the planning
+   * decisions. [[PythonDataSourceV2.getOrCreateLookupPlan]] runs it, or reuses the plan of an
+   * earlier call whose `cacheKey` is the same.
    *
    * `filters` are the filters that [[PythonScanBuilder.pushFilters]] received, empty when filter
    * pushdown is disabled. `candidates` are the predicates that Spark offers to
    * [[org.apache.spark.sql.connector.read.SupportsExternalLookup.selectLookupPredicates]].
    * A broken contract of the lookup API that Python finds is reported with the error that Spark
    * raises for a Scala connector, for the table `tableName`.
-   */
-  def planLookupInPython(
-      tableName: String,
-      pythonResult: PythonDataSourceCreationResult,
-      schema: StructType,
-      filters: Array[Filter],
-      candidates: Array[V2Predicate]): PythonDataSourceLookupPlan = {
-    lookupPlanner(tableName, pythonResult, schema, filters, candidates).runInPython()
-  }
-
-  /**
-   * The runner of [[planLookupInPython]], whose `cacheKey` identifies the inputs of the planning
-   * call before it runs.
    */
   private[python] def lookupPlanner(
       tableName: String,
@@ -777,6 +766,10 @@ private[python] class UserDefinedPythonDataSourceLookupPlanRunner(
 
   // See the logic in `pyspark.sql.worker.plan_data_source_lookup.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_lookup"
+
+  /** Whether the planning call pushes filters into the lookup reader. */
+  def pushesFilters: Boolean =
+    SQLConf.get.pythonFilterPushDown && serializedFilters.key.positions.nonEmpty
 
   /** The inputs of the planning call, which decide its result. */
   def cacheKey: PythonLookupPlanKey = PythonLookupPlanKey(
