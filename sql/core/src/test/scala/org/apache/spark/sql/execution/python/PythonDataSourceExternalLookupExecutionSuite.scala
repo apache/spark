@@ -44,8 +44,9 @@ import org.apache.spark.sql.types.StructType
  * `select` picks in `candidates`, by default every equality on `id`, and evaluates them on the
  * stored rows.
  * It appends the number of parameter rows of each request, and its other events, to the file
- * `events` in `markerDir`. With the option `behavior` set to `sparkFile`, the `name` of each
- * returned row is the text of the file `file`, which it finds through `SparkFiles`.
+ * `events` in `markerDir`: `serve` at the first request of each reader, and, with the option
+ * `markParameters`, each parameter row. With the option `behavior` set to `sparkFile`, the `name`
+ * of each returned row is the text of the file `file`, which it finds through `SparkFiles`.
  */
 class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuiteBase {
   private val runCount = new AtomicInteger(0)
@@ -90,6 +91,7 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |    def __init__(self, options):
        |        self.options = options
        |        self.selected = []
+       |        self.served = False
        |
        |    def mark(self, event):
        |        with open(os.path.join(self.options["markerDir"], "events"), "a") as f:
@@ -109,7 +111,13 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |        rows = stored_rows(self.options)
        |        behavior = self.options.get("behavior", "")
        |        repeat = int(self.options.get("repeat", "1"))
+       |        if not self.served:
+       |            self.served = True
+       |            self.mark("serve")
        |        self.mark(f"request {len(parameters)}")
+       |        if self.options.get("markParameters") == "true":
+       |            for values in parameters:
+       |                self.mark(f"parameter {values}")
        |        yielded = 0
        |        try:
        |            for ordinal, values in enumerate(parameters):
@@ -249,8 +257,10 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
         matches.collect { case (sid, rows) if rows.nonEmpty => Row(sid.get) })
       checkStream(stream("left_anti"),
         matches.collect { case (sid, Seq()) => Row(sid.orNull) })
-      // Every Python reader was closed gracefully.
-      assert(events(markerDir).contains("close"))
+      // Every Python reader that served a request was closed gracefully, once.
+      val readerEvents = events(markerDir)
+      assert(readerEvents.contains("serve"))
+      assert(readerEvents.count(_ == "close") === readerEvents.count(_ == "serve"))
     }
   }
 
@@ -261,15 +271,17 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
         stream.join(lookup, stream("sid") <=> lookup("id")).select(stream("sid"), col("name")),
         Seq(Row(1L, "name1-0"), Row(null, "null id"), Row(2L, "name2-0"), Row(2L, "name2-1")))
     }
-    // The constant tier of a filter is offered as a candidate, and selected with the key.
+    // The constant tier of a filter is offered as a candidate, and selected with the key: each
+    // parameter row holds the key and the tier, in the order of the selected positions.
     val byColumn = "sorted(range(len(candidates)), key=lambda i: candidates[i].attribute)"
-    withLookupSource()("select" -> byColumn) { (lookup, markerDir) =>
+    withLookupSource()("select" -> byColumn, "markParameters" -> "true") { (lookup, markerDir) =>
       val stream = idStream(Some(2L), Some(5L), Some(4L))
       checkStream(
         stream.join(lookup.filter("tier = 1"), stream("sid") === lookup("id"))
           .select(stream("sid"), col("name")),
         Seq(Row(2L, "name2-1"), Row(5L, "name5-1")))
-      assert(events(markerDir).exists(_.startsWith("request ")))
+      assert(events(markerDir).filter(_.startsWith("parameter ")).toSet ===
+        Set("parameter (2, 1)", "parameter (5, 1)", "parameter (4, 1)"))
     }
     // A selected range on a stream column gives one parameter row per request.
     withLookupSource()("select" -> "range(len(candidates))") { (lookup, markerDir) =>
@@ -281,6 +293,67 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
           .select(stream("sid"), col("name")),
         Seq(Row(2L, "name2-1"), Row(5L, "name5-0"), Row(5L, "name5-1")))
       assert(events(markerDir).filter(_.startsWith("request ")).toSet === Set("request 1"))
+    }
+  }
+
+  test("each type of lookup key reaches Python as its Python type, through the JVM") {
+    assume(shouldTestPandasUDFs)
+    val sourceName = "TypedLookupSource"
+    val columns = Seq("b", "i", "d", "ts", "ntz", "s", "bin", "dec")
+    val script =
+      s"""
+         |import datetime
+         |from pyspark.sql.datasource import DataSource, DataSourceLookupReader
+         |
+         |COLUMNS = ["b", "i", "d", "ts", "ntz", "s", "bin", "dec", "types"]
+         |
+         |class TypedLookupReader(DataSourceLookupReader):
+         |    def selectLookupPredicates(self, candidates):
+         |        self.columns = [c.attribute[0] for c in candidates]
+         |        return list(range(len(candidates)))
+         |
+         |    def lookup(self, parameters):
+         |        # Each parameter row is returned as the stored row, so the join keeps it only if
+         |        # its values reach Python and come back unchanged, with their Python types.
+         |        for ordinal, values in enumerate(parameters):
+         |            row = dict(zip(self.columns, values))
+         |            row["types"] = ",".join(sorted(
+         |                f"{c}:{type(v).__name__}"
+         |                + ("-naive" if isinstance(v, datetime.datetime) and v.tzinfo is None
+         |                   else "")
+         |                for c, v in zip(self.columns, values)))
+         |            yield ordinal, tuple(row.get(c) for c in COLUMNS)
+         |
+         |class $sourceName(DataSource):
+         |    def schema(self):
+         |        return ("b BOOLEAN, i INT, d DATE, ts TIMESTAMP, ntz TIMESTAMP_NTZ, s STRING, "
+         |                "bin BINARY, dec DECIMAL(10, 2), types STRING")
+         |
+         |    def lookupReader(self, schema):
+         |        return TypedLookupReader()
+         |""".stripMargin
+    spark.dataSource.registerPython(
+      sourceName, createUserDefinedPythonDataSource(sourceName, script))
+    val schema = new StructType().add("k_b", "boolean").add("k_i", "int").add("k_d", "date")
+      .add("k_ts", "timestamp").add("k_ntz", "timestamp_ntz").add("k_s", "string")
+      .add("k_bin", "binary").add("k_dec", "decimal(10, 2)")
+    val key = Row(true, 7, java.sql.Date.valueOf("2026-03-15"),
+      java.sql.Timestamp.from(java.time.Instant.parse("2026-03-15T12:34:56.123456Z")),
+      java.time.LocalDateTime.parse("2026-03-15T01:30:00.654321"), "key",
+      Array[Byte](0, 1, 2), new java.math.BigDecimal("12.34"))
+    Seq(true, false).foreach { binaryAsBytes =>
+      withSQLConf(
+          SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true",
+          SQLConf.PYSPARK_BINARY_AS_BYTES.key -> binaryAsBytes.toString) {
+        val lookup = spark.read.format(sourceName).load()
+        val stream = streamOf(schema, Seq(key), numPartitions = 1)
+        val joined = stream.join(lookup,
+          columns.map(c => stream(s"k_$c") === lookup(c)).reduce(_ && _))
+        val binaryType = if (binaryAsBytes) "bytes" else "bytearray"
+        checkStream(joined.select(lookup("types")), Seq(Row(
+          s"b:bool,bin:$binaryType,d:date,dec:Decimal,i:int,ntz:datetime-naive,s:str," +
+            "ts:datetime-naive")))
+      }
     }
   }
 

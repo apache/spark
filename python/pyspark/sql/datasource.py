@@ -1433,9 +1433,9 @@ class DataSourceLookupReader(ABC):
             - DECIMAL: `decimal.Decimal`, at the column's precision and scale
             - DATE: `datetime.date`
             - TIMESTAMP: a naive `datetime.datetime` in the local time zone of the Python
-              worker, as for the rows that a DataFrame passes to Python elsewhere. During a
-              daylight-saving change, two instants can have the same local time, and so the
-              same value.
+              worker, as for the rows that a DataFrame passes to Python elsewhere, with `fold`
+              always 0. During a daylight-saving change, two instants can have the same local
+              time, and so the same value.
             - TIMESTAMP_NTZ: a naive `datetime.datetime` of the stored date and time
             - BINARY: `bytes`, or `bytearray` when
               `spark.sql.execution.pyspark.binaryAsBytes` is false
@@ -1458,7 +1458,8 @@ class DataSourceLookupReader(ABC):
         -----
         Every returned row must carry the stored values of the columns that the selected
         predicates read. A value may be NULL only where both the table and the read schema
-        allow one, and a DECIMAL must fit its precision and scale. The results may omit a row
+        allow one. The Python worker rounds a DECIMAL to the scale of its column, half to even,
+        and it must then fit the column's precision. The results may omit a row
         that fails a pushed filter. Do not keep `parameters` after the generator ends.
 
         Spark fails the task with a :class:`PythonException` (`PYTHON_EXCEPTION`) for an
@@ -1468,8 +1469,10 @@ class DataSourceLookupReader(ABC):
         `DATA_SOURCE_RETURN_SCHEMA_MISMATCH` or `DATA_SOURCE_INVALID_RETURN_TYPE`, for a row
         that does not fit the read schema. It fails the task with
         `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_INPUT_ORDINAL` for an ordinal out of range,
-        and with `NULL_IN_NOT_NULL_FIELD` or `DECIMAL_OUT_OF_RANGE` for a value that does not
-        fit.
+        and with `NULL_IN_NOT_NULL_FIELD` for a `None` in a top-level column that is not
+        nullable. The Python worker raises an exception, which fails the task with
+        `PYTHON_EXCEPTION`, for a DECIMAL with more digits than its precision allows, and for a
+        `None` in a nested field, an array element or a map value that is not nullable.
 
         Spark may stop reading the result early, for example when a semi join has decided every
         stream row. It then closes the generator, so `try`/`finally` and `with` blocks run. The
