@@ -314,6 +314,22 @@ class FrameAttrsMixin:
 
         self.assert_eq(psdf, pdf)
 
+    def test_assign_validates_callable_result(self):
+        # SPARK-60562: a callable's result follows the same rules as a direct value.
+        pdf = pd.DataFrame({"value": [1, 2]})
+        psdf = ps.from_pandas(pdf)
+
+        for value in (np.array([1, 2]), lambda df: df["value"].to_numpy()):
+            with self.assertRaisesRegex(
+                TypeError, "Column assignment doesn't support type ndarray"
+            ):
+                psdf.assign(assigned=value)
+
+        self.assert_eq(
+            psdf.assign(assigned=lambda df: df["value"] + 1, constant=lambda _: True),
+            pdf.assign(assigned=lambda df: df["value"] + 1, constant=lambda _: True),
+        )
+
     def test_attributes(self):
         psdf = self.psdf
 

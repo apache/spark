@@ -5855,15 +5855,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import IndexOpsMixin
 
         for k, v in kwargs.items():
-            is_invalid_assignee = (
-                not (isinstance(v, (IndexOpsMixin, PySparkColumn)) or callable(v) or is_scalar(v))
-            ) or isinstance(v, MultiIndex)
-            if is_invalid_assignee:
+            if callable(v):
+                v = v(self)
+            if isinstance(v, MultiIndex) or not (
+                isinstance(v, (IndexOpsMixin, PySparkColumn)) or is_scalar(v)
+            ):
                 raise TypeError(
                     "Column assignment doesn't support type {0}".format(type(v).__name__)
                 )
-            if callable(v):
-                kwargs[k] = v(self)
+            kwargs[k] = v
 
         pairs = {
             (k if is_name_like_tuple(k) else (k,)): (
