@@ -102,7 +102,8 @@ class RDDTestsMixin:
         self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
 
     def test_actions_of_several_jobs_compute_shuffles_once(self):
-        # The jobs of an action run on one RDD, so they share the outputs of its shuffles.
+        # The jobs of an action run on one RDD, so they share the outputs of its shuffles, and so
+        # do the later actions on that RDD.
         with tempfile.TemporaryDirectory() as d:
 
             def computed():
@@ -128,6 +129,12 @@ class RDDTestsMixin:
             rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
             self.assertEqual(sorted(rdd.keys().zipWithIndex().values().collect()), list(range(8)))
             self.assertEqual(computed(), 32)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.take(8)), [(i, i) for i in range(8)])
+            self.assertEqual(sorted(rdd.collect()), [(i, i) for i in range(8)])
+            self.assertEqual(rdd.mapValues(lambda v: v + 1).values().sum(), 36)
+            self.assertEqual(computed(), 40)
 
     def test_run_job_on_a_partition_that_does_not_exist(self):
         rdd = self.sc.parallelize([1, 2, 3], 2)

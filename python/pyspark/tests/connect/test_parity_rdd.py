@@ -314,32 +314,50 @@ print(sorted(m for m in set(sys.modules) - before if m.startswith(client)))
         self.assertEqual(result.stdout.strip(), "[]")
 
     def test_pinned_rdd_runs_its_functions_with_those_of_the_jobs(self):
-        # An action of several jobs pins the RDD of the first function of a PipelinedRDD, and runs
-        # the functions on it again, so that each job composes its function with them in one Python
+        # An action of several jobs pins the RDD of the first function of a PipelinedRDD, on which
+        # its functions then run, so that each job composes its function with them in one Python
         # worker, as in Spark Classic: a take after a reduceByKey runs with the merge of its values,
         # which reads the whole input of the worker, so that the worker is reused.
-        from pyspark.core.connect.rdd import PipelinedRDD
         from pyspark.sql.connect.plan import CachedRemoteRelation
 
+        expected = [(0, 9), (1, 7), (2, 8)]
         rdd = self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max, 3)
-        pinned = rdd._pinned()
-        self.assertIsInstance(pinned, PipelinedRDD)
-        self.assertIsInstance(pinned._prev_rdd._df._plan, CachedRemoteRelation)
-        self.assertEqual(pinned.getNumPartitions(), 3)
-        self.assertEqual(sorted(pinned.collect()), [(0, 9), (1, 7), (2, 8)])
-        self.assertEqual(sorted(rdd.take(3)), [(0, 9), (1, 7), (2, 8)])
-        # Also when the RDD of the first function was pinned after the plan of the RDD was built.
+        self.assertEqual(sorted(rdd.collect()), expected)
+        self.assertIs(rdd._pinned(), rdd)
+        self.assertIsInstance(rdd._prev_rdd._df._plan, CachedRemoteRelation)
+        # The plan of the RDD, built before, is built again on the pinned input.
+        self.assertIsNotNone(rdd._elements_df)
+        self.assertIs(rdd._df_cache_input, rdd._prev_rdd._df)
+        self.assertEqual(sorted(rdd.take(3)), expected)
+        self.assertEqual(sorted(rdd.collect()), expected)
+        # A persisted RDD keeps the plan that it persisted, which it unpersists.
+        df = rdd._elements_df
+        rdd.persist()
+        try:
+            self.assertIs(rdd._elements_df, df)
+            self.assertEqual(sorted(rdd.collect()), expected)
+        finally:
+            rdd.unpersist()
+        self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+        # Also when getNumPartitions pinned the RDD of the first function.
         mapped = self.spark.range(10).repartition(2).rdd.map(lambda r: r.id)
         self.assertEqual(sorted(mapped.collect()), list(range(10)))
         mapped.getNumPartitions()
-        pinned = mapped._pinned()
-        self.assertIsInstance(pinned, PipelinedRDD)
-        self.assertIsInstance(pinned._prev_rdd._df._plan, CachedRemoteRelation)
+        self.assertIsInstance(mapped._prev_rdd._df._plan, CachedRemoteRelation)
         self.assertEqual(sorted(mapped.take(10)), list(range(10)))
+        # The plan of the RDD is built again on the pinned input when it is used.
+        self.assertIsNotNone(mapped._elements_df)
+        self.assertIs(mapped._df_cache_input, mapped._prev_rdd._df)
+        self.assertEqual(sorted(mapped.collect()), list(range(10)))
+
         # A persisted RDD is not pinned: its jobs share its cache.
-        cached = rdd.cache()
+        cached = self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max, 3)
+        cached.cache()
         try:
             self.assertIs(cached._pinned(), cached)
+            self.assertNotIsInstance(cached._prev_rdd._df._plan, CachedRemoteRelation)
+            self.assertEqual(sorted(cached.take(3)), expected)
         finally:
             cached.unpersist()
 

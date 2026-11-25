@@ -382,22 +382,26 @@ class RDD(RDDFacade, Generic[T_co]):
             return None
         return self._cctx._pin(self._elements_df)
 
-    def _pinned(self: "RDD[T]") -> "RDD[T]":
+    def _pin(self) -> None:
         """
-        This RDD planned once on the server (see ``_pin_plan``), for an action that runs several
-        jobs on it, as ``take`` and ``toLocalIterator`` do.
+        Plan this RDD once on the server when it computes shuffles (see ``_pin_plan``). It is then
+        computed from the pinned plan, so that the jobs of its actions share the outputs of its
+        shuffles, as the jobs on an RDD of Spark Classic do, until it is garbage-collected.
         """
         pinned = self._pin_plan()
-        if pinned is None:
-            return self
-        df, num_partitions = pinned
-        rdd: "RDD[T]" = RDD(
-            df, self._cctx, self._jrdd_deserializer, num_partitions, self._server_partitioner
-        )
-        rdd.partitioner = self.partitioner
-        if self._resource_profile is not None:
-            rdd.withResources(self._resource_profile)
-        return rdd
+        if pinned is not None:
+            self._lineage_df = self._elements_df
+            self._set_df(pinned[0])
+            self._num_partitions = pinned[1]
+            self._has_shuffle = False
+
+    def _pinned(self: "RDD[T]") -> "RDD[T]":
+        """
+        This RDD pinned (see ``_pin``), for an action that runs several jobs on it, as ``take``
+        and ``toLocalIterator`` do: the later actions on it share its shuffles too.
+        """
+        self._pin()
+        return self
 
     def _pickled(self: "RDD[T]") -> "RDD[T]":
         return self._reserialize(AutoBatchedSerializer(CPickleSerializer()))
@@ -444,7 +448,6 @@ class RDD(RDDFacade, Generic[T_co]):
         return self._cctx
 
     def cache(self: "RDD[T]") -> "RDD[T]":
-        self.is_cached = True
         self.persist(StorageLevel.MEMORY_ONLY)
         return self
 
@@ -462,17 +465,21 @@ class RDD(RDDFacade, Generic[T_co]):
                     "new_level": str(storageLevel),
                 },
             )
+        # The DataFrame of the elements, so that the resource profile of the RDD, which can be
+        # set later, does not change the DataFrame to unpersist. It is the plan of the RDD before
+        # it is marked as persisted, which keeps that plan (see PipelinedRDD._elements_df).
+        df = self._elements_df
         self.is_cached = True
         self._storage_level = storageLevel
-        # The DataFrame of the elements, so that the resource profile of the RDD, which can be
-        # set later, does not change the DataFrame to unpersist.
-        self._elements_df.persist(storageLevel)
+        df.persist(storageLevel)
         return self
 
     def unpersist(self: "RDD[T]", blocking: bool = False) -> "RDD[T]":
+        # The DataFrame that was persisted, while the RDD is marked as persisted.
+        df = self._elements_df
         self.is_cached = False
         self._storage_level = None
-        self._elements_df.unpersist(blocking)
+        df.unpersist(blocking)
         return self
 
     def getStorageLevel(self) -> StorageLevel:
@@ -807,17 +814,11 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def getNumPartitions(self) -> int:
         if self._num_partitions is None:
-            pinned = self._pin_plan()
-            if pinned is None:
-                self._num_partitions = self._cctx._num_partitions(self._df)
-            else:
-                # Planning an RDD with shuffles can compute them, as adaptive query execution
-                # does, so the RDD is computed from the pinned plan from now on, and its jobs share
-                # them, as Spark Classic plans an RDD once.
-                self._lineage_df = self._elements_df
-                self._set_df(pinned[0])
-                self._num_partitions = pinned[1]
-                self._has_shuffle = False
+            # Planning an RDD with shuffles can compute them, as adaptive query execution does,
+            # so the RDD is pinned, as Spark Classic plans an RDD once.
+            self._pin()
+        if self._num_partitions is None:
+            self._num_partitions = self._cctx._num_partitions(self._df)
         return self._num_partitions
 
     def _memory_limit(self) -> int:
@@ -2186,7 +2187,12 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
 
     @property
     def _elements_df(self) -> "ConnectDataFrame":
-        if self._df_cache is not None:
+        input_df = self._prev_rdd._df
+        # The plan is built again when the RDD of the first function was pinned meanwhile, unless
+        # this RDD is persisted, whose jobs share its cache, or its plan was set, as a checkpoint.
+        if self._df_cache is not None and (
+            self.is_cached or self._df_cache_input is None or self._df_cache_input is input_df
+        ):
             return self._df_cache
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
@@ -2197,7 +2203,6 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         pickled_command = CloudPickleSerializer().dumps(command)
         python_ver = "%d.%d" % sys.version_info[:2]
         hash_seed = self._cctx._python_hash_seed
-        input_df = self._prev_rdd._df
         is_barrier = self.is_barrier
         output_pairs = self._output_pairs
 
@@ -2221,31 +2226,18 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         self._df_cache = df
         self._df_cache_input = None
 
-    def _pinned(self: "PipelinedRDD[T, U]") -> "RDD[U]":
+    def _pin(self) -> None:
         """
-        The functions of this RDD on the RDD of the first function planned once on the server (see
-        ``_pin_plan``), for an action that runs several jobs on it. The function of each job is then
-        composed with them and run in one Python worker, as the jobs on a PipelinedRDD of Spark
-        Classic run, rather than on their output in another worker. For instance, a ``take`` after
-        ``reduceByKey`` runs with the merge of its values, which reads the input of the worker to
-        the end, so the worker is reused, while a worker whose function stops early is not.
+        Pin the RDD of the first function (see ``RDD._pin``), on which the functions of this RDD
+        then run: the function of each job of an action is composed with them in one Python worker,
+        as the jobs on a PipelinedRDD of Spark Classic run, rather than run in another worker on
+        their output. For instance, a ``take`` after ``reduceByKey`` runs with the merge of its
+        values, which reads the input of the worker to the end, so that the worker is reused,
+        while a worker whose function stops early is not. A persisted or checkpointed RDD is not
+        pinned, since its jobs read its cache or its checkpoint.
         """
-        if not self._is_pipelinable():
-            # Its functions are not composed with those of the jobs.
-            return super()._pinned()
-        prev = self._prev_rdd._pinned()
-        if prev is self._prev_rdd and (
-            self._df_cache is None or self._df_cache_input is self._prev_rdd._df
-        ):
-            return self
-        # Also when the RDD of the first function was pinned after the plan of this RDD was built.
-        rdd = PipelinedRDD(prev, self.func, self.preservesPartitioning, self.is_barrier)
-        rdd._jrdd_deserializer = self._jrdd_deserializer
-        rdd._bypass_serializer = self._bypass_serializer
-        rdd._output_pairs = self._output_pairs
-        rdd.partitioner = self.partitioner
-        rdd._server_partitioner = self._server_partitioner
-        return rdd
+        if not (self.is_cached or self.is_checkpointed):
+            self._prev_rdd._pin()
 
     def _is_pipelinable(self) -> bool:
         return not (self.is_cached or self.is_checkpointed or self.has_resource_profile)
