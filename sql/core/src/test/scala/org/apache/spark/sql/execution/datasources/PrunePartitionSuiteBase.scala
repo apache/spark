@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.StatisticsCollectionTestBase
+import org.apache.spark.sql.{Row, StatisticsCollectionTestBase}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
-import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, ANSI_ENABLED}
 
 abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
 
@@ -71,6 +71,28 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
               |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
               |) tmp GROUP BY i
             """.stripMargin, 2, "((p = '1') || (p = '2'))")
+        }
+      }
+    }
+  }
+
+  test("SPARK-62187: a partition filter that can fail prunes partitions over a filter that can " +
+    "be NULL") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false", ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, j INT, p STRING) USING $format PARTITIONED BY (p)")
+        sql("INSERT INTO t PARTITION (p = '1') VALUES (2, 3)")
+        sql("INSERT INTO t PARTITION (p = '2') VALUES (NULL, 0)")
+        sql("INSERT INTO t PARTITION (p = '3') VALUES (5, NULL)")
+        // `i > 1 OR j > 2` can be NULL, so the cast, which can fail, is combined into the filter
+        // below under an `If` of it, whose parts are still partition filters. Also after
+        // `ReplaceNullWithFalseInPredicate` gives the CASE WHEN an ELSE FALSE.
+        Seq("CAST(p AS INT) = 1", "CASE WHEN CAST(p AS INT) = 1 THEN true END").foreach { cond =>
+          withClue(cond) {
+            val df = sql(s"SELECT * FROM (SELECT * FROM t WHERE i > 1 OR j > 2) WHERE $cond")
+            assert(getScanExecPartitionSize(df.queryExecution.sparkPlan) == 1)
+            checkAnswer(df, Row(2, 3, "1"))
+          }
         }
       }
     }

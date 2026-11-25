@@ -579,7 +579,7 @@ object DataSourceStrategy
     } else {
       val partitionSet = AttributeSet(partitionColumns)
       val maxToStringFields = SQLConf.get.getConf(SQLConf.MAX_TO_STRING_FIELDS)
-      val predicates = ExpressionSet(normalizedFilters
+      val predicates = ExpressionSet(splitFilterGuards(normalizedFilters)
         .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
       logInfo(log"Pruning directories with: ${MDC(PREDICATES,
         predicates.simpleString(maxToStringFields))}")

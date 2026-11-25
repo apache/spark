@@ -140,7 +140,9 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       val newElseValue = cw.elseValue.map(replaceNullWithFalse).getOrElse(FalseLiteral)
       CaseWhen(newBranches, newElseValue)
     case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
-      If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
+      // `withNewChildren` keeps the tags, e.g. the one of a filter guard (see `CombineFilters`).
+      i.withNewChildren(Seq(
+        replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal)))
     case e if e.dataType == BooleanType =>
       e
     case e =>

@@ -380,7 +380,9 @@ case class Filter(condition: Expression, child: LogicalPlan)
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override protected lazy val validConstraints: ExpressionSet = {
-    val predicates = splitConjunctivePredicates(condition)
+    // The conjuncts that `CombineFilters` evaluates only where the condition of a filter below
+    // is TRUE hold on the output rows too.
+    val predicates = splitFilterGuards(splitConjunctivePredicates(condition))
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(ExpressionSet(predicates))
   }

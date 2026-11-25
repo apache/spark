@@ -60,8 +60,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
           !f.exists(_.isInstanceOf[PythonUDF])
       }, relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
-    ExpressionSet(
-      normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
+    ExpressionSet(splitFilterGuards(normalizedFilters)
+      .flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
   }
 
   /**

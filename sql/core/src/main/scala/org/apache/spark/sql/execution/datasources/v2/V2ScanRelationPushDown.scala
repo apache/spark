@@ -124,9 +124,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+      // A conjunct that `CombineFilters` evaluates only where the condition of a filter below is
+      // TRUE is pushed as its parts (see `splitFilterGuards`), and is still evaluated after the
+      // scan unless the source handles all of them.
       val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(sHolder.relation)
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
+      val (pushedFilters, postScanParts) = PushDownUtils.pushFilters(
+        sHolder.builder, splitFilterGuards(normalizedFiltersWithoutSubquery),
+        partitionPredicateFields)
+      val (guards, others) = normalizedFiltersWithoutSubquery.partition(isFilterGuard)
+      val postScanFiltersWithoutSubquery = if (guards.isEmpty) {
+        postScanParts
+      } else {
+        val unhandled = ExpressionSet(postScanParts)
+        val onlyInGuards = ExpressionSet(guards.flatMap(g => splitFilterGuards(Seq(g)))) -- others
+        postScanParts.filterNot(onlyInGuards.contains) ++
+          guards.filter(g => splitFilterGuards(Seq(g)).exists(unhandled.contains))
+      }
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
