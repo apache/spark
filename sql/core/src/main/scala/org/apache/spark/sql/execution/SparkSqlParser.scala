@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
-  GlobalTempView, LocalTempView, PersistedView,
+  FakeSystemCatalog, GlobalTempView, LocalTempView, PersistedView, ResolvedIdentifier,
   SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
   UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
   UnresolvedTableOrViewSearchPathMode}
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, WriteDistributionAndOrdering}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -1066,7 +1066,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          CreateUserDefinedFunction(
+          CreateUserDefinedFunctionCommand(
             UnresolvedIdentifier(functionIdentifier),
             inputParamText,
             returnTypeText,
@@ -1078,6 +1078,7 @@ class SparkSqlAstBuilder extends AstBuilder {
             containsSQL,
             language,
             isTableFunc,
+            isTemp = false,
             ctx.EXISTS != null,
             ctx.REPLACE != null)
         } else {
@@ -1088,8 +1089,11 @@ class SparkSqlAstBuilder extends AstBuilder {
 
           // Extract the actual function name, handling session qualification
           val funcName = extractTempFunctionName(functionIdentifier, ctx)
+          val tempIdent = ResolvedIdentifier(
+            FakeSystemCatalog,
+            Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), funcName))
           CreateUserDefinedFunctionCommand(
-            FunctionIdentifier(funcName),
+            tempIdent,
             inputParamText,
             returnTypeText,
             exprText,
@@ -1101,9 +1105,8 @@ class SparkSqlAstBuilder extends AstBuilder {
             language,
             isTableFunc,
             isTemp = true,
-            ctx.EXISTS != null,
-            ctx.REPLACE != null
-          )
+            ignoreIfExists = false,
+            replace = ctx.REPLACE != null)
         }
       })
     }
