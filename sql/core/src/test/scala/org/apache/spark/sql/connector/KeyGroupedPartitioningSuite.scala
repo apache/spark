@@ -8369,7 +8369,7 @@ class KeyGroupedPartitioningSuite
         Seq(Row(1L, "aa", 10.0f), Row(1L, "aa", 20.0f), Row(2L, "cc", 30.0f)))
       val byKeyPlan = byKey.queryExecution.executedPlan
       assertFinalAloneWithOneLocalSort(byKeyPlan)
-      finalChild(byKeyPlan) match {
+      unwrapWrappers(finalChild(byKeyPlan)) match {
         case g: GroupPartitionsExec =>
           assert(unwrapWrappers(g.child).isInstanceOf[SortExec],
             s"expected the sort that fed the partial node below the grouping:\n$byKeyPlan")
