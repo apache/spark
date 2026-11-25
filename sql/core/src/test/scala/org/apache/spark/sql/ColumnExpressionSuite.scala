@@ -1133,6 +1133,43 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-62323: a NULLIF or BETWEEN in a lambda function reads its input once per element") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      onEachEvalPath {
+        // A definition that reads `x` was inlined, so each reference drew its own value, and
+        // `nullif(_, true)` returned true and the empty BETWEEN window held for about a quarter and
+        // a sixth of the 200 elements.
+        checkAnswer(
+          spark.sql("SELECT " +
+            "size(filter(transform(sequence(1, 200), " +
+            "x -> nullif(rand(1) + x * 0 > 0.5, true)), v -> v)), " +
+            "size(filter(transform(sequence(1, 200), " +
+            "x -> rand(2) + x * 0 BETWEEN 0.6 AND 0.4), v -> v))"),
+          Row(0, 0))
+        // A definition that reads no lambda variable was evaluated once per row, so every element
+        // got the same value, and also for an empty array.
+        checkAnswer(
+          spark.sql(
+            "SELECT size(array_distinct(transform(sequence(1, 100), x -> nullif(rand(3), 2))))"),
+          Row(100))
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          val df = Seq((Seq.empty[Int], 4, 0), (Seq(1, 2), 4, 2)).toDF("arr", "a", "b")
+          checkAnswer(
+            df.selectExpr("transform(arr, x -> nullif(a / b, 1))"),
+            Seq(Row(Seq.empty[Double]), Row(Seq(2.0, 2.0))))
+          // `zip_with` and `map_zip_with` evaluate their second argument only if the first one is
+          // not null.
+          checkAnswer(
+            df.selectExpr(
+              "zip_with(CAST(NULL AS ARRAY<INT>), array(nullif(a / b, 1)), (x, y) -> y)",
+              "map_zip_with(CAST(NULL AS MAP<INT, INT>), map(1, nullif(a / b, 1)), " +
+                "(k, v1, v2) -> v2)"),
+            Seq(Row(null, null), Row(null, null)))
+        }
+      }
+    }
+  }
+
   test("SPARK-59954: a With in a DECLARE VARIABLE default is evaluated once") {
     // `CreateVariableExec` evaluates the default on the driver, so the accumulator needs no job to
     // read. `plus_one_counted` is deterministic but not cheap, so its definition is worth

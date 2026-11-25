@@ -469,6 +469,19 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // instead, but only the definitions that gain something from it.
         inlineWithsThatGainNothing(newExpr)
 
+      // A lambda function is evaluated once per element, possibly for none, so a definition in it
+      // cannot go into a project either. Only the arguments that are always evaluated are
+      // rewritten as above, and a `With` in the rest stays where it is, as in a conditional branch.
+      case h: HigherOrderFunction =>
+        val newExpr = h.mapChildren { c =>
+          if (h.alwaysEvaluatedArguments.exists(_ eq c)) {
+            rewriteWithExprAndInputPlans(c, inputPlans, commonExprsPerChild, isNestedWith)
+          } else {
+            c
+          }
+        }
+        inlineWithsThatGainNothing(newExpr)
+
       // `MergeRowsExec` evaluates an instruction only for the rows of its kind (matched, not
       // matched or not matched by source) that no earlier instruction of that kind took, and its
       // outputs only for the rows its condition selects. So a whole instruction is a conditional
