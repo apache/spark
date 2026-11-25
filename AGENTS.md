@@ -67,6 +67,8 @@ Before the first code edit or running test in a session, ensure a clean working 
   executable script; the license check in CI fails otherwise. If one cannot carry a header, such
   as test data, add a `dev/.rat-excludes` entry that matches no other file or directory name: RAT
   matches each entry against bare names anywhere in the tree. Binary files need neither.
+- Avoid committing large binaries such as test archives. Check their combined size; ask the user
+  before adding an exception.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.
