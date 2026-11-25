@@ -15,14 +15,11 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError, PySparkTypeError
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import functions as F
 from pyspark.sql.types import Row
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.util import is_remote_only
 
 
 class SparkConnectErrorTests(ReusedConnectTestCase):
@@ -185,7 +182,6 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
             messageParameters={},
         )
 
-    @unittest.skipIf(is_remote_only(), "Disabled for remote only")
     def test_rdd(self):
         # SPARK-41225 disabled DataFrame.rdd, which Spark Connect now supports.
         df = self.spark.range(10)
