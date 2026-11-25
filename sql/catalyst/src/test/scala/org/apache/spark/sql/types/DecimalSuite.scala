@@ -221,6 +221,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(-123) === Decimal(BigDecimal("-123.00")))
   }
 
+  test("SPARK-62352: compare and equals across compact and expanded decimals") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val operands = Seq("0", "0.00", "1.5", "1.50", "-1.5", "-15", "100.0", "1E+2", "-1E+2",
+        "999999999999999998", "999999999999999999", "-999999999999999999",
+        "99999999999999999.9").flatMap { s =>
+        val value = new java.math.BigDecimal(s)
+        val compact = Decimal(value.unscaledValue.longValueExact, 38, value.scale)
+        val expanded = Decimal(value, 38, value.scale)
+        checkCompact(compact, true)
+        checkCompact(expanded, false)
+        Seq(value -> compact, value -> expanded)
+      }
+      for ((x, a) <- operands; (y, b) <- operands) {
+        val expected = x.compareTo(y)
+        val clue = s"${a.toDebugString} and ${b.toDebugString}"
+        assert(math.signum(a.compare(b)) === expected, clue)
+        assert((a == b) === (expected == 0), clue)
+      }
+    }
+  }
+
   test("isZero") {
     assert(Decimal(0).isZero)
     assert(Decimal(0, 4, 2).isZero)
