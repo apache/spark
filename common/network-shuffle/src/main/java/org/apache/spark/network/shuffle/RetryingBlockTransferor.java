@@ -301,7 +301,10 @@ public class RetryingBlockTransferor {
           try {
             listener.onBlockTransferFailure(blockId, t);
           } catch (Throwable failureError) {
-            t.addSuppressed(failureError);
+            // addSuppressed throws if a throwable would suppress itself.
+            if (failureError != t) {
+              t.addSuppressed(failureError);
+            }
           }
           throw t;
         }

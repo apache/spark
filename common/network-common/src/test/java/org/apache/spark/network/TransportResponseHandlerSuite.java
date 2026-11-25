@@ -26,6 +26,7 @@ import io.netty.channel.local.LocalChannel;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -259,20 +260,40 @@ public class TransportResponseHandlerSuite {
     }
   }
 
+  /**
+   * What onFailure throws in the tests below: an Exception, an Error, or the success-callback
+   * error itself. Either way the success-callback error must be the one rethrown.
+   */
+  private static Throwable[] failureCallbackErrors(Throwable successCallbackError) {
+    return new Throwable[] {
+      new RuntimeException("onFailure"), new OutOfMemoryError("onFailure"), successCallbackError};
+  }
+
+  private static void assertSuppressedFailureCallbackError(
+      Throwable successCallbackError, Throwable failureCallbackError) {
+    Throwable[] expected = failureCallbackError == successCallbackError ?
+      new Throwable[0] : new Throwable[] {failureCallbackError};
+    assertArrayEquals(expected, successCallbackError.getSuppressed());
+  }
+
   @Test
   public void rethrowSuccessCallbackErrorWhenFailureCallbackAlsoThrows() throws Exception {
-    StreamChunkId streamChunkId = new StreamChunkId(1, 0);
-    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
-    ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
-    RuntimeException error = new RuntimeException("onSuccess");
-    doThrow(error).when(callback).onSuccess(anyInt(), any());
-    doThrow(new RuntimeException("onFailure")).when(callback).onFailure(anyInt(), any());
-    handler.addFetchRequest(streamChunkId, callback);
-    ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
+    for (int i = 0; i < 3; i++) {
+      StreamChunkId streamChunkId = new StreamChunkId(1, 0);
+      TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+      ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
+      RuntimeException error = new RuntimeException("onSuccess");
+      Throwable failureError = failureCallbackErrors(error)[i];
+      doThrow(error).when(callback).onSuccess(anyInt(), any());
+      doThrow(failureError).when(callback).onFailure(anyInt(), any());
+      handler.addFetchRequest(streamChunkId, callback);
+      ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
 
-    assertSame(error, assertThrows(RuntimeException.class,
-      () -> handler.handle(new ChunkFetchSuccess(streamChunkId, body))));
-    verify(body, times(1)).release();
+      assertSame(error, assertThrows(RuntimeException.class,
+        () -> handler.handle(new ChunkFetchSuccess(streamChunkId, body))));
+      assertSuppressedFailureCallbackError(error, failureError);
+      verify(body, times(1)).release();
+    }
   }
 
   @Test
@@ -295,17 +316,21 @@ public class TransportResponseHandlerSuite {
 
   @Test
   public void rethrowRpcSuccessCallbackErrorWhenFailureCallbackAlsoThrows() throws Exception {
-    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
-    RpcResponseCallback callback = mock(RpcResponseCallback.class);
-    RuntimeException error = new RuntimeException("onSuccess");
-    doThrow(error).when(callback).onSuccess(any());
-    doThrow(new RuntimeException("onFailure")).when(callback).onFailure(any());
-    handler.addRpcRequest(12345, callback);
-    ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
+    for (int i = 0; i < 3; i++) {
+      TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+      RpcResponseCallback callback = mock(RpcResponseCallback.class);
+      RuntimeException error = new RuntimeException("onSuccess");
+      Throwable failureError = failureCallbackErrors(error)[i];
+      doThrow(error).when(callback).onSuccess(any());
+      doThrow(failureError).when(callback).onFailure(any());
+      handler.addRpcRequest(12345, callback);
+      ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
 
-    assertSame(error, assertThrows(RuntimeException.class,
-      () -> handler.handle(new RpcResponse(12345, body))));
-    verify(body, times(1)).release();
+      assertSame(error, assertThrows(RuntimeException.class,
+        () -> handler.handle(new RpcResponse(12345, body))));
+      assertSuppressedFailureCallbackError(error, failureError);
+      verify(body, times(1)).release();
+    }
   }
 
   @Test
@@ -329,16 +354,36 @@ public class TransportResponseHandlerSuite {
   @Test
   public void rethrowMergedBlockMetaSuccessCallbackErrorWhenFailureCallbackAlsoThrows()
       throws Exception {
-    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
-    MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
-    RuntimeException error = new RuntimeException("onSuccess");
-    doThrow(error).when(callback).onSuccess(anyInt(), any());
-    doThrow(new RuntimeException("onFailure")).when(callback).onFailure(any());
-    handler.addRpcRequest(13, callback);
-    ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
+    for (int i = 0; i < 3; i++) {
+      TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+      MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+      RuntimeException error = new RuntimeException("onSuccess");
+      Throwable failureError = failureCallbackErrors(error)[i];
+      doThrow(error).when(callback).onSuccess(anyInt(), any());
+      doThrow(failureError).when(callback).onFailure(any());
+      handler.addRpcRequest(13, callback);
+      ManagedBuffer body = spy(new NioManagedBuffer(ByteBuffer.allocate(8)));
 
-    assertSame(error, assertThrows(RuntimeException.class,
-      () -> handler.handle(new MergedBlockMetaSuccess(13, 2, body))));
-    verify(body, times(1)).release();
+      assertSame(error, assertThrows(RuntimeException.class,
+        () -> handler.handle(new MergedBlockMetaSuccess(13, 2, body))));
+      assertSuppressedFailureCallbackError(error, failureError);
+      verify(body, times(1)).release();
+    }
+  }
+
+  @Test
+  public void failEmptyStreamWhenCompletionCallbackThrows() throws Exception {
+    for (Throwable error : new Throwable[] {
+        new IOException("boom"), new OutOfMemoryError("Java heap space")}) {
+      TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+      StreamCallback callback = mock(StreamCallback.class);
+      doThrow(error).when(callback).onComplete("stream");
+      handler.addStreamCallback("stream", callback);
+
+      assertSame(error, assertThrows(Throwable.class,
+        () -> handler.handle(new StreamResponse("stream", 0L, null))));
+      verify(callback, times(1)).onFailure(eq("stream"), same(error));
+      assertEquals(0, handler.numOutstandingRequests());
+    }
   }
 }

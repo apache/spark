@@ -140,13 +140,16 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
    * Fails a fetch whose success callback threw. Its request was removed from the outstanding
    * requests before the callback ran, so neither a connection close nor the idle timeout can fail
    * it later; without this its caller would wait forever for a response that never arrives.
+   *
+   * The caller rethrows {@code cause}, so anything {@code onFailure} throws is added to it as
+   * suppressed rather than replacing it.
    */
   private void failAfterSuccessCallbackError(
       ChunkReceivedCallback listener, int chunkIndex, Throwable cause) {
     try {
       listener.onFailure(chunkIndex, cause);
-    } catch (Exception e) {
-      logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
     }
   }
 
@@ -154,8 +157,25 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   private void failAfterSuccessCallbackError(BaseResponseCallback listener, Throwable cause) {
     try {
       listener.onFailure(cause);
-    } catch (Exception e) {
-      logger.warn("RpcResponseCallback.onFailure throws exception", e);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
+    }
+  }
+
+  /** Same as above for an empty stream whose completion callback threw. */
+  private void failAfterSuccessCallbackError(
+      StreamCallback callback, String streamId, Throwable cause) {
+    try {
+      callback.onFailure(streamId, cause);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
+    }
+  }
+
+  /** {@link Throwable#addSuppressed} throws if a throwable would suppress itself. */
+  private static void addSuppressedIfDistinct(Throwable cause, Throwable suppressed) {
+    if (suppressed != cause) {
+      cause.addSuppressed(suppressed);
     }
   }
 
@@ -296,8 +316,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         } else {
           try {
             callback.onComplete(resp.streamId);
-          } catch (Exception e) {
-            logger.warn("Error in stream handler onComplete().", e);
+          } catch (Throwable t) {
+            failAfterSuccessCallbackError(callback, resp.streamId, t);
+            throw t;
           }
         }
       } else {
