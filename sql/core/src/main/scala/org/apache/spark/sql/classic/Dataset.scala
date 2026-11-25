@@ -843,12 +843,28 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    val joinConditions = usingColumns.map { name =>
-      this(name) === other(name)
-    }
-    val joinCondition = joinConditions.reduceOption(_ && _).orNull
-    joinAsOf(other, leftAsOf, rightAsOf, joinCondition, joinType,
+    // An empty list means a join with no equality condition.
+    joinAsOfInternal(other, leftAsOf, rightAsOf, null,
+      if (usingColumns.isEmpty) None else Some(usingColumns), joinType,
       tolerance, allowExactMatches, direction)
+  }
+
+  // Moves each column of a key from its Dataset's plan onto the same column of its join input.
+  // In a self join, the right input gets new attributes, also for metadata columns.
+  private def moveToJoinInput(
+      key: Expression,
+      plan: LogicalPlan,
+      joinInput: LogicalPlan): Expression = {
+    val metadataOutput = plan.metadataOutput
+    key.transformUp {
+      case a: AttributeReference if plan.outputSet.contains(a) =>
+        val index = plan.output.indexWhere(_.exprId == a.exprId)
+        joinInput.output(index)
+      case a: AttributeReference if metadataOutput.exists(_.exprId == a.exprId) =>
+        // Only when the names match, so a different column list never gives a wrong column.
+        val index = metadataOutput.indexWhere(_.exprId == a.exprId)
+        joinInput.metadataOutput.lift(index).filter(_.name == a.name).getOrElse(a)
+    }
   }
 
   // TODO(SPARK-22947): Fix the DataFrame API.
@@ -861,21 +877,21 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
+    joinAsOfInternal(other, leftAsOf, rightAsOf, joinExprs, None, joinType,
+      tolerance, allowExactMatches, direction)
+  }
 
-    // Moves each column of a key from its Dataset's plan onto the same column of its join input.
-    // In a self join, the right input gets new attributes, also for metadata columns.
-    def moveToJoinInput(key: Expression, plan: LogicalPlan, joinInput: LogicalPlan): Expression = {
-      val metadataOutput = plan.metadataOutput
-      key.transformUp {
-        case a: AttributeReference if plan.outputSet.contains(a) =>
-          val index = plan.output.indexWhere(_.exprId == a.exprId)
-          joinInput.output(index)
-        case a: AttributeReference if metadataOutput.exists(_.exprId == a.exprId) =>
-          // Only when the names match, so a different column list never gives a wrong column.
-          val index = metadataOutput.indexWhere(_.exprId == a.exprId)
-          joinInput.metadataOutput.lift(index).filter(_.name == a.name).getOrElse(a)
-      }
-    }
+  // A join on using columns has no condition. The analyzer builds its condition and output.
+  private def joinAsOfInternal(
+      other: Dataset[_],
+      leftAsOf: Column,
+      rightAsOf: Column,
+      joinExprs: Column,
+      usingColumns: Option[Seq[String]],
+      joinType: String,
+      tolerance: Column,
+      allowExactMatches: Boolean,
+      direction: String): DataFrame = {
 
     def createAsOfJoinPlan(joinPlan: Join): AsOfJoin = {
       val leftAsOfExpr = moveToJoinInput(leftAsOf.expr, logicalPlan, joinPlan.left)
@@ -888,7 +904,7 @@ class Dataset[T] private[sql](
         Option(tolerance).map(_.expr),
         allowExactMatches,
         AsOfJoinDirection(direction)
-      )
+      ).copy(usingColumns = usingColumns)
     }
 
     resolveSelfJoinCondition(other, Option(joinExprs), joinType) match {
