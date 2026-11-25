@@ -29,7 +29,7 @@ TakeOrderedAndProject (24)
 Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_customer_sk:bigint,ss_ticket_number:bigint,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 1]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
@@ -51,7 +51,7 @@ Output [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantit
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
-ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
+ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
 
 (7) ColumnarToRow [codegen id : 3]
 Input [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
@@ -87,7 +87,7 @@ Output [2]: [r_reason_sk#12, r_reason_desc#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
 PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
-ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+ReadSchema: struct<r_reason_sk:bigint,r_reason_desc:string>
 
 (15) ColumnarToRow [codegen id : 5]
 Input [2]: [r_reason_sk#12, r_reason_desc#13]
@@ -102,7 +102,7 @@ Input [2]: [r_reason_sk#12, r_reason_desc#13]
 
 (18) BroadcastExchange
 Input [1]: [r_reason_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=3]
 
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [sr_reason_sk#8]

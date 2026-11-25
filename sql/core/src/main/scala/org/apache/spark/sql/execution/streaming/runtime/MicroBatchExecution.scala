@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -51,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileMan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUtils, StateSchemaBroadcast, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUtils, RocksDBStateStoreProvider, StateSchemaBroadcast, StateStoreErrors}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
@@ -196,6 +195,9 @@ class MicroBatchExecution(
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
+  // The rewrites of the filters that the scans of the sources got, which the micro-batches check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
    * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
@@ -241,6 +243,7 @@ class MicroBatchExecution(
     // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
     // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
     val streamConf = sparkSessionForStream.sessionState.conf
+    applyJoinStateConfigGuardrails(streamConf)
     val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
@@ -259,7 +262,14 @@ class MicroBatchExecution(
           keys, child, spec, orderDeterministically, dedupResolver))
     }
 
+    // Before any source is created, so that a lookup join that cannot be planned stops the query
+    // with no source to stop.
+    ExternalLookupJoinStartupCheck(sparkSessionForStream, planWithDedupKeys,
+      initialLatestOffsetSeq.flatMap(_._2.metadataOpt), triggerClock.getTimeMillis())
+
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
+      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -287,17 +297,14 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            // Passes the full output schema (not a pruned subset) so that connectors
-            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
-            val scanBuilder = table.newScanBuilder(options)
-            scanBuilder match {
-              case r: SupportsPushDownRequiredColumns =>
-                r.pruneColumns(output.toStructType)
-              case _ =>
-            }
-            val scan = scanBuilder.build()
-            val stream = scan.toMicroBatchStream(metadataPath)
+            // The scan gets the columns and the filters that the query reads from the source, see
+            // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+            // reads, so that connectors implementing SupportsMetadataColumns include them in
+            // readSchema().
+            val streamingScan = StreamingV2ScanPushDown.buildScan(
+              table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
+              StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
+              _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
                 output,
@@ -311,7 +318,7 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            streamingScan.toRelation(relation, output)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
@@ -463,6 +470,45 @@ class MicroBatchExecution(
 
       case _ =>
         throw new IllegalArgumentException(s"unknown sink type for $sink")
+    }
+  }
+
+  /**
+   * Align new stream-stream joins with the selected state store before checkpoint configuration
+   * is pinned. On restart the checkpoint's configuration must take precedence.
+   */
+  private def applyJoinStateConfigGuardrails(streamConf: SQLConf): Unit = {
+    def hasStreamStreamJoin: Boolean = analyzedPlan.exists {
+      case join: Join => join.left.isStreaming && join.right.isStreaming
+      case _ => false
+    }
+
+    def isRocksDBProvider(providerClassName: String): Boolean =
+      classOf[RocksDBStateStoreProvider].isAssignableFrom(Utils.classForName(providerClassName))
+
+    val configuredVersion = streamConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+    if (initialLatestOffsetSeq.isEmpty && configuredVersion >= 3 && hasStreamStreamJoin) {
+      val stateStoreProvider = streamConf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
+      if (!isRocksDBProvider(stateStoreProvider)) {
+        val fallbackVersion = 2
+        logInfo(log"Overriding " +
+          log"${MDC(CONFIG, SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key)} from " +
+          log"${MDC(OLD_VALUE, configuredVersion)} to ${MDC(NEW_VALUE, fallbackVersion)} " +
+          log"because ${MDC(CONFIG, SQLConf.STATE_STORE_PROVIDER_CLASS.key)} is set to " +
+          log"${MDC(CLASS_NAME, stateStoreProvider)}, which does not support the virtual column " +
+          log"families required by this join state format.")
+        streamConf.setConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION, fallbackVersion)
+      } else if (configuredVersion == 4) {
+        val mergeOperatorVersion =
+          streamConf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION)
+        if (mergeOperatorVersion != 2) {
+          logInfo(log"Overriding " +
+            log"${MDC(CONFIG, SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key)} from " +
+            log"${MDC(OLD_VALUE, mergeOperatorVersion)} to ${MDC(NEW_VALUE, 2)} " +
+            log"because join state format version 4 requires RocksDB merge operator version 2.")
+          streamConf.setConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION, 2)
+        }
+      }
     }
   }
 
@@ -1279,31 +1325,8 @@ class MicroBatchExecution(
     }
     execCtx.newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
-    val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
-      _.containsPattern(CURRENT_LIKE)) {
-      case ct: CurrentTimestamp =>
-        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
-        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
-        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case ct: CurrentTimestampNanos =>
-        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
-        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
-        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
-        // nanos-within-micro.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case lt: LocalTimestamp =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case lt: LocalTimestampNanos =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case cd: CurrentDate =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          cd.dataType, cd.timeZoneId)
-    }
+    val newAttributePlan = MicroBatchExecution.withBatchTimestamp(
+      newBatchesPlan, execCtx.offsetSeqMetadata.batchTimestampMs)
 
     val triggerLogicalPlan = sink match {
       case _: Sink =>
@@ -1336,7 +1359,8 @@ class MicroBatchExecution(
         currentStateStoreCkptId,
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
-        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
+        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins
@@ -1709,6 +1733,32 @@ class MicroBatchExecution(
 
 object MicroBatchExecution {
   val BATCH_ID_KEY = "streaming.sql.batchId"
+
+  /**
+   * `plan` with the current time and date as the batch timestamp, as each micro-batch reads them.
+   * A `CurrentBatchTimestamp` stays non-deterministic until the optimization of the micro-batch
+   * ends, when it becomes a literal.
+   */
+  private[sql] def withBatchTimestamp(plan: LogicalPlan, batchTimestampMs: Long): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+      case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case ct: CurrentTimestampNanos =>
+        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
+        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
+        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
+        // nanos-within-micro.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case lt: LocalTimestampNanos =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case cd: CurrentDate =>
+        CurrentBatchTimestamp(batchTimestampMs, cd.dataType, cd.timeZoneId)
+    }
 
   /**
    * Default sink name used when sink evolution is disabled or no explicit name is provided.

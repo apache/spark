@@ -21,12 +21,14 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -38,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -171,6 +173,21 @@ case class StreamingSymmetricHashJoinExec(
       s"The query is using stream-stream $joinType join with state" +
       s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
+  }
+
+  if (stateFormatVersion == 4) {
+    val mergeOperatorVersion =
+      conf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION)
+    SparkException.require(
+      mergeOperatorVersion == 2,
+      errorClass = "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS",
+      messageParameters = Map(
+        "stateFormatVersionConfig" -> SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key,
+        "stateFormatVersion" -> stateFormatVersion.toString,
+        "mergeOperatorVersionConfig" ->
+          SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key,
+        "mergeOperatorVersion" -> mergeOperatorVersion.toString,
+        "requiredMergeOperatorVersion" -> "2"))
   }
 
   private lazy val errorMessageForJoinType =
@@ -311,6 +328,10 @@ case class StreamingSymmetricHashJoinExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
+    val valueSchemaValidator = Option.when(
+      session.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS)) {
+      validateJoinValueSchema _
+    }
     if (useVirtualColumnFamilies) {
       val info = getStateInfo
       val stateSchemaDir = stateSchemaDirPath()
@@ -320,7 +341,8 @@ case class StreamingSymmetricHashJoinExec(
       // so we hardcode 3 here for the VCF path.
       val effectiveSchemaVersion = 3
       validateAndWriteStateSchema(
-        hadoopConf, batchId, effectiveSchemaVersion, info, stateSchemaDir, session
+        hadoopConf, batchId, effectiveSchemaVersion, info, stateSchemaDir, session,
+        valueSchemaValidator = valueSchemaValidator
       )
     } else {
       var result: Map[String, (StructType, StructType)] = Map.empty
@@ -340,8 +362,31 @@ case class StreamingSymmetricHashJoinExec(
           WidenStatefulOpNullability.widenStateSchema(keySchema), 0,
           WidenStatefulOpNullability.widenStateSchema(valueSchema)))
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
+          newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName,
+          valueSchemaValidator = valueSchemaValidator)
       }.toList
+    }
+  }
+
+  private def validateJoinValueSchema(
+      storeId: StateStoreId,
+      storedSchema: StateStoreColFamilySchema,
+      newSchema: StateStoreColFamilySchema): Unit = {
+    // Changing join eligibility can swap a retained timestamp with another timestamp. The
+    // ordinary compatibility check accepts this because it compares fields by position and type.
+    // A rename that preserves the watermark is compatible. Detecting a swap between two
+    // watermarked columns would require persisting column identity.
+    storedSchema.valueSchema.fields.zip(newSchema.valueSchema.fields).find {
+      case (stored, current) =>
+        stored.dataType == TimestampType && stored.name != current.name &&
+          stored.metadata.contains(EventTimeWatermark.delayKey) !=
+            current.metadata.contains(EventTimeWatermark.delayKey)
+    }.foreach { case (stored, current) =>
+      val storeName = if (useVirtualColumnFamilies) newSchema.colFamilyName else storeId.storeName
+      throw new SparkUnsupportedOperationException(
+        errorClass = "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED",
+        messageParameters = Map(
+          "storeName" -> storeName, "storedColumn" -> stored.name, "newColumn" -> current.name))
     }
   }
 
@@ -723,10 +768,17 @@ case class StreamingSymmetricHashJoinExec(
           case RightSide => (right.output, left.output)
         }
 
+        // Scan bounds must constrain the event-time columns used by the index and probe.
+        // Bounds on other columns cannot limit this scan. If either event-time bound is
+        // missing, scan all rows for the join key.
+        val thisEventTime = WatermarkSupport.findEventTimeColumn(
+          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+        val otherEventTime = WatermarkSupport.findEventTimeColumn(
+          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
         val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherSideAttrs), AttributeSet(thisSideAttrs), condition.full, Some(0L))
+          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
         val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisSideAttrs), AttributeSet(otherSideAttrs), condition.full, Some(0L))
+          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
 
         (lowerBoundMs, upperBoundMs) match {
           case (Some(lower), Some(upper)) =>
@@ -951,7 +1003,8 @@ case class StreamingSymmetricHashJoinExec(
      * processing the rows for outer join.
      */
     def removeAndReturnOldState(): Iterator[KeyToValuePair] = {
-      stateWatermarkPredicate match {
+      val numRemovedStateRows = longMetric("numRemovedStateRows")
+      val removedRowIter = stateWatermarkPredicate match {
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
@@ -973,6 +1026,10 @@ case class StreamingSymmetricHashJoinExec(
                 prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
         case _ => Iterator.empty
+      }
+      removedRowIter.map { row =>
+        numRemovedStateRows += 1
+        row
       }
     }
 
@@ -1094,17 +1151,24 @@ case class StreamingSymmetricHashJoinExec(
       Nil
     }
 
-  // This operator will evict based on the state watermark on both side of inputs; we would like
-  // to let users leverage both sides of event time column for output of join, so the watermark
-  // must be lower bound of both sides of event time column. The lower bound of event time column
-  // for each side is determined by state watermark, hence we take a minimum of (left state
-  // watermark, right state watermark, input watermark) to decide the output watermark.
+  // The output watermark bounds the event-time columns emitted by the join. State watermarks
+  // bound buffered rows that can still be emitted, and the input watermark bounds new rows.
+  // Joins emitting both sides take the minimum of both state watermarks and the input watermark.
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
         left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
         !allowMultipleStatefulOperators)
 
-    Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
+    if (joinType == LeftSemi) {
+      // Only left columns are output. Without a watermarked left column, the watermark is lost;
+      // the right state watermark cannot replace it or constrain the emitted left event time.
+      WatermarkSupport.findEventTimeColumn(output,
+        allowMultipleEventTimeColumns = !allowMultipleStatefulOperators).map { _ =>
+        (leftStateWatermark ++ Some(inputWatermarkMs)).min
+      }
+    } else {
+      Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
+    }
   }
 }

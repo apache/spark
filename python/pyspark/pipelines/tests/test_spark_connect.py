@@ -33,9 +33,11 @@ if should_test_connect:
     from google.protobuf import any_pb2
 
     import pyspark.sql.connect.proto as pb2
-    from pyspark.errors import PySparkValueError
+    from pyspark.errors import PySparkTypeError, PySparkValueError
     from pyspark.errors.exceptions.connect import AnalysisException
     from pyspark.pipelines.graph_element_registry import graph_element_registration_context
+    from pyspark.pipelines.output import Output, Table
+    from pyspark.pipelines.source_code_location import SourceCodeLocation
     from pyspark.pipelines.spark_connect_graph_element_registry import (
         SparkConnectGraphElementRegistry,
     )
@@ -74,6 +76,55 @@ class SparkConnectPipelineEventHandlerTests(unittest.TestCase):
             handle_pipeline_events(iter([any_pb2.Any()]))
 
         self.assertIn("received an unexpected result", str(error.exception))
+
+    def test_rejects_response_without_pipeline_result(self):
+        with self.assertRaises(PySparkValueError) as error:
+            handle_pipeline_events(iter([{}]))
+
+        self.assertIn("received an unexpected result: {}", str(error.exception))
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class SparkConnectGraphElementRegistryTests(unittest.TestCase):
+    def test_register_output_unsupported_dataset_type(self):
+        registry = SparkConnectGraphElementRegistry(mock.MagicMock(), "test_dataflow_graph_id")
+
+        class CustomTable(Table):
+            pass
+
+        unsupported_table = CustomTable(
+            name="unsupported",
+            comment=None,
+            source_code_location=SourceCodeLocation(filename="test.py", line_number=1),
+            table_properties={},
+            partition_cols=None,
+            cluster_by=None,
+            schema=None,
+            format=None,
+        )
+        with self.assertRaises(PySparkTypeError) as context:
+            registry.register_output(unsupported_table)
+
+        self.assertEqual(context.exception.getCondition(), "UNSUPPORTED_PIPELINES_DATASET_TYPE")
+        self.assertEqual(context.exception.getMessageParameters(), {"dataset_type": "CustomTable"})
+        self.assertIn("Unsupported pipelines dataset type: CustomTable.", str(context.exception))
+
+    def test_register_output_unsupported_output_type(self):
+        # SPARK-57965: an Output that is not a Table, TemporaryView or Sink is not a dataset, so
+        # it must not be reported as an unsupported dataset type.
+        registry = SparkConnectGraphElementRegistry(mock.MagicMock(), "test_dataflow_graph_id")
+
+        unsupported_output = Output(
+            name="unsupported",
+            comment=None,
+            source_code_location=SourceCodeLocation(filename="test.py", line_number=1),
+        )
+        with self.assertRaises(PySparkTypeError) as context:
+            registry.register_output(unsupported_output)
+
+        self.assertEqual(context.exception.getCondition(), "UNSUPPORTED_PIPELINES_OUTPUT_TYPE")
+        self.assertEqual(context.exception.getMessageParameters(), {"output_type": "Output"})
+        self.assertIn("Unsupported pipelines output type: Output.", str(context.exception))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

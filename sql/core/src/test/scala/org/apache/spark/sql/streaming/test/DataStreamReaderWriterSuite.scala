@@ -552,13 +552,17 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      intercept[AnalysisException] {
-        spark.range(10).writeStream
-          .outputMode("append")
-          .partitionBy("id")
-          .format("parquet")
-          .start(path)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          MemoryStream[Long].toDS().toDF("id").writeStream
+            .option("checkpointLocation", newMetadataDir)
+            .outputMode("append")
+            .partitionBy("id")
+            .format("parquet")
+            .start(path)
+        },
+        condition = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
+        parameters = Map.empty)
     }
   }
 

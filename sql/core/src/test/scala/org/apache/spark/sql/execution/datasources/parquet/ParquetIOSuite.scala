@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.ByteArrayInputStream
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
-import java.util.Locale
+import java.util.{Arrays, Locale}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -27,16 +30,29 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.parquet.bytes.BytesUtils
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
+import org.apache.parquet.format.{PageType, Util}
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
-import org.apache.parquet.io.api.Binary
+import org.apache.parquet.hadoop.metadata.CompressionCodecName.SNAPPY
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.ParquetDecodingException
+import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.apache.parquet.schema.PrimitiveComparator.UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.{mock, verify}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler}
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
@@ -51,6 +67,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -156,6 +173,157 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     // as we store Spark SQL schema in the extra metadata.
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
+  }
+
+  /**
+   * Values covering what a Parquet string writer has to get right: nulls, empty and repeated
+   * values that feed the dictionary, multi-byte and surrogate-pair UTF-8, values long enough to
+   * force dictionary fallback, and embedded NULs. Independent of the writer settings and of how
+   * a test stores each value, so it is built once for the whole suite.
+   */
+  private lazy val reusedStringTestValues: Seq[String] = {
+    // scalastyle:off nonascii
+    val long = "very-long-\u96ea" * 1024
+    (0 until 1024).map { id =>
+      id % 8 match {
+        case 0 => null
+        case 1 => ""
+        case 2 => "repeated"
+        case 3 => "\u96ea\u2603\u00e9\ud801\udc00"
+        case 4 if id >= 256 => s"id-$id-" + "x" * 128
+        case 5 if id >= 256 => long
+        case 6 => "\u0000inside\u0000"
+        case _ => "escape-\"\\\n\t"
+      }
+    }
+    // scalastyle:on nonascii
+  }
+
+  private def parquetStringWriterConf: Configuration = {
+    val conf = spark.sessionState.newHadoopConf()
+    ParquetWriteSupport.setSchema(new StructType().add("text", StringType), conf)
+    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
+    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
+    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
+    conf
+  }
+
+  private class InternalRowParquetWriterBuilder(path: Path)
+    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
+
+    override protected def self(): InternalRowParquetWriterBuilder = this
+
+    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
+      new ParquetWriteSupport
+  }
+
+  test("SPARK-60321: string writer reuses the backing array of a UTF8String slice") {
+    val bytes = "prefix-value-suffix".getBytes(UTF_8)
+    Seq(0 -> "prefix", 7 -> "value").foreach { case (offset, expected) =>
+      val consumer = mock(classOf[RecordConsumer])
+      val support = new ParquetWriteSupport
+      support.init(parquetStringWriterConf)
+      support.prepareForWrite(consumer)
+      support.write(InternalRow(UTF8String.fromBytes(bytes, offset, expected.length)))
+
+      val argument = ArgumentCaptor.forClass(classOf[Binary])
+      verify(consumer).addBinary(argument.capture())
+      val binary = argument.getValue
+      assert(binary.isBackingBytesReused)
+      assert(binary.toByteBuffer.array() eq bytes)
+      assert(binary.toStringUsingUTF8 == expected)
+    }
+  }
+
+  for {
+    storage <- Seq("array", "slice", "offheap")
+    dictionary <- Seq("off", "on", "fallback")
+    version <- ParquetProperties.WriterVersion.values()
+  } {
+    test(s"SPARK-60321: strings with reused $storage memory, " +
+        s"dictionary $dictionary, writer $version") {
+      val expected = reusedStringTestValues
+      val offHeap = storage == "offheap"
+      withTempPath { dir =>
+        val conf = parquetStringWriterConf
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val padding = 13
+        val shared = new Array[Byte](64 * 1024)
+        val address = if (offHeap) Platform.allocateMemory(shared.length) else 0L
+        try {
+          // Surround each payload with sentinel bytes, so that an off-by-one offset or length
+          // corrupts the output instead of silently passing.
+          Arrays.fill(shared, '!'.toByte)
+          if (offHeap) {
+            Platform.setMemory(address, '!'.toByte, shared.length)
+          }
+          val writer = new InternalRowParquetWriterBuilder(path)
+            .withConf(conf)
+            .withWriterVersion(version)
+            .withCompressionCodec(SNAPPY)
+            .withDictionaryEncoding(dictionary != "off")
+            .withDictionaryPageSize(if (dictionary == "fallback") 4096 else 1024 * 1024)
+            .withPageRowCountLimit(64)
+            .withMinRowCountForPageSizeCheck(1)
+            .withMaxRowCountForPageSizeCheck(64)
+            .build()
+          try {
+            expected.foreach { text =>
+              if (text == null) {
+                writer.write(InternalRow(null))
+              } else {
+                // Each case writes into the storage it exercises and then overwrites just the
+                // range it wrote: retained values must survive the producer reusing its storage.
+                val bytes = text.getBytes(UTF_8)
+                storage match {
+                  case "array" =>
+                    writer.write(InternalRow(UTF8String.fromBytes(bytes)))
+                    Arrays.fill(bytes, '?'.toByte)
+                  case "slice" =>
+                    System.arraycopy(bytes, 0, shared, padding, bytes.length)
+                    writer.write(InternalRow(UTF8String.fromBytes(shared, padding, bytes.length)))
+                    Arrays.fill(shared, padding, padding + bytes.length, '?'.toByte)
+                  case "offheap" =>
+                    Platform.copyMemory(
+                      bytes, Platform.BYTE_ARRAY_OFFSET, null, address + padding, bytes.length)
+                    writer.write(
+                      InternalRow(UTF8String.fromAddress(null, address + padding, bytes.length)))
+                    Platform.setMemory(address + padding, '?'.toByte, bytes.length)
+                }
+              }
+            }
+          } finally {
+            writer.close()
+          }
+        } finally {
+          if (offHeap) {
+            Platform.freeMemory(address)
+          }
+        }
+
+        withAllParquetReaders {
+          checkAnswer(spark.read.parquet(dir.toString), expected.map(Row(_)))
+        }
+        val reader = ParquetFileReader.open(HadoopInputFile.fromPath(path, conf))
+        try {
+          val blocks = reader.getFooter.getBlocks
+          assert(blocks.size() == 1)
+          val column = blocks.get(0).getColumns.get(0)
+          val encodings = column.getEncodingStats
+          assert(encodings.hasDictionaryEncodedPages == (dictionary != "off"))
+          assert(encodings.hasNonDictionaryEncodedPages == (dictionary != "on"))
+          val ordering: Ordering[Binary] =
+            Ordering.comparatorToOrdering(UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR)
+          val values = expected.filter(_ != null).distinct.map(Binary.fromString)
+          assert(column.getStatistics.genericGetMin == values.min(ordering))
+          assert(column.getStatistics.genericGetMax == values.max(ordering))
+          assert(column.getStatistics.getNumNulls == expected.count(_ == null))
+        } finally {
+          reader.close()
+        }
+      }
+    }
   }
 
   test("SPARK-36182: TimestampNTZ") {
@@ -2478,6 +2646,119 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           checkAnswer(df, expected)
         }
       }
+    }
+  }
+
+  /**
+   * Writes 100 rows of `column` with the writer `options`, lets `corrupt` modify the bytes of
+   * the written file, and returns the error of reading the file with the vectorized reader.
+   */
+  private def readCorruptedFile(column: String, options: Map[String, String])(
+      corrupt: Array[Byte] => Unit): Throwable = {
+    var error: Throwable = null
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr(column).coalesce(1).write.options(options).parquet(path)
+      val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
+      val bytes = Files.readAllBytes(file.toPath)
+      corrupt(bytes)
+      Files.write(file.toPath, bytes)
+      dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        // Before SPARK-59832 a truncated read never returned, so run it with a timeout. The test
+        // thread waits interruptibly for the job, so it can be signaled directly.
+        implicit val signaler: Signaler = ThreadSignaler
+        error = intercept[SparkException] {
+          failAfter(Span(60, Seconds))(spark.read.parquet(path).collect())
+        }
+      }
+    }
+    error
+  }
+
+  /**
+   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
+   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
+   * with header 100 << 1 and value 1), and returns the error of reading the file with the
+   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
+   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
+   */
+  private def readCorruptedRleSection(
+      column: String,
+      writerVersion: String = "PARQUET_1_0")(
+      corrupt: (Array[Byte], Int) => Unit): Throwable = {
+    val options = Map(
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false",
+      ParquetOutputFormat.WRITER_VERSION -> writerVersion,
+      "compression" -> "uncompressed")
+    readCorruptedFile(column, options) { bytes =>
+      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val offset = bytes.indexOfSlice(section)
+      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
+      corrupt(bytes, offset)
+    }
+  }
+
+  private def causes(e: Throwable): Seq[Throwable] =
+    ExceptionUtils.getThrowableList(e).asScala.toSeq
+
+  /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
+  private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
+    BytesUtils.intToBytes(Int.MaxValue).copyToArray(bytes, offset)
+
+  /**
+   * Checks that the page error is reported once with the column, directly on top of the
+   * `ParquetDecodingException` about the invalid length.
+   */
+  private def assertInvalidLengthReportsColumn(e: Throwable, column: String): Unit = {
+    val pageErrors =
+      causes(e).filter(c => Option(c.getMessage).exists(_.startsWith("could not read page")))
+    assert(pageErrors.size == 1, e)
+    assert(pageErrors.head.getMessage.contains(s"in col [$column]"), e)
+    assert(pageErrors.head.getCause.isInstanceOf[ParquetDecodingException], e)
+    assert(pageErrors.head.getCause.getMessage.contains(
+      s"Corrupted RLE data: invalid length ${Int.MaxValue}"), e)
+  }
+
+  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+    // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a") {
+      (bytes, offset) => bytes(offset + 4) = 0x80.toByte
+    }
+    assert(causes(e).exists {
+      case c: ParquetDecodingException => c.getMessage.contains("Corrupted RLE data")
+      case _ => false
+    }, e)
+  }
+
+  test("SPARK-59832: invalid definition level length reports the column") {
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "a")
+  }
+
+  test("SPARK-59832: invalid length of RLE booleans in a V2 page reports the column") {
+    val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "b")
+  }
+
+  test("SPARK-59854: a ZSTD page that cannot be decompressed reports the column") {
+    Seq(PageType.DATA_PAGE -> false, PageType.DICTIONARY_PAGE -> true).foreach {
+      case (pageType, dictionary) =>
+        val options = Map(
+          ParquetOutputFormat.ENABLE_DICTIONARY -> dictionary.toString,
+          "compression" -> "zstd")
+        val e = readCorruptedFile("cast(id % 10 as int) as a", options) { bytes =>
+          // The first page of the only column chunk starts right after the magic number.
+          val start = ParquetFileWriter.MAGIC.length
+          val in = new ByteArrayInputStream(bytes, start, bytes.length - start)
+          assert(Util.readPageHeader(in).getType == pageType)
+          // Invert the first bytes of the page, the ZSTD frame magic number.
+          val pageStart = bytes.length - in.available()
+          (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
+        }
+        assert(causes(e).exists(c =>
+          Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
   }
 }

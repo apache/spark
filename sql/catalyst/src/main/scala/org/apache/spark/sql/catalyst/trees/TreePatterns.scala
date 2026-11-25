@@ -47,6 +47,7 @@ object TreePattern extends Enumeration  {
   val DATETIME: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
+  val EVAL_ONLY_WHEN: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTERNAL_UDF: Value = Value
@@ -84,6 +85,8 @@ object TreePattern extends Enumeration  {
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
+  val PARSE_SQL: Value = Value
+  val PER_PARTITION_RUNTIME_FILTER_SUBQUERY: Value = Value
   val PIPE_EXPRESSION: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -98,6 +101,7 @@ object TreePattern extends Enumeration  {
   val SESSION_WINDOW: Value = Value
   val SQL_FUNCTION_EXPRESSION: Value = Value
   val SQL_SCALAR_FUNCTION: Value = Value
+  val SUBTRACT_TIMESTAMPS: Value = Value
   val SUM: Value = Value
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TIME_WINDOW: Value = Value
@@ -126,6 +130,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_JSON_CONSTRUCTOR: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_PLAN_ID: Value = Value
   val UNRESOLVED_REGEX: Value = Value
@@ -159,6 +164,8 @@ object TreePattern extends Enumeration  {
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val EXECUTE_IMMEDIATE: Value = Value
+  val EXTERNAL_LOOKUP_HINT: Value = Value
+  val EXTERNAL_LOOKUP_JOIN: Value = Value
   val INTERSECT: Value = Value
   val FILTER: Value = Value
   val GENERATE: Value = Value
@@ -170,6 +177,7 @@ object TreePattern extends Enumeration  {
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
   val LOGICAL_QUERY_STAGE: Value = Value
+  val LOOKUP_ONLY_RELATION: Value = Value
   val MERGE_INTO_TABLE: Value = Value
   val METRIC_VIEW_PLACEHOLDER: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
@@ -212,6 +220,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_BIN_BY: Value = Value
   val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
+  val UNRESOLVED_GAP_FILL: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_INSERT: Value = Value

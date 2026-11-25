@@ -19,15 +19,20 @@ package org.apache.spark.sql
 
 import java.util.Random
 
+import scala.collection.mutable
+
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BoundReference
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.execution.stat.{CollectFrequentItems, StatFunctions}
 import org.apache.spark.sql.functions.{col, lit, struct, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, StringType, StructField, StructType}
 
 class DataFrameStatSuite extends SharedSparkSession {
   import testImplicits._
@@ -459,6 +464,46 @@ class DataFrameStatSuite extends SharedSparkSession {
 
     assert(resultRow.get(0).asInstanceOf[scala.collection.Seq[String]].toSet == Set("1", "2", "3"))
     assert(resultRow.get(1).asInstanceOf[scala.collection.Seq[String]].toSet == Set("a", "b", null))
+  }
+
+  test("SPARK-59898: freqItems compares BinaryType values by content") {
+    // Every row holds the same value, each in its own byte array. Without the fix, the value
+    // came back n % 3 times: twice for 11 rows and not at all for 12.
+    Seq(11, 12).foreach { n =>
+      val df = Seq.fill(n)(Array[Byte](1, 2)).toDF("b")
+      val items = df.stat.freqItems(Array("b"), 0.5).collect().head.getSeq[Array[Byte]](0)
+      assert(items.map(_.toSeq) === Seq(Seq[Byte](1, 2)))
+    }
+    // A value in half of the rows, among distinct values spread across partitions, is found.
+    val distinct = $"id".cast("string").cast("binary")
+    val skewed = spark.range(0, 100, 1, 4)
+      .select(when($"id" % 2 === 0, lit(Array[Byte](1, 2))).otherwise(distinct).as("b"))
+    val items = skewed.stat.freqItems(Array("b"), 0.4).collect().head.getSeq[Array[Byte]](0)
+    assert(items.map(_.toSeq).contains(Seq[Byte](1, 2)))
+  }
+
+  test("SPARK-59898: collect_frequent_items keys BinaryType values by content") {
+    val agg = new CollectFrequentItems(BoundReference(0, BinaryType, nullable = true), 10)
+    def items(buffer: mutable.Map[Any, Long]): Seq[Option[Seq[Byte]]] =
+      agg.eval(buffer).asInstanceOf[ArrayData].toObjectArray(BinaryType).toSeq
+        .map(v => Option(v.asInstanceOf[Array[Byte]]).map(_.toSeq))
+        .sortBy(_.map(_.mkString(",")))
+    val buffer = agg.createAggregationBuffer()
+    (1 to 3).foreach(_ => agg.update(buffer, InternalRow(Array[Byte](1, 2))))
+    (1 to 2).foreach(_ => agg.update(buffer, InternalRow(Array[Byte](3, 4))))
+    agg.update(buffer, InternalRow(null))
+    // Equal values share a key, and distinct values keep separate keys.
+    val expected = Seq(None, Some(Seq[Byte](1, 2)), Some(Seq[Byte](3, 4)))
+    assert(items(buffer) === expected)
+    // Keys read back from a serialized buffer match keys added by update.
+    val roundTripped = agg.deserialize(agg.serialize(buffer))
+    assert(items(roundTripped) === expected)
+    agg.merge(buffer, roundTripped)
+    assert(items(buffer) === expected)
+    // A buffer serialized before this fix can hold equal keys, whose counts are added up.
+    val legacy = mutable.Map[Any, Long](Array[Byte](1, 2) -> 1L, Array[Byte](1, 2) -> 1L)
+    assert(legacy.size === 2)
+    assert(agg.deserialize(agg.serialize(legacy)).values.toSeq === Seq(2L))
   }
 
   test("sampleBy") {

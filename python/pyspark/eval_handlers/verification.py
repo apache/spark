@@ -17,7 +17,7 @@
 
 """Verification helpers for a UDF's result before it is written back to the JVM.
 
-Used by the eval type handlers and by the worker's ``read_udfs``.
+Used by the eval type handlers.
 """
 
 from collections.abc import Iterator
@@ -28,6 +28,7 @@ from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
     import pandas as pd
+    import pyarrow as pa
 
 T = TypeVar("T")
 
@@ -210,3 +211,52 @@ def verify_pandas_result(
     # a numeric RangeIndex falls back to a by-position count check.
     by_name = assign_cols_by_name and any(isinstance(n, str) for n in result.columns)
     _verify_column_schema(actual_names, field_names, assign_cols_by_name=by_name)
+
+
+def verify_arrow_result(
+    result: Union["pa.Table", "pa.RecordBatch"],
+    assign_cols_by_name: bool,
+    expected_cols_and_types: Union[dict[str, "pa.DataType"], list[tuple[str, "pa.DataType"]]],
+) -> None:
+    # Skip schema check on a fully empty result (no rows and no columns).
+    if result.num_columns == 0 and result.num_rows == 0:
+        return
+
+    actual_names = list(result.schema.names)
+    actual_types = list(result.schema.types)
+    # expected_cols_and_types is a dict in by-name mode, list of (name, type) by position.
+    if isinstance(expected_cols_and_types, dict):
+        expected_names = list(expected_cols_and_types.keys())
+    else:
+        expected_names = [name for name, _ in expected_cols_and_types]
+
+    _verify_column_schema(actual_names, expected_names, assign_cols_by_name=assign_cols_by_name)
+
+    if isinstance(expected_cols_and_types, dict):
+        actual_by_name = dict(zip(actual_names, actual_types))
+        column_types = [
+            (name, expected_cols_and_types[name], actual_by_name[name])
+            for name in sorted(expected_cols_and_types.keys())
+        ]
+    else:
+        column_types = [
+            (expected_name, expected_type, actual_type)
+            for (expected_name, expected_type), actual_type in zip(
+                expected_cols_and_types, actual_types
+            )
+        ]
+
+    type_mismatch = [
+        (name, expected, actual) for name, expected, actual in column_types if actual != expected
+    ]
+
+    if type_mismatch:
+        raise PySparkRuntimeError(
+            errorClass="RESULT_COLUMN_TYPES_MISMATCH",
+            messageParameters={
+                "mismatch": ", ".join(
+                    "column '{}' (expected {}, actual {})".format(name, expected, actual)
+                    for name, expected, actual in type_mismatch
+                )
+            },
+        )

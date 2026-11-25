@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.python.PythonSQLMetrics
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreRestoreExec, StateStoreSaveExec, StreamingAggregationStateManager}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution}
@@ -862,6 +863,16 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(inputData, 3, 2, 1, 3),
       CheckLastBatch((3, 2), (2, 1), (1, 1)),
+      Execute { query =>
+        val stores = query.lastExecution.executedPlan.collect {
+          case store: StateStoreSaveExec => store
+        }
+        assert(stores.nonEmpty)
+        val phaseMetrics = PythonSQLMetrics.pythonPhaseTimingMetricsDesc.keySet ++
+          PythonSQLMetrics.pythonPhaseCountMetricsDesc.keySet
+        assert(stores.forall(_.metrics.contains("pythonDataSent")))
+        assert(stores.forall(_.metrics.keySet.intersect(phaseMetrics).isEmpty))
+      },
       assertNumStateRows(
         total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
 
@@ -1273,7 +1284,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
-  // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
+  // is emitted only once the watermark passes it, via EvictionIterator.
   // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same
   // watermark/eviction behaviour.
   testWithAllStateVersions("streamline aggregation: append mode emits windows past the watermark",
@@ -1301,6 +1312,27 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     // operator writes state per input row rather than once per key per batch, so its counts
     // legitimately differ from the micro-batch stateStoreSave operator. Output correctness -- what
     // Append actually guarantees -- is covered by the CheckLastBatch assertions above.
+  }
+
+  test("SPARK-60150: streaming aggregations on float/double keys keep their stateful operators") {
+    // As before, a DISTINCT below a duplicate-insensitive aggregation is removed, also with a
+    // filter on the key, which stays below it. So these queries keep one stateful operator and can
+    // restart from existing checkpoints.
+    for (where <- Seq("", "WHERE cast(d AS STRING) = '0.0' ")) withTempView("s") {
+      val input = MemoryStream[(Long, Double)]
+      input.toDF().toDF("t", "d")
+        .withColumn("ts", timestamp_seconds($"t"))
+        .withWatermark("ts", "10 seconds")
+        .createOrReplaceTempView("s")
+      val query = spark.sql("SELECT w.start AS start, max(d) AS m FROM " +
+        s"(SELECT DISTINCT window(ts, '1 minute') AS w, d FROM s) ${where}GROUP BY w")
+      testStream(query, Append)(
+        AddData(input, (0L, -0.0d), (1L, 0.0d)),
+        ProcessAllAvailable(),
+        AssertOnQuery { q =>
+          q.lastExecution.executedPlan.collect { case s: StateStoreSaveExec => s }.size == 1
+        })
+    }
   }
 
   // The micro-batch aggregation operator (stateStoreSave) and the streamline operator share the

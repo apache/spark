@@ -99,8 +99,6 @@ private[client] sealed abstract class Shim {
 
   def setDataLocation(table: Table, loc: String): Unit
 
-  def getAllPartitions(hive: Hive, table: Table): Seq[Partition]
-
   def getPartitionsByFilter(
       hive: Hive,
       table: Table,
@@ -334,11 +332,6 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     }
     recordHiveCall()
     hive.createPartitions(addPartitionDesc)
-  }
-
-  override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = {
-    recordHiveCall()
-    hive.getAllPartitionsOf(table).asScala.toSeq
   }
 
   override def getPartitionsByFilter(

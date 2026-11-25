@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
@@ -833,11 +834,15 @@ object QueryExecution {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
+    val ensureRequirements = EnsureRequirements()
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
+      // Must run before `EnsureRequirements`, which then plans the query without the semi joins
+      // this rule drops.
+      ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
@@ -845,7 +850,7 @@ object QueryExecution {
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
-      EnsureRequirements(),
+      ensureRequirements,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
@@ -1043,7 +1048,8 @@ object QueryExecution {
       refreshPhaseEnabled: Boolean = true,
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
-      analyzerOpt: Option[Analyzer] = None)
+      analyzerOpt: Option[Analyzer] = None,
+      beforeExecution: SparkPlan => Unit = _ => ())
     : (QueryExecution, Array[InternalRow]) = {
     val qe = new QueryExecution(
       sparkSession,
@@ -1054,6 +1060,7 @@ object QueryExecution {
       analyzerOpt = analyzerOpt)
     val result = QueryExecution.withInternalError(s"Executed $name failed.") {
       SQLExecution.withNewExecutionId(qe, Some(name)) {
+        beforeExecution(qe.executedPlan)
         qe.executedPlan.executeCollect()
       }
     }

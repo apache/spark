@@ -420,6 +420,34 @@ class ReadwriterV2TestsMixin:
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
             df.writeTo("test_table").overwrite(lit(True))
 
+    def test_write_modes_with_options_and_properties(self):
+        with self.sql_conf(
+            {"spark.sql.catalog.testcat": "org.apache.spark.sql.connector.catalog.InMemoryCatalog"}
+        ):
+            tbl = "testcat.pyspark_writer_v2_modes"
+            with self.table(tbl):
+                df = self.spark.range(3)
+                with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+                    df.writeTo(tbl).replace()
+
+                df.writeTo(tbl).tableProperty("prop", "value").createOrReplace()
+                self.assertEqual(3, self.spark.table(tbl).count())
+                props = self.spark.sql(f"SHOW TBLPROPERTIES {tbl}").collect()
+                self.assertIn(("prop", "value"), [tuple(r) for r in props])
+
+                with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_ALREADY_EXISTS"):
+                    df.writeTo(tbl).create()
+
+                df.writeTo(tbl).append()
+                self.assertEqual(6, self.spark.table(tbl).count())
+                # The in-memory table fails any write that carries this write option.
+                writer = df.writeTo(tbl).option("spark.sql.test.simulateFailedWrite", "true")
+                with self.assertRaisesRegex(Exception, "Manual write to table failure"):
+                    writer.append()
+                self.assertEqual(6, self.spark.table(tbl).count())
+                self.spark.range(2).writeTo(tbl).overwritePartitions()
+                self.assertEqual(2, self.spark.table(tbl).count())
+
     def test_cluster_by(self):
         data = [
             (1, "foo", 3.0),
@@ -449,7 +477,16 @@ class ReadwriterV2TestsMixin:
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
-    pass
+    # Classic only: Spark Connect's DataStreamReader.changes does not validate the argument type.
+    def test_streaming_changes_rejects_non_str_table_name(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.readStream.changes(123)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"arg_name": "tableName", "expected_type": "str", "arg_type": "int"},
+        )
 
 
 class ReadwriterV2Tests(ReadwriterV2TestsMixin, ReusedSQLTestCase):

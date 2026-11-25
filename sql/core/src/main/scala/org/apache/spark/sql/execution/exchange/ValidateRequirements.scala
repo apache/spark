@@ -95,9 +95,9 @@ object ValidateRequirements extends Logging {
    * `committed` path commits on the sides a reduce rebuilt rather than on the pair it picked. A
    * finished plan is asked the strict question alone, which the reduced pair answers
    * (`hasSameReducedKeys`). The coverage of every operation key
-   * (`spark.sql.requireAllClusterKeysForCoPartition`) is a skew heuristic and part of neither.
+   * (`KeyedPartitioning.meetsCoPartitionKeyRequirement`) is a skew heuristic and part of neither.
    */
-  private def satisfiesForPairing(
+  private[execution] def satisfiesForPairing(
       children: Seq[SparkPlan],
       distributions: Seq[Distribution]): Boolean = {
     val specs = children.zip(distributions).map { case (child, distribution) =>

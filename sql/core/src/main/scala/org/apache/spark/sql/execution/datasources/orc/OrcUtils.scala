@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
@@ -142,6 +143,12 @@ object OrcUtils extends Logging {
         case Category.STRUCT => toStructType(orcType)
         case Category.LIST => toArrayType(orcType)
         case Category.MAP => toMapType(orcType)
+        // A Spark TIMESTAMP_LTZ column (catalyst type attribute `timestamp`) and a foreign ORC
+        // TIMESTAMP column (no attribute) are both read as TimestampType, so do not let the
+        // parser resolve `timestamp` by spark.sql.timestampType.
+        case Category.TIMESTAMP if Option(orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME))
+            .forall(_ == TimestampType.typeName) =>
+          TimestampType
         case _ =>
           val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
           if (catalystTypeAttrValue != null) {
@@ -727,7 +734,8 @@ object OrcUtils extends Logging {
       filePath: Path,
       conf: Configuration,
       fileSplit: FileSplit,
-      readerOptions: OrcFile.ReaderOptions): OrcMapreduceRecordReader[OrcStruct] = {
+      readerOptions: OrcFile.ReaderOptions,
+      searchArgument: Option[SearchArgument]): OrcMapreduceRecordReader[OrcStruct] = {
     val fs = filePath.getFileSystem(conf)
     val orcReader = OrcFile.createReader(
       filePath,
@@ -738,6 +746,11 @@ object OrcUtils extends Logging {
     val options = OrcMapredInputFormat
       .buildOptions(conf, orcReader, fileSplit.getStart, fileSplit.getLength)
       .useSelected(true)
+    // Set it directly rather than with `OrcInputFormat.setSearchArgument`, whose Kryo round trip
+    // truncates timestamp values to milliseconds.
+    searchArgument.foreach { sarg =>
+      options.searchArgument(sarg, orcReader.getSchema.getFieldNames.asScala.toArray)
+    }
     new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
   }
 }

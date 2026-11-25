@@ -14,14 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import copy
 import cProfile
 import os
 import pstats
+import sys
+import threading
 import warnings
 from abc import ABC, abstractmethod
 from io import StringIO
 from threading import RLock
-from types import CodeType, TracebackType
+from types import CodeType, FrameType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -42,16 +45,18 @@ from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
 )
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.profiler import (
     CodeMapDict,
     MemoryProfiler,
     MemUsageParam,
     PStatsParam,
+    SamplingResultParam,
 )
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults, ProfileResultsV2
+    from pyspark.taskcontext import TaskContext
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
@@ -99,30 +104,174 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     AccumulatorParam for profilers.
     """
 
+    # Guards a results dict that the driver's accumulator server thread merges into while other
+    # threads read or clear it. The DAGScheduler blocks until that thread acknowledges, so keep
+    # holds short, and never call into the JVM or wait on a Spark job while holding it.
+    # A class attribute, so it is not pickled with the param.
+    lock = RLock()
+
     @staticmethod
     def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
         return {}
 
-    @staticmethod
-    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
-        for key, result in value2.items():
-            if key not in value1:
-                value1[key] = result
-            else:
-                perf = PStatsParam.addInPlace(
-                    value1[key].get("perf", None), result.get("perf", None)
-                )
-                if perf is not None:
-                    value1[key]["perf"] = perf
-                memory = MemUsageParam.addInPlace(
-                    value1[key].get("memory", None), result.get("memory", None)
-                )
-                if memory is not None:
-                    value1[key]["memory"] = memory
-        return value1
+    @classmethod
+    def addInPlace(
+        cls, value1: "ProfileResultsV2", value2: "ProfileResultsV2"
+    ) -> "ProfileResultsV2":
+        with cls.lock:
+            for key, result in value2.items():
+                if key not in value1:
+                    value1[key] = result
+                else:
+                    perf = PStatsParam.addInPlace(
+                        value1[key].get("perf", None), result.get("perf", None)
+                    )
+                    if perf is not None:
+                        value1[key]["perf"] = perf
+                    memory = MemUsageParam.addInPlace(
+                        value1[key].get("memory", None), result.get("memory", None)
+                    )
+                    if memory is not None:
+                        value1[key]["memory"] = memory
+                    sampling = SamplingResultParam.addInPlace(
+                        value1[key].get("sampling", {}), result.get("sampling", {})
+                    )
+                    if sampling:
+                        value1[key]["sampling"] = sampling
+            return value1
 
 
 ProfileResultsParamV2 = _ProfileResultsParamV2()
+
+
+class WorkerSamplingProfiler:
+    """
+    SamplingProfiler is a profiler for sampling profiling.
+    """
+
+    # The most frames kept per sample. The worker pickles a call tree recursively, about two
+    # levels of recursion per tree level, and on Python 3.11 that counts against the
+    # recursion limit (1000 by default), so a tree of about 500 levels would fail the task.
+    # The cap also bounds the recursive copy in ProfilerCollector._sampling_profile_results.
+    _MAX_STACK_DEPTH = 256
+
+    def __init__(
+        self,
+        task_context: "TaskContext",
+        sampling_interval: float = 100,
+        aggregation: str = "stage",
+    ) -> None:
+        # Keyed by thread name, so that threads from different tasks can be merged.
+        # TODO: Group threads whose names CPython generates from process-wide counters, such
+        # as "ThreadPoolExecutor-0_0" or "Thread-1 (run)". Each new thread in a worker gets a
+        # new name, so such threads mostly keep separate call trees.
+        self._callstack_data: dict[str, dict] = {}
+        # Thread names by thread id, kept across samples: a thread is removed from
+        # threading.enumerate() before its last frames are gone.
+        self._thread_names: dict[int, str] = {}
+        self._task_context = task_context
+        self._sampling_interval = sampling_interval
+        self._aggregation = aggregation
+        # Get the key before the UDF runs, so that an unknown level fails the task early.
+        self._task_key = self._get_task_key()
+        self._sampling_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
+    def __enter__(self) -> "WorkerSamplingProfiler":
+        self._start_sampling_thread()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        assert self._sampling_thread is not None
+        self._stop_event.set()
+        self._sampling_thread.join()
+        self._sampling_thread = None
+
+    def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
+        accumulator.add({self._task_key: {"sampling": {"callstack": self._callstack_data}}})
+
+    def _start_sampling_thread(self) -> None:
+        if self._sampling_thread is not None:
+            raise PySparkRuntimeError("Sampling thread already started")
+        self._sampling_thread = threading.Thread(target=self._sample_loop)
+        self._sampling_thread.start()
+
+    def _sample_loop(self) -> None:
+        self_tid = threading.get_ident()
+        while not self._stop_event.wait(self._sampling_interval / 1000):
+            # Take the frames first and then the names, so that every thread in the frames
+            # that threading.enumerate() lists by then is named.
+            frames = sys._current_frames()
+            self._thread_names.update(
+                (t.ident, t.name) for t in threading.enumerate() if t.ident is not None
+            )
+            for tid, frame in frames.items():
+                if tid != self_tid:
+                    # A thread is named once threading.enumerate() lists it with its id.
+                    # Before that, or always if it is never listed, e.g. when started with
+                    # _thread.start_new_thread(), it goes under the name last seen for its id,
+                    # which a reused id keeps from an exited thread, or else under
+                    # "<unknown thread>", one call tree for all of them, since thread ids mean
+                    # nothing across tasks.
+                    self._add_sample(self._thread_names.get(tid, "<unknown thread>"), frame)
+
+    def _add_sample(self, thread_name: str, frame: Optional[FrameType]) -> None:
+        if thread_name not in self._callstack_data:
+            self._callstack_data[thread_name] = {}
+        frames: list[FrameType] = []
+        while frame is not None:
+            frames.append(frame)
+            frame = frame.f_back
+
+        # Keep the outermost frames, so that each sample keeps its real root and the trees
+        # still merge, and count a deeper sample once under a "<truncated>" child of its last
+        # kept frame.
+        idents = [self._get_ident_from_frame(f) for f in reversed(frames[-self._MAX_STACK_DEPTH :])]
+        if len(frames) > self._MAX_STACK_DEPTH:
+            idents.append("<truncated>")
+
+        d = self._callstack_data[thread_name]
+        for ident in idents:
+            if ident not in d:
+                d[ident] = {"count": 0}
+            d[ident]["count"] += 1
+            d = d[ident]
+
+    def _get_ident_from_frame(self, frame: FrameType) -> str:
+        code = frame.f_code
+        return f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
+
+    def _get_task_key(self) -> str:
+        # The "sampling_" prefix keeps these keys apart from the other profilers' keys,
+        # which are UDF result ids (int) or worker module names.
+        tc = self._task_context
+        if self._aggregation == "query":
+            # Each micro-batch of a streaming query is its own SQL execution, so prefer the
+            # streaming query id to group all of them together. Neither id is set when the
+            # UDF does not run in a SQL query, e.g. under `df.rdd`.
+            query_id = tc.getLocalProperty("sql.streaming.queryId") or tc.getLocalProperty(
+                "spark.sql.execution.root.id"
+            )
+            return f"sampling_query_{query_id if query_id is not None else 'unknown'}"
+        elif self._aggregation == "stage":
+            return f"sampling_stage_{tc.stageId()}"
+        elif self._aggregation == "task":
+            # Stage ids are unique in the application, so this identifies a task. All
+            # attempts of the task, e.g. retries, are merged together.
+            return f"sampling_task_{tc.stageId()}_{tc.partitionId()}"
+        else:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
+                    "arg_name": "spark.sql.pyspark.udf.profiler.samplingAggregation",
+                    "allowed_values": str(["query", "stage", "task"]),
+                },
+            )
 
 
 class WorkerPerfProfiler:
@@ -274,9 +423,11 @@ class ProfilerCollector(ABC):
 
     @property
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
+        # Return copies, since merges mutate the stats in place while callers sort, print and
+        # dump them outside the lock.
         with self._lock:
             return {
-                result_id: result["perf"]
+                result_id: pstats.Stats().add(result["perf"])
                 for result_id, result in self._profile_results.items()
                 if result.get("perf", None) is not None
             }
@@ -325,6 +476,18 @@ class ProfilerCollector(ABC):
                 result_id: result["memory"]
                 for result_id, result in self._profile_results.items()
                 if result.get("memory", None) is not None
+            }
+
+    @property
+    def _sampling_profile_results(self) -> Dict[Union[int, str], dict]:
+        # Return copies, since merges change the call trees in place while callers read them
+        # outside the lock. The copy recurses, but the depth of a call tree is bounded by
+        # WorkerSamplingProfiler._MAX_STACK_DEPTH.
+        with self._lock:
+            return {
+                result_id: copy.deepcopy(result["sampling"])
+                for result_id, result in self._profile_results.items()
+                if result.get("sampling", None) is not None
             }
 
     @property
@@ -451,6 +614,30 @@ class ProfilerCollector(ABC):
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
 
+    def clear_sampling_profiles(self, id: Optional[Union[int, str]] = None) -> None:
+        """
+        Clear the sampling profile results.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        id : int or str, optional
+            The result ID whose sampling profile results should be cleared.
+            If not specified, all the results will be cleared.
+        """
+        with self._lock:
+            if id is not None:
+                if id in self._profile_results:
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+            else:
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
@@ -462,6 +649,8 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             self._accumulator = Accumulator(
                 SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
+        # Share the lock with the accumulator merge, which mutates the same dict.
+        self._lock = ProfileResultsParamV2.lock
 
     @property
     def _profile_results(self) -> "ProfileResultsV2":
@@ -650,8 +839,9 @@ class Profile:
             self.profiler_collector.clear_memory_profiles(id)
         elif type == "perf" or type is None:
             self.profiler_collector.clear_perf_profiles(id)
-            if type is None:  # Clear both perf and memory profiles
+            if type is None:  # Clear perf, memory and sampling profiles
                 self.profiler_collector.clear_memory_profiles(id)
+                self.profiler_collector.clear_sampling_profiles(id)
         else:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_ALLOWED",

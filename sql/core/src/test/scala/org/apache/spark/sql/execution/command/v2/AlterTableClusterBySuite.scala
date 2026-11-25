@@ -21,11 +21,13 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `ALTER TABLE ... CLUSTER BY` command to check V2 table
  * catalogs.
  */
+@DataSourceV2Test
 class AlterTableClusterBySuite extends command.AlterTableClusterBySuiteBase
   with CommandSuiteBase {
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {

@@ -988,8 +988,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.changes(tableName))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
 
@@ -1887,8 +1891,11 @@ class DataStreamWriter:
         -----
         This API is evolving.
 
-        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
-        the table exists or not. A new table will be created if the table not exists.
+        For v1 table, a new table will be created with the partitioning columns provided by
+        `partitionBy` if the table does not exist. If the table exists, the partitioning of the
+        table will be respected, and `partitionBy` must match it, including the order of the
+        columns, if provided. Otherwise, or if the files already committed to the table have other
+        partition columns, the query fails to start.
 
         For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
         be respected only if the v2 table does not exist. Besides, the v2 table created by this API

@@ -50,7 +50,9 @@ private[sql] object TypedAggUtils {
       expr: T,
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): T = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+    // Build it only for a typed aggregate. Its constructor checks every input attribute.
+    lazy val unresolvedDeserializer =
+      UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val transformed = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(

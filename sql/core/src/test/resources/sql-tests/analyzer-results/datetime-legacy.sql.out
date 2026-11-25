@@ -736,7 +736,7 @@ Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles)
 -- !query
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(d,DateType,true), (dateFormat,dd/MMMMM/yyyy), {"d":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"d":"26/October/2015"})#x]
+Project [from_json(StructField(d,DateType,true), (dateFormat,dd/MMMMM/yyyy), {"d":"26/October/2015"}, Some(America/Los_Angeles), false, false) AS from_json({"d":"26/October/2015"})#x]
 +- OneRowRelation
 
 
@@ -1110,6 +1110,20 @@ Project [make_timestamp(1, 1, 1, 1, 1, cast(99.999999 as decimal(16,6)), None, S
 SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 -- !query analysis
 Project [make_timestamp(1, 1, 1, 1, 1, cast(999.999999 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampType) AS make_timestamp(1, 1, 1, 1, 1, 999.999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query analysis
+Project [make_timestamp(1, 1, 1, 1, 1, cast(4324.967296 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampType) AS make_timestamp(1, 1, 1, 1, 1, 4324.967296)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query analysis
+Project [try_make_timestamp(1, 1, 1, 1, 1, 4324.967296) AS try_make_timestamp(1, 1, 1, 1, 1, 4324.967296)#x]
 +- OneRowRelation
 
 
@@ -1970,7 +1984,7 @@ Project [unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE, Some(America/Los_An
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"t":"26/October/2015"})#x]
+Project [from_json(StructField(t,TimestampType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false, false) AS from_json({"t":"26/October/2015"})#x]
 +- OneRowRelation
 
 

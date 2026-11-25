@@ -68,9 +68,9 @@ class InMemoryRowLevelOperationTableCatalog
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
-    val table = new InMemoryRowLevelOperationTable(
-      tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
+    val table = InMemoryRowLevelOperationTable.withColumns(
+      tableName, tableInfo.columns, tableInfo.partitions, tableInfo.properties,
+      tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -89,7 +89,7 @@ class InMemoryRowLevelOperationTableCatalog
     }
 
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      CatalogV2Util.structTypeToV2Columns(schema))
+      InMemoryTableCatalog.alteredColumns(table.columns(), schema, changes))
 
     val newTable = InMemoryRowLevelOperationTable.withColumns(
       name = table.name,
@@ -100,7 +100,7 @@ class InMemoryRowLevelOperationTableCatalog
       tableId = table.id,
       schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -135,15 +135,15 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
     }
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, propertyChanges)
     val schema = computeAlterTableSchema(table.schema, changes.toSeq)
-    val newTable = new InMemoryRowLevelOperationTable(
+    val newTable = InMemoryRowLevelOperationTable.withColumns(
       name = table.name,
-      schema = schema,
+      columns = InMemoryTableCatalog.alteredColumns(table.columns(), schema, changes),
       partitioning = table.partitioning,
       properties = properties,
       constraints = table.constraints,
       schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, table.schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }

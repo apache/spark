@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelpe
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{AtomicCreateTableAsSelectExec, AtomicReplaceTableAsSelectExec, AtomicReplaceTableExec, CreateTableAsSelectExec, ReplaceTableAsSelectExec, ReplaceTableExec}
+import org.apache.spark.tags.DataSourceV2Test
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
@@ -74,6 +75,7 @@ object StagingInMemoryTableCatalogWithMetrics {
     TestCustomTaskMetric("numOutputBytes", 1339))
 }
 
+@DataSourceV2Test
 class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
 
   private val testCatalog = "test_catalog"

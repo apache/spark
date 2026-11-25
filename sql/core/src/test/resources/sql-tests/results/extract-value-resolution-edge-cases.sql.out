@@ -32,6 +32,110 @@ b
 
 
 -- !query
+CREATE TABLE t2(col1 ARRAY<INT>, col2 INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1[get(filter(col1,k -> k == col2), col2)] FROM t2
+-- !query schema
+struct<col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]:int>
+-- !query output
+
+
+
+-- !query
+SELECT filter(col1, k -> k == col2)[0] FROM t2
+-- !query schema
+struct<filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable()))[0]:int>
+-- !query output
+
+
+
+-- !query
+SELECT col1[element_at(filter(col1, k -> k > col2), 1)] FROM t2
+-- !query schema
+struct<col1[element_at(filter(col1, lambdafunction((namedlambdavariable() > col2), namedlambdavariable())), 1)]:int>
+-- !query output
+
+
+
+-- !query
+SELECT col1[col1[get(filter(col1, k -> k == col2), col2)]] FROM t2
+-- !query schema
+struct<col1[col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]]:int>
+-- !query output
+
+
+
+-- !query
+SELECT col2 FROM t2 WHERE col1[get(filter(col1, k -> k == col2), col2)] > 0
+-- !query schema
+struct<col2:int>
+-- !query output
+
+
+
+-- !query
+SELECT col2 FROM t2 ORDER BY col1[get(filter(col1, k -> k == col2), col2)]
+-- !query schema
+struct<col2:int>
+-- !query output
+
+
+
+-- !query
+SELECT col2 FROM t2 GROUP BY col1, col2 HAVING col1[get(filter(col1, k -> k == col2), col2)] > 0
+-- !query schema
+struct<col2:int>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE t3(col1 MAP<INT, INT>, col2 INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1[element_at(filter(map_keys(col1), k -> k == col2), 1)] FROM t3
+-- !query schema
+struct<col1[element_at(filter(map_keys(col1), lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), 1)]:int>
+-- !query output
+
+
+
+-- !query
+SELECT transform(map_values(col1), v -> v + col2)[0] FROM t3
+-- !query schema
+struct<transform(map_values(col1), lambdafunction((namedlambdavariable() + col2), namedlambdavariable()))[0]:int>
+-- !query output
+
+
+
+-- !query
+DROP TABLE t3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE t1
 -- !query schema
 struct<>

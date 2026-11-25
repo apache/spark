@@ -376,22 +376,33 @@ abstract class StreamExecution(
           e
         }
 
-        streamDeathCause = new StreamingQueryException(
-          toDebugString(includeLogicalPlan = isInitialized),
-          cause = cause,
-          getLatestExecutionContext().startOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
-          getLatestExecutionContext().endOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
-          errorClass = "STREAM_FAILED",
-          messageParameters = Map(
-            "id" -> id.toString,
-            "runId" -> runId.toString,
-            "message" -> message))
+        try {
+          streamDeathCause = new StreamingQueryException(
+            toDebugString(includeLogicalPlan = isInitialized),
+            cause = cause,
+            getLatestExecutionContext().startOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            getLatestExecutionContext().endOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            errorClass = "STREAM_FAILED",
+            messageParameters = Map(
+              "id" -> id.toString,
+              "runId" -> runId.toString,
+              "message" -> message))
+        } catch {
+          // If building the detailed exception fails (e.g. a source's `toString` throws), the
+          // query failure must still be reported instead of the query looking stopped cleanly.
+          case buildFailure: Throwable =>
+            streamDeathCause = fallbackStreamDeathCause(cause, message, buildFailure)
+            // Like a fatal `cause` below, hand fatal errors to the `UncaughtExceptionHandler`.
+            if (!NonFatal(buildFailure)) {
+              throw buildFailure
+            }
+        }
 
         errorClassOpt = e match {
           case t: SparkThrowable => Option(t.getCondition)
@@ -478,9 +489,7 @@ abstract class StreamExecution(
    *
    * Every default applied here is logged, so those changes are recoverable from the driver log.
    *
-   * Deliberately not set, though Databricks Runtime does default them for Real-Time Mode:
-   *  - The incremental state-cleanup factor: that mechanism does not exist in OSS yet.
-   *  - The Python/Pandas UDF latency knobs: those configs do not exist in OSS.
+   * The Python/Pandas UDF latency knobs defaulted by Databricks Runtime do not exist in OSS.
    */
   private def setSparkSessionConfigsForRealTimeMode(sparkSessionForStream: SparkSession): Unit = {
     val conf = sparkSessionForStream.conf
@@ -519,6 +528,13 @@ abstract class StreamExecution(
     if (usingRocksDb && !conf.contains(changelogKey)) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, changelogKey)}=true")
       conf.set(changelogKey, "true")
+    }
+
+    // Spread eviction across the long-running batch to reduce cleanup latency at batch boundaries.
+    val incrementalCleanupConf = SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR
+    if (!conf.contains(incrementalCleanupConf.key)) {
+      logInfo(log"Setting incremental cleanup factor to 2 for real-time mode")
+      conf.set(incrementalCleanupConf, 2L)
     }
 
     // SOFT DEFAULT. `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207)
@@ -730,6 +746,24 @@ abstract class StreamExecution(
 
   override def toString: String = {
     s"Streaming Query $prettyIdString [state = $state]"
+  }
+
+  /** The query failure without the debug string and offsets that could not be built. */
+  private def fallbackStreamDeathCause(
+      cause: Throwable,
+      message: String,
+      buildFailure: Throwable): StreamingQueryException = {
+    logWarning(log"Failed to build the detailed exception for query " +
+      log"${MDC(PRETTY_ID_STRING, prettyIdString)}", buildFailure)
+    val fallback = new StreamingQueryException(
+      queryDebugString = "",
+      cause = cause,
+      startOffset = "",
+      endOffset = "",
+      errorClass = "STREAM_FAILED",
+      messageParameters = Map("id" -> id.toString, "runId" -> runId.toString, "message" -> message))
+    fallback.addSuppressed(buildFailure)
+    fallback
   }
 
   private def toDebugString(includeLogicalPlan: Boolean): String = {

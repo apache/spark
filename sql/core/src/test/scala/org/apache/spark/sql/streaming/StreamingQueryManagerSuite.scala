@@ -32,10 +32,12 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
   OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.tags.SlowSQLTest
@@ -168,6 +170,37 @@ class StreamingQueryManagerSuite extends StreamTest {
     }
   }
 
+  test("SPARK-60632: regex pattern cost estimate version 0 for old checkpoints") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      // `NOT` caches whether its child is expensive, and both queries share this plan.
+      val result = input.toDF().select($"value", !$"value".rlike("^1") as "p").where($"p")
+
+      def run(data: String): Boolean = {
+        val query = result.writeStream
+          .format("noop")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(data)
+          query.processAllAvailable()
+          // Whether the filter stays above the projection.
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.optimizedPlan
+            .exists {
+              case Filter(_, _: Project) => true
+              case _ => false
+            }
+        } finally {
+          query.stop()
+        }
+      }
+
+      assert(!run("a"))
+      rewriteOffsetLogConf(checkpointDir)(_ - SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key)
+      assert(run("b"))
+    }
+  }
+
   test("streaming EXCEPT compatibility uses the query session checkpoint location") {
     withTempDir { checkpointRoot =>
       withTempDir { otherCheckpointRoot =>
@@ -239,6 +272,34 @@ class StreamingQueryManagerSuite extends StreamTest {
       }
 
       assert(checkpointRoot.listFiles().count(_.isDirectory) === 1)
+    }
+  }
+
+  test("SPARK-60885: avoidDoubleFilterEval is read from the offset log") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL.key
+    val left = MemoryStream[(Int, Int)]
+    val right = MemoryStream[(Int, Int)]
+    val expensive = udf((value: Int) => value)
+    // With the conf on, the filter stays above the join and the left state also keeps the rows
+    // failing it. Turning it off would push the filter under the join, so those rows would join.
+    val df = left.toDF().toDF("key", "leftValue")
+      .join(right.toDF().toDF("key", "rightValue"), "key")
+      .select($"key", expensive($"leftValue").as("result"), $"rightValue")
+      .where($"result" > 0)
+
+    withTempDir { dir =>
+      withSQLConf(key -> "true", SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        testStream(df)(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(left, (1, -1), (2, 10)),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(
+            checkpointLocation = dir.getCanonicalPath,
+            additionalConfs = Map(key -> "false")),
+          AddData(right, (1, 100), (2, 200)),
+          CheckNewAnswer((2, 10, 200)))
+      }
     }
   }
 

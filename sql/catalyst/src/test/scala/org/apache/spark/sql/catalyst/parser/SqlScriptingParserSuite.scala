@@ -65,6 +65,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains("SELECT"))
   }
 
+  test("statement text after a supplementary character") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sqlScriptText = s"BEGIN SELECT '$emoji'; SELECT 2; END"
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val statements = tree.collection.map(_.asInstanceOf[SingleStatement].getText)
+    assert(statements === Seq(s"SELECT '$emoji'", "SELECT 2"))
+  }
+
   test("multi select") {
     val sqlScriptText = "BEGIN SELECT 1;SELECT 2; END"
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]

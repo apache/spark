@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, TableSummary, V1Table}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
@@ -59,6 +61,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   }
 }
 
+@DataSourceV2Test
 class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -377,6 +380,59 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(filterV2TableProperties(loaded.properties) == Map())
 
     assert(filterV2TableProperties(table.properties) == Map())
+  }
+
+  private def createTableWithCommentAndCollation(): Unit = {
+    sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
+      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE TBLPROPERTIES ('prop-1' = '0')")
+  }
+
+  private def loadCatalogTable(catalog: V2SessionCatalog): CatalogTable =
+    catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+
+  test("SPARK-62033: alterTable keeps the comment and collation unless a change names them") {
+    // (changes, expected comment, expected collation)
+    Seq[(Seq[TableChange], Option[String], Option[String])](
+      (Seq(TableChange.setProperty("prop-1", "1")), Some("table comment"), Some("UTF8_LCASE")),
+      (Seq(TableChange.removeProperty("prop-1")), Some("table comment"), Some("UTF8_LCASE")),
+      (Seq(TableChange.removeProperty(TableCatalog.PROP_COMMENT)), None, Some("UTF8_LCASE")),
+      (Seq(TableChange.removeProperty(TableCatalog.PROP_COLLATION)), Some("table comment"), None)
+    ).foreach { case (changes, expectedComment, expectedCollation) =>
+      val catalog = newCatalog()
+      catalog.dropTable(testIdent)
+      createTableWithCommentAndCollation()
+      // A table created by DDL holds them only in the dedicated fields; see `alterTable`.
+      val created = loadCatalogTable(catalog)
+      assert(!created.properties.contains(TableCatalog.PROP_COMMENT))
+      assert(!created.properties.contains(TableCatalog.PROP_COLLATION))
+
+      catalog.alterTable(testIdent, changes: _*)
+      val altered = loadCatalogTable(catalog)
+      assert(altered.comment == expectedComment, s"changes: $changes")
+      assert(altered.collation == expectedCollation, s"changes: $changes")
+    }
+  }
+
+  test("SPARK-62033: alterTable sets or removes the comment and collation a change names") {
+    val catalog = newCatalog()
+    createTableWithCommentAndCollation()
+
+    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COMMENT, "new comment"))
+    val afterComment = loadCatalogTable(catalog)
+    assert(afterComment.comment.contains("new comment"))
+    assert(afterComment.collation.contains("UTF8_LCASE"))
+
+    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COLLATION, "UNICODE"))
+    val afterCollation = loadCatalogTable(catalog)
+    assert(afterCollation.comment.contains("new comment"))
+    assert(afterCollation.collation.contains("UNICODE"))
+
+    catalog.alterTable(testIdent,
+      TableChange.removeProperty(TableCatalog.PROP_COMMENT),
+      TableChange.removeProperty(TableCatalog.PROP_COLLATION))
+    val afterRemove = loadCatalogTable(catalog)
+    assert(afterRemove.comment.isEmpty)
+    assert(afterRemove.collation.isEmpty)
   }
 
   test("alterTable: add top-level column") {
@@ -851,6 +907,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 }
 
+@DataSourceV2Test
 class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

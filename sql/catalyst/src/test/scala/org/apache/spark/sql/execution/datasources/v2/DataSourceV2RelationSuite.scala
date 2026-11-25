@@ -26,15 +26,17 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Histogram, HistogramBin, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
-import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
@@ -219,6 +221,35 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60810: pushed and inferred filters on a read-side padded CHAR column") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        StructType(Seq(StructField("c", CharType(5))))).head)
+      val schema = StructType(Seq(StructField("c", StringType)))
+      val scan = new Scan with SupportsReportStatistics {
+        override def readSchema(): StructType = schema
+        override def estimateStatistics(): V2Statistics = DataSourceV2Relation.v1StatsToV2Stats(
+          CatalogStatistics(sizeInBytes = 16000, rowCount = Some(BigInt(1000)), colStats = Map(
+            "c" -> CatalogColumnStat(distinctCount = Some(10), nullCount = Some(200),
+              avgLen = Some(5), maxLen = Some(5)))),
+          schema)
+        override def reflectsFullyPushedDownFilters(): Boolean = false
+        override def useInferredFilterEstimation(): Boolean = true
+      }
+      // Filters pushed into a scan compare the padding expression, like a Filter pushed below
+      // the padding Project. Of 1000 rows the equality keeps 100 and IS NOT NULL keeps 800, and
+      // the smaller estimate of the two groups wins; STARTSWITH cannot be estimated.
+      val padded = CharVarcharUtils.addPaddingForScan(c)
+      Seq(
+        EqualTo(padded, Literal("3    ")) -> 100,
+        StartsWith(padded, Literal("3")) -> 800).foreach { case (pushed, expectedRows) =>
+        val withFilters = scanRel(Seq(c), scan).copy(
+          pushedFilters = Seq(pushed), inferredFilters = Seq(IsNotNull(padded)))
+        assert(withFilters.stats.rowCount.contains(BigInt(expectedRows)), pushed)
+      }
+    }
+  }
+
   test("inferred filters improve estimates for opaque original predicates") {
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val base = scanWithCorrelatedColumns()
@@ -330,6 +361,14 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
         assert(scan.stats == base.stats)
       }
     }
+  }
+
+  test("SPARK-61870: a scan with only row-wise pushdowns reads the same rows again") {
+    val scan = scanRel(Seq(AttributeReference("id", IntegerType)()),
+      newStatsScan(v2Statistics(rows = OptionalLong.of(1L))))
+    assert(!scan.isRepeatableRead)
+    assert(scan.copy(onlyRowWisePushdowns = true).isRepeatableRead)
+    assert(scan.copy(repeatableRead = true).isRepeatableRead)
   }
 
   test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
@@ -722,6 +761,30 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     // ... but the column ID is preserved.
     assert(field.id.contains("1"))
     assert(field.metadata.contains(FIELD_ID_METADATA_KEY))
+  }
+
+  test("withMetadataColumns preserves tags") {
+    val table = new Table with SupportsMetadataColumns {
+      override def name(): String = "t"
+      override def columns(): Array[Column] = Array(Column.create("id", IntegerType))
+      override def metadataColumns(): Array[MetadataColumn] =
+        Array(new MetadataColumn {
+          override def name(): String = "index"
+          override def dataType(): DataType = IntegerType
+          override def isNullable(): Boolean = false
+        })
+      override def capabilities(): util.Set[TableCapability] =
+        util.Set.of[TableCapability]()
+    }
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val tag = TreeNodeTag[Unit]("metadata-columns-test")
+    relation.setTagValue(tag, ())
+
+    val relationWithMetadata = relation.withMetadataColumns()
+
+    assert(relationWithMetadata ne relation)
+    assert(relationWithMetadata.getTagValue(tag).contains(()))
   }
 
   test("nodePatterns declare the DSv2 relation identity tree patterns") {

@@ -434,14 +434,18 @@ class QueryContext(ABC):
     @abstractmethod
     def startIndex(self) -> int:
         """
-        The starting index in the query text which throws the exception. The index starts from 0.
+        The starting index in the query text which throws the exception.
+
+        The index is a 0-based Unicode code-point offset.
         """
         ...
 
     @abstractmethod
     def stopIndex(self) -> int:
         """
-        The stopping index in the query which throws the exception. The index starts from 0.
+        The stopping index in the query text which throws the exception.
+
+        The index is a 0-based Unicode code-point offset, inclusive.
         """
         ...
 

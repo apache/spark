@@ -23,6 +23,7 @@ correctness of the pipelined data transfer path for various UDF types.
 """
 
 import os
+import time
 import unittest
 
 from pyspark import SparkConf
@@ -70,8 +71,40 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             flag = os.environ.get("SPARK_PIPELINED_UDF", "not_set")
             return pd.Series([flag] * len(x))
 
-        result = self.spark.range(1).select(check_env(col("id"))).first()[0]
-        self.assertEqual(result, "1", "JVM should set SPARK_PIPELINED_UDF=1")
+        result = self.spark.range(1, numPartitions=1).select(check_env(col("id")))
+        self.assertEqual(result.collect()[0][0], "1", "JVM should set SPARK_PIPELINED_UDF=1")
+        plan = result._jdf.queryExecution().executedPlan()
+        while plan.nodeName() != "ArrowEvalPython":
+            self.assertEqual(plan.children().size(), 1)
+            plan = plan.children().apply(0)
+        self.assertEqual(plan.metrics().apply("pythonNumPipelinedTasks").value(), 1)
+
+    def test_detailed_timing_is_disabled(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            data = self.spark.range(2, numPartitions=1)
+            for name, build in (
+                (
+                    "arrow batched",
+                    lambda: data.select(udf(lambda value: value, "long", useArrow=True)("id")),
+                ),
+                ("map pandas", lambda: data.mapInPandas(lambda dfs: dfs, "id long")),
+            ):
+                with self.subTest(handler=name):
+                    result = build()
+                    self.assertEqual([row[0] for row in result.collect()], [0, 1])
+                    plan = result._jdf.queryExecution().executedPlan()
+                    while not plan.metrics().contains("pythonProcessingTime"):
+                        self.assertEqual(plan.children().size(), 1)
+                        plan = plan.children().apply(0)
+                    metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 1)
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
 
     def test_scalar_arrow_udf(self):
         """Basic scalar Arrow UDF with pipelined mode."""
@@ -244,6 +277,67 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
         with self.assertRaisesRegex(Exception, "intentional error"):
             self.spark.range(10).select(bad_udf(col("id"))).collect()
+
+    def test_udf_kill_on_idle_timeout(self):
+        """A worker that produces no output within the idle timeout is killed.
+
+        All input has been sent to the worker by the time it is killed, so the failure comes
+        from the reader. The timeout leaves room for a worker that still has to initialize.
+        """
+        uds_enabled = self.spark.conf.get(
+            "spark.python.unix.domain.socket.enabled", os.environ.get("PYSPARK_UDS_MODE", "false")
+        )
+        if uds_enabled.lower() == "true":
+            self.skipTest("Pipelined mode has no idle timeout over Unix domain sockets.")
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "3s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @pandas_udf(LongType())
+            def slow_udf(x: pd.Series) -> pd.Series:
+                time.sleep(30)
+                return x
+
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 3 seconds\\)",
+            ):
+                self.spark.range(1).select(slow_udf(col("id"))).collect()
+
+    def test_udf_kill_on_idle_timeout_while_sending_input(self):
+        """The idle timeout is the error when the worker is killed while it is sent input.
+
+        The input is larger than what the socket buffers hold, so the writer is still sending
+        it when the worker is killed, and fails as well. The task fails with the idle timeout
+        and not with that failure of the writer.
+        """
+        uds_enabled = self.spark.conf.get(
+            "spark.python.unix.domain.socket.enabled", os.environ.get("PYSPARK_UDS_MODE", "false")
+        )
+        if uds_enabled.lower() == "true":
+            self.skipTest("Pipelined mode has no idle timeout over Unix domain sockets.")
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "3s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @pandas_udf(LongType())
+            def slow_udf(x: pd.Series) -> pd.Series:
+                time.sleep(30)
+                return x
+
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 3 seconds\\)",
+            ):
+                self.spark.range(0, 50000000, 1, 1).select(slow_udf(col("id"))).collect()
 
     def test_offheap_reader_with_head_does_not_segfault(self):
         """Regression test: SPARK-33277 reproducer adapted for pipelined mode.

@@ -17,21 +17,36 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{sources, Column, Row}
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog}
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.TableInfo
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.types.StringType
+import java.util
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.logging.log4j.Level
+
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.{sources, Column, DataFrame, Row}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution
+import org.apache.spark.sql.classic.MergeIntoWriter
+import org.apache.spark.sql.connector.catalog.{Aborted, Column => V2Column, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, TableCapability}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.TableCapability.{ACCEPT_ANY_SCHEMA, AUTOMATIC_SCHEMA_EVOLUTION}
+import org.apache.spark.sql.connector.catalog.TableInfo
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
+
+@DataSourceV2Test
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
+    .set("spark.sql.catalog.non_txn", classOf[NonTransactionalRowLevelOperationCatalog].getName)
 
   import testImplicits._
 
@@ -266,6 +281,419 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         Seq(
           Row(1, 100, "hr"), // unchanged
           Row(2, 200, "finance"))) // update
+    }
+  }
+
+  test("merge into fails if a condition has an optional reference") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      // A column that the source does not have must not turn the condition into NULL IS NULL.
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("source.archived? IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "source.archived?", start = 0, stop = 15))
+
+        // Also in the plan of a subquery of an assignment.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched()
+              .update(Map("salary" -> expr("(SELECT max(bonus?) FROM source)")))
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "bonus?", start = 12, stop = 17))
+        // Also in a subquery built from a Dataset, whose plan is analyzed when it is built.
+        val maxBonus = "coalesce(max(bonus?[0]), 0)"
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched()
+              .update(Map("salary" -> spark.table("source").selectExpr(maxBonus).scalar()))
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = "bonus?",
+            start = maxBonus.indexOf("bonus?"),
+            stop = maxBonus.indexOf("bonus?") + 5))
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into fails if the source has an optional reference") {
+    withTempView("source", "source_v") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        // The unanalyzed plan of the source is analyzed as part of the MERGE, so a column that the
+        // source does not have must not make `is_deleted = true` false for every row, like in the
+        // source query of the SQL statement.
+        val sourceSql = "SELECT pk, is_deleted? AS is_deleted FROM source"
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(sourceSql)
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("is_deleted = true"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "is_deleted?", start = 11, stop = 21))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source").selectExpr("pk", "archived? AS archived")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "archived?", start = 0, stop = 8))
+
+        // A view resolves its own optional references, so a source that reads it is fine.
+        sql(s"CREATE TEMPORARY VIEW source_v AS $sourceSql")
+        spark.table("source_v")
+          .mergeInto(tableNameAsString, $"source_v.pk" === col(tableNameAsString + ".pk"))
+          .whenMatched(expr("source_v.is_deleted = true"))
+          .delete()
+          .merge()
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into fails if an analyzed operation of the source has an optional reference") {
+    withTempView("source", "source_v") {
+      withUserDefinedFunction(
+          "archived_flag" -> true, "source_rows" -> true, "flag_rows" -> true) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |""".stripMargin)
+        Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        val target = tableNameAsString
+
+        def merge(source: DataFrame): Unit = {
+          source
+            .mergeInto(target, $"s.pk" === col(target + ".pk"))
+            .whenMatched(expr("s.archived = true"))
+            .delete()
+            .merge()
+        }
+
+        def checkMergeFails(source: => DataFrame, sqlText: String, reference: String): Unit = {
+          checkError(
+            exception = intercept[AnalysisException](merge(source)),
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = reference,
+              start = sqlText.indexOf(reference),
+              stop = sqlText.indexOf(reference) + reference.length - 1))
+        }
+
+        withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          // A Dataset operation builds on the analyzed plan of the one before it, so the optional
+          // reference of the `selectExpr` is already the NULL that it resolved to.
+          val selected = spark.table("source").selectExpr("pk", "archived? AS archived")
+          Seq(selected.as("s"), selected.filter("pk > 0").as("s")).foreach { source =>
+            checkError(
+              exception = intercept[AnalysisException](merge(source)),
+              condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+              sqlState = "0A000",
+              parameters = Map("context" -> "MERGE"),
+              context = ExpectedContext(fragment = "archived?", start = 0, stop = 8))
+          }
+          // Also a path of a missing VARIANT column.
+          checkError(
+            exception = intercept[AnalysisException] {
+              merge(spark.table("source")
+                .selectExpr("pk", "CAST(missing?:a AS BOOLEAN) AS archived").as("s"))
+            },
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(fragment = "missing?:a", start = 5, stop = 14))
+          // The rest of the analysis of the operation can replace the NULL that the reference
+          // resolved to: an extraction from it, an IF over it, and a row of an inline table are
+          // folded, and an argument of a SQL table function is a part of the plan of the function.
+          Seq(
+            "attrs?['active']" -> "attrs?",
+            "tags?[0]" -> "tags?",
+            "items?[0].sku" -> "items?",
+            "IF(is_active?, true, false)" -> "is_active?"
+          ).foreach { case (expression, reference) =>
+            val selectItem = s"$expression AS archived"
+            checkMergeFails(
+              spark.table("source").selectExpr("pk", selectItem).as("s"), selectItem, reference)
+          }
+          val inlineTable = "SELECT * FROM VALUES (1, flag?) AS t(pk, archived)"
+          checkMergeFails(spark.sql(inlineTable).as("s"), inlineTable, "flag?")
+          // The single-pass resolver records the NULL on the plan that it returns as well.
+          val ifItem = "IF(is_active?, true, false) AS archived"
+          val singlePassSource =
+            withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+              spark.table("source").selectExpr("pk", ifItem)
+            }
+          checkMergeFails(singlePassSource.as("s"), ifItem, "is_active?")
+          sql("CREATE TEMPORARY FUNCTION flag_rows(flag BOOLEAN) " +
+            "RETURNS TABLE (archived BOOLEAN) RETURN SELECT flag")
+          val lateralCall = "SELECT pk, f.archived FROM source, LATERAL flag_rows(archived?) f"
+          checkMergeFails(spark.sql(lateralCall).as("s"), lateralCall, "archived?")
+
+          // The common table expressions of an unanalyzed source are not children of its plan.
+          val withCte = "WITH s AS (SELECT pk, archived? AS archived FROM source) SELECT * FROM s"
+          checkError(
+            exception = intercept[AnalysisException](merge(spark.sql(withCte))),
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = "archived?",
+              start = withCte.indexOf("archived?"),
+              stop = withCte.indexOf("archived?") + 8))
+
+          // Views and SQL functions resolve their own optional references, also when an
+          // operation follows the one that reads them.
+          sql("CREATE TEMPORARY VIEW source_v AS SELECT pk, archived? AS archived FROM source")
+          sql("CREATE TEMPORARY FUNCTION archived_flag() RETURNS BOOLEAN " +
+            "RETURN coalesce(archived?, false)")
+          sql("CREATE TEMPORARY FUNCTION source_rows() RETURNS TABLE (pk INT, archived BOOLEAN) " +
+            "RETURN SELECT pk, archived? FROM source")
+          merge(spark.table("source_v").as("s"))
+          merge(spark.table("source").selectExpr("pk", "archived_flag() AS archived").as("s"))
+          merge(spark.sql("SELECT * FROM source_rows()").as("s"))
+        }
+
+        // The analyzed operations of a source DataFrame keep their NULLs when optional references
+        // are disabled before the MERGE.
+        val builtWhileEnabled = withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          spark.table("source").selectExpr("pk", "attrs?['active'] AS archived")
+        }
+        checkMergeFails(builtWhileEnabled.as("s"), "attrs?['active'] AS archived", "attrs?")
+
+        checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+      }
+    }
+  }
+
+  test("merge into fails if a Dataset operation rebuilt an analyzed operation of the source " +
+      "that has an optional reference") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val target = tableNameAsString
+
+      def checkMergeFails(source: => DataFrame, sqlText: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException] {
+            source.as("s")
+              .mergeInto(target, $"s.pk" === col(target + ".pk"))
+              .whenMatched(expr("s.archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = "attrs?",
+            start = sqlText.indexOf("attrs?"),
+            stop = sqlText.indexOf("attrs?") + 5))
+      }
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        // The union of Datasets flattens the analyzed Union of the query into a new one.
+        val unionAll = "SELECT pk, attrs?['active'] AS archived FROM source " +
+          "UNION ALL SELECT pk + 1 AS pk, attrs?['active'] AS archived FROM source"
+        val other = spark.table("source").selectExpr("pk + 2 AS pk", "true AS archived")
+        checkMergeFails(spark.sql(unionAll).union(other), unionAll)
+        checkMergeFails(spark.sql(unionAll).unionAll(other), unionAll)
+        checkMergeFails(spark.sql(unionAll).unionByName(other), unionAll)
+        // So does the union of a distinct union of Datasets: it flattens the analyzed Distinct of
+        // a SQL UNION, and the Deduplicate of `distinct` over the Union of a UNION ALL. The other
+        // operands have the VOID type of `archived` in the query, as the cast that widens a type
+        // would come between the unions.
+        val union = unionAll.replace("UNION ALL", "UNION")
+        val voidOther = spark.table("source").selectExpr("pk + 2 AS pk", "NULL AS archived")
+        val voidLast = spark.table("source").selectExpr("pk + 3 AS pk", "NULL AS archived")
+        checkMergeFails(spark.sql(union).union(voidOther).distinct().union(voidLast), union)
+        checkMergeFails(
+          spark.sql(unionAll).distinct().union(voidOther).distinct().union(voidLast), unionAll)
+
+        // A join of Datasets with a condition, `joinWith`, and `joinAsOf` rebuild the analyzed
+        // Join whose condition has the reference.
+        val left = spark.table("source").as("l")
+        val right = spark.table("source").as("r")
+        val condition = "l.pk = r.pk AND attrs?['active'] IS NULL"
+        checkMergeFails(
+          left.join(right, expr(condition)).selectExpr("l.pk", "true AS archived"), condition)
+        Seq("inner", "left_outer").foreach { joinType =>
+          checkMergeFails(
+            left.joinWith(right, expr(condition), joinType)
+              .selectExpr("_1.pk AS pk", "true AS archived"),
+            condition)
+        }
+        checkMergeFails(
+          left
+            .joinAsOf(right, left("pk"), right("pk"), expr(condition), "inner",
+              tolerance = null, allowExactMatches = true, direction = "backward")
+            .selectExpr("l.pk", "true AS archived"),
+          condition)
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into fails if type coercion replaced the NULL of an optional reference in an " +
+      "analyzed operation of the source") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val target = tableNameAsString
+
+      def checkMergeFails(source: DataFrame, selectItem: String, reference: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException] {
+            source.as("s")
+              .mergeInto(target, $"s.pk" === col(target + ".pk"))
+              .whenMatched(expr("s.archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = reference,
+            start = selectItem.indexOf(reference),
+            stop = selectItem.indexOf(reference) + reference.length - 1))
+      }
+
+      withSQLConf(
+          SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val other = spark.table("source").selectExpr("pk + 1 AS pk", "NULL AS archived")
+        // Type coercion replaces the NULL of the reference with a NULL of the type that the
+        // comparison or `size` takes, so only the mark records the reference.
+        Seq(
+          "status? = 'deleted' AS archived" -> "status?",
+          "size(tags?) AS archived" -> "tags?"
+        ).foreach { case (selectItem, reference) =>
+          Seq("false", "true").foreach { singlePass =>
+            withClue(s"$selectItem with the single-pass resolver $singlePass: ") {
+              val selected =
+                withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+                  spark.table("source").selectExpr("pk", selectItem)
+                }
+              checkMergeFails(selected, selectItem, reference)
+              checkMergeFails(selected.union(other), selectItem, reference)
+              checkMergeFails(
+                selected.as("l").join(selected.as("r"), expr("l.pk = r.pk"))
+                  .selectExpr("l.pk", "l.archived"),
+                selectItem,
+                reference)
+            }
+          }
+        }
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into fails if the source has an unbound optional named parameter marker") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val sqlText = "SELECT pk, :p? AS archived FROM source WHERE pk = :q"
+      Seq(false, true).foreach { constantsOnly =>
+        withSQLConf(
+            SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+            SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString) {
+          // The marker without a value is the NULL of a missing reference, also when another
+          // marker of the source has a value.
+          val source = spark.sql(sqlText, Map("q" -> 1))
+          checkError(
+            exception = intercept[AnalysisException] {
+              source.as("s")
+                .mergeInto(tableNameAsString, $"s.pk" === col(tableNameAsString + ".pk"))
+                .whenMatched(expr("s.archived IS NULL"))
+                .delete()
+                .merge()
+            },
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = ":p?",
+              start = sqlText.indexOf(":p?"),
+              stop = sqlText.indexOf(":p?") + 2))
+        }
+      }
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into uses a source that a drop of a missing optional field left unchanged") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 200, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        val source = spark.table("source")
+          .selectExpr("pk", "salary", "named_struct('name', dep) AS info")
+        // The drop drops nothing, so its analysis returns the analyzed plan of `source`, which
+        // the NULL of `info.missing?` is not a part of.
+        val dropped = source.drop(expr("info.missing?"))
+        assert(dropped.columns === source.columns)
+        source.as("s")
+          .mergeInto(tableNameAsString, $"s.pk" === col(tableNameAsString + ".pk"))
+          .whenMatched()
+          .update(Map("salary" -> col("s.salary")))
+          .merge()
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 200, "hr")))
     }
   }
 
@@ -923,6 +1351,39 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("SPARK-60721: merge with assignments to metadata columns") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      Seq((1, "hr"), (3, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+
+      def mergeBuilder: MergeIntoWriter[Row] = spark.table("source")
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+
+      Seq(
+        mergeBuilder.whenMatched().update(Map("index" -> lit(5))) -> "index",
+        mergeBuilder.whenNotMatched().insert(Map(
+          "pk" -> col("source.pk"),
+          "salary" -> lit(0),
+          "dep" -> col("source.dep"),
+          "_partition" -> lit("x"))) -> "_partition"
+      ).foreach { case (writer, metadataCol) =>
+        val e = intercept[AnalysisException](writer.merge())
+        assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+        assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 200, "software"))) // unchanged
+    }
+  }
+
   test("merge refreshed relation cache") {
     withTempView("temp", "source") {
       withCache("temp") {
@@ -1185,6 +1646,76 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           Row(2, 200, "software"), // unchanged
           Row(3, 301, "support"), // insert
           Row(4, 401, "finance"))) // insert
+    }
+  }
+
+  test("schema evolution warns once per write only when both capabilities are present") {
+    val tableName = "non_txn.ns1.test_table"
+    for {
+      command <- Seq("INSERT", "MERGE")
+      (description, capabilities) <- Seq(
+        "neither capability" -> Set.empty[TableCapability],
+        "only ACCEPT_ANY_SCHEMA" -> Set(ACCEPT_ANY_SCHEMA),
+        "only AUTOMATIC_SCHEMA_EVOLUTION" -> Set(AUTOMATIC_SCHEMA_EVOLUTION),
+        "both capabilities" -> Set(AUTOMATIC_SCHEMA_EVOLUTION, ACCEPT_ANY_SCHEMA))
+      evolutionEnabled <- Seq(false, true)
+    } {
+      withClue(s"$command with $description, schema evolution=$evolutionEnabled: ") {
+        withTable(tableName) {
+          val acceptAnySchema = capabilities.contains(ACCEPT_ANY_SCHEMA)
+          val autoSchemaEvolution = capabilities.contains(AUTOMATIC_SCHEMA_EVOLUTION)
+          val warnOnEvolution = evolutionEnabled && acceptAnySchema && autoSchemaEvolution
+          sql(
+            s"""CREATE TABLE $tableName (pk INT) USING foo
+               |TBLPROPERTIES (
+               |  'accept-any-schema' = '$acceptAnySchema',
+               |  'auto-schema-evolution' = '$autoSchemaEvolution')
+               |""".stripMargin)
+          val initial = spark.createDataFrame(
+            Seq(Row(0)).asJava,
+            new StructType().add("pk", IntegerType))
+          val first = spark.createDataFrame(
+            Seq(Row(1, "a", true)).asJava,
+            initial.schema.add("data", StringType).add("active", BooleanType))
+          val next = spark.createDataFrame(
+            Seq(Row(2, "b", false, 2L)).asJava,
+            first.schema.add("score", LongType))
+
+          // A write matching the table schema does not warn.
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, initial, evolutionEnabled, capabilities,
+            expectWarning = false)
+
+          // Adding multiple columns emits at most one warning for the entire write.
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, first, evolutionEnabled, capabilities,
+            expectWarning = warnOnEvolution)
+
+          // A later request adding another column gets its own warning when applicable.
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, next, evolutionEnabled, capabilities,
+            expectWarning = warnOnEvolution)
+
+          // Repeating the write does not warn.
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, next, evolutionEnabled, capabilities, expectWarning = false)
+
+          val acceptsWrite = command == "INSERT" && acceptAnySchema
+          val evolvesAndWrites = evolutionEnabled && autoSchemaEvolution && !acceptAnySchema
+          val expectedRows = if (acceptsWrite || evolvesAndWrites) {
+            Seq(
+              Row(0, null, null, null),
+              Row(1, "a", true, null),
+              Row(2, "b", false, 2L),
+              Row(2, "b", false, 2L))
+          } else if (command == "MERGE" && acceptAnySchema) {
+            Nil
+          } else {
+            Seq(Row(0))
+          }
+          checkAnswer(spark.table(tableName), expectedRows)
+        }
+      }
     }
   }
 
@@ -1550,5 +2081,112 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             Row(2, 201, "software")))
       }
     }
+  }
+
+  // Test helpers.
+
+  private def checkSchemaEvolutionWriteWithWarning(
+      tableName: String,
+      command: String,
+      source: DataFrame,
+      evolutionEnabled: Boolean,
+      capabilities: Set[TableCapability],
+      expectWarning: Boolean): Unit = {
+    val originalSchema = spark.table(tableName).schema
+    val sourceSchema = source.schema.asNullable.toDDL
+    val schemaMatches = originalSchema.asNullable.toDDL == sourceSchema
+    val acceptAnySchema = capabilities.contains(ACCEPT_ANY_SCHEMA)
+    val evolvesSchema = evolutionEnabled &&
+      capabilities.contains(AUTOMATIC_SCHEMA_EVOLUTION) && !schemaMatches
+    val writeSucceeds = if (command == "MERGE" && acceptAnySchema) {
+      false
+    } else {
+      schemaMatches || evolvesSchema || acceptAnySchema
+    }
+    val expectedWarnings = if (expectWarning) {
+      Seq(schemaEvolutionWarning(tableName))
+    } else {
+      Nil
+    }
+    val appender = new LogAppender("schema evolution warning")
+    withLogAppender(
+        appender,
+        loggerNames = Seq(ResolveSchemaEvolution.getClass.getName.stripSuffix("$")),
+        level = Some(Level.WARN)) {
+      if (writeSucceeds) {
+        writeWithSchemaEvolution(tableName, command, source, evolutionEnabled)
+        assert(spark.table(tableName).schema.asNullable.toDDL == sourceSchema)
+      } else {
+        val error = intercept[AnalysisException] {
+          writeWithSchemaEvolution(tableName, command, source, evolutionEnabled)
+        }
+        val expectedError = if (command == "INSERT") {
+          "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS"
+        } else {
+          "UNRESOLVED_COLUMN.WITH_SUGGESTION"
+        }
+        assert(error.getCondition == expectedError)
+        val expectedSchema = if (evolvesSchema) sourceSchema else originalSchema.toDDL
+        assert(spark.table(tableName).schema.toDDL == expectedSchema)
+      }
+    }
+    val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
+      .map(_.getMessage.getFormattedMessage).toSeq
+    assert(warnings == expectedWarnings)
+  }
+
+  private def writeWithSchemaEvolution(
+      tableName: String,
+      command: String,
+      source: DataFrame,
+      evolutionEnabled: Boolean): Unit = {
+    if (command == "INSERT") {
+      val writer = source.write.mode("append")
+      if (evolutionEnabled) {
+        writer.withSchemaEvolution()
+      }
+      writer.insertInto(tableName)
+    } else {
+      // DataFrame columns supply resolved source values; Spark must still resolve target keys.
+      val assignments = source.columns.map(name => name -> source(name)).toMap
+      val writer = source.mergeInto(tableName, lit(false))
+        .whenNotMatched().insert(assignments)
+      if (evolutionEnabled) {
+        writer.withSchemaEvolution()
+      }
+      writer.merge()
+    }
+  }
+
+  private def schemaEvolutionWarning(tableName: String): String = {
+    s"Applying schema evolution to foo table $tableName, which reports both " +
+      "AUTOMATIC_SCHEMA_EVOLUTION and ACCEPT_ANY_SCHEMA capabilities. While " +
+      "AUTOMATIC_SCHEMA_EVOLUTION natively resolves and evolves the schema on a write " +
+      "schema evolution request, ACCEPT_ANY_SCHEMA skips native write schema " +
+      "resolution and alignment. This may cause the write to fail after the table " +
+      "schema has been updated. Consider disabling ACCEPT_ANY_SCHEMA."
+  }
+}
+
+class NonTransactionalRowLevelOperationCatalog extends InMemoryTableCatalog {
+
+  // scalastyle:off argcount
+  override protected def newInMemoryTable(
+      name: String,
+      columns: Array[V2Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    InMemoryRowLevelOperationTable.withColumns(
+      name, columns, partitioning, properties, constraints, id, schemaAlignmentConfig)
   }
 }

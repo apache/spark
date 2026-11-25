@@ -29,7 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   - if the max rows per partition of the child of local sort is less than or equal to 1,
  *     remove the local sort
  *   - if the max rows of the child of aggregate is less than or equal to 1 and its child and
- *     it's grouping only(include the rewritten distinct plan), convert aggregate to project
+ *     it's grouping only(include the rewritten distinct plan), convert aggregate to project,
+ *     unless the project would read float/double grouping keys that the aggregate normalizes
  *   - if the max rows of the child of aggregate is less than or equal to 1,
  *     set distinct to false in all aggregate expression
  *
@@ -51,7 +52,8 @@ object OptimizeOneRowPlan extends Rule[LogicalPlan] {
       case Sort(_, false, child, _) if child.maxRowsPerPartition.exists(_ <= 1L) &&
         isChildEligible(child, enableForStreaming) => child
       case agg @ Aggregate(_, _, child, _) if agg.groupOnly && child.maxRows.exists(_ <= 1L) &&
-        isChildEligible(child, enableForStreaming) =>
+        isChildEligible(child, enableForStreaming) &&
+        !NormalizeFloatingNumbers.readsNormalizedKeys(agg, agg.aggregateExpressions) =>
         Project(agg.aggregateExpressions, child)
       case agg: Aggregate if agg.child.maxRows.exists(_ <= 1L) &&
         isChildEligible(agg.child, enableForStreaming) =>

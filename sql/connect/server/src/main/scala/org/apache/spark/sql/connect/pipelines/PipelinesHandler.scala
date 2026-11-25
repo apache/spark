@@ -27,14 +27,16 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CATALOG_NAME, COMMAND, DATABASE_NAME}
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{OptionalReferences, PlanWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExecuteImmediate, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, UnresolvedInsert}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, Union, UnresolvedInsert, UnresolvedWith}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
@@ -83,12 +85,12 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
-        logInfo(s"Drop pipeline cmd received: $cmd")
+        logInfo(log"Drop pipeline cmd received: ${MDC(COMMAND, cmd)}")
         sessionHolder.dataflowGraphRegistry
           .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_OUTPUT =>
-        logInfo(s"Define pipelines output cmd received: $cmd")
+        logInfo(log"Define pipelines output cmd received: ${MDC(COMMAND, cmd)}")
         val resolvedDataset =
           defineOutput(cmd.getDefineOutput, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
@@ -105,7 +107,7 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
-        logInfo(s"Define pipelines flow cmd received: $cmd")
+        logInfo(log"Define pipelines flow cmd received: ${MDC(COMMAND, cmd)}")
         val resolvedFlow =
           defineFlow(
             cmd.getDefineFlow,
@@ -128,11 +130,11 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
-        logInfo(s"Start pipeline cmd received: $cmd")
+        logInfo(log"Start pipeline cmd received: ${MDC(COMMAND, cmd)}")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
-        logInfo(s"Register sql datasets cmd received: $cmd")
+        logInfo(log"Register sql datasets cmd received: ${MDC(COMMAND, cmd)}")
         defineSqlGraphElements(cmd.getDefineSqlGraphElements, sessionHolder)
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
@@ -150,6 +152,19 @@ private[connect] object PipelinesHandler extends Logging {
    * set of read-only operations (e.g., SHOW, DESCRIBE).
    */
   def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
+    queryPlan match {
+      // The parser can leave a statement named by an IDENTIFIER clause, such as
+      // IDENTIFIER('a' || 'b'), unbuilt until analysis evaluates the clause. Build the statement
+      // with a placeholder name and check it instead.
+      case p: PlanWithUnresolvedIdentifier =>
+        blockUnsupportedSqlCommand(p.planBuilder(Seq("placeholder"), p.children))
+      // The parser puts a DML statement with a CTE prefix, such as WITH ... INSERT INTO ..., under
+      // UnresolvedWith and builds a multi-insert, FROM ... INSERT ... INSERT ..., as a Union of
+      // its INSERTs. Check the statements under them.
+      case w: UnresolvedWith => blockUnsupportedSqlCommand(w.child)
+      case u: Union => u.children.foreach(blockUnsupportedSqlCommand)
+      case _ =>
+    }
     val allowlistedCommands = Set(
       classOf[DescribeRelation],
       classOf[DescribeTablePartition],
@@ -168,12 +183,17 @@ private[connect] object PipelinesHandler extends Logging {
       // Disable all [[Command]] except the ones that are explicitly allowlisted
       // in "allowlistedCommands".
       queryPlan.isInstanceOf[Command] ||
+      // EXECUTE IMMEDIATE runs a SQL string that is parsed only during analysis, and CALL runs a
+      // procedure during analysis.
+      queryPlan.isInstanceOf[UnresolvedExecuteImmediate] ||
+      queryPlan.isInstanceOf[ExecutableDuringAnalysis] ||
       // Following commands are not subclasses of [[Command]] but have side effects.
       queryPlan.isInstanceOf[CreateTableAsSelect] ||
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
       queryPlan.isInstanceOf[InsertIntoStatement] ||
       queryPlan.isInstanceOf[UnresolvedInsert] ||
+      queryPlan.isInstanceOf[InsertIntoDir] ||
       queryPlan.isInstanceOf[RenameTable] ||
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]
@@ -193,8 +213,8 @@ private[connect] object PipelinesHandler extends Logging {
       .getOrElse {
         val currentCatalog = sessionHolder.session.catalog.currentCatalog()
         logInfo(
-          "No default catalog was supplied. " +
-            s"Falling back to the current catalog: $currentCatalog.")
+          log"No default catalog was supplied. " +
+            log"Falling back to the current catalog: ${MDC(CATALOG_NAME, currentCatalog)}.")
         currentCatalog
       }
 
@@ -203,8 +223,8 @@ private[connect] object PipelinesHandler extends Logging {
       .getOrElse {
         val currentDatabase = sessionHolder.session.catalog.currentDatabase
         logInfo(
-          "No default database was supplied. " +
-            s"Falling back to the current database: $currentDatabase.")
+          log"No default database was supplied. " +
+            log"Falling back to the current database: ${MDC(DATABASE_NAME, currentDatabase)}.")
         currentDatabase
       }
 
@@ -278,7 +298,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
-              language = Option(Python())),
+              language = Some(Python)),
             format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
             isStreamingTable = output.getOutputType == proto.OutputType.TABLE))
@@ -298,7 +318,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Some(Python())),
+              language = Some(Python)),
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
@@ -318,7 +338,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Some(Python()))))
+              language = Some(Python))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
@@ -444,10 +464,23 @@ private[connect] object PipelinesHandler extends Logging {
         .nameParts,
       isStreaming = true)
 
-    val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
+    // Like the SQL form of the flow, reject optional references (`x?`): a column that the source
+    // does not have must not silently change which rows the flow deletes, or how it sequences
+    // them. The expressions still carry the markers of the parser.
+    val transformChangeArgument: proto.Expression => Expression = expr => {
+      val expression = transformExpressionFunc(expr)
+      OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
+        throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
+          "AUTO CDC",
+          reference.origin)
+      }
+      expression
+    }
+
+    val toColumn: proto.Expression => Column = expr => Column(transformChangeArgument(expr))
 
     val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName = expr =>
-      transformExpressionFunc(expr) match {
+      transformChangeArgument(expr) match {
         case a: UnresolvedAttribute => UnqualifiedColumnName(a.nameParts)
         case other =>
           throw new AnalysisException(
@@ -561,7 +594,7 @@ private[connect] object PipelinesHandler extends Logging {
       flow.getSourceCodeLocation.getLineNumber),
     objectType = Some(QueryOriginType.Flow.toString),
     objectName = Option(flowIdentifier.unquotedString),
-    language = Some(Python()))
+    language = Some(Python))
 
   private def startRun(
       cmd: proto.PipelineCommand.StartRun,
