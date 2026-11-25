@@ -233,21 +233,17 @@ object UnsupportedOperationChecker extends Logging {
   // into each of its inputs that contains the join; any other node that is not stateful is
   // followed into the one child that outputs all the traced columns. A path ends at another
   // operator that drops late rows: its own check traces every event time it outputs from the
-  // join. None as soon as one path cannot be followed, such as one through any other stateful
-  // operator.
+  // join. A path that no longer carries a traced column or the join counts no input. None as soon
+  // as one path cannot be followed, such as one through any other stateful operator.
   private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
-    def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] = {
-      val withJoin = paths.filter { case (plan, _) => plan.exists(_ eq join) }
-      if (withJoin.isEmpty) None else withJoin.foldLeft(Option(AttributeSet.empty)) {
-        // A path without such a column carries none of the join's event times.
-        case (sources, (plan, attrs)) => sources.flatMap { s =>
-          (if (attrs.isEmpty) Some(AttributeSet.empty) else trace(plan, AttributeSet(attrs)))
-            .map(s ++ _)
-        }
+    def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] =
+      paths.foldLeft(Option(AttributeSet.empty)) { case (sources, (plan, attrs)) =>
+        sources.flatMap(s => trace(plan, AttributeSet(attrs)).map(s ++ _))
       }
-    }
     def trace(plan: LogicalPlan, attrs: AttributeSet): Option[AttributeSet] = plan match {
       case p if p eq join => Some(attrs)
+      // A path without traced columns, or without the join, carries none of its event times.
+      case p if attrs.isEmpty || !p.exists(_ eq join) => Some(AttributeSet.empty)
       case Project(list, child) =>
         trace(child, AttributeSet(list.filter(e => attrs.contains(e.toAttribute))
           .flatMap(_.references)))

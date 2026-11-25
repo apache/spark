@@ -1122,14 +1122,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   // Each of these passes only because of one condition: the left semi join emits only its left
   // input, an operator whose input has no event time filters no joined row, and a join input
   // without an event time emits none. transformWithState in processing-time mode is a stateful
-  // operator through which the trace does not follow.
+  // operator through which the trace does not follow, so it isolates the first two conditions.
   Seq[(String, LogicalPlan)](
     "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime),
       scalaTransformWithState(Join(TestStreamingRelation(Seq(leftKey, leftTime)),
         TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
         Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE), ProcessingTime)),
     "an operator whose input has no event time" ->
-      Deduplicate(Seq(leftKey), Aggregate(Seq(leftKey), Seq(leftKey), keyOnlyJoin)),
+      Deduplicate(Seq(att), scalaTransformWithState(keyOnlyJoin, ProcessingTime)),
     "a watermark above a join of inputs without one" -> {
       val (lt, rt) = (leftTime.withMetadata(Metadata.empty), rightTime.withMetadata(Metadata.empty))
       val watermarked = EventTimeWatermark(java.util.UUID.randomUUID(), lt,
@@ -1140,6 +1140,28 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   ).foreach { case (name, plan) =>
     test(s"join output watermark: accept $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
+    }
+  }
+
+  // A path that carries no event time of the join counts no input, wherever it leaves the join:
+  // a time computed from a literal, or one that only a static relation outputs.
+  private val (dimKey, dimTime) = (AttributeReference("dk", IntegerType)(),
+    AttributeReference("dt", TimestampType, metadata = watermarkMetadata)())
+  private val joinWithStatic = Join(keyOnlyJoin, LocalRelation(dimKey, dimTime), Inner,
+    Some(leftKey === dimKey), JoinHint.NONE)
+  private def groupByLiteralTime(child: LogicalPlan): LogicalPlan = {
+    val time = Alias(Literal(0L, TimestampType), "lit")(explicitMetadata = Some(watermarkMetadata))
+    Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(child.output :+ time, child))
+  }
+  Seq[(String, LogicalPlan)](
+    "a literal time above a join with a static relation" -> groupByLiteralTime(joinWithStatic),
+    "a literal time above transformWithState in processing-time mode" ->
+      groupByLiteralTime(scalaTransformWithState(keyOnlyJoin, ProcessingTime)),
+    "a time that only a static relation outputs" ->
+      Aggregate(Seq(dimTime), Seq(dimTime), joinWithStatic)
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: key-only join before $name") {
       UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
     }
   }
