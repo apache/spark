@@ -4556,7 +4556,8 @@ object SQLConf {
         "operations and these rows can be discarded. Please refer the programming guide doc for " +
         "more details. Once the issue is detected, Spark will throw analysis exception. " +
         "When this config is disabled, Spark will just print warning message for users. " +
-        "Prior to Spark 3.1.0, the behavior is disabling this config.")
+        "Prior to Spark 3.1.0, the behavior is disabling this config. This config also covers " +
+        "the stream-stream join output watermark check.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -4572,7 +4573,9 @@ object SQLConf {
         "0: none. " +
         "1: the join output watermark check fails, in append mode, an operator that drops late " +
         "rows after a stream-stream join, when its event time can come from an input of the " +
-        "join that has a watermark but no state cutoff; below 1, it only logs a warning.")
+        "join that has a watermark but no state cutoff, while " +
+        s"${STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key} is true; below 1, or when that " +
+        "conf is false, it only logs a warning.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf

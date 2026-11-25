@@ -397,9 +397,9 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           "the state of the left input of a stream-stream join has no cutoff")))
       }
     }
-    Seq("-1", "2").foreach { version =>
+    Seq(-1, latestJoinCorrectnessVersion + 1).foreach { version =>
       intercept[IllegalArgumentException](
-        spark.conf.set(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key, version))
+        spark.conf.set(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key, version.toString))
     }
   }
 
@@ -412,7 +412,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           testStream(result)(start,
             MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer(), StopStream)
         }
-        // The checkpoint of this version records version 1, so the query fails when it restarts.
+        // The checkpoint of this version records the latest version, so the query fails when it
+        // restarts.
         testStream(result)(start,
           MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), expectRejected("left"))
         removeJoinCorrectnessVersion(checkpoint)
@@ -421,24 +422,29 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           testStream(result)(start,
             MultiAddData(leftInput, (3, 50L))(rightInput, (3, 50L)), ProcessAllAvailable())
         }
-        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-          "the state of the left input of a stream-stream join has no cutoff")))
+        // The check runs only on the first micro-batch of a run, here the replayed one.
+        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")) == 1)
       }
     }
   }
 
+  private def latestJoinCorrectnessVersion: Int =
+    SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.defaultValue.get
+
   // Removes the conf from the latest offset log entry, as versions without it wrote it.
   private def removeJoinCorrectnessVersion(checkpoint: File): Unit = {
     val key = SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key
+    val latest = latestJoinCorrectnessVersion.toString
     val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
     val log = new OffsetSeqLog(spark, offsetsPath)
     val (batchId, offsets) = log.getLatest().get
     val updated = offsets match {
       case o: OffsetSeq =>
-        assert(o.metadataOpt.exists(_.conf.get(key).contains("1")))
+        assert(o.metadataOpt.exists(_.conf.get(key).contains(latest)))
         o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
       case o: OffsetMap =>
-        assert(o.metadata.conf.get(key).contains("1"))
+        assert(o.metadata.conf.get(key).contains(latest))
         o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
     }
     val path = new Path(offsetsPath, batchId.toString)

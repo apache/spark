@@ -1166,6 +1166,19 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  // A join with a static relation on a range is not a stream-stream join, so it does not skip the
+  // check.
+  test("join output watermark: key-only join before a range join with a static relation") {
+    val (start, end) = (AttributeReference("s", TimestampType)(),
+      AttributeReference("e", TimestampType)())
+    val e = intercept[AnalysisException](
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(leftTime),
+        Seq(leftTime), Join(keyOnlyJoin, LocalRelation(start, end), Inner,
+          Some(leftTime >= start && leftTime < end), JoinHint.NONE)), Append))
+    assert(e.getMessage.contains(
+      "the state of the left input of a stream-stream join has no cutoff"))
+  }
+
   // Planning rejects this join with its own error. The right input has no cutoff, so the check
   // would reject the plan without its early return.
   test("join output watermark: a stream-stream join without an equality predicate") {
