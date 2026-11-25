@@ -507,22 +507,14 @@ case class CurrentBatchTimestamp(
 }
 
 /**
- * A date arithmetic expression that raises its overflow error in every evaluation mode, so it
- * keeps its own query context when it replaces an expression without one. For example, with ANSI
- * mode off, `d + 1` and `d1 - d2` are first analyzed into an `Add` and a `Subtract`, which have no
- * query context as they cannot fail, and the expressions that replace them should still point to
- * them in their errors.
+ * A date arithmetic expression that raises its overflow error in every evaluation mode, so it has
+ * a query context in every mode. With ANSI mode off, `d + 1` and `d1 - d2` are first analyzed
+ * into an `Add` and a `Subtract`, which have no query context as they cannot fail, and the
+ * expression that replaces them keeps its own, as `SupportQueryContext.copyTagsFrom` copies only
+ * a context with an origin.
  */
 trait DateArithmeticQueryContext extends SupportQueryContext {
   override def initQueryContext(): Option[QueryContext] = Some(origin.context)
-
-  override def copyTagsFrom(other: Expression): Unit = {
-    val ownContext = queryContext
-    super.copyTagsFrom(other)
-    if (queryContext.isEmpty) {
-      queryContext = ownContext
-    }
-  }
 }
 
 /**
