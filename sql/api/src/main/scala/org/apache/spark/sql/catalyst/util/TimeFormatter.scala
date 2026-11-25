@@ -33,8 +33,10 @@ sealed trait TimeFormatter extends Serializable {
 
   // A non-throwing variant of `parse`, returning None instead of throwing when the input cannot be
   // parsed. Used by schema inference to probe the time type without paying an exception per
-  // non-time value. Subclasses override it to return None without throwing for input that does
-  // not match the time format; out-of-range fields may still raise an exception caught internally.
+  // non-time value. Subclasses override it to return None instead of throwing, but some inputs
+  // may still raise an exception that is caught internally, for example out-of-range fields,
+  // conflicting fields under a pattern, or a time followed by an invalid zone in the default
+  // formatter.
   def parseOptional(s: String): Option[Long] =
     try {
       Some(parse(s))
