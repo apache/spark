@@ -29,5 +29,9 @@ case class RelationId(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty,
     isStreaming: Boolean = false,
-    timeTravelSpec: Option[TimeTravelSpec] = None
+    timeTravelSpec: Option[TimeTravelSpec] = None,
+    // Whether caller-supplied relations apply where the key is computed. A view body is resolved
+    // with them cleared, so it does not share the entry of a statement reference to the same
+    // identity, which reads the supplied relation.
+    suppliedRelations: Boolean = false
 )

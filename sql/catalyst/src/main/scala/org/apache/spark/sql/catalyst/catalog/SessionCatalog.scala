@@ -96,11 +96,20 @@ class SessionCatalog(
     hadoopConf: Configuration,
     val parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
-    functionExpressionBuilder: FunctionExpressionBuilder,
+    private[sql] val functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
     defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import SessionCatalog._
+
+  /**
+   * The session catalog this catalog is a per-call copy of (see parse_sql ANALYZE), or None for
+   * the session's own catalog. A copy hands its persistent function loads to the session catalog,
+   * after qualifying the name with its own current database. The builders are then created and
+   * registered by the session, under its lock, so the copy registers nothing in the registries it
+   * shares with the session.
+   */
+  @volatile private[sql] var sessionCatalog: Option[SessionCatalog] = None
   import CatalogTypes.TablePartitionSpec
 
   private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
@@ -2800,7 +2809,14 @@ class SessionCatalog(
    */
   def loadPersistentScalarFunction(name: FunctionIdentifier): V1Function = {
     val qualifiedIdent = qualifyIdentifier(name)
+    sessionCatalog match {
+      case Some(session) => session.loadPersistentScalarFunction(qualifiedIdent)
+      case None => loadQualifiedPersistentScalarFunction(qualifiedIdent)
+    }
+  }
 
+  private def loadQualifiedPersistentScalarFunction(
+      qualifiedIdent: FunctionIdentifier): V1Function = {
     // Check cache first (no synchronization needed for reads)
     functionRegistry.lookupFunctionEntry(qualifiedIdent) match {
       case Some((cachedInfo, cachedBuilder)) =>
@@ -2843,6 +2859,14 @@ class SessionCatalog(
    * Look up a persistent table function by name and resolves it to a LogicalPlan.
    */
   def resolvePersistentTableFunction(
+      name: FunctionIdentifier,
+      arguments: Seq[Expression]): LogicalPlan = sessionCatalog match {
+    case Some(session) =>
+      session.resolvePersistentTableFunction(qualifyIdentifier(name), arguments)
+    case None => resolveOwnPersistentTableFunction(name, arguments)
+  }
+
+  private def resolveOwnPersistentTableFunction(
       name: FunctionIdentifier,
       arguments: Seq[Expression]): LogicalPlan = synchronized {
     val qualifiedIdent = qualifyIdentifier(name)
