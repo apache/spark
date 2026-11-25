@@ -798,6 +798,20 @@ class GeographyType(SpatialType):
         geography._alg = alg
         return geography
 
+    # Equality of GEOGRAPHY types depends on the SRID and the algorithm only, as on the JVM side:
+    # the type parsed from "EPSG:4326" and the type constructed from SRID 4326 are the same type,
+    # although each keeps the CRS spelling it was created with for its JSON representation.
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            isinstance(other, self.__class__)
+            and self.srid == other.srid
+            and self._alg == other._alg
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.__class__.__name__, self.srid, self._alg))
+
     def simpleString(self) -> str:
         if self.srid == GeographyType.MIXED_SRID:
             # The mixed SRID type is displayed with a special string value "ANY".
@@ -895,6 +909,16 @@ class GeometryType(SpatialType):
         geometry = GeometryType(srid)
         geometry._crs = crs
         return geometry
+
+    # Equality of GEOMETRY types depends on the SRID only, as on the JVM side: the type parsed
+    # from "EPSG:4326" and the type constructed from SRID 4326 are the same type, although each
+    # keeps the CRS spelling it was created with for its JSON representation.
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, self.__class__) and self.srid == other.srid
+
+    def __hash__(self) -> int:
+        return hash((self.__class__.__name__, self.srid))
 
     def simpleString(self) -> str:
         if self.srid == GeometryType.MIXED_SRID:

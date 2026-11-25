@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.sql.types import GeometryType
+from pyspark.sql.types import GeographyType, GeometryType
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -74,22 +74,42 @@ class GeometryTypeTestMixin:
     # The tests below verify GEOMETRY type object equality based on SRID values.
 
     def test_geometrytype_same_srid_values(self):
-        """Test that two GeometryTypes with specified SRIDs have the same SRID values."""
+        """Test that two GeometryTypes with the same SRID are equal, however they were built."""
 
-        for srid in [0, 3857, 4326]:
+        for srid in [0, 3857, 4326, 2154]:
             geometry_type_1 = GeometryType(srid)
             geometry_type_2 = GeometryType(srid)
             self.assertEqual(geometry_type_1.srid, geometry_type_2.srid)
+            self.assertEqual(geometry_type_1, geometry_type_2)
+            self.assertEqual(hash(geometry_type_1), hash(geometry_type_2))
+
+        # Equality depends on the SRID only, as on the JVM side: a type parsed from any CRS string
+        # equals the type constructed from the SRID it resolves to, whatever the CRS spelling.
+        supported_crs = {"EPSG:4326": 4326, "OGC:CRS84": 4326, "EPSG:4269": 4269, "SRID:0": 0}
+        for crs, srid in supported_crs.items():
+            geometry_type_from_crs = GeometryType._from_crs(crs)
+            self.assertEqual(geometry_type_from_crs, GeometryType(srid))
+            self.assertEqual(GeometryType(srid), geometry_type_from_crs)
+            self.assertEqual(hash(geometry_type_from_crs), hash(GeometryType(srid)))
+        self.assertEqual(GeometryType._from_crs("EPSG:4326"), GeometryType._from_crs("OGC:CRS84"))
+        self.assertEqual(GeometryType("ANY"), GeometryType._from_crs("srid:any"))
+        self.assertEqual(len({GeometryType(4326), GeometryType._from_crs("EPSG:4326")}), 1)
 
     def test_geometrytype_different_srid_values(self):
-        """Test that two GeometryTypes with specified SRIDs have different SRID values."""
+        """Test that two GeometryTypes with different SRIDs are not equal."""
 
         for srid in [0, 4326]:
             geometry_type_1 = GeometryType(srid)
             geometry_type_2 = GeometryType("ANY")
             self.assertNotEqual(geometry_type_1.srid, geometry_type_2.srid)
+            self.assertNotEqual(geometry_type_1, geometry_type_2)
             geometry_type_3 = GeometryType(3857)
             self.assertNotEqual(geometry_type_1.srid, geometry_type_3.srid)
+            self.assertNotEqual(geometry_type_1, geometry_type_3)
+
+        # A geometry and a geography with the same SRID are different types.
+        self.assertNotEqual(GeometryType(4326), GeographyType(4326))
+        self.assertNotEqual(GeometryType("ANY"), GeographyType("ANY"))
 
     # The tests below verify GEOMETRY type JSON parsing based on the CRS value.
 
