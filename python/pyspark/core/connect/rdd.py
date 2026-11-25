@@ -2147,6 +2147,8 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         self.ctx = prev.ctx
         self.prev = prev
         self._df_cache: Optional["ConnectDataFrame"] = None
+        # The DataFrame of the RDD of the first function that `_df_cache` computes from.
+        self._df_cache_input: Optional["ConnectDataFrame"] = None
         self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
@@ -2212,10 +2214,38 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
             udf.python_hash_seed = hash_seed
 
         self._df_cache = _RDDRelationPlan.relation_dataframe(self._cctx, map_partitions, input_df)
+        self._df_cache_input = input_df
         return self._df_cache
 
     def _set_df(self, df: "ConnectDataFrame") -> None:
         self._df_cache = df
+        self._df_cache_input = None
+
+    def _pinned(self: "PipelinedRDD[T, U]") -> "RDD[U]":
+        """
+        The functions of this RDD on the RDD of the first function planned once on the server (see
+        ``_pin_plan``), for an action that runs several jobs on it. The function of each job is then
+        composed with them and run in one Python worker, as the jobs on a PipelinedRDD of Spark
+        Classic run, rather than on their output in another worker. For instance, a ``take`` after
+        ``reduceByKey`` runs with the merge of its values, which reads the input of the worker to
+        the end, so the worker is reused, while a worker whose function stops early is not.
+        """
+        if not self._is_pipelinable():
+            # Its functions are not composed with those of the jobs.
+            return super()._pinned()
+        prev = self._prev_rdd._pinned()
+        if prev is self._prev_rdd and (
+            self._df_cache is None or self._df_cache_input is self._prev_rdd._df
+        ):
+            return self
+        # Also when the RDD of the first function was pinned after the plan of this RDD was built.
+        rdd = PipelinedRDD(prev, self.func, self.preservesPartitioning, self.is_barrier)
+        rdd._jrdd_deserializer = self._jrdd_deserializer
+        rdd._bypass_serializer = self._bypass_serializer
+        rdd._output_pairs = self._output_pairs
+        rdd.partitioner = self.partitioner
+        rdd._server_partitioner = self._server_partitioner
+        return rdd
 
     def _is_pipelinable(self) -> bool:
         return not (self.is_cached or self.is_checkpointed or self.has_resource_profile)

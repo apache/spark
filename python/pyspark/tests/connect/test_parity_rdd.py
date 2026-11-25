@@ -313,6 +313,36 @@ print(sorted(m for m in set(sys.modules) - before if m.startswith(client)))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "[]")
 
+    def test_pinned_rdd_runs_its_functions_with_those_of_the_jobs(self):
+        # An action of several jobs pins the RDD of the first function of a PipelinedRDD, and runs
+        # the functions on it again, so that each job composes its function with them in one Python
+        # worker, as in Spark Classic: a take after a reduceByKey runs with the merge of its values,
+        # which reads the whole input of the worker, so that the worker is reused.
+        from pyspark.core.connect.rdd import PipelinedRDD
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        rdd = self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max, 3)
+        pinned = rdd._pinned()
+        self.assertIsInstance(pinned, PipelinedRDD)
+        self.assertIsInstance(pinned._prev_rdd._df._plan, CachedRemoteRelation)
+        self.assertEqual(pinned.getNumPartitions(), 3)
+        self.assertEqual(sorted(pinned.collect()), [(0, 9), (1, 7), (2, 8)])
+        self.assertEqual(sorted(rdd.take(3)), [(0, 9), (1, 7), (2, 8)])
+        # Also when the RDD of the first function was pinned after the plan of the RDD was built.
+        mapped = self.spark.range(10).repartition(2).rdd.map(lambda r: r.id)
+        self.assertEqual(sorted(mapped.collect()), list(range(10)))
+        mapped.getNumPartitions()
+        pinned = mapped._pinned()
+        self.assertIsInstance(pinned, PipelinedRDD)
+        self.assertIsInstance(pinned._prev_rdd._df._plan, CachedRemoteRelation)
+        self.assertEqual(sorted(mapped.take(10)), list(range(10)))
+        # A persisted RDD is not pinned: its jobs share its cache.
+        cached = rdd.cache()
+        try:
+            self.assertIs(cached._pinned(), cached)
+        finally:
+            cached.unpersist()
+
     def test_set_checkpoint_dir_not_supported(self):
         with self.assertRaises(PySparkNotImplementedError):
             self.sc.setCheckpointDir("/tmp/connect-rdd-checkpoint")
