@@ -140,13 +140,17 @@ class RowsToArrowConverter:
                     "actual": str(num_columns),
                 },
             )
+        # Read once: `batch.schema.names` builds a new list on each access, and a lookup checks
+        # every batch that it returns.
+        batch_names = batch.schema.names
+        batch_name_set = set(batch_names)
         for name in self.column_names:
-            if name not in batch.schema.names:
+            if name not in batch_name_set:
                 raise PySparkRuntimeError(
                     errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
                     messageParameters={
                         "expected": str(self.column_names),
-                        "actual": str(batch.schema.names),
+                        "actual": str(batch_names),
                     },
                 )
         # Validate that the Arrow schema types match the expected output schema.

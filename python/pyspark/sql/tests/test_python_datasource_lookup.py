@@ -160,7 +160,49 @@ class BatchLookupReader(DataSourceLookupReader):
             events.append("finally")
 
 
+class ListPairsLookupReader(DataSourceLookupReader):
+    """Returns the given items as the results of a lookup."""
+
+    def __init__(self, items) -> None:
+        self.items = items
+
+    def selectLookupPredicates(self, candidates):
+        return range(len(candidates))
+
+    def lookup(self, parameters):
+        yield from self.items
+
+
+class DocExampleLookupReader(DataSourceLookupReader):
+    """The RecordBatch example of `DataSourceLookupReader.lookup`, over a dictionary."""
+
+    def __init__(self, rows) -> None:
+        self.rows = rows
+
+    def selectLookupPredicates(self, candidates):
+        return range(len(candidates))
+
+    def lookup(self, parameters):
+        import pyarrow as pa
+
+        ordinals, user_ids, names = [], [], []
+        for ordinal, (user_id,) in enumerate(parameters):
+            for row in self.rows.get(user_id, []):
+                ordinals.append(ordinal)
+                user_ids.append(row[0])
+                names.append(row[1])
+        yield pa.RecordBatch.from_arrays(
+            [
+                pa.array(ordinals, pa.int32()),
+                pa.array(user_ids, pa.int64()),
+                pa.array(names, pa.string()),
+            ],
+            names=["ordinal", "user_id", "name"],
+        )
+
+
 READ_SCHEMA = StructType([StructField("id", LongType()), StructField("name", StringType())])
+USER_SCHEMA = StructType([StructField("user_id", LongType()), StructField("name", StringType())])
 
 
 class LookupWorkerClient:
@@ -450,6 +492,31 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
                 client = self.client(PairLookupReader((0, row)), read_schema=read_schema)
                 client.lookup_error((1,), error_type=error_type)
 
+    def test_first_result_of_neither_form_names_both_forms(self):
+        table = pa.table({"o": [0], "id": [1], "name": ["a"]})
+        for item in [table, Row(a=0, b=(1, "one")), (0, (1, "one"), 2), 0, None]:
+            with self.subTest(item=type(item).__name__):
+                client = self.client(PairLookupReader(item))
+                error = client.lookup_error((1,))
+                self.assertEqual(error.getCondition(), "DATA_SOURCE_INVALID_RETURN_TYPE")
+                self.assertEqual(
+                    error.getMessageParameters()["supported_types"],
+                    "(ordinal, row) tuple, `pyarrow.RecordBatch`",
+                )
+        client = self.client(ListPairsLookupReader([(0, (1, "one")), table]))
+        error = client.lookup_error((1,))
+        self.assertEqual(error.getMessageParameters()["supported_types"], "(ordinal, row) tuple")
+
+    def test_record_batch_form_of_the_docstring_example(self):
+        # The example of `DataSourceLookupReader.lookup` gives each column its type, so a
+        # request without a match returns no row instead of failing the schema check.
+        client = self.client(DocExampleLookupReader({1: [(1, "one")]}), read_schema=USER_SCHEMA)
+        batches, status = client.lookup((7,), (8,))
+        self.assertEqual(self.rows(batches), [])
+        self.assertEqual(status, client.protocol.STATUS_COMPLETE)
+        batches, _ = client.lookup((7,), (1,))
+        self.assertEqual(self.rows(batches), [{"ordinal": 1, "user_id": 1, "name": "one"}])
+
     @staticmethod
     def echo_batches(parameters):
         """The results of `EchoLookupReader`, as one `pyarrow.RecordBatch` with int64 ordinals."""
@@ -491,6 +558,8 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
         for ordinals, expected in [
             (pa.array([0, 1], pa.int8()), [0, 1]),
             (pa.array([2**40], pa.uint64()), [2**31 - 1]),
+            (pa.array([2**63, 2**64 - 1], pa.uint64()), [2**31 - 1, 2**31 - 1]),
+            (pa.array([2**32 - 1], pa.uint32()), [2**31 - 1]),
             (pa.array([-(2**40)], pa.int64()), [-(2**31)]),
         ]:
             with self.subTest(ordinals=ordinals):
