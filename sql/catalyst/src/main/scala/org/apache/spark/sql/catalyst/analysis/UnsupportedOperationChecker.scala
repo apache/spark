@@ -162,8 +162,8 @@ object UnsupportedOperationChecker extends Logging {
    * its event time can come from an input of the join that has a watermark but no state cutoff, as
    * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
    * plan, whose join conditions eviction uses, and in which the optimizer has replaced every CTE
-   * reference, MATERIALIZED ones included. A query from a checkpoint without
-   * `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   * reference, MATERIALIZED ones included. Below `STREAMING_JOIN_CORRECTNESS_VERSION` 1, as for a
+   * query from a checkpoint without it, it only logs a warning.
    */
   def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     // TODO: Update mode is not checked, although its aggregations also drop late rows.
@@ -180,7 +180,7 @@ object UnsupportedOperationChecker extends Logging {
       return
     }
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled &&
-      SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
+      SQLConf.get.getConf(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION) >= 1
     try {
       plan.foreach { subPlan =>
         if (dropsLateRows(subPlan)) {

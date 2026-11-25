@@ -384,6 +384,25 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     }
   }
 
+  test("a key-only join before a window aggregation only warns with join correctness version 0") {
+    withJoinConf(4) {
+      withSQLConf(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key -> "0") {
+        val (leftInput, rightInput, result) = countJoined(keyOnly, "leftTime")
+        val logAppender = new LogAppender("join output watermark")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          testStream(result)(
+            MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer())
+        }
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")))
+      }
+    }
+    Seq("-1", "2").foreach { version =>
+      intercept[IllegalArgumentException](
+        spark.conf.set(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key, version))
+    }
+  }
+
   test("a key-only join before a window aggregation keeps running from an older checkpoint") {
     withJoinConf(4) {
       withTempDir { checkpoint =>
@@ -393,10 +412,10 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
           testStream(result)(start,
             MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer(), StopStream)
         }
-        // The checkpoint of this version is checked when the query restarts.
+        // The checkpoint of this version records version 1, so the query fails when it restarts.
         testStream(result)(start,
           MultiAddData(leftInput, (2, 40L))(rightInput, (2, 40L)), expectRejected("left"))
-        removeCheckJoinOutputWatermark(checkpoint)
+        removeJoinCorrectnessVersion(checkpoint)
         val logAppender = new LogAppender("join output watermark")
         withLogAppender(logAppender, level = Some(Level.WARN)) {
           testStream(result)(start,
@@ -409,17 +428,17 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // Removes the conf from the latest offset log entry, as versions without it wrote it.
-  private def removeCheckJoinOutputWatermark(checkpoint: File): Unit = {
-    val key = SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK.key
+  private def removeJoinCorrectnessVersion(checkpoint: File): Unit = {
+    val key = SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION.key
     val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
     val log = new OffsetSeqLog(spark, offsetsPath)
     val (batchId, offsets) = log.getLatest().get
     val updated = offsets match {
       case o: OffsetSeq =>
-        assert(o.metadataOpt.exists(_.conf.contains(key)))
+        assert(o.metadataOpt.exists(_.conf.get(key).contains("1")))
         o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
       case o: OffsetMap =>
-        assert(o.metadata.conf.contains(key))
+        assert(o.metadata.conf.get(key).contains("1"))
         o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
     }
     val path = new Path(offsetsPath, batchId.toString)

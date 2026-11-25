@@ -4561,19 +4561,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK =
-    buildConf("spark.sql.streaming.statefulOperator.checkJoinOutputWatermark")
+  private val STREAMING_JOIN_LATEST_CORRECTNESS_VERSION = 1
+
+  val STREAMING_JOIN_CORRECTNESS_VERSION =
+    buildConf("spark.sql.streaming.join.correctnessVersion")
       .internal()
-      .doc("When true, the correctness check of chained stateful operators also covers, in " +
-        "append mode, an operator that drops late rows after a stream-stream join, when its " +
-        "event time can come from an input of the join that has a watermark but no state " +
-        "cutoff. " +
-        "When false, such a query only logs a warning. A streaming query restarted from a " +
-        "checkpoint written without this config uses false.")
+      .doc("The stream-stream join correctness fixes that a streaming query uses. Each version " +
+        "adds one fix to those of the versions below it. A streaming query restarted from a " +
+        "checkpoint uses the version it recorded, and 0 if it recorded none. " +
+        "0: none. " +
+        "1: the join output watermark check fails, in append mode, an operator that drops late " +
+        "rows after a stream-stream join, when its event time can come from an input of the " +
+        "join that has a watermark but no state cutoff; below 1, it only logs a warning.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(true)
+      .intConf
+      .checkValue(v => v >= 0 && v <= STREAMING_JOIN_LATEST_CORRECTNESS_VERSION,
+        s"The version must be between 0 and $STREAMING_JOIN_LATEST_CORRECTNESS_VERSION.")
+      .createWithDefault(STREAMING_JOIN_LATEST_CORRECTNESS_VERSION)
 
   val STATEFUL_OPERATOR_ALLOW_MULTIPLE =
     buildConf("spark.sql.streaming.statefulOperator.allowMultiple")
