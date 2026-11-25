@@ -288,6 +288,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statementType, colName, defaultSQL)
     }
+    // A DEFAULT clause of SQL text cannot have optional references, see
+    // `OptionalReferenceValidation`, and neither can a default from metadata.
+    OptionalReferences.unresolvedOptionalReference(defaultExpr).foreach { reference =>
+      throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(
+        "DEFAULT", reference.origin)
+    }
 
     // Analyze the parse result.
     val plan = try {

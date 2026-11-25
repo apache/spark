@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
+import scala.util.Success
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -578,6 +579,15 @@ case class KeyLayout(
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
+
+  /**
+   * Whether `other` carries the same layout state: whether the keys are unique, whether they were
+   * collapsed, and why they repeat. The unknown-keys state is not asked, since it records where
+   * rows of an undeclared key were placed rather than how the layout describes its keys.
+   */
+  def describesSameLayoutState(other: KeyLayout): Boolean =
+    isGrouped == other.isGrouped && isCollapsed == other.isCollapsed &&
+      ungroupingOrigin == other.ungroupingOrigin
 }
 
 /**
@@ -2676,18 +2686,22 @@ case class KeyedShuffleSpec(
     // This covers transform positions only. An identity position is rebuilt over the other key
     // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
     // before this check, and are left to SPARK-60782.
-    // The storage check comes first, since it needs no call: a key it refuses is named, and the
-    // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
-    // not evaluated.
+    // The storage check comes first, since it needs no call, and a key it refuses is named. The
+    // call over a key it takes is asked without logging, see `isEvaluableQuietly`, and what
+    // resolving it throws is the error's cause.
     partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
       case ((te: TransformExpression, positionSet), t: TransformExpression) =>
         val columnType = te.references.head.dataType
         positionSet.iterator.map(clustering)
           .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
-          // The key the transform was rebuilt over is its column argument; its other children
-          // are literal parameters.
-          .orElse(Option.when(!canEvaluate(t))(t.columnSlots.head))
-          .foreach { key =>
+          .map((_, Option.empty[Throwable]))
+          .orElse(t.isEvaluableQuietly match {
+            case Success(true) => None
+            // The key the transform was rebuilt over is its column argument; its other children
+            // are literal parameters.
+            case evaluable => Some((t.columnSlots.head, evaluable.failed.toOption))
+          })
+          .foreach { case (key, cause) =>
             // `name()` and `inputTypes()` are connector code, which must not replace this error.
             val functionClass = t.function.getClass.getName
             val name = TransformExpression.orElse(t.function.name(), functionClass)
@@ -2698,7 +2712,8 @@ case class KeyedShuffleSpec(
               },
               columnType,
               TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
-              key)
+              key,
+              cause.orNull)
           }
       case _ =>
     }

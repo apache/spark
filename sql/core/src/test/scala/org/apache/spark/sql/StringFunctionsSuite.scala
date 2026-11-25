@@ -1112,6 +1112,21 @@ class StringFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("to_char: cached results are not reused for a different formatZeroAsBlank value") {
+    val query = "SELECT to_char(id, '999') AS s FROM range(1)"
+    withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "false") {
+      val cached = spark.sql(query).cache()
+      try {
+        checkAnswer(cached, Row("  0"))
+        withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+          checkAnswer(spark.sql(query), Row("   "))
+        }
+      } finally {
+        cached.unpersist(blocking = true)
+      }
+    }
+  }
+
   test("to_number") {
     val df = Seq("$78.12").toDF("a")
     checkAnswer(

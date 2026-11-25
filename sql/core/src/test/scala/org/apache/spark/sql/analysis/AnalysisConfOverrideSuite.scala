@@ -58,7 +58,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
 
   test("resolution config retention follows binding policies") {
     val sessionKey = SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key
-    val notApplicableKey = SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key
+    val notApplicableKey = SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED.key
     val persistedKey = SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key
     val catalogKey = "spark.sql.catalog.analysisConfOverrideSuite.option"
     val unknownKey = "spark.sql.analysisConfOverrideSuite.unknown." +
