@@ -19,15 +19,18 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.net.URI
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultCatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, DefaultCatalogManager, FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LookupFunctionsSuite extends PlanTest {
@@ -116,6 +119,141 @@ class LookupFunctionsSuite extends PlanTest {
     analyzer.LookupFunctions.apply(plan)
 
     assert(customerFunctionReg.getLookupFunctionCalledTimes == 2)
+  }
+
+  test("resolveFunctionName looks up scalar metadata before table metadata") {
+    val scalarRegistry = FunctionRegistry.builtin.clone()
+    val tableRegistry = TableFunctionRegistry.builtin.clone()
+    val catalog = new SessionCatalog(new InMemoryCatalog, scalarRegistry, tableRegistry)
+    val catalogManager = new DefaultCatalogManager(new CustomV2SessionCatalog(catalog), catalog)
+    val relationResolution = new RelationResolution(catalogManager, RelationCache.empty) {
+      override def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
+        fail("Built-in metadata lookup must not expand identifiers")
+      }
+    }
+    var tableLookups = 0
+    val functionResolution = new FunctionResolution(catalogManager, relationResolution) {
+      override def lookupBuiltinOrTempTableFunction(
+          nameParts: Seq[String]): Option[ExpressionInfo] = {
+        tableLookups += 1
+        super.lookupBuiltinOrTempTableFunction(nameParts)
+      }
+    }
+
+    val scalarInfo = scalarRegistry.lookupFunction(
+      FunctionRegistry.builtinFunctionIdentifier("explode")).get
+    val tableInfo = tableRegistry.lookupFunction(
+      FunctionRegistry.builtinFunctionIdentifier("range")).get
+    case class MetadataCase(
+        nameParts: Seq[String],
+        info: ExpressionInfo,
+        expectedTableLookups: Int)
+    val cases = Seq(
+      MetadataCase(Seq("ExPlOdE"), scalarInfo, 0),
+      MetadataCase(Seq("RaNgE"), tableInfo, 1),
+      MetadataCase(Seq("system", "builtin", "explode"), scalarInfo, 1))
+    cases.foreach { testCase =>
+      val resolved = functionResolution.resolveFunctionName(
+        UnresolvedFunctionName(testCase.nameParts, "DESCRIBE FUNCTION"))
+        .asInstanceOf[ResolvedNonPersistentFunc]
+      assert(resolved.name == testCase.nameParts.head)
+      assert(resolved.func.asInstanceOf[V1Function].info eq testCase.info)
+      assert(tableLookups == testCase.expectedTableLookups)
+    }
+  }
+
+  test("resolveFunctionName expands catalog fallbacks and qualifies missing names") {
+    val catalog = new SessionCatalog(new InMemoryCatalog, new SimpleFunctionRegistry)
+    val function = V1Function.metadataOnly(new ExpressionInfo("fake", "persistent_fn"))
+    val catalogError = new IllegalStateException("function catalog failure")
+    val loadedIdentifiers = ArrayBuffer.empty[Identifier]
+    val v2Catalog = new CustomV2SessionCatalog(catalog) {
+      override def name(): String = "loaded_catalog"
+      override def loadFunction(ident: Identifier): UnboundFunction = {
+        loadedIdentifiers += ident
+        ident.name() match {
+          case "persistent_fn" => function
+          case "broken_fn" => throw catalogError
+          case _ => throw new NoSuchFunctionException(ident)
+        }
+      }
+    }
+    val catalogManager = new DefaultCatalogManager(v2Catalog, catalog)
+    val expandedNames = ArrayBuffer.empty[Seq[String]]
+    val relationResolution = new RelationResolution(catalogManager, RelationCache.empty) {
+      override def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
+        expandedNames += nameParts
+        Seq(CatalogManager.SESSION_CATALOG_NAME, "expanded_ns", nameParts.last)
+      }
+    }
+    val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+    val persistent = UnresolvedFunctionName(Seq("persistent_fn"), "DESCRIBE FUNCTION")
+    val missing = UnresolvedFunctionName(
+      Seq("missing_fn"), "DESCRIBE FUNCTION", Some(Seq("stale_name")))
+    val broken = UnresolvedFunctionName(Seq("broken_fn"), "DESCRIBE FUNCTION")
+
+    assert(functionResolution.resolveFunctionName(persistent) == ResolvedPersistentFunc(
+      v2Catalog, Identifier.of(Array("expanded_ns"), "persistent_fn"), function))
+    assert(functionResolution.resolveFunctionName(missing) == missing.copy(
+      possibleQualifiedName = Some(Seq("loaded_catalog", "expanded_ns", "missing_fn"))))
+    assert(intercept[IllegalStateException] {
+      functionResolution.resolveFunctionName(broken)
+    } eq catalogError)
+    assert(expandedNames.toSeq == Seq(persistent, missing, broken).map(_.multipartIdentifier))
+    assert(loadedIdentifiers.toSeq == Seq("persistent_fn", "missing_fn", "broken_fn").map { name =>
+      Identifier.of(Array("expanded_ns"), name)
+    })
+  }
+
+  test("resolveFunctionName preserves the analyzer's catalog and initialized extractor") {
+    val catalog = new SessionCatalog(new InMemoryCatalog, new SimpleFunctionRegistry)
+    val sessionCatalog = new CustomV2SessionCatalog(catalog) {
+      override def loadFunction(ident: Identifier): UnboundFunction = {
+        throw new NoSuchFunctionException(ident)
+      }
+    }
+    val catalogManager = new DefaultCatalogManager(sessionCatalog, catalog)
+    val function = V1Function.metadataOnly(new ExpressionInfo("fake", "persistent_fn"))
+    val overrideCatalog = new CustomV2SessionCatalog(catalog) {
+      override def name(): String = "override_catalog"
+      override def loadFunction(ident: Identifier): UnboundFunction = {
+        if (ident.name() == "persistent_fn") function else throw new NoSuchFunctionException(ident)
+      }
+    }
+    val analyzer = new Analyzer(catalogManager) {
+      override def currentCatalog: CatalogPlugin = overrideCatalog
+    }
+    val initialConf = SQLConf.get.clone()
+    initialConf.setConf(StaticSQLConf.GLOBAL_TEMP_DATABASE, "initial_global")
+    SQLConf.withExistingConf(initialConf) {
+      assert(analyzer.CatalogAndIdentifier.unapply(Seq("initial_global", "probe"))
+        .exists(_._1 eq sessionCatalog))
+    }
+    val laterConf = initialConf.clone()
+    laterConf.setConf(StaticSQLConf.GLOBAL_TEMP_DATABASE, "later_global")
+
+    AnalysisContext.withNewAnalysisContext {
+      SQLConf.withExistingConf(laterConf) {
+        val persistent = UnresolvedFunctionName(Seq("persistent_fn"), "DESCRIBE FUNCTION")
+        val missing = UnresolvedFunctionName(Seq("missing_fn"), "DESCRIBE FUNCTION")
+        assert(analyzer.ResolveFunctions(persistent) == ResolvedPersistentFunc(
+          overrideCatalog, Identifier.of(Array("default"), "persistent_fn"), function))
+        assert(analyzer.ResolveFunctions(missing) == missing.copy(
+          possibleQualifiedName = Some(Seq("override_catalog", "default", "missing_fn"))))
+
+        val global = UnresolvedFunctionName(
+          Seq("initial_global", "missing_fn"), "DESCRIBE FUNCTION")
+        assert(analyzer.ResolveFunctions(global) == global.copy(
+          possibleQualifiedName = Some(Seq(
+            CatalogManager.SESSION_CATALOG_NAME, "initial_global", "missing_fn"))))
+
+        val functionResolution = new FunctionResolution(
+          catalogManager, new RelationResolution(catalogManager, RelationCache.empty))
+        assert(functionResolution.resolveFunctionName(persistent) == persistent.copy(
+          possibleQualifiedName = Some(Seq(
+            CatalogManager.SESSION_CATALOG_NAME, "default", "persistent_fn"))))
+      }
+    }
   }
 }
 
