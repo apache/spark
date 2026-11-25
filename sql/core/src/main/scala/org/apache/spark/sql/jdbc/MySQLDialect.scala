@@ -53,7 +53,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // MySQL rounds when casting to an integral type. It has no single argument TRUNCATE, so the
   // number of decimal places to keep is passed explicitly.
-  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
     Some(s"TRUNCATE($expr, 0)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {

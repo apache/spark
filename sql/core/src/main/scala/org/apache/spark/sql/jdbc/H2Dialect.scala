@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, FractionalType, MetadataBuilder, ShortType, StringType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, NumericType, ShortType, StringType, TimestampType}
 import org.apache.spark.util.SparkStringUtils
 
 private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
@@ -65,7 +65,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
     supportedFunctions.contains(funcName)
 
   // H2 rounds when casting to an integral type.
-  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
     Some(s"TRUNC($expr)")
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {

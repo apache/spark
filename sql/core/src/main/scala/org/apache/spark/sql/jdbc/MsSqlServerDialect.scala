@@ -68,7 +68,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
   // SQL Server rounds MONEY and SMALLMONEY (read as DECIMAL) when casting to an integral type, but
   // truncates FLOAT and REAL. ROUND with a nonzero third argument truncates instead.
-  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
     from match {
       case _: DecimalType => Some(s"ROUND($expr, 0, 1)")
       case _ => Some(expr)

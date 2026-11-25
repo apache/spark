@@ -587,11 +587,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * `compileExpression` calls this; a dialect that overrides `compileExpression` with its own
    * expression builder must handle these casts in that builder's `visitCast`.
    * @param expr The SQL string of the value being cast.
-   * @param from The type of the value being cast.
+   * @param from The type of the value being cast: `FloatType`, `DoubleType`, or a `DecimalType`
+   *             with a nonzero scale.
    * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
    */
   @Since("4.4.0")
-  def truncateFractionalValue(expr: String, from: FractionalType): Option[String] = None
+  def truncateFractionalValue(expr: String, from: NumericType): Option[String] = None
 
   /**
    * Whether the database converts TIMESTAMP and TIME values to numbers as Spark does, for example

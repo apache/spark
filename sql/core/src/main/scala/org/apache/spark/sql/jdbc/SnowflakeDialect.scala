@@ -21,7 +21,7 @@ import java.sql.SQLException
 import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.types.{BooleanType, DataType, FractionalType}
+import org.apache.spark.sql.types.{BooleanType, DataType, NumericType}
 
 private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
@@ -32,7 +32,7 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
   }
 
   // Snowflake rounds when casting to an integral type.
-  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] =
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
     Some(s"TRUNC($expr)")
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

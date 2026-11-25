@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, SQLException}
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.types.{DataType, FractionalType, MetadataBuilder}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, NumericType}
 
 /**
  * AggregatedDialect can unify multiple dialects into one virtual Dialect.
@@ -50,7 +50,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   // Truncating explicitly is harmless where the cast already truncates, so any dialect that
   // truncates explicitly wins.
-  override def truncateFractionalValue(expr: String, from: FractionalType): Option[String] = {
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] = {
     val values = dialects.flatMap(_.truncateFractionalValue(expr, from))
     values.find(_ != expr).orElse(values.headOption)
   }

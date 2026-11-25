@@ -1420,7 +1420,7 @@ class JDBCSuite extends SharedSparkSession {
       """CAST(TRUNC("a") AS INTEGER)""")
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(decimalCast).get ===
       "CAST(TRUNCATE(`a`, 0) AS SIGNED)")
-    // SQL Server rounds only DECIMAL values, such as MONEY.
+    // SQL Server rounds only MONEY and SMALLMONEY, which Spark reads as DECIMAL.
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(cast).get ===
       """CAST("a" AS INTEGER)""")
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(decimalCast).get ===
@@ -1460,6 +1460,22 @@ class JDBCSuite extends SharedSparkSession {
     assert(new AggregatedDialect(List(custom, NoopDialect)).compileExpression(cast).isEmpty)
     assert(new AggregatedDialect(List(custom, DB2Dialect())).compileExpression(cast).get ===
       """CAST("a" AS INTEGER)""")
+
+    val fromTimestamp = new V2Cast(FieldReference("a"), TimestampType, LongType)
+    Seq(
+      new AggregatedDialect(List(custom, DatabricksDialect())),
+      new AggregatedDialect(List(DatabricksDialect(), custom))
+    ).foreach { d =>
+      assert(d.castsDatetimeToNumericLikeSpark, s"dialect=$d")
+      assert(d.compileExpression(fromTimestamp).isDefined, s"dialect=$d")
+    }
+    Seq(
+      new AggregatedDialect(List(custom, PostgresDialect())),
+      new AggregatedDialect(List(custom, NoopDialect))
+    ).foreach { d =>
+      assert(!d.castsDatetimeToNumericLikeSpark, s"dialect=$d")
+      assert(d.compileExpression(fromTimestamp).isEmpty, s"dialect=$d")
+    }
   }
 
   test("SPARK-58372: numeric casts of datetime sources are pushed down only to Databricks") {
