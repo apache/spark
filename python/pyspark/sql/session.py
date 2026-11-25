@@ -1993,7 +1993,7 @@ class SparkSession(SparkConversionMixin):
         """Returns the :class:`DataFrame` stored at ``path``, computing and storing it first if
         it is not already there. The dataset is stored as Parquet.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Parameters
         ----------
@@ -2011,6 +2011,8 @@ class SparkSession(SparkConversionMixin):
         Notes
         -----
         Supports Spark Classic only.
+
+        This API is experimental.
 
         Completeness is tracked with a marker file written under ``path`` once the data is
         stored, so a path left behind by an interrupted write is recomputed rather than read

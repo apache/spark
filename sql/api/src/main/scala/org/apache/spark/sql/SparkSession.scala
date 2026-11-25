@@ -361,9 +361,10 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @note
    *   this is only supported in Classic.
-   * @since 4.4.0
+   * @since 4.5.0
    */
   @ClassicOnly
+  @Experimental
   def getOrCreateDataFrame(path: String, create: () => DataFrame): DataFrame
 
   /* ------------------------------- *
