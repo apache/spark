@@ -95,6 +95,10 @@ class UnivocityParser(
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
+  // Existence DEFAULT values of the required columns, analyzed at most once per parser instead of
+  // once per missing or malformed token.
+  private lazy val existenceDefaultValues =
+    ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -435,7 +439,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
+          row.update(i, existenceDefaultValues(i))
       }
       i += 1
     }

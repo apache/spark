@@ -18,16 +18,18 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalTime
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, EqualTo, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, Cast, EqualTo, Expression, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{DefaultValueInterval, NullValueInterval, ValueInterval}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 
 class JoinEstimationSuite extends StatsEstimationTestBase {
@@ -473,6 +475,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       val dec = Decimal("1.000000000000000000")
       val date = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-08"))
       val timestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
+      val time = DateTimeUtils.localTimeToNanos(LocalTime.parse("12:34:56.123456"))
       mutable.LinkedHashMap[Attribute, ColumnStat](
         AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = Some(1),
           min = Some(false), max = Some(false),
@@ -511,6 +514,18 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
         AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = Some(1),
           min = Some(timestamp), max = Some(timestamp),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("ctimestamp_ntz", TimestampNTZType)() -> ColumnStat(
+          distinctCount = Some(1), min = Some(timestamp), max = Some(timestamp),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("ctime", TimeType())() -> ColumnStat(distinctCount = Some(1),
+          min = Some(time), max = Some(time),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("cyminterval", YearMonthIntervalType())() -> ColumnStat(
+          distinctCount = Some(1), min = Some(13), max = Some(13),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        AttributeReference("cdtinterval", DayTimeIntervalType())() -> ColumnStat(
+          distinctCount = Some(1), min = Some(timestamp), max = Some(timestamp),
           nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))
       )
     }
@@ -605,6 +620,41 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(join.stats.rowCount.contains(BigInt(80)))
   }
 
+  test("SPARK-61724: TIMESTAMP_NTZ join keys with histograms use the histogram estimate") {
+    // ANALYZE builds the histogram of a TIMESTAMP_NTZ column from its microseconds, as it does
+    // for a TIMESTAMP column. 8 rows of 0 and 4 rows of 1 on each side.
+    val histogram = Histogram(height = 4, Array(HistogramBin(lo = 0, hi = 0, ndv = 1),
+      HistogramBin(lo = 0, hi = 0, ndv = 1), HistogramBin(lo = 1, hi = 1, ndv = 1)))
+    val stat = ColumnStat(distinctCount = Some(2), min = Some(0L), max = Some(1L),
+      nullCount = Some(0), avgLen = Some(8), maxLen = Some(8), histogram = Some(histogram))
+    def side(name: String): LogicalPlan = {
+      val key = AttributeReference(name, TimestampNTZType)()
+      StatsTestPlan(Seq(key), 12, AttributeMap(Seq(key -> stat)))
+    }
+    val (left, right) = (side("l"), side("r"))
+    val join = Join(left, right, Inner, Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+    // 8 x 8 + 4 x 4 from the histograms. The distinct count alone would give 12 x 12 / 2 = 72.
+    assert(join.stats.rowCount.contains(BigInt(80)))
+  }
+
+  test("SPARK-61724: nanosecond timestamp join keys with min/max use the distinct count") {
+    // Their values cannot be converted to Double, so their min/max give no range.
+    val stat = ColumnStat(distinctCount = Some(10),
+      min = Some(new TimestampNanosVal(1L, 1.toShort)),
+      max = Some(new TimestampNanosVal(10L, 1.toShort)),
+      nullCount = Some(0), avgLen = Some(16), maxLen = Some(16))
+    def side(name: String): LogicalPlan = {
+      val key = AttributeReference(name, TimestampNTZNanosType(9))()
+      StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> stat)))
+    }
+    val (left, right) = (side("l"), side("r"))
+    val join = Join(left, right, Inner, Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+    // 10 x 10 rows with 10 distinct values on each side.
+    assert(join.stats.rowCount.contains(BigInt(10)))
+  }
+
   test("SPARK-60810: join keys without non-null values match no rows") {
     // ANALYZE stores a distinct count of 0 for a column of nulls, and an IS NULL filter sets
     // it. Padded CHAR keys get the column's statistics through the padding Project.
@@ -627,6 +677,59 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       assert(Join(left, right, FullOuter, condition, JoinHint.NONE).stats.rowCount
         .contains(BigInt(20)))
     }
+  }
+
+  test("SPARK-60830: CHAR and VARCHAR join keys read as first-class types use their stats") {
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0), avgLen = Some(1),
+      maxLen = Some(1))
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(10), avgLen = Some(5),
+      maxLen = Some(5))
+    def checkedSide(key: AttributeReference, keyStat: ColumnStat): LogicalPlan = Project(
+      Seq(Alias(readSideCheck(key), key.name)()),
+      StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> keyStat))))
+    def innerJoinRows(
+        left: LogicalPlan, right: LogicalPlan, condition: Expression): Option[BigInt] =
+      Join(left, right, Inner, Some(condition), JoinHint.NONE).stats.rowCount
+    val s = AttributeReference("s", StringType)()
+    val stringSide = StatsTestPlan(Seq(s), 10, AttributeMap(Seq(s -> stat)))
+    val noColumnStats = StatsTestPlan(Seq(s), 1000, AttributeMap(Nil))
+    Seq(charAttr _, varcharAttr _).foreach { column =>
+      def joinRows(keyStat: ColumnStat): Option[BigInt] = {
+        val (left, right) = (checkedSide(column("l", 5), keyStat),
+          checkedSide(column("r", 5), keyStat))
+        innerJoinRows(left, right, EqualTo(left.output.head, right.output.head))
+      }
+      // 10 x 10 rows with 10 distinct values on each side.
+      assert(joinRows(stat).contains(BigInt(10)))
+      // Keys without non-null values match no rows.
+      assert(joinRows(nullStat).contains(BigInt(0)))
+
+      // A key compared with a STRING key is cast to it, on either side of the join.
+      Seq(true, false).foreach { standardSemantics =>
+        val key = column("k", 5)
+        val side = Project(Seq(Alias(firstClassRead(key, standardSemantics), "k")()),
+          StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> stat))))
+        val cast = Cast(side.output.head, StringType)
+        assert(innerJoinRows(side, stringSide, EqualTo(cast, s)).contains(BigInt(10)), side)
+        assert(innerJoinRows(stringSide, side, EqualTo(s, cast)).contains(BigInt(10)), side)
+        // A side unique on its key bounds the join by the rows of the other side, which has no
+        // column stats here, also when its key is cast.
+        val grouped = Aggregate(side.output, side.output, side)
+        val groupedCast = Cast(grouped.output.head, StringType)
+        assert(innerJoinRows(grouped, noColumnStats, EqualTo(groupedCast, s))
+          .contains(BigInt(1000)), side)
+        assert(innerJoinRows(noColumnStats, grouped, EqualTo(s, groupedCast))
+          .contains(BigInt(1000)), side)
+      }
+    }
+    // A cast of a column of another type to STRING is not stripped: 10 x 10 rows are estimated
+    // as the cartesian product.
+    val i = attr("i")
+    val intSide = StatsTestPlan(Seq(i), 10, AttributeMap(Seq(i -> ColumnStat(
+      distinctCount = Some(10), min = Some(1), max = Some(10), nullCount = Some(0),
+      avgLen = Some(4), maxLen = Some(4)))))
+    assert(innerJoinRows(intSide, stringSide, EqualTo(Cast(i, StringType), s))
+      .contains(BigInt(100)))
   }
 
   test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {

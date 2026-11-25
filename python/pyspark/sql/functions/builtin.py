@@ -565,6 +565,58 @@ def sqrt(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def try_abs(col: "ColumnOrName") -> Column:
+    """
+    Returns the absolute value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`abs`.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A column that evaluates to a numeric or interval.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the type that :meth:`abs` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.abs`
+
+    Examples
+    --------
+    Example 1: try_abs of integers.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-1,), (2,), (None,)], "a INT")
+    >>> df.select("*", sf.try_abs("a")).show()
+    +----+----------+
+    |   a|try_abs(a)|
+    +----+----------+
+    |  -1|         1|
+    |   2|         2|
+    |NULL|      NULL|
+    +----+----------+
+
+    Example 2: Overflow results in NULL
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_abs(sf.lit(-sys.maxsize - 1))).show()
+    +-----------------------------+
+    |try_abs(-9223372036854775808)|
+    +-----------------------------+
+    |                         NULL|
+    +-----------------------------+
+    """
+    return _invoke_function_over_columns("try_abs", col)
+
+
+@_try_remote_functions
 def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns the sum of `left`and `right` and the result is null on overflow.
@@ -885,6 +937,58 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     +------------------------------------------------------+
     """
     return _invoke_function_over_columns("try_multiply", left, right)
+
+
+@_try_remote_functions
+def try_negative(col: "ColumnOrName") -> Column:
+    """
+    Returns the negated value of `col` and the result is null on overflow or when a string
+    argument cannot be cast to a number. The acceptable input types are the same as for
+    :meth:`negative`.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        A column that evaluates to a numeric or interval.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the type that :meth:`negative` returns: the type of a numeric or interval
+        input, and DOUBLE for a string or NULL input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.negative`
+
+    Examples
+    --------
+    Example 1: try_negative of integers.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-1,), (2,), (None,)], "a INT")
+    >>> df.select("*", sf.try_negative("a")).show()
+    +----+---------------+
+    |   a|try_negative(a)|
+    +----+---------------+
+    |  -1|              1|
+    |   2|             -2|
+    |NULL|           NULL|
+    +----+---------------+
+
+    Example 2: Overflow results in NULL
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_negative(sf.lit(-sys.maxsize - 1))).show()
+    +----------------------------------+
+    |try_negative(-9223372036854775808)|
+    +----------------------------------+
+    |                              NULL|
+    +----------------------------------+
+    """
+    return _invoke_function_over_columns("try_negative", col)
 
 
 @_try_remote_functions
@@ -15249,6 +15353,41 @@ def xxh3_128(col: "ColumnOrName") -> Column:
     [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
     """
     return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+    algorithm.
+
+    The result matches ``FARM_FINGERPRINT`` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. String input is hashed as its UTF-8 bytes.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to fingerprint, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.farm_fingerprint('a').alias('h')).collect()
+    [Row(h=-2743780590904673122)]
+    """
+    return _invoke_function_over_columns("farm_fingerprint", col)
 
 
 @_try_remote_functions
@@ -31288,6 +31427,13 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a long, or an array of longs if the rank
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31327,6 +31473,13 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
         The quantile value(s).
         Returns a column that evaluates to a float, or an array of floats if the rank
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
 
     Examples
     --------
@@ -31368,6 +31521,13 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a double, or an array of doubles if the rank
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31407,6 +31567,13 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type BIGINT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3L, NULL)`` is accepted, but ``array(3, NULL)`` fails.
 
     Examples
     --------
@@ -31448,6 +31615,13 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
 
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type FLOAT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0F, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31487,6 +31661,13 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type DOUBLE, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0D, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
 
     Examples
     --------

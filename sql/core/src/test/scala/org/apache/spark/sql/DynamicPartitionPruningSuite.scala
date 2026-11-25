@@ -28,11 +28,12 @@ import org.scalatest.GivenWhenThen
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BroadcastValueProjection,
-  DynamicPruningExpression, DynamicPruningSubquery, Expression}
+  DynamicPruningExpression, DynamicPruningSubquery, Expression, ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.connector.RotatingLimitDataSourceV2
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
@@ -42,12 +43,15 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExc
   ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
+import org.apache.spark.sql.execution.python.EvalPythonExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.tags.DataSourceV2Test
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -2006,6 +2010,80 @@ abstract class DynamicPartitionPruningSuiteBase
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
+
+  // These tests drop their function themselves, as `withUserDefinedFunction` checks the drop with
+  // a lookup that fails in the V2 suites, whose default catalog has no functions.
+  test("SPARK-62052: no DPP filter on a pruning key with a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    try {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON pyudf(f.store_id) = s.store_id
+          |WHERE s.country = 'NL'
+        """.stripMargin)
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      // A scan cannot evaluate the UDF to prune partitions, so a DPP filter would only filter
+      // rows, above another evaluation of the UDF.
+      assert(!checkUnpushedFilters(df), df.queryExecution)
+      val evals = collect(df.queryExecution.executedPlan) { case e: EvalPythonExec => e }
+      assert(evals.size === 1, df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS pyudf")
+    }
+  }
+
+  test("SPARK-62052: keep DPP on a pruning key with a Python UDF only through an alias") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    try {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id
+          |FROM (SELECT date_id, pyudf(store_id) AS store_id FROM fact_sk
+          |      UNION ALL
+          |      SELECT date_id, store_id FROM fact_stats) f
+          |JOIN dim_store s ON f.store_id = s.store_id
+          |WHERE s.country = 'NL'
+        """.stripMargin)
+      val rows = Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil
+      checkAnswer(df, rows ++ rows)
+      // The join key has no UDF, so the DPP filter is kept and prunes the partitions of the union
+      // branch without the UDF.
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1,
+        df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS pyudf")
+    }
+  }
+
+  test("SPARK-62052: no DPP filter on a pruning key with an external UDF") {
+    // No public API builds a scalar external UDF yet, so the test registers one as a function.
+    // Planning it needs a static conf, which the test sets only for itself.
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction("ext",
+        children => ExternalUserDefinedFunction(Some("ext"),
+          UDFWorkerSpecification.getDefaultInstance, Array.emptyByteArray, IntegerType, children,
+          udfDeterministic = true, udfNullable = true),
+        "scala_udf")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON ext(f.store_id) = s.store_id AND s.country = 'NL'
+        """.stripMargin)
+      val dpps = df.queryExecution.optimizedPlan.flatMap(_.expressions).flatMap(
+        _.collect { case d: DynamicPruningSubquery => d })
+      assert(dpps.isEmpty, df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS ext")
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -2480,6 +2558,84 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("SPARK-61811: DPP does not read a V2 scan with a pushed LIMIT again in a subquery") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("dim_limit") {
+        spark.read.format(classOf[RotatingLimitDataSourceV2].getName).load()
+          .createOrReplaceTempView("dim_limit")
+        // Each read of the scan returns another row, and every `i` has a fact partition. A DPP
+        // subquery that reads the scan apart from the join would prune the join row's partition.
+        val df = sql(
+          """SELECT count_if(f.date_id IS NULL)
+            |FROM (SELECT * FROM dim_limit LIMIT 1) d
+            |LEFT JOIN fact_sk f ON d.i = f.store_id
+            |WHERE d.i > 0""".stripMargin)
+        checkAnswer(df, Row(0))
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
+      }
+    }
+  }
+
+  test("SPARK-61824: no standalone DPP subquery for a filtering side with a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    withUserDefinedFunction("pyudf" -> true, "dpp_udtf" -> true) {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      // DPP drops a non-deterministic filtering side, so the UDTF is deterministic.
+      spark.udtf.registerPython("dpp_udtf", createUserDefinedPythonTableFunction(
+        "DppUDTF",
+        """
+          |class DppUDTF:
+          |    def eval(self):
+          |        yield 1, 'NL'
+          |        yield 2, 'NL'
+          |        yield 3, 'DE'
+          |""".stripMargin,
+        Some(StructType.fromDDL("store_id int, country string")),
+        deterministic = true))
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        Seq(
+          "dim_store s ON f.store_id = s.store_id AND pyudf(s.country) = 'NL'",
+          "dim_store s ON f.store_id = pyudf(s.store_id) AND s.country = 'NL'",
+          "dpp_udtf() s ON f.store_id = s.store_id AND s.country = 'NL'").foreach { join =>
+          val df = sql(s"SELECT f.date_id, f.store_id FROM fact_sk f JOIN $join")
+          checkPartitionPruningPredicate(df, false, false)
+          checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61824: no standalone DPP subquery for a filtering side with an external UDF") {
+    // No public API builds a scalar external UDF yet, so the test registers one as a function.
+    // Planning it needs a static conf, which the test sets only for itself.
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction("ext",
+        children => ExternalUserDefinedFunction(Some("ext"),
+          UDFWorkerSpecification.getDefaultInstance, Array.emptyByteArray, IntegerType, children,
+          udfDeterministic = true, udfNullable = true),
+        "scala_udf")
+      withUserDefinedFunction("ext" -> true) {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+          val df = sql(
+            """
+              |SELECT f.date_id, f.store_id FROM fact_sk f
+              |JOIN dim_store s ON f.store_id = s.store_id AND ext(s.store_id) = 1
+            """.stripMargin)
+          val onlyInBroadcast = df.queryExecution.optimizedPlan.flatMap(_.expressions).flatMap(
+            _.collect { case d: DynamicPruningSubquery => d.onlyInBroadcast })
+          assert(onlyInBroadcast === Seq(true))
+        }
+      }
+    } finally {
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
+    }
+  }
+
   /**
    * Check the static scan metrics with and without DPP
    */
@@ -2559,6 +2715,28 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         assert(scan3.metrics("filesSize").value == partFilesSize)
         assert(scan3.metrics("numPartitions").value === 1)
         assert(scan3.metrics("pruningTime").value !== -1)
+      }
+    }
+  }
+
+  test("SPARK-62241: no partition pruning on an equality that is not a join key") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("fact", "dim") {
+        spark.range(0, 8).selectExpr("id AS k", "CAST(id % 4 AS STRING) AS p")
+          .write.partitionBy("p").format(tableFormat).saveAsTable("fact")
+        Seq((1L, 1, 1, 1), (2L, 2, -1, 2)).toDF("k", "pi", "x", "y")
+          .write.format(tableFormat).saveAsTable("dim")
+        // The cast of the partition column, which can fail, follows the throwable CASE WHEN, so
+        // it is not a join key, and no pruning filter evaluates it ahead of the join.
+        val df = sql(
+          """SELECT f.k FROM fact f JOIN dim d ON f.k = d.k
+            |  AND CASE WHEN d.x < -5 THEN raise_error('neg') ELSE true END
+            |  AND CAST(f.p AS INT) = d.pi
+            |WHERE d.y = 1
+            |""".stripMargin)
+        checkPartitionPruningPredicate(df, false, false)
+        checkAnswer(df, Row(1))
       }
     }
   }

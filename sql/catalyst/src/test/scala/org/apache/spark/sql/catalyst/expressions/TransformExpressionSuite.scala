@@ -22,13 +22,16 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
-class TransformExpressionSuite extends SparkFunSuite {
+class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /** The logger the log tests attach their appender to, so that other loggers stay out. */
   private val transformLogger = Seq(classOf[TransformExpression].getName)
@@ -207,7 +210,8 @@ class TransformExpressionSuite extends SparkFunSuite {
 
   test("SPARK-60027: an argument is taken as it is when it is stored as the declared type is") {
     // A function declaring `declared` reads a value of `argumentType` as it is, field by field and
-    // by position, when the two are stored alike, as it did before the input type check. The
+    // by position, when the two are stored alike, as it did before the input type check, apart
+    // from two datetime or interval types, see `TransformExpression.datetimeCastKeepsValue`. The
     // value is read from an unsafe row, as a one-side shuffle reads it, since that is where a
     // nested decimal is stored by its precision.
     class IntUDT extends UserDefinedType[Integer] {
@@ -276,7 +280,20 @@ class TransformExpressionSuite extends SparkFunSuite {
       ("a field of another physical type", struct("d", DateType), struct("d", LongType),
         InternalRow(5), structField, false),
       ("a struct with another number of fields", struct("a", IntegerType),
-        struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false)
+        struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false),
+      // SPARK-60813 and SPARK-61650, see `TransformExpression.datetimeCastKeepsValue`.
+      ("a TIME against a TIMESTAMP", TimeType(), TimestampType, 5L, structField, false),
+      ("a nested TIME against a nested TIMESTAMP", struct("t", TimeType()),
+        struct("t", TimestampType), InternalRow(5L), structField, false),
+      ("a TIMESTAMP_NTZ against a TIMESTAMP", TimestampNTZType, TimestampType, 5L, structField,
+        false),
+      ("a nested TIMESTAMP_NTZ against a nested TIMESTAMP", struct("t", TimestampNTZType),
+        struct("t", TimestampType), InternalRow(5L), structField, false),
+      ("a TIME of a coarser precision", TimeType(3), TimeType(6), 5000000L,
+        (row: InternalRow) => (row.getLong(1) / 1000000L).toInt, true),
+      ("a TIME of a finer precision", TimeType(6), TimeType(3), 5000L, structField, false),
+      ("a DAY TO SECOND interval against a DAY TO HOUR one", DayTimeIntervalType(),
+        DayTimeIntervalType(0, 1), 5L, structField, false)
     ).foreach { case (what, argumentType, declared, value, read, taken) =>
       val argument = BoundReference(0, argumentType, nullable = true)
       val transform = TransformExpression(function(declared)(read), Seq(argument), Some(4))
@@ -285,6 +302,65 @@ class TransformExpressionSuite extends SparkFunSuite {
         val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
         assert(transform.eval(unsafe) == 1, what)
       }
+    }
+  }
+
+  test("SPARK-61650: a datetime or interval value goes as another type only as its cast keeps it") {
+    // The write path can cast an argument to the declared type, so a datetime or interval value a
+    // function takes as it is has to be the value that cast gives, in a session time zone other
+    // than UTC too, or the two place a row in different partitions. A datetime or interval value
+    // against the integer it is held as is taken as it is too, though a cast between them would
+    // change it, e.g. a `TIMESTAMP` to its seconds: no implicit cast exists between them, in
+    // either mode, so the write path passes it as it is as well.
+    val zones = Seq("UTC", "America/Los_Angeles", "Asia/Kolkata")
+    val types: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType, TimeType(6)) ++
+      DataTypeTestUtils.timestampNanosTypes ++ DataTypeTestUtils.timeTypes ++
+      DataTypeTestUtils.yearMonthIntervalTypes ++ DataTypeTestUtils.dayTimeIntervalTypes
+    def value(dataType: DataType): Any = dataType match {
+      case DateType => 5
+      case TimestampType | TimestampNTZType => 3600123456L
+      case t @ (_: TimestampNTZNanosType | _: TimestampLTZNanosType) =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(
+          TimestampNanosVal.fromParts(3600123456L, 789.toShort),
+          TimestampFamily.fractionalPrecision(t).get)
+      case TimeType(precision) => DateTimeUtils.truncateTimeToPrecision(3600123456789L, precision)
+      case YearMonthIntervalType(_, end) =>
+        IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(14), end)
+      case DayTimeIntervalType(_, end) =>
+        IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(90061123456L), end)
+    }
+    def taken(from: DataType, to: DataType): Boolean = TransformExpression(
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(to)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "years"
+        override def canonicalName(): String = "test.years"
+        override def produceResult(input: InternalRow): Int = 0
+      }, Seq(BoundReference(0, from, nullable = true))).evaluableFunction.isDefined
+    val takenPairs = for (from <- types; to <- types if from != to && taken(from, to))
+      yield (from, to)
+    takenPairs.foreach { case (from, to) =>
+      val raw = value(from)
+      zones.foreach { zone =>
+        assert(Cast(Literal(raw, from), to, Some(zone)).eval() == raw, s"$from against $to, $zone")
+      }
+    }
+    assert(takenPairs.contains((TimeType(3), TimeType(6))) &&
+      takenPairs.contains((DayTimeIntervalType(0, 1), DayTimeIntervalType(0, 3))) &&
+      takenPairs.contains((TimestampNTZNanosType(7), TimestampNTZNanosType(9))) &&
+      !takenPairs.contains((TimestampNTZType, TimestampType)), takenPairs)
+
+    Seq[(DataType, DataType)](
+      (DateType, IntegerType), (TimestampType, LongType), (TimestampNTZType, LongType),
+      (TimeType(), LongType), (YearMonthIntervalType(), IntegerType),
+      (DayTimeIntervalType(), LongType), (IntegerType, DateType), (LongType, TimestampType),
+      (LongType, TimestampNTZType), (LongType, TimeType()), (IntegerType, YearMonthIntervalType()),
+      (LongType, DayTimeIntervalType())
+    ).foreach { case (from, to) =>
+      assert(taken(from, to), s"$from against $to")
+      val argument = BoundReference(0, from, nullable = true)
+      assert(TypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to")
+      assert(AnsiTypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to, ANSI")
     }
   }
 
@@ -338,6 +414,22 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(transform.eval(InternalRow(5)) == 1)
   }
 
+  test("SPARK-60813: a transform's plan string names its reduction and its key marker when set") {
+    // An unset `reducedWith` or `storedKey` stays out of the plan string, so the ordinary form is
+    // unchanged, and a set one prints, since it changes how the call resolves or what the
+    // transform equals.
+    val transform = bucket(new NamedFunction("test.bucket"), a)
+    val marked = transform.copy(storedKey = true)
+    assert(marked.toString == transform.toString.stripSuffix(")") + ", storedKey)",
+      marked.toString)
+    assert(!transform.toString.contains("None") && !transform.toString.contains("false"),
+      transform.toString)
+    // A set `reducedWith` prints as master printed it.
+    val reduced = transform.reducedTogetherWith(bucket(new NamedFunction("other"), a, 2))
+    assert(reduced.toString.endsWith(", Some(TransformFunctionId(other,Some(2))))"),
+      reduced.toString)
+  }
+
   test("SPARK-60027: cogroup keys are stored alike when their key rows compare alike") {
     // A cogroup pairs the groups of its two sides by comparing their key rows, so a key shuffled
     // onto a layout has to be stored as the layout's column is: apart from nullability and field
@@ -353,6 +445,8 @@ class TransformExpressionSuite extends SparkFunSuite {
       (IntegerType, IntegerType, true),
       (DateType, IntegerType, true),
       (TimestampNTZType, TimestampType, true),
+      (ArrayType(TimestampNTZType), ArrayType(TimestampType), true),
+      (TimeType(3), TimeType(6), true),
       (StringType, VarcharType(5), true),
       (new IntUDT, IntegerType, true),
       (new StructType().add("x", IntegerType, nullable = false),
@@ -370,6 +464,10 @@ class TransformExpressionSuite extends SparkFunSuite {
       (StringType, StringType("UTF8_LCASE"), false),
       (DecimalType(10, 2), DecimalType(20, 2), false),
       (DecimalType(10, 2), DecimalType(10, 3), false),
+      // Datetime and interval keys by their storage alone, as the hash shuffle compares them.
+      (TimeType(), TimestampType, true),
+      (YearMonthIntervalType(), DateType, true),
+      (DayTimeIntervalType(), TimestampType, true),
       (new StructType().add("x", IntegerType), new StructType().add("x", LongType), false),
       (ArrayType(IntegerType), ArrayType(LongType), false),
       (new StructType().add("x", IntegerType),
@@ -501,6 +599,41 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(logged.exists(m => m.contains("int_bucket") && m.contains("(int, int)") &&
       m.contains("(int, bigint)")), logged)
     assert(logged.exists(_.contains("(int, string)")), logged)
+  }
+
+  test("SPARK-62319: isEvaluableQuietly tells whether a transform is evaluable without logging") {
+    // Classes of their own, since what was logged is shared by the JVM.
+    class QuietUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = IntegerType
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    class QuietBucket extends IntBucketFunction {
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    class QuietInvokeBucket extends IntBucketFunction {
+      def invoke(numBuckets: Int, value: Int): Int = 0
+    }
+    class QuietNotScalar extends BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "quiet_bucket"
+    }
+    class QuietFailing extends QuietBucket {
+      override def inputTypes(): Array[DataType] = throw new IllegalStateException("connector bug")
+    }
+    val appender = new LogAppender("transforms asked quietly")
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.DEBUG)) {
+      assert(bucket(ProduceResultBucketFunction, Literal(7)).isEvaluableQuietly.get)
+      assert(!bucket(new QuietBucket, Literal(7L)).isEvaluableQuietly.get)
+      val udt = BoundReference(0, new QuietUDT, nullable = true)
+      assert(!bucket(new QuietInvokeBucket, udt).isEvaluableQuietly.get)
+      assert(!bucket(new QuietNotScalar, Literal(7)).isEvaluableQuietly.get)
+      assert(bucket(new QuietFailing, Literal(7)).isEvaluableQuietly.isFailure)
+    }
+    assert(appender.loggingEvents.isEmpty,
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage))
   }
 
   test("SPARK-60027: a function that is not a ScalarFunction is logged once per class") {
@@ -706,4 +839,77 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(warnings.size == 2, warnings)
     assert(warnings.exists(_.contains("first")) && warnings.exists(_.contains("second")))
   }
+
+  test("SPARK-60541: the generated code computes what eval does") {
+    // `checkEvaluation` runs both the interpreted and the generated path. Each function resolves to
+    // one of the calls `V2ExpressionUtils.resolveScalarFunction` builds.
+    val input = BoundReference(0, IntegerType, nullable = true)
+    Seq(
+      InvokeBucketFunction -> classOf[Invoke],
+      new StaticInvokeBucketFunction -> classOf[StaticInvoke],
+      ProduceResultBucketFunction -> classOf[ApplyFunctionExpression]
+    ).foreach { case (fn, call) =>
+      val transform = bucket(fn, input)
+      assert(call.isInstance(transform.evaluableFunction.get), transform.evaluableFunction)
+      checkEvaluation(transform, 3, create_row(7))
+      checkEvaluation(transform, 2, create_row(6))
+    }
+  }
+
+  test("SPARK-60541: a transform whose call falls back leaves its arguments to `eval`") {
+    // Subexpression elimination and `With` treat it as they treat a `CodegenFallback`.
+    val sum = Add(BoundReference(0, IntegerType, nullable = true),
+      BoundReference(1, IntegerType, nullable = true))
+    def commonSubexpressions(fn: BoundFunction): Seq[Expression] = {
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(bucket(fn, sum))
+      equivalence.addExprTree(sum)
+      equivalence.getCommonSubexpressions
+    }
+    assert(commonSubexpressions(InvokeBucketFunction) == Seq(sum),
+      "the generated call shares the sum")
+    assert(commonSubexpressions(ProduceResultBucketFunction).isEmpty,
+      "the call that falls back computes the sum itself")
+
+    def refUnderCodegenFallback(fn: BoundFunction): Boolean =
+      With(sum) { refs => bucket(fn, refs.head) }.refUnderCodegenFallback
+    assert(!refUnderCodegenFallback(InvokeBucketFunction))
+    assert(refUnderCodegenFallback(ProduceResultBucketFunction))
+  }
+
+  test("SPARK-60541: a transform whose keys a join reduced generates no code") {
+    // The call no longer computes such keys, so it must not run in the generated path either.
+    val input = BoundReference(0, IntegerType, nullable = true)
+    val reduced = bucket(InvokeBucketFunction, input, 12)
+      .reducedTogetherWith(bucket(InvokeBucketFunction, input, 8))
+    checkError(
+      exception = intercept[SparkException](reduced.genCode(new CodegenContext)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"Cannot generate code for expression: $reduced"))
+  }
+}
+
+/** `bucket` over integers. The functions below differ only in how Spark calls them. */
+private trait IntBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+}
+
+/** Called through the magic `invoke` method, whose call generates code. */
+private object InvokeBucketFunction extends IntBucketFunction {
+  def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+}
+
+/** Called through a static `invoke` method, as a Java function would be. */
+private class StaticInvokeBucketFunction extends IntBucketFunction
+
+private object StaticInvokeBucketFunction {
+  def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+}
+
+/** Called through `produceResult`, whose call falls back to `eval`. */
+private object ProduceResultBucketFunction extends IntBucketFunction {
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getInt(1), input.getInt(0))
 }

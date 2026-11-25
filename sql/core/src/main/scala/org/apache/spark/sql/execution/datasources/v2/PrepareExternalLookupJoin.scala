@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Collections, IdentityHashMap}
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -127,17 +125,39 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
       }
     }
-    val offeredCandidates = conjuncts.zipWithIndex.flatMap { case (conjunct, index) =>
+    val conditionCandidates = conjuncts.zipWithIndex.flatMap { case (conjunct, index) =>
       ExternalLookupJoinShapes.lookupComparison(
         conjunct, join.left.outputSet, join.right.outputSet).flatMap { comparison =>
         tableColumn(comparison.lookupField, lookupPlan).map { column =>
-          OfferedLookupPredicate(comparison.parameter, column, index, comparison.comparison)
+          OfferedLookupPredicate(comparison.parameter, column, Some(index), comparison.comparison)
         }
       }
     }
+    // Predicate pushdown moves a comparison of a lookup column with a value that reads no column
+    // onto the lookup side, as for an ordinary join, so the source receives it as a pushed filter
+    // when it translates. A source may need it in its access path, as the constant tenant of a
+    // composite key, so it is offered as well, as the same comparison is from the join condition,
+    // whatever form its value takes after optimization, such as a deterministic UDF over a
+    // literal. The filter stays, and Spark evaluates it on the returned rows either way.
+    val lookupSideOutput = AttributeSet(lookupPlan.relation.output ++
+      lookupPlan.fields.map(_.toAttribute) ++ lookupPlan.upperStages.flatMap(_.output))
+    val filterCandidates = lookupFilterConjuncts(lookupPlan).flatMap { conjunct =>
+      ExternalLookupJoinShapes.lookupComparison(conjunct, AttributeSet.empty, lookupSideOutput)
+        .flatMap { comparison =>
+          tableColumn(comparison.lookupField, lookupPlan).map { column =>
+            OfferedLookupPredicate(comparison.parameter, column, None, comparison.comparison)
+          }
+        }
+    }
+    val offeredCandidates = (conditionCandidates ++ filterCandidates).distinctBy { candidate =>
+      (candidate.projectedField.exprId, candidate.comparison, candidate.parameter)
+    }
     if (offeredCandidates.isEmpty) {
+      // Without a condition, the join has nothing to look up by: predicate pushdown left it no
+      // conjunct, of the written condition or of a filter above.
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLFreeFormId(tableName)))
+        if (conjuncts.isEmpty) "MISSING_JOIN_CONDITION" else "NO_LOOKUP_CANDIDATE",
+        if (conjuncts.isEmpty) Map.empty else Map("table" -> toSQLFreeFormId(tableName)))
     }
 
     val scanBuilder = supportsRead.newScanBuilder(relation.options)
@@ -166,9 +186,15 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
-    val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
-      lookupBuilder.selectLookupPredicates(offeredPredicates))
-    val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
+    // The connector selects by position, so it receives a copy, which Spark checks afterwards: a
+    // copy that the connector reordered would bind the parameters to the wrong predicates. The
+    // descriptions are taken first, because the connector receives the predicate instances.
+    val offeredDescriptions = offeredPredicates.map(_.describe()).toIndexedSeq
+    val passedPredicates = offeredPredicates.clone()
+    val selectedPredicates = selectedCandidates(tableName, offeredPredicates,
+      offeredDescriptions, offeredCandidates.toIndexedSeq, passedPredicates,
+      lookupBuilder.selectLookupPredicates(passedPredicates))
+    val selectedConjuncts = selectedPredicates.flatMap(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that
     // cannot fail. A conjunct that can fail then runs only for rows that pass them. Each group
@@ -350,16 +376,21 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   }
 
   /**
-   * Maps the connector's selection back to the offered candidates, in the connector's order, which
-   * defines the fields of each request parameter row. Selections are matched by object identity
-   * rather than by equality, so two candidates of the same shape, for example the same lookup field
-   * compared with two different join-side values, remain distinguishable.
+   * Maps the connector's selection, positions in the offered array, back to the offered
+   * candidates, in the connector's order, which defines the fields of each request parameter row.
+   * Positions keep two candidates of the same shape, for example the same lookup field compared
+   * with two different join-side values, distinguishable. `passed` is the copy of `offered` that
+   * the connector received; for a non-empty selection, it must still hold the offered predicates
+   * in the offered order. As each offered predicate has its own `LookupParameter`, which equals
+   * only itself, `equals` tells every reorder apart while it accepts an equal rebuilt predicate.
    */
   private def selectedCandidates(
       tableName: String,
       offered: Array[V2Predicate],
-      candidates: Seq[OfferedLookupPredicate],
-      selected: Array[V2Predicate]): Seq[OfferedLookupPredicate] = {
+      descriptions: IndexedSeq[String],
+      candidates: IndexedSeq[OfferedLookupPredicate],
+      passed: Array[V2Predicate],
+      selected: Array[Int]): Seq[OfferedLookupPredicate] = {
     if (selected == null) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
@@ -368,31 +399,32 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
-    val candidateByPredicate = new IdentityHashMap[V2Predicate, OfferedLookupPredicate]()
-    offered.zip(candidates).foreach { case (predicate, candidate) =>
-      candidateByPredicate.put(predicate, candidate)
+    if (!passed.corresponds(offered)(_ == _)) {
+      val position = passed.indices.indexWhere(position => passed(position) != offered(position))
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, "MODIFIED_CANDIDATES",
+        Map("position" -> position.toString, "predicate" -> descriptions(position)))
     }
-    val seen = Collections.newSetFromMap(new IdentityHashMap[V2Predicate, java.lang.Boolean]())
-    selected.toSeq.map { predicate =>
-      // A null element is not an offered instance either.
-      val candidate = Option(predicate).map(candidateByPredicate.get).orNull
-      if (candidate == null) {
+    val seen = mutable.BitSet.empty
+    selected.toSeq.map { position =>
+      if (position < 0 || position >= candidates.length) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "UNOFFERED_SELECTED_PREDICATE",
-          Map("predicate" -> Option(predicate).map(_.describe()).getOrElse("null")))
+          tableName, "INVALID_SELECTED_PREDICATE_POSITION",
+          Map("position" -> position.toString, "maxPosition" -> (candidates.length - 1).toString))
       }
-      if (!seen.add(predicate)) {
+      if (!seen.add(position)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> predicate.describe()))
+          tableName, "DUPLICATE_SELECTED_PREDICATE",
+          Map("position" -> position.toString, "predicate" -> descriptions(position)))
       }
-      candidate
+      candidates(position)
     }
   }
 
   private case class OfferedLookupPredicate(
       parameter: Expression,
       projectedField: Attribute,
-      conjunctIndex: Int,
+      conjunctIndex: Option[Int],
       comparison: LookupKeyComparison)
 
   /**
@@ -431,6 +463,14 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case _ => None
     }
   }
+
+  /** The conjuncts of the deterministic filters of a lookup side, in evaluation order. */
+  private def lookupFilterConjuncts(lookupPlan: LookupPlan): Seq[Expression] =
+    lookupPlan.filtersPushDown.flatMap(splitConjunctivePredicates) ++
+      lookupPlan.upperStages.flatMap {
+        case ExternalLookupFilter(condition, _) => splitConjunctivePredicates(condition)
+        case _: ExternalLookupProject => Nil
+      }
 
   /**
    * The table column that a lookup-side attribute passes through unchanged, if any: substituting

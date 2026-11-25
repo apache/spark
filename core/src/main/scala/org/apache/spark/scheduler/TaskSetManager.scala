@@ -975,8 +975,9 @@ private[spark] class TaskSetManager(
     val partitionId = tasks(index).partitionId
     // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
     // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
-    logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
-      s"(index=$index), attemptMapId=${mapStatus.mapId}. Marked as stale push.")
+    logInfo(log"[StalePush] Late/killed attempt tid=${MDC(TASK_ID, tid)} for " +
+      log"partition=${MDC(PARTITION_ID, partitionId)} (index=${MDC(INDEX, index)}), " +
+      log"attemptMapId=${MDC(MAP_ID, mapStatus.mapId)}. Marked as stale push.")
     sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
   }
 

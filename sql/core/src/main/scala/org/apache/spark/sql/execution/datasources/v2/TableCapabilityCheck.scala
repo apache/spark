@@ -133,7 +133,8 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
         case join: Join =>
           ExternalLookupJoinEligibility(join) match {
             case ExternalLookupJoinEligibility.Ineligible(error) => throw error
-            // The query is analyzed in full, so the condition cannot be added later.
+            // The command is checked before its query is optimized, so a key that predicate
+            // pushdown could move into the join from a filter above does not count here.
             case ExternalLookupJoinEligibility.MissingCondition =>
               throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
                 "MISSING_JOIN_CONDITION")

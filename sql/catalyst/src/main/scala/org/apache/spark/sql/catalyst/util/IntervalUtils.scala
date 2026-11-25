@@ -682,6 +682,19 @@ object IntervalUtils extends SparkIntervalUtils {
   }
 
   /**
+   * Unary minus, returns the negated calendar interval value, or null if negating any field
+   * overflows, that is when it is the minimum value of its type.
+   */
+  def negateOrNull(interval: CalendarInterval): CalendarInterval = {
+    if (interval.months == Int.MinValue || interval.days == Int.MinValue ||
+        interval.microseconds == Long.MinValue) {
+      null
+    } else {
+      negate(interval)
+    }
+  }
+
+  /**
    * Unary minus, return the negated the calendar interval value.
    */
   def negate(interval: CalendarInterval): CalendarInterval = {

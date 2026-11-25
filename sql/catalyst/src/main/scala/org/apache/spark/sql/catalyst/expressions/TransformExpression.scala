@@ -27,11 +27,11 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, MapType, StructType, UpCastRule, UserDefinedType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
 
 /**
  * The identity of a partition transform function. It holds the two values
@@ -58,18 +58,31 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
  *                    exactly that, and names the other half of the pairing that produced the space,
  *                    which is the only thing that tells two such key spaces apart. See
  *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
+ * @param storedKey whether this transform was rebuilt over a cogroup's key of another type than
+ *                  the layout's column, stored as it is (`TransformExpression.keysStoredAlike`), by
+ *                  `KeyedShuffleSpec.createPartitioning`. The cogroup pairs its groups by those
+ *                  bytes, so such a key goes to the function by storage, as the keyed side's
+ *                  column of the same bytes does, even where a datetime value of its type would
+ *                  be read differently (`datetimeCastKeepsValue`). Kept on the expression so that
+ *                  an executor resolves the call as the driver did.
  */
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
     numBucketsOpt: Option[Int] = None,
-    reducedWith: Option[TransformFunctionId] = None) extends Expression {
+    reducedWith: Option[TransformFunctionId] = None,
+    storedKey: Boolean = false) extends Expression {
 
   override def nullable: Boolean = true
 
-  /** Drops the trailing `reducedWith` when it is unset, so the ordinary form is unchanged. */
+  /**
+   * Prints `reducedWith` and `storedKey` only when they are set, so the ordinary form is
+   * unchanged, while two transforms that resolve their call or compare differently print
+   * differently.
+   */
   override protected def stringArgs: Iterator[Any] =
-    if (reducedWith.isEmpty) super.stringArgs.take(productArity - 1) else super.stringArgs
+    Iterator(function, children, numBucketsOpt) ++ Iterator(reducedWith).filter(_.isDefined) ++
+      Iterator("storedKey").filter(_ => storedKey)
 
   /** The identity of this expression's transform function. */
   lazy val functionId: TransformFunctionId =
@@ -196,7 +209,8 @@ case class TransformExpression(
    * would send the row to a partition it does not belong to. That second arm is a local gate. No
    * caller reaches it today, because every consumer of a reduced partitioning refuses it first,
    * and the write path never sees one. The write path (`DistributionAndOrderingUtils`) casts the
-   * arguments to the function's input types itself. `eval` uses [[evaluableFunction]] instead.
+   * arguments to the function's input types itself. `eval` and `doGenCode` use
+   * [[evaluableFunction]] instead.
    */
   lazy val resolvedFunction: Option[Expression] =
     scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, callArguments))
@@ -224,22 +238,35 @@ case class TransformExpression(
    * the failure) the driver resolved while planning.
    */
   @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] =
-    try Success(resolveEvaluableFunction()) catch {
+    try Success(resolveEvaluableFunction(quiet = false)) catch {
       case e @ (NonFatal(_) | _: LinkageError) =>
         TransformExpression.logCannotResolve(function, e)
         Failure(e)
     }
 
-  private def resolveEvaluableFunction(): Option[Expression] = scalarFunction match {
+  /**
+   * Whether [[evaluableFunction]] is defined, without logging why not, or what resolving its call
+   * threw. For `KeyedShuffleSpec.createPartitioning`, which fails on a transform it cannot
+   * evaluate rather than shuffle otherwise, so that no line claims a join does not evaluate it,
+   * and which makes what was thrown the cause of its error.
+   */
+  private[sql] def isEvaluableQuietly: Try[Boolean] =
+    try Success(resolveEvaluableFunction(quiet = true).isDefined) catch {
+      case e @ (NonFatal(_) | _: LinkageError) => Failure(e)
+    }
+
+  private def resolveEvaluableFunction(quiet: Boolean): Option[Expression] = scalarFunction match {
     case None =>
       // Reduced keys are the planner's own doing, so only a function Spark cannot call is logged.
-      if (!function.isInstanceOf[ScalarFunction[_]]) TransformExpression.logNotScalar(function)
+      if (!quiet && !function.isInstanceOf[ScalarFunction[_]]) {
+        TransformExpression.logNotScalar(function)
+      }
       None
     case Some(scalarFunc) =>
       val arguments = callArguments
       val declaredTypes = scalarFunc.inputTypes().toSeq
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
-        TransformExpression.atDeclaredType(argument, declaredType)
+        TransformExpression.atDeclaredType(argument, declaredType, storedKey)
       }
       if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
         val call = V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten)
@@ -247,16 +274,28 @@ case class TransformExpression(
           case None => Some(call)
           case failure =>
             // The types the call was resolved over, i.e. after the casts of narrower arguments.
-            TransformExpression.logArgumentsMismatch(scalarFunc, typed.flatten.map(_.dataType),
-              declaredTypes, failure)
+            if (!quiet) {
+              TransformExpression.logArgumentsMismatch(scalarFunc, typed.flatten.map(_.dataType),
+                declaredTypes, failure)
+            }
             None
         }
       } else {
-        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
-          declaredTypes, None)
+        if (!quiet) {
+          TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+            declaredTypes, None)
+        }
         None
       }
   }
+
+  /**
+   * Whether the code of [[evaluableFunction]] falls back to `eval` on the input row, as the call of
+   * a function with only `produceResult` does. This transform is not a [[CodegenFallback]], so the
+   * places that keep such code apart name it (see `CodegenFallback.generate`).
+   */
+  lazy val fallsBackToEval: Boolean =
+    evaluableFunction.exists(_.exists(_.isInstanceOf[CodegenFallback]))
 
   override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
     case Success(Some(call)) => call.eval(input)
@@ -265,7 +304,11 @@ case class TransformExpression(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    evaluableFunctionAttempt match {
+      case Success(Some(call)) => call.genCode(ctx)
+      case Failure(e) => throw e
+      case _ => throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    }
 }
 
 object TransformExpression extends Logging {
@@ -410,18 +453,24 @@ object TransformExpression extends Logging {
    * [[TransformExpression.evaluableFunction]].
    *
    * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
-   * which is how a function read it before this check. A numeric argument narrower than declared
-   * (`UpCastRule.legalNumericPrecedence`), e.g. a `SMALLINT` against an `INT` or an `INT` against a
-   * `DOUBLE`, is held as another JVM type, so it is cast. That gives the value a magic `invoke` got
-   * from Java's widening before this check, which can lose digits for a `BIGINT` against a
-   * `DOUBLE` as it did there, and needs no time zone. Anything else is refused,
-   * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone. A call
-   * whose arguments all suit is still refused when the method it invokes cannot take them, see
-   * `methodLookupFailure`.
+   * which is how a function read it before this check, apart from two datetime or interval types,
+   * which go as they are only as `datetimeCastKeepsValue` says, or by their physical type alone
+   * with `datetimeByStorage`, for a transform rebuilt over a cogroup's key (`storedKey`). A
+   * numeric argument narrower than declared (`UpCastRule.legalNumericPrecedence`), e.g. a
+   * `SMALLINT` against an `INT` or an `INT` against a `DOUBLE`, is held as another JVM type, so it
+   * is cast. That gives the value a magic `invoke` got from Java's widening before this check,
+   * which can lose digits for a `BIGINT` against a `DOUBLE` as it did there, and needs no time
+   * zone. Anything else is refused, a `DATE` against a `TIMESTAMP` in particular, whose cast takes
+   * the session time zone. A call whose arguments all suit is still refused when the method it
+   * invokes cannot take them, see `methodLookupFailure`.
    */
-  private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =
+  private def atDeclaredType(
+      argument: Expression,
+      declaredType: DataType,
+      datetimeByStorage: Boolean): Option[Expression] =
     (argument.dataType, declaredType) match {
-      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false) =>
+      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false,
+          datetimeByStorage = datetimeByStorage) =>
         Some(argument)
       case (argumentType, _) if UpCastRule.legalNumericPrecedence(argumentType, declaredType) =>
         Some(Cast(argument, declaredType))
@@ -453,23 +502,30 @@ object TransformExpression extends Logging {
    * bytes in an unsafe row, and order alike read as either type. A cogroup pairs the groups of its
    * two sides by comparing their key rows, ordered by its left side's key types, so keys of other
    * types pair their groups wrongly, or fail, see `KeyedShuffleSpec.createPartitioning`. As
-   * `storedAlike` for a nested value, apart from decimals: two decimals of one scale are stored
+   * `storedAlike` for a nested value, apart from decimals and from two datetime or interval types.
+   * Two decimals of one scale are stored
    * alike, whatever their precision, when both are stored as a `long`, up to
    * `Decimal.MAX_LONG_DIGITS` digits, or both as bytes. A row, the key itself or a struct field,
    * reads a `long` at a smaller precision than its value has as it is. An array element, or a
    * map's key or value, is read with a check that fails for a value of more digits than that
    * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
-   * pairs its groups wrongly.
+   * pairs its groups wrongly. Two datetime or interval types are compared by their physical type,
+   * e.g. a `TIME` key and a `TIMESTAMP` column, which the hash shuffle hashes alike. Nanosecond
+   * timestamps with and without a time zone, though stored and hashed alike, have physical types
+   * of their own, so they are not taken for each other. A key taken here goes to the layout's
+   * function by storage too, see `TransformExpression.storedKey`, unless the function cannot take
+   * it even so, e.g. a nested decimal of more precision than declared.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
-    storedAlike(from, to, nested = true, anyPrecision = true)
+    storedAlike(from, to, nested = true, anyNestedPrecision = true, datetimeByStorage = true)
 
   /**
    * Whether a value of type `from` is stored the way one of type `to` is, so that a function
    * declaring `to` reads it as it is:
    *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a
    *    `DATE` and an `INT`, or a `TIMESTAMP` and a `BIGINT`. A user-defined type is stored as its
-   *    `sqlType`;
+   *    `sqlType`. A function reads one datetime or interval type as another only as
+   *    `datetimeCastKeepsValue` says;
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
@@ -479,32 +535,70 @@ object TransformExpression extends Logging {
    *    `DECIMAL(10,2)`, see `KeyedShuffleSpec.createPartitioning`. Nested in an unsafe row, a
    *    decimal is read at the declared precision: it is stored as a `long` up to
    *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
-   *    and both on one side of that. With `anyPrecision`, as `keysStoredAlike` asks, any precision
-   *    on one side of that.
+   *    and both on one side of that.
+   * With `anyNestedPrecision`, a nested decimal of any precision on one side of that. With
+   * `datetimeByStorage`, two datetime or interval types by their physical type alone, whatever
+   * they hold, e.g. a `TIME` and a `TIMESTAMP`. `keysStoredAlike` asks both; a transform rebuilt
+   * over a cogroup's key stored alike (`storedKey`) asks only the latter, so that a nested decimal
+   * of more precision than declared still fails while planning.
    */
   private def storedAlike(
       from: DataType,
       to: DataType,
       nested: Boolean,
-      anyPrecision: Boolean = false): Boolean =
+      anyNestedPrecision: Boolean = false,
+      datetimeByStorage: Boolean = false): Boolean = {
+    def alike(f: DataType, t: DataType, nested: Boolean): Boolean =
+      storedAlike(f, t, nested, anyNestedPrecision, datetimeByStorage)
     (from, to) match {
       case _ if from == to => true
-      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested, anyPrecision)
-      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested, anyPrecision)
+      case (udt: UserDefinedType[_], _) => alike(udt.sqlType, to, nested)
+      case (_, udt: UserDefinedType[_]) => alike(from, udt.sqlType, nested)
       case (f: StructType, t: StructType) =>
         f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
-          storedAlike(ff.dataType, tf.dataType, nested = true, anyPrecision)
+          alike(ff.dataType, tf.dataType, nested = true)
         }
-      case (f: ArrayType, t: ArrayType) =>
-        storedAlike(f.elementType, t.elementType, nested = true, anyPrecision)
+      case (f: ArrayType, t: ArrayType) => alike(f.elementType, t.elementType, nested = true)
       case (f: MapType, t: MapType) =>
-        storedAlike(f.keyType, t.keyType, nested = true, anyPrecision) &&
-          storedAlike(f.valueType, t.valueType, nested = true, anyPrecision)
+        alike(f.keyType, t.keyType, nested = true) && alike(f.valueType, t.valueType, nested = true)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && (!nested || ((anyPrecision || f.precision <= t.precision) &&
+        f.scale == t.scale && (!nested || ((anyNestedPrecision || f.precision <= t.precision) &&
           DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
+      case (_: DatetimeType | _: AnsiIntervalType, _: DatetimeType | _: AnsiIntervalType)
+          if !datetimeByStorage && !datetimeCastKeepsValue(from, to) => false
       case _ =>
         val physical = PhysicalDataType(from)
         physical != UninitializedPhysicalType && physical == PhysicalDataType(to)
+    }
+  }
+
+  /**
+   * Whether Spark's cast from the datetime or interval type `from` to another one, `to`, leaves
+   * every value unchanged, which `storedAlike` asks besides one physical type, so that a function
+   * declaring `to` gets one value however it reaches it, as it is or cast by the write path, whose
+   * implicit cast depends on `spark.sql.ansi.enabled`. That holds for a type of the same class at
+   * no finer a precision or end field, e.g. a `TIME(3)` against a `TIME(6)`,
+   * or a `DAY TO HOUR` interval against a `DAY TO SECOND` one. A timestamp goes by its family,
+   * local or not, and its fractional precision (`TimestampFamily`), e.g. a `TIMESTAMP_NTZ(7)`
+   * against a `TIMESTAMP_NTZ(9)`. Not one of a finer precision or end field, which the cast
+   * truncates. Not one of another class, though both can share a physical type: a `TIME` holds
+   * nanoseconds of the day where a `TIMESTAMP` holds microseconds since the epoch, a `YEAR TO
+   * MONTH` interval holds months where a `DATE` holds days, a `DAY TO SECOND` interval holds a
+   * duration where a `TIMESTAMP` holds an instant, and a `TIMESTAMP_NTZ` holds a local time where
+   * a `TIMESTAMP` holds an instant, which the cast converts with the session time zone. Where the
+   * write path passes such a value as it is, e.g. an interval, which it never casts, refusing it
+   * costs a join only its storage-partitioned plan. A cogroup's key stored as the layout's column
+   * is goes to the function by storage, see `storedKey`.
+   */
+  private def datetimeCastKeepsValue(from: DataType, to: DataType): Boolean =
+    (TimestampFamily.fractionalPrecision(from), TimestampFamily.fractionalPrecision(to)) match {
+      case (Some(f), Some(t)) => TimestampFamily.isLtz(from) == TimestampFamily.isLtz(to) && f <= t
+      case _ => (from, to) match {
+        case (f: TimeType, t: TimeType) => f.precision <= t.precision
+        case (f: DayTimeIntervalType, t: DayTimeIntervalType) => f.endField <= t.endField
+        case (f: YearMonthIntervalType, t: YearMonthIntervalType) => f.endField <= t.endField
+        // `storedAlike` takes two equal types first, so these are of other classes.
+        case _ => false
+      }
     }
 }
