@@ -61,7 +61,9 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
   private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
   private val isTimeTypeEnabled = SQLConf.get.isTimeTypeEnabled
-  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
+  private lazy val timeFormatter = allCatch opt {
+    TimeFormatter(options.timeFormatInRead, isParsing = true)
+  }
 
   override def equals(obj: Any): Boolean = obj match {
     case other: JsonInferSchema => options == other.options
@@ -180,7 +182,7 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
           decimalTry.get
         } else if (options.inferTimestamp) {
           if (isTimeTypeEnabled &&
-              timeFormatter.parseOptional(field).isDefined) {
+              timeFormatter.exists(_.parseOptional(field).isDefined)) {
             TimeType(TimeType.DEFAULT_PRECISION)
           // For text-based format, it's ambiguous to infer a timestamp string without
           // timezone, as it can be both TIMESTAMP LTZ and NTZ. To avoid behavior changes

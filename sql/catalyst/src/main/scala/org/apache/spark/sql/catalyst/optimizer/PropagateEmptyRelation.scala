@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
@@ -67,8 +68,14 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
   protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = true
 
+  // A streaming source without data in a micro-batch is an empty LocalRelation. Removing it from
+  // a Union changes the plan from batch to batch, so a rule that pushes a stateful operator below
+  // the Union, such as PushDownLeftSemiAntiJoin, can change the number of stateful operators.
+  private def canPruneUnionChildren(union: Union): Boolean = !union.isStreaming ||
+    conf.getConf(SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN)
+
   protected def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case p: Union if p.children.exists(isEmpty) =>
+    case p: Union if p.children.exists(isEmpty) && canPruneUnionChildren(p) =>
       val newChildren = p.children.filterNot(isEmpty)
       if (newChildren.isEmpty) {
         empty(p)

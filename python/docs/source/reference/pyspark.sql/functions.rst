@@ -144,10 +144,12 @@ Mathematical Functions
     tan
     tanh
     truncate
+    try_abs
     try_add
     try_divide
     try_mod
     try_multiply
+    try_negative
     try_subtract
     unhex
     uniform

@@ -3094,7 +3094,8 @@ class DataFrame:
             an asof tolerance within this range; must be compatible
             with the merge index.
         allowExactMatches : bool, optional
-            default ``True``.
+            default ``True``. If ``False``, a right row with an equal key is not matched.
+            The ``tolerance`` bound stays inclusive.
         direction : str, optional
             default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
 
@@ -3136,6 +3137,14 @@ class DataFrame:
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=6)]
+
+        A join on column names returns each of these columns once, first, as in SQL
+        ``ASOF JOIN ... USING``.
+
+        >>> left_k = spark.createDataFrame([(1, "x"), (5, "y")], ["a", "k"])
+        >>> right_k = spark.createDataFrame([(1, "x", 1), (3, "y", 2)], ["a", "k", "v"])
+        >>> left_k._joinAsOf(right_k, leftAsOfColumn="a", rightAsOfColumn="a", on="k").columns
+        ['k', 'a', 'a', 'v']
         """
         ...
 

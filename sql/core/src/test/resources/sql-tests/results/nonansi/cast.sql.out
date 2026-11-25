@@ -351,9 +351,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "literal" : "interval 3 month 1 hour"
+    "input" : "3 month 1 hour"
   },
   "queryContext" : [ {
     "objectType" : "",
