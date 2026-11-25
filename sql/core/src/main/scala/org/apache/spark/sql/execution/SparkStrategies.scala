@@ -1183,6 +1183,35 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           r.partitioning, planLater(r.child),
           shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
+      case p: execution.python.PythonRDDMapPartitions =>
+        execution.python.PythonRDDMapPartitionsExec(
+          p.func, p.isBarrier, p.outputPairs, p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDShuffle =>
+        val partitioning = physical.ShufflePartitionIdPassThrough(
+          DirectShufflePartitionID(p.child.output.head), p.numPartitions)
+        exchange.ShuffleExchangeExec(partitioning, planLater(p.child), REPARTITION_BY_NUM) :: Nil
+      case p: execution.python.PythonRDDValues =>
+        execution.python.PythonRDDValuesExec(p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDUnion =>
+        execution.python.PythonRDDUnionExec(p.output, p.children.map(planLater)) :: Nil
+      case p: execution.python.PythonRDDZipPartitions =>
+        execution.python.PythonRDDZipPartitionsExec(
+          p.concatenate, p.output, p.children.map(planLater)) :: Nil
+      case p: execution.python.PythonRDDCartesian =>
+        execution.python.PythonRDDCartesianExec(
+          p.output, planLater(p.left), planLater(p.right)) :: Nil
+      case p: execution.python.PythonRDDCoalesce =>
+        execution.CoalesceExec(p.numPartitions, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDParallelize =>
+        execution.python.PythonRDDParallelizeExec(p.numSlices, p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDFromDataFrame =>
+        execution.python.PythonRDDFromDataFrameExec(p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDToDataFrame =>
+        execution.python.PythonRDDToDataFrameExec(p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDElements =>
+        execution.python.PythonRDDElementsExec(p.partitions, p.output, planLater(p.child)) :: Nil
+      case p: execution.python.PythonRDDWithResources =>
+        execution.python.PythonRDDWithResourcesExec(p.profile, planLater(p.child)) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
           r.stream) :: Nil

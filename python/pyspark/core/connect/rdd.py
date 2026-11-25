@@ -18,22 +18,24 @@
 """
 RDD API on Spark Connect.
 
-An RDD here is a DataFrame whose rows encode its elements (see ``_runtime``) plus a pending
-function ``func(split, iterator)`` from narrow transformations. Narrow transformations only
-compose that function, so a chain of them runs as one ``mapInArrow`` pass per stage, the way
-``PipelinedRDD`` does in Spark Classic. Shuffles bucket elements in Python and move them with
-``DataFrame.repartitionById``; aggregations, sorting, and joins use the same Python algorithms as
-Spark Classic on top of that.
+The server builds the RDDs as Spark Classic builds the RDDs of PySpark, with the same RDDs of
+Spark Core: a function of the partitions runs in Python as a ``PythonRDD``, a shuffle moves the
+batches that Python buckets with a ``PairwiseRDD`` partitioned by a ``PythonPartitioner``, and
+``union``, ``zip``, ``cartesian``, ``coalesce`` and the sources are the RDD methods that PySpark
+calls. So the algorithms of this module are those of Spark Classic's RDD, and the elements move
+between the JVM and Python in the same pickled batches.
 
-``mapInArrow`` reports the Spark task's partition id, which is the RDD partition index unless a
-union, coalesce, or cartesian product places the pipeline in a differently partitioned stage.
-Pipelines that read the index (``mapPartitionsWithIndex``, sampling, ...) are tracked so those
-operations can correct the index or materialize such a pipeline in a stage of its own first.
+The client describes an RDD with an ``RDDPlan`` (see relations.proto), which the server builds once
+per session and keeps under the ID of the plan until the client releases it, when the plan is not
+referenced anymore. The jobs and the commands of an RDD then share the RDD on the server, as they
+share the JVM RDD in Spark Classic: its shuffle outputs, its cached partitions and its
+checkpoint. Once the server keeps the RDD of a plan, the client sends the plan as a reference to it.
 """
 
 import bisect
 import copy
 import heapq
+import io
 import itertools
 import math
 import operator
@@ -45,8 +47,8 @@ import uuid
 import warnings
 from collections import defaultdict
 from functools import reduce
-from io import BytesIO
 from itertools import chain
+from math import ceil, isinf, isnan, log, pow, sqrt
 from subprocess import PIPE, Popen
 from threading import Thread
 from typing import (
@@ -69,7 +71,8 @@ from typing import (
     cast,
 )
 
-from pyspark.core.connect import _runtime as rt
+import pyspark.sql.connect.proto as pb2
+from pyspark.core.connect import _runtime
 from pyspark.core.rdd import RDD as RDDFacade
 from pyspark.core.rdd import BoundedFloat, Partitioner
 from pyspark.core.rdd import RDDBarrier as RDDBarrierFacade
@@ -87,9 +90,13 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.serializers import (
     AutoBatchedSerializer,
     BatchedSerializer,
+    CartesianDeserializer,
     CloudPickleSerializer,
     CPickleSerializer,
+    NoOpSerializer,
+    PairDeserializer,
     Serializer,
+    pack_long,
 )
 from pyspark.shuffle import (
     Aggregator,
@@ -104,10 +111,12 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.util import _parse_memory, fail_on_stopiteration, portable_hash
 
 if TYPE_CHECKING:
+    import pyarrow as pa
+
+    from pyspark._typing import NumberOrArray, S, SizedIterable
     from pyspark.core.connect.context import SparkContext
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.types import StructType
 
 __all__ = ["RDD", "RDDBarrier"]
 
@@ -117,116 +126,107 @@ U = TypeVar("U")
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
 
-PartitionFunc = Callable[[int, Iterator[Any]], Iterable[Any]]
 
-# Serializer for data that ExternalMerger, ExternalGroupBy, and ExternalSorter spill to disk.
-_SPILL_SERIALIZER = AutoBatchedSerializer(CloudPickleSerializer())
-# The chunk of shuffle markers, which holds no elements.
-_EMPTY_CHUNK = rt.dumps([])
-
-
-def _chunk_schema() -> "StructType":
-    from pyspark.sql.types import BinaryType, IntegerType, StructField, StructType
-
-    return StructType(
-        [
-            StructField(rt.CHUNK_COL, BinaryType(), True),
-            StructField(rt.COUNT_COL, IntegerType(), True),
-        ]
-    )
-
-
-def _pid_chunk_schema() -> "StructType":
-    from pyspark.sql.types import IntegerType, StructField
-
-    return _chunk_schema().add(StructField(rt.PID_COL, IntegerType(), True))
-
-
-def _place(tagged: "DataFrame", num: int, *extra: Any, pid_col: str = rt.PID_COL) -> "DataFrame":
+class _RDDRelationPlan:
     """
-    Shuffle ``tagged`` to the partitions in its partition id column. One empty row per partition
-    is added (``extra`` gives the values of any columns after the chunk, count, and partition id
-    columns): adaptive query execution replaces a shuffle with no rows at all by an empty
-    relation without partitions, whereas an RDD keeps its empty partitions.
+    The plan of a relation of the RDD API (``RDDRelation``): ``fill`` writes its relation type,
+    with the relations of its inputs, the plans of the DataFrames of other RDDs.
     """
-    from pyspark.sql.connect import functions as F
 
-    markers = tagged.sparkSession.range(0, num, 1, numPartitions=1).select(
-        F.lit(_EMPTY_CHUNK).alias(rt.CHUNK_COL),
-        F.lit(0).alias(rt.COUNT_COL),
-        F.col("id").cast("int").alias(pid_col),
-        *extra,
-    )
-    return tagged.union(markers).repartitionById(num, pid_col)
+    @staticmethod
+    def dataframe(
+        ctx: "SparkContext",
+        fill: Callable[[pb2.RDDRelation, Any], None],
+        child: Optional["ConnectDataFrame"] = None,
+    ) -> "ConnectDataFrame":
+        """A DataFrame of the relation that ``fill`` writes."""
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.plan import LogicalPlan
 
+        class RDDRelation(LogicalPlan):
+            def __init__(self) -> None:
+                # The first input, for the observations of the plan.
+                super().__init__(None if child is None else child._plan)
 
-def _compose(first: Optional[PartitionFunc], second: PartitionFunc) -> PartitionFunc:
-    if first is None:
-        return second
+            def plan(self, session: Any) -> pb2.Relation:
+                relation = self._create_proto_relation()
+                fill(relation.rdd_relation, session)
+                return relation
 
-    def composed(split: int, iterator: Iterator[Any]) -> Iterable[Any]:
-        return second(split, iter(first(split, iterator)))
-
-    return composed
-
-
-def _shift(func: PartitionFunc, offset: int) -> PartitionFunc:
-    """Run ``func`` in a stage whose task ids are this RDD's partition indices plus ``offset``."""
-
-    def shifted(split: int, iterator: Iterator[Any]) -> Iterable[Any]:
-        return func(split - offset, iterator)
-
-    return shifted
+        return DataFrame(RDDRelation(), ctx._session)
 
 
-def _identity_partition(split: int, iterator: Iterator[Any]) -> Iterator[Any]:
-    return iterator
+def _relation(df: "ConnectDataFrame", session: Any) -> pb2.Relation:
+    return df._plan.plan(session)
 
 
-def _confidence_factor(confidence: float, count: int) -> float:
-    """Two-sided normal or Student's t quantile, as used by Spark's approximate evaluators."""
-    from statistics import NormalDist
+def _local_data_relation(ctx: "SparkContext", values: Sequence[bytes]) -> pb2.Relation:
+    """
+    A relation of local data with one binary column holding ``values`` in order. Like the local
+    data of ``createDataFrame``, it is cached on the server as artifacts when it is large.
+    """
+    import pyarrow as pa
 
-    if confidence >= 1.0:
-        return math.inf
-    if confidence <= 0.0:
-        return 0.0
-    p = 1 - (1 - confidence) / 2
-    z = NormalDist().inv_cdf(p)
-    if count > 100:
-        return z
-    dof = count - 1
-    if dof == 1:
-        return math.tan(math.pi * (p - 0.5))
-    if dof == 2:
-        return (2 * p - 1) / math.sqrt(2 * p * (1 - p))
-    # Abramowitz and Stegun 26.7.5, accurate to a few parts in 1e4 for three or more degrees of
-    # freedom.
-    g1 = (z**3 + z) / 4
-    g2 = (5 * z**5 + 16 * z**3 + 3 * z) / 96
-    g3 = (3 * z**7 + 19 * z**5 + 17 * z**3 - 15 * z) / 384
-    g4 = (79 * z**9 + 776 * z**7 + 1482 * z**5 - 1920 * z**3 - 945 * z) / 92160
-    return z + g1 / dof + g2 / dof**2 + g3 / dof**3 + g4 / dof**4
+    from pyspark.sql.connect.plan import LocalRelation, LogicalPlan
+    from pyspark.sql.types import BinaryType, StructField, StructType
+
+    table = pa.Table.from_arrays([pa.array(values, pa.large_binary())], names=["value"])
+    local = LocalRelation(table, schema=StructType([StructField("value", BinaryType())]).json())
+    session = ctx._session
+    plan: LogicalPlan = local
+    # Data below the default threshold of the cache is sent in the plan without asking the
+    # server for its configurations.
+    if table.nbytes >= _INLINE_DATA_LIMIT:
+        configs = session._client.get_config_dict(
+            "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationSizeLimit",
+            "spark.sql.session.localRelationChunkSizeRows",
+            "spark.sql.session.localRelationChunkSizeBytes",
+            "spark.sql.session.localRelationBatchOfChunksSizeBytes",
+        )
+
+        def conf(name: str) -> int:
+            # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found.
+            return int(cast(str, configs["spark.sql.session." + name]))
+
+        if conf("localRelationCacheThreshold") <= table.nbytes:
+            plan = session._cache_local_relation(
+                local,
+                conf("localRelationSizeLimit"),
+                conf("localRelationChunkSizeRows"),
+                conf("localRelationChunkSizeBytes"),
+                conf("localRelationBatchOfChunksSizeBytes"),
+            )
+    return plan.plan(session.client)
 
 
-class _PythonJrddRef:
-    """Lightweight handle so ``RDD._jrdd.first()`` keeps working without a JVM."""
+# The default of spark.sql.session.localRelationCacheThreshold.
+_INLINE_DATA_LIMIT = 1 << 20
 
-    def __init__(self, rdd: "RDD[Any]") -> None:
-        self._rdd = rdd
 
-    def first(self) -> bytes:
-        rows = self._rdd.take(1)
-        if not rows:
-            raise ValueError("RDD is empty")
-        buf = BytesIO()
-        BatchedSerializer(CPickleSerializer(), 1).dump_stream(iter(rows), buf)
-        return buf.getvalue()
+def _with_resources(
+    ctx: "SparkContext", df: "ConnectDataFrame", profile: ResourceProfile
+) -> "ConnectDataFrame":
+    """The rows of ``df``, in a stage that runs with ``profile``."""
+    profile_id = profile.id
+
+    def fill(relation: pb2.RDDRelation, session: Any) -> None:
+        relation.with_resources.input.CopyFrom(_relation(df, session))
+        relation.with_resources.profile_id = profile_id
+
+    return _RDDRelationPlan.dataframe(ctx, fill, df)
+
+
+def _load(deserializer: Serializer, table: "pa.Table") -> Iterator[Any]:
+    """The elements in the ``data`` column of the rows of ``RDDRelation.Elements``."""
+    for data in table.column(1).to_pylist():
+        yield from deserializer.load_stream(io.BytesIO(data))
 
 
 class RDD(RDDFacade, Generic[T_co]):
     """
-    RDD backed by a Spark Connect :class:`DataFrame`.
+    A Resilient Distributed Dataset (RDD) on Spark Connect: a DataFrame whose rows hold the
+    elements of the RDD, as its deserializer reads them, in the partitions of the RDD.
 
     .. versionadded:: 5.0.0
     """
@@ -238,323 +238,99 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def __init__(
         self,
-        df: "DataFrame",
+        df: "ConnectDataFrame",
         ctx: "SparkContext",
+        jrdd_deserializer: Serializer = AutoBatchedSerializer(CPickleSerializer()),
         num_partitions: Optional[int] = None,
-        source: str = rt.SOURCE_CHUNKS,
-        func: Optional[PartitionFunc] = None,
-        row_schema: Optional["StructType"] = None,
-        binary_as_bytes: bool = True,
+        server_partitioner: Optional[Tuple[int, int]] = None,
     ) -> None:
-        self._df = df
-        # The facade declares ``ctx`` as Spark Classic's SparkContext; see ``_cctx``.
-        self.ctx = cast(Any, ctx)
-        # Known partition count, or None until computed.
-        self._num_partitions = num_partitions
-        self._source = source
-        self._func = func
-        self._row_schema = row_schema
-        self._binary_as_bytes = binary_as_bytes
-        # Whether the pending function reads the partition index it is given.
-        self._func_uses_split = False
-        # Whether ``_df`` holds materialized functions that read the Spark task id as the
-        # partition index, so that it must not run under a differently partitioned stage.
-        self._df_uses_split = False
-        # Whether ``_df`` has a PID column holding each row's partition index.
-        self._df_has_pid = False
-        self._barrier = False
-        self._stage_profile: Optional[ResourceProfile] = None
-        self._resource_profile: Optional[ResourceProfile] = None
-        self.has_resource_profile = False
-        self._materialized: Optional["DataFrame"] = None
-        self._rdd_id: Optional[int] = None
-        self._name: Optional[str] = None
-        self.partitioner: Optional[Partitioner] = None
+        self._df_val = df
         self.is_cached = False
         self.is_checkpointed = False
+        self.has_resource_profile = False
+        # The facade declares ``ctx`` as Spark Classic's SparkContext; see ``_cctx``.
+        self.ctx = cast(Any, ctx)
+        self._jrdd_deserializer = jrdd_deserializer
+        self._id: Optional[int] = None
+        self.partitioner: Optional[Partitioner] = None
+        self._name: Optional[str] = None
         self._locally_checkpointed = False
-        self._jrdd_deserializer: Serializer = AutoBatchedSerializer(CPickleSerializer())
+        self._resource_profile: Optional[ResourceProfile] = None
+        # The cache of ``_df`` with a resource profile: the DataFrame of the elements and the
+        # profile that it was made of, and it.
+        self._df_with_resources: Optional[
+            Tuple["ConnectDataFrame", ResourceProfile, "ConnectDataFrame"]
+        ] = None
+        # The number of partitions, when known without asking the server.
+        self._num_partitions = num_partitions
+        # The number of partitions and the ID of the partition function of the shuffle that
+        # partitioned the elements, while the RDD keeps that partitioning on the server: as with
+        # the partitioners of the RDDs of Spark Classic, unions of RDDs with the same one keep it.
+        self._server_partitioner = server_partitioner
 
     @classmethod
     def _from_dataframe(cls, df: "ConnectDataFrame") -> "RDD[Any]":
-        """``DataFrame.rdd``: an RDD of the DataFrame's rows."""
-        rdd: RDD[Any] = RDD(
-            df,
-            df.sparkSession.sparkContext,
-            None,
-            rt.SOURCE_ROWS,
-            row_schema=df.schema,
-            binary_as_bytes=df._get_binary_as_bytes(),
-        )
-        return rdd
+        """``DataFrame.rdd``: the rows of the DataFrame, as Spark Classic pickles them."""
+        ctx = df.sparkSession.sparkContext
+
+        def fill(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.from_data_frame.input.CopyFrom(_relation(df, session))
+
+        rdd_df = _RDDRelationPlan.dataframe(ctx, fill, df)
+        return RDD(rdd_df, ctx, BatchedSerializer(CPickleSerializer()))
 
     # -- Internals -----------------------------------------------------------------------------
+
+    @property
+    def _df(self) -> "ConnectDataFrame":
+        """
+        The DataFrame of the RDD: the DataFrame of its elements, in a stage that runs with the
+        resource profile of the RDD when it has one.
+        """
+        df = self._elements_df
+        profile = self._resource_profile
+        if profile is None:
+            return df
+        cached = self._df_with_resources
+        if cached is None or cached[0] is not df or cached[1] is not profile:
+            cached = (df, profile, _with_resources(self._cctx, df, profile))
+            self._df_with_resources = cached
+        return cached[2]
+
+    @property
+    def _elements_df(self) -> "ConnectDataFrame":
+        """The DataFrame of the elements of the RDD, without its resource profile."""
+        return self._df_val
 
     @property
     def _cctx(self) -> "SparkContext":
         """``ctx`` as the Spark Connect SparkContext that it is."""
         return cast("SparkContext", self.ctx)
 
-    def _derive(
+    def _new(
         self,
-        func: PartitionFunc,
-        preservesPartitioning: bool = False,
-        uses_split: bool = False,
-        barrier: bool = False,
+        fill: Callable[[pb2.RDDRelation, Any], None],
+        jrdd_deserializer: Serializer,
+        num_partitions: Optional[int] = None,
+        server_partitioner: Optional[Tuple[int, int]] = None,
     ) -> "RDD[Any]":
-        """A narrow transformation: compose ``func`` into the pending pipeline."""
-        child: RDD[Any] = RDD(
-            self._df,
-            self._cctx,
-            self._num_partitions,
-            self._source,
-            _compose(self._func, func),
-            self._row_schema,
-            self._binary_as_bytes,
-        )
-        child._func_uses_split = self._func_uses_split or uses_split
-        child._df_uses_split = self._df_uses_split
-        child._barrier = self._barrier or barrier
-        child._stage_profile = self._stage_profile
-        if preservesPartitioning:
-            child.partitioner = self.partitioner
-        return child
-
-    def _input_df(self) -> "DataFrame":
-        if self._source == rt.SOURCE_CHUNKS:
-            return self._df.select(rt.CHUNK_COL)
-        return self._df
-
-    def _run(
-        self,
-        emit: Callable[..., Any],
-        schema: Union["StructType", str],
-        func: Optional[PartitionFunc] = None,
-        partitions: Optional[Sequence[int]] = None,
-        offset: int = 0,
-    ) -> "DataFrame":
-        """
-        DataFrame running the pending pipeline, then ``func``, in one ``mapInArrow`` pass and
-        writing the result with ``emit``. ``offset`` is how far the task ids of the stage this
-        DataFrame ends up in are from this RDD's partition indices.
-        """
-        from pyspark.sql.connect import functions as F
-
-        pipeline = self._func if func is None else _compose(self._func, func)
-        if offset and pipeline is not None:
-            pipeline = _shift(pipeline, offset)
-        selected = None if partitions is None else frozenset(partitions)
-        runner = rt.make_runner(
-            self._source,
-            pipeline,
-            emit,
-            self._row_schema,
-            self._binary_as_bytes,
-            selected,
-        )
-        df = self._input_df()
-        if selected is not None:
-            # Keep the rows of other partitions out of the Python workers; the runner also skips
-            # those partitions before running any user function.
-            df = df.filter(F.spark_partition_id().isin(sorted(selected)))
-        return df.mapInArrow(runner, schema, barrier=self._barrier, profile=self._stage_profile)
-
-    def _chunk_df(self) -> "DataFrame":
-        """The elements as encoded chunks: a DataFrame with the chunk and count columns."""
-        if self._func is None and self._source == rt.SOURCE_CHUNKS:
-            return self._df.select(rt.CHUNK_COL, rt.COUNT_COL)
-        if self._materialized is None:
-            self._materialized = self._run(rt.emit_chunks, _chunk_schema())
-        return self._materialized
-
-    def _uses_split(self) -> bool:
-        return self._func_uses_split or self._df_uses_split
-
-    def _sealed(self) -> "RDD[T_co]":
-        """
-        This RDD without dependence on Spark task ids: a pipeline that reads the partition index
-        is materialized in a stage of its own, and every partition is moved as a whole and in
-        order to the same partition index.
-        """
-        if not self._uses_split():
-            return self
-        num = self.getNumPartitions()
-
-        def tag(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[bytes, int, int]]:
-            for blob, n in rt.encode_chunks(iterator):
-                yield blob, n, split
-
-        tagged = self._run(rt.emit_pid_chunks, _pid_chunk_schema(), func=tag)
-        sealed: RDD[T_co] = RDD(_place(tagged, num), self._cctx, num)
-        sealed.partitioner = self.partitioner
-        sealed._df_has_pid = True
-        return sealed
-
-    def _union_df(self, rdds: Sequence["RDD[Any]"]) -> "DataFrame":
-        """
-        Concatenate the chunks of ``rdds``. Every branch is re-aliased so that Spark keeps the
-        union a concatenation even when branches report the same partitioning.
-        """
-        from pyspark.sql.connect import functions as F
-
-        result = None
-        for i, rdd in enumerate(rdds):
-            if i > 0 and rdd._df_uses_split:
-                rdd = rdd._sealed()
-            if i > 0 and rdd._func_uses_split:
-                offset = sum(r.getNumPartitions() for r in rdds[:i])
-                part = rdd._run(rt.emit_chunks, _chunk_schema(), offset=offset)
-            else:
-                part = rdd._chunk_df()
-            part = part.select(
-                F.col(rt.CHUNK_COL).alias(rt.CHUNK_COL), F.col(rt.COUNT_COL).alias(rt.COUNT_COL)
-            )
-            result = part if result is None else result.union(part)
-        assert result is not None
-        return result
-
-    def _pid_tagged_df(self, side: int, offset: int) -> "DataFrame":
-        """
-        The chunks with their partition index, ``side``, and a sequence number keeping their
-        order within the partition, for a union of RDDs with the same partitioner. ``offset`` is
-        as in :meth:`_run`.
-        """
-        from pyspark.sql.connect import functions as F
-
-        rdd = self._sealed() if offset and self._df_uses_split else self
-        if rdd._func is None and rdd._df_has_pid:
-            tagged = rdd._df.select(rt.CHUNK_COL, rt.COUNT_COL, rt.PID_COL)
-        else:
-
-            def tag(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[bytes, int, int]]:
-                for blob, n in rt.encode_chunks(iterator):
-                    yield blob, n, split
-
-            tagged = rdd._run(rt.emit_pid_chunks, _pid_chunk_schema(), func=tag, offset=offset)
-        return tagged.select(
-            F.col(rt.CHUNK_COL).alias(rt.CHUNK_COL),
-            F.col(rt.COUNT_COL).alias(rt.COUNT_COL),
-            F.col(rt.PID_COL).alias(rt.PID_COL),
-            F.lit(side).alias("__side"),
-            F.monotonically_increasing_id().alias("__seq"),
-        )
-
-    def _collect_partition(self, split: int) -> List[Any]:
-        """Run the pipeline for one partition only."""
-        df = self._run(rt.emit_chunks, _chunk_schema(), partitions=[split])
-        return rt.decode_table(df.select(rt.CHUNK_COL).toArrow(), rt.SOURCE_CHUNKS)
-
-    def _collect_partitions(self, partitions: Sequence[int]) -> Dict[int, List[Any]]:
-        """Run the pipeline for the given partitions only, keeping the results per partition."""
-
-        def tag(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[int, List[Any]]]:
-            yield split, list(iterator)
-
-        df = self._run(rt.emit_chunks, _chunk_schema(), func=tag, partitions=partitions)
-        return dict(rt.decode_table(df.select(rt.CHUNK_COL).toArrow(), rt.SOURCE_CHUNKS))
-
-    def _exchange(
-        self,
-        numPartitions: int,
-        bucket: Callable[[int, Iterator[Any]], Iterator[Tuple[bytes, int, int]]],
-    ) -> "RDD[Any]":
-        """Shuffle the chunks that ``bucket`` assigns to target partitions."""
-        tagged = self._run(rt.emit_pid_chunks, _pid_chunk_schema(), func=bucket)
-        rdd: RDD[Any] = RDD(_place(tagged, numPartitions), self._cctx, numPartitions)
-        rdd._df_has_pid = True
-        return rdd
-
-    def _bucketed(
-        self, numPartitions: int, target: Callable[[int], Callable[[Any], int]]
-    ) -> Callable[[int, Iterator[Any]], Iterator[Tuple[bytes, int, int]]]:
-        """
-        Map side of a shuffle: group each partition's elements by target partition into chunks,
-        flushing a bucket once its chunk is big enough and every bucket when the worker runs out
-        of memory. ``target(split)`` returns the target function for that partition.
-        """
-        limit = self._memory_limit() / 2
-
-        def bucket(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[bytes, int, int]]:
-            pid_of = target(split)
-            buckets: Dict[int, List[Any]] = defaultdict(list)
-            sizes: Dict[int, int] = defaultdict(lambda: 1)
-            c = 0
-            for x in iterator:
-                pid = pid_of(x)
-                items = buckets[pid]
-                items.append(x)
-                c += 1
-                if len(items) >= sizes[pid]:
-                    blob = rt.dumps(items)
-                    yield blob, len(items), pid
-                    del buckets[pid]
-                    if len(blob) < rt.CHUNK_TARGET_BYTES:
-                        sizes[pid] *= 2
-                    elif len(blob) > rt.CHUNK_TARGET_BYTES * 10 and sizes[pid] > 1:
-                        sizes[pid] //= 2
-                if c % 1000 == 0 and get_used_memory() > limit:
-                    for p in list(buckets.keys()):
-                        items = buckets.pop(p)
-                        yield rt.dumps(items), len(items), p
-            for p, items in buckets.items():
-                yield rt.dumps(items), len(items), p
-
-        return bucket
-
-    def _approx(
-        self, partial: Callable[[Iterable[Any]], Any], timeout: int
-    ) -> Tuple[List[Any], int, bool]:
-        """
-        Compute ``partial`` per partition in the background and return the results available
-        when ``timeout`` (milliseconds) expires: (results, number of partitions, complete).
-        """
-        total = self.getNumPartitions()
-        if total == 0:
-            return [], 0, True
-        df = self.mapPartitions(lambda it: [partial(it)])._chunk_df().select(rt.CHUNK_COL)
-        session = self._cctx._session
-        tag = "spark-connect-rdd-approx-" + uuid.uuid4().hex
-        results: List[Any] = []
-        errors: List[BaseException] = []
-        done = threading.Event()
-
-        def run() -> None:
-            try:
-                session.addTag(tag)
-                try:
-                    for row in df.toLocalIterator():
-                        results.extend(rt.loads(row[0]))
-                finally:
-                    session.removeTag(tag)
-            except BaseException as e:
-                errors.append(e)
-            finally:
-                done.set()
-
-        Thread(target=run, daemon=True).start()
-        complete = done.wait(max(0, timeout) / 1000.0)
-        if not complete:
-            # Python cannot ask for the final value later, so stop the job instead of leaving it
-            # running.
-            session.interruptTag(tag)
-        elif errors:
-            raise errors[0]
-        return list(results), total, complete
-
-    def _to_dataframe(self, struct: "StructType", use_large_var_types: bool) -> "DataFrame":
-        """Convert the elements to rows of ``struct`` in the same pass as the pipeline."""
-        from pyspark.sql.pandas.types import _deduplicate_field_names
-
-        deduped = cast("StructType", _deduplicate_field_names(struct))
-        return self._run(rt.make_dataframe_emitter(deduped, use_large_var_types), deduped)
-
-    # -- Identity and persistence -------------------------------------------------------------
+        """A new RDD of the relation that ``fill`` writes."""
+        df = _RDDRelationPlan.dataframe(self._cctx, fill, self._df)
+        return RDD(df, self._cctx, jrdd_deserializer, num_partitions, server_partitioner)
 
     def _pickled(self: "RDD[T]") -> "RDD[T]":
-        return self
+        return self._reserialize(AutoBatchedSerializer(CPickleSerializer()))
 
     def _reserialize(self: "RDD[T]", serializer: Optional[Serializer] = None) -> "RDD[T]":
+        serializer = serializer or self.ctx.serializer
+        if self._jrdd_deserializer != serializer:
+            self = self.map(lambda x: x, preservesPartitioning=True)
+            self._jrdd_deserializer = serializer
         return self
+
+    def _collect(self, partitions: Optional[Sequence[int]] = None) -> List[Any]:
+        """The elements of the partitions (all of them if not given), in the order given."""
+        return self._cctx._collect_rdd(self._df, self._jrdd_deserializer, partitions)
 
     def _to_java_object_rdd(self) -> NoReturn:
         raise PySparkNotImplementedError(
@@ -562,14 +338,13 @@ class RDD(RDDFacade, Generic[T_co]):
             messageParameters={"feature": "RDD._to_java_object_rdd on Spark Connect"},
         )
 
-    @property
-    def _jrdd(self) -> _PythonJrddRef:
-        return _PythonJrddRef(self)
+    # -- Identity and persistence -------------------------------------------------------------
 
     def id(self) -> int:
-        if self._rdd_id is None:
-            self._rdd_id = next(RDD._ids)
-        return self._rdd_id
+        """A unique ID for this RDD within this Python process, not the server's RDD ID."""
+        if self._id is None:
+            self._id = next(RDD._ids)
+        return self._id
 
     def __repr__(self) -> str:
         if self._name is not None:
@@ -588,51 +363,38 @@ class RDD(RDDFacade, Generic[T_co]):
         return self._cctx
 
     def cache(self: "RDD[T]") -> "RDD[T]":
-        return self.persist(StorageLevel.MEMORY_ONLY)
+        self.is_cached = True
+        self.persist(StorageLevel.MEMORY_ONLY)
+        return self
 
     def persist(self: "RDD[T]", storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY) -> "RDD[T]":
-        # The RDD of a DataFrame caches its rows as chunks of its own, as Spark Classic caches
-        # them in the RDD, so that unpersisting the RDD leaves the cache of the DataFrame alone.
-        if self._func is None and self._source != rt.SOURCE_ROWS:
-            df = self._df
-        else:
-            df = self._chunk_df()
-            self._df, self._source, self._func = df, rt.SOURCE_CHUNKS, None
-            self._df_uses_split = self._uses_split()
-            self._func_uses_split = False
-            self._df_has_pid = False
-            self._materialized = None
-        df.persist(storageLevel)
+        """
+        Persist the RDD through :meth:`DataFrame.persist` of its DataFrame, which the jobs of
+        the RDDs computed from this one then read.
+        """
         self.is_cached = True
+        # The DataFrame of the elements, so that the resource profile of the RDD, which can be
+        # set later, does not change the DataFrame to unpersist.
+        self._elements_df.persist(storageLevel)
         return self
 
     def unpersist(self: "RDD[T]", blocking: bool = False) -> "RDD[T]":
-        self._df.unpersist(blocking)
         self.is_cached = False
+        self._elements_df.unpersist(blocking)
         return self
 
     def getStorageLevel(self) -> StorageLevel:
-        # The DataFrame may be cached for another RDD or by the user.
-        return self._df.storageLevel if self.is_cached else StorageLevel.NONE
+        # The DataFrame of the RDD of a DataFrame may also be cached by the user.
+        return self._elements_df.storageLevel if self.is_cached else StorageLevel.NONE
 
     def _checkpoint(self, local: bool) -> None:
-        sealed = self._sealed()
-        if sealed._func is None:
-            df, source, has_pid = sealed._df, sealed._source, sealed._df_has_pid
-        else:
-            df, source, has_pid = sealed._chunk_df(), rt.SOURCE_CHUNKS, False
-        checkpointed = df.localCheckpoint(eager=True) if local else df.checkpoint(eager=True)
-        self._df = checkpointed
-        self._source = source
-        self._row_schema = sealed._row_schema
-        self._num_partitions = sealed._num_partitions
-        self._func = None
-        self._func_uses_split = False
-        self._df_uses_split = False
-        self._df_has_pid = has_pid
-        self._materialized = None
+        checkpointed = self._df.localCheckpoint(eager=True) if local else self._df.checkpoint(True)
+        self._set_df(cast("ConnectDataFrame", checkpointed))
         self.is_checkpointed = True
         self._locally_checkpointed = local
+
+    def _set_df(self, df: "ConnectDataFrame") -> None:
+        self._df_val = df
 
     def checkpoint(self) -> None:
         """
@@ -641,15 +403,15 @@ class RDD(RDDFacade, Generic[T_co]):
         """
         self._checkpoint(local=False)
 
+    def isCheckpointed(self) -> bool:
+        return self.is_checkpointed
+
     def localCheckpoint(self) -> None:
         """
         Checkpoint this RDD through :meth:`DataFrame.localCheckpoint`, which truncates its
         lineage. On Spark Connect the checkpoint is written immediately.
         """
         self._checkpoint(local=True)
-
-    def isCheckpointed(self) -> bool:
-        return self.is_checkpointed
 
     def isLocallyCheckpointed(self) -> bool:
         return self._locally_checkpointed
@@ -672,8 +434,7 @@ class RDD(RDDFacade, Generic[T_co]):
 
     def toDebugString(self) -> Optional[bytes]:
         """The extended plan of the DataFrame that computes this RDD."""
-        df = self._df if self._func is None else self._chunk_df()
-        return cast("ConnectDataFrame", df)._explain_string(extended=True).encode("utf-8")
+        return self._df._explain_string(extended=True).encode("utf-8")
 
     # -- Narrow transformations ---------------------------------------------------------------
 
@@ -681,7 +442,7 @@ class RDD(RDDFacade, Generic[T_co]):
         def func(_: int, iterator: Iterable[T]) -> Iterable[U]:
             return map(fail_on_stopiteration(f), iterator)
 
-        return self._derive(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(
         self: "RDD[T]", f: Callable[[T], Iterable[U]], preservesPartitioning: bool = False
@@ -689,7 +450,7 @@ class RDD(RDDFacade, Generic[T_co]):
         def func(_: int, iterator: Iterable[T]) -> Iterable[U]:
             return chain.from_iterable(map(fail_on_stopiteration(f), iterator))
 
-        return self._derive(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(
         self: "RDD[T]", f: Callable[[Iterable[T]], Iterable[U]], preservesPartitioning: bool = False
@@ -697,14 +458,14 @@ class RDD(RDDFacade, Generic[T_co]):
         def func(_: int, iterator: Iterable[T]) -> Iterable[U]:
             return f(iterator)
 
-        return self._derive(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitionsWithIndex(
         self: "RDD[T]",
         f: Callable[[int, Iterable[T]], Iterable[U]],
         preservesPartitioning: bool = False,
     ) -> "RDD[U]":
-        return self._derive(f, preservesPartitioning, uses_split=True)
+        return PipelinedRDD(self, f, preservesPartitioning)
 
     def mapPartitionsWithSplit(
         self: "RDD[T]",
@@ -724,57 +485,23 @@ class RDD(RDDFacade, Generic[T_co]):
 
         return self.mapPartitions(func, True)
 
-    def glom(self: "RDD[T]") -> "RDD[List[T]]":
-        def func(iterator: Iterable[T]) -> Iterable[List[T]]:
-            yield list(iterator)
-
-        return self.mapPartitions(func)
-
-    def keyBy(self: "RDD[T]", f: Callable[[T], K]) -> "RDD[Tuple[K, T]]":
-        return self.map(lambda x: (f(x), x))
-
-    def keys(self: "RDD[Tuple[K, V]]") -> "RDD[K]":
-        return self.map(lambda x: x[0])
-
-    def values(self: "RDD[Tuple[K, V]]") -> "RDD[V]":
-        return self.map(lambda x: x[1])
-
-    def mapValues(self: "RDD[Tuple[K, V]]", f: Callable[[V], U]) -> "RDD[Tuple[K, U]]":
-        def map_values_fn(kv: Tuple[K, V]) -> Tuple[K, U]:
-            return kv[0], f(kv[1])
-
-        return self.map(map_values_fn, preservesPartitioning=True)
-
-    def flatMapValues(
-        self: "RDD[Tuple[K, V]]", f: Callable[[V], Iterable[U]]
-    ) -> "RDD[Tuple[K, U]]":
-        def flat_map_fn(kv: Tuple[K, V]) -> Iterable[Tuple[K, U]]:
-            return ((kv[0], x) for x in f(kv[1]))
-
-        return self.flatMap(flat_map_fn, preservesPartitioning=True)
+    def distinct(self: "RDD[T]", numPartitions: Optional[int] = None) -> "RDD[T]":
+        return (
+            self.map(lambda x: (x, None))
+            .reduceByKey(lambda x, _: x, numPartitions)
+            .map(lambda x: x[0])
+        )
 
     def sample(
         self: "RDD[T]", withReplacement: bool, fraction: float, seed: Optional[int] = None
     ) -> "RDD[T]":
         if not fraction >= 0:
             raise ValueError("Fraction must be nonnegative.")
-        sampler = RDDSampler(withReplacement, fraction, seed)
-        return self._derive(sampler.func, True, uses_split=True)
-
-    def sampleByKey(
-        self: "RDD[Tuple[K, V]]",
-        withReplacement: bool,
-        fractions: Dict[K, Union[float, int]],
-        seed: Optional[int] = None,
-    ) -> "RDD[Tuple[K, V]]":
-        for fraction in fractions.values():
-            assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        sampler = RDDStratifiedSampler(withReplacement, fractions, seed)
-        return self._derive(sampler.func, True, uses_split=True)
+        return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     def randomSplit(
         self: "RDD[T]", weights: Sequence[Union[int, float]], seed: Optional[int] = None
-    ) -> "List[RDDFacade[T]]":
+    ) -> "List[RDDFacade[Any]]":
         if not all(w >= 0 for w in weights):
             raise ValueError("Weights must be nonnegative")
         s = float(sum(weights))
@@ -785,35 +512,83 @@ class RDD(RDDFacade, Generic[T_co]):
             cweights.append(cweights[-1] + w / s)
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
-        return [
-            self._derive(RDDRangeSampler(lb, ub, seed).func, True, uses_split=True)
+        splits = [
+            self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
             for lb, ub in zip(cweights, cweights[1:])
         ]
+        return cast(List[RDDFacade[Any]], splits)
 
-    def zipWithIndex(self: "RDD[T]") -> "RDD[Tuple[T, int]]":
-        starts = [0]
-        num = self.getNumPartitions()
-        if num > 1:
-            counts = dict(
-                self.mapPartitionsWithIndex(lambda i, it: [(i, sum(1 for _ in it))]).collect()
+    def takeSample(
+        self: "RDD[T]", withReplacement: bool, num: int, seed: Optional[int] = None
+    ) -> List[T]:
+        numStDev = 10.0
+        maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
+        if num < 0:
+            raise ValueError("Sample size cannot be negative.")
+        elif num > maxSampleSize:
+            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
+
+        if num == 0 or self.getNumPartitions() == 0:
+            return []
+
+        initialCount = self.count()
+        if initialCount == 0:
+            return []
+
+        rand = random.Random(seed)
+
+        if (not withReplacement) and num >= initialCount:
+            # shuffle current RDD and return
+            samples = self.collect()
+            rand.shuffle(samples)
+            return samples
+
+        fraction = RDD._computeFractionForSampleSize(num, initialCount, withReplacement)
+        samples = self.sample(withReplacement, fraction, seed).collect()
+
+        # If the first sample didn't turn out large enough, keep trying to take samples;
+        # this shouldn't happen often because we use a big multiplier for their initial size.
+        numIters = 0
+        while len(samples) < num:
+            numIters += 1
+            logger.warning(
+                "Needed to re-sample due to insufficient sample size. Repeat #%d" % numIters
             )
-            for i in range(num - 1):
-                starts.append(starts[-1] + counts.get(i, 0))
+            seed = rand.randint(0, sys.maxsize)
+            samples = self.sample(withReplacement, fraction, seed).collect()
 
-        def func(k: int, it: Iterable[T]) -> Iterable[Tuple[T, int]]:
-            for i, v in enumerate(it, starts[k]):
-                yield v, i
+        rand.shuffle(samples)
 
-        return self.mapPartitionsWithIndex(func)
+        return samples[0:num]
 
-    def zipWithUniqueId(self: "RDD[T]") -> "RDD[Tuple[T, int]]":
-        n = self.getNumPartitions()
+    @staticmethod
+    def _computeFractionForSampleSize(
+        sampleSizeLowerBound: int, total: int, withReplacement: bool
+    ) -> float:
+        fraction = float(sampleSizeLowerBound) / total
+        if withReplacement:
+            numStDev = 5
+            if sampleSizeLowerBound < 12:
+                numStDev = 9
+            return fraction + numStDev * sqrt(fraction / total)
+        else:
+            delta = 0.00005
+            gamma = -log(delta) / total
+            return min(1, fraction + gamma + sqrt(gamma * gamma + 2 * gamma * fraction))
 
-        def func(k: int, it: Iterable[T]) -> Iterable[Tuple[T, int]]:
-            for i, v in enumerate(it):
-                yield v, i * n + k
+    def glom(self: "RDD[T]") -> "RDD[List[T]]":
+        def func(iterator: Iterable[T]) -> Iterable[List[T]]:
+            yield list(iterator)
 
-        return self.mapPartitionsWithIndex(func)
+        return self.mapPartitions(func)
+
+    def groupBy(
+        self: "RDD[T]",
+        f: Callable[[T], K],
+        numPartitions: Optional[int] = None,
+        partitionFunc: Callable[[K], int] = portable_hash,
+    ) -> "RDD[Tuple[K, Iterable[T]]]":
+        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
     def pipe(
         self, command: str, env: Optional[Dict[str, str]] = None, checkCode: bool = False
@@ -830,7 +605,6 @@ class RDD(RDDFacade, Generic[T_co]):
                     out.write(s.encode("utf-8"))
                 out.close()
 
-            # Feed stdin from another thread so that a full stdout pipe cannot block the writer.
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
 
             def check_return_code() -> Iterable[int]:
@@ -856,52 +630,129 @@ class RDD(RDDFacade, Generic[T_co]):
 
         return self.mapPartitions(func)
 
+    def keyBy(self: "RDD[T]", f: Callable[[T], K]) -> "RDD[Tuple[K, T]]":
+        return self.map(lambda x: (f(x), x))
+
+    def keys(self: "RDD[Tuple[K, V]]") -> "RDD[K]":
+        return self.map(lambda x: x[0])
+
+    def values(self: "RDD[Tuple[K, V]]") -> "RDD[V]":
+        return self.map(lambda x: x[1])
+
+    def flatMapValues(
+        self: "RDD[Tuple[K, V]]", f: Callable[[V], Iterable[U]]
+    ) -> "RDD[Tuple[K, U]]":
+        def flat_map_fn(kv: Tuple[K, V]) -> Iterable[Tuple[K, U]]:
+            return ((kv[0], x) for x in f(kv[1]))
+
+        return self.flatMap(flat_map_fn, preservesPartitioning=True)
+
+    def mapValues(self: "RDD[Tuple[K, V]]", f: Callable[[V], U]) -> "RDD[Tuple[K, U]]":
+        def map_values_fn(kv: Tuple[K, V]) -> Tuple[K, U]:
+            return kv[0], f(kv[1])
+
+        return self.map(map_values_fn, preservesPartitioning=True)
+
+    def sampleByKey(
+        self: "RDD[Tuple[K, V]]",
+        withReplacement: bool,
+        fractions: Dict[K, Union[float, int]],
+        seed: Optional[int] = None,
+    ) -> "RDD[Tuple[K, V]]":
+        for fraction in fractions.values():
+            assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        return self.mapPartitionsWithIndex(
+            RDDStratifiedSampler(withReplacement, fractions, seed).func, True
+        )
+
+    def zipWithIndex(self: "RDD[T]") -> "RDD[Tuple[T, int]]":
+        starts = [0]
+        if self.getNumPartitions() > 1:
+            nums = self.mapPartitions(lambda it: [sum(1 for i in it)]).collect()
+            for i in range(len(nums) - 1):
+                starts.append(starts[-1] + nums[i])
+
+        def func(k: int, it: Iterable[T]) -> Iterable[Tuple[T, int]]:
+            for i, v in enumerate(it, starts[k]):
+                yield v, i
+
+        return self.mapPartitionsWithIndex(func)
+
+    def zipWithUniqueId(self: "RDD[T]") -> "RDD[Tuple[T, int]]":
+        n = self.getNumPartitions()
+
+        def func(k: int, it: Iterable[T]) -> Iterable[Tuple[T, int]]:
+            for i, v in enumerate(it):
+                yield v, i * n + k
+
+        return self.mapPartitionsWithIndex(func)
+
     def barrier(self: "RDD[T]") -> "RDDBarrier[T]":
         return RDDBarrier(self)
 
     def _is_barrier(self) -> bool:
-        return self._barrier
+        return False
 
     def withResources(self: "RDD[T]", profile: ResourceProfile) -> "RDD[T]":
         """
-        Run the stage computing this RDD with ``profile`` (stage-level scheduling). On Spark
-        Connect the profile applies to the ``mapInArrow`` stage that computes the elements, so
-        they are always computed by Python, even for actions that would not need it otherwise.
+        Run the stage that computes this RDD with ``profile``, as Spark Classic runs the stage of
+        an RDD with a resource profile.
         """
-        self._resource_profile = profile
-        self._stage_profile = profile
         self.has_resource_profile = True
-        if self._func is None:
-            self._func = _identity_partition
-        self._materialized = None
+        self._resource_profile = profile
         return self
 
     def getResourceProfile(self) -> Optional[ResourceProfile]:
         return self._resource_profile
 
-    # -- Partitioning --------------------------------------------------------------------------
+    # -- Partitioning and shuffles -------------------------------------------------------------
 
     def getNumPartitions(self) -> int:
-        """
-        The number of partitions. It is known without running a job for RDDs from
-        ``parallelize``, ``range`` and shuffles, and for ``coalesce`` and narrow transformations
-        of those; otherwise one job counts them.
-        """
         if self._num_partitions is None:
-            from pyspark.sql.connect import functions as F
-
-            markers = self._df.select(F.lit(0).alias("x")).mapInArrow(rt.mark_partition, "p int")
-            self._num_partitions = int(markers.count())
+            self._num_partitions = self._cctx._num_partitions(self._df)
         return self._num_partitions
 
     def _memory_limit(self) -> int:
-        conf = self._cctx._session.conf.get("spark.python.worker.memory", "512m")
-        return _parse_memory(cast(str, conf))
+        return _parse_memory(self._cctx._spark_conf_value("spark.python.worker.memory") or "512m")
 
     def _defaultReducePartitions(self) -> int:
-        if self._cctx._session.conf.get("spark.default.parallelism", None) is not None:
-            return self._cctx.defaultParallelism
-        return self.getNumPartitions()
+        parallelism = self._cctx._spark_conf_value("spark.default.parallelism")
+        if parallelism is not None:
+            return int(parallelism)
+        else:
+            return self.getNumPartitions()
+
+    def _shuffle(
+        self,
+        keyed: "RDD[Any]",
+        num_partitions: int,
+        partitioner_id: Optional[int],
+    ) -> "RDD[Any]":
+        """
+        Shuffle the batches that ``keyed`` writes after their partition index, as the PairwiseRDD
+        of Spark Classic reads them, into ``num_partitions`` partitions.
+        """
+        keyed._bypass_serializer = True  # type: ignore[attr-defined]
+        keyed._output_pairs = True  # type: ignore[attr-defined]
+        keyed_df = keyed._df
+
+        def shuffle(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.shuffle.input.CopyFrom(_relation(keyed_df, session))
+            relation.shuffle.num_partitions = num_partitions
+
+        shuffled_df = _RDDRelationPlan.dataframe(self._cctx, shuffle, keyed_df)
+
+        def values(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.values.input.CopyFrom(_relation(shuffled_df, session))
+
+        server_partitioner = None if partitioner_id is None else (num_partitions, partitioner_id)
+        return RDD(
+            _RDDRelationPlan.dataframe(self._cctx, values, shuffled_df),
+            self._cctx,
+            BatchedSerializer(self.ctx._unbatched_serializer),
+            num_partitions,
+            server_partitioner,
+        )
 
     def partitionBy(
         self: "RDD[Tuple[K, V]]",
@@ -916,14 +767,48 @@ class RDD(RDDFacade, Generic[T_co]):
         if self.partitioner == partitioner:
             return self
 
-        def target(_: int) -> Callable[[Tuple[K, V]], int]:
-            def pid(kv: Tuple[K, V]) -> int:
-                k, _v = kv
-                return partitionFunc(k) % num_partitions
+        # Transferring O(n) objects to Java is too expensive.
+        # Instead, we'll form the hash buckets in Python,
+        # transferring O(numPartitions) objects to Java.
+        # Each object is a (splitNumber, [objects]) pair.
+        # In order to avoid too huge objects, the objects are
+        # grouped into chunks.
+        outputSerializer = self.ctx._unbatched_serializer
 
-            return pid
+        limit = self._memory_limit() / 2
 
-        rdd = self._exchange(num_partitions, self._bucketed(num_partitions, target))
+        def add_shuffle_key(split: int, iterator: Iterable[Tuple[K, V]]) -> Iterable[bytes]:
+            buckets = defaultdict(list)
+            c, batch = 0, min(10 * num_partitions, 1000)
+
+            for k, v in iterator:
+                buckets[partitionFunc(k) % num_partitions].append((k, v))
+                c += 1
+
+                # check used memory and avg size of chunk of objects
+                if c % 1000 == 0 and get_used_memory() > limit or c > batch:
+                    n, size = len(buckets), 0
+                    for split in list(buckets.keys()):
+                        yield pack_long(split)
+                        d = outputSerializer.dumps(buckets[split])
+                        del buckets[split]
+                        yield d
+                        size += len(d)
+
+                    avg = int(size / n) >> 20
+                    # let 1M < avg < 10M
+                    if avg < 1:
+                        batch = min(sys.maxsize, batch * 1.5)  # type: ignore[assignment]
+                    elif avg > 10:
+                        batch = max(int(batch / 1.5), 1)
+                    c = 0
+
+            for split, items in buckets.items():
+                yield pack_long(split)
+                yield outputSerializer.dumps(items)
+
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
+        rdd = self._shuffle(keyed, num_partitions, id(partitionFunc))
         rdd.partitioner = partitioner
         return rdd
 
@@ -934,77 +819,39 @@ class RDD(RDDFacade, Generic[T_co]):
         if not numPartitions > 0:
             raise ValueError("Number of partitions must be positive.")
         if shuffle:
-            # Deal the elements of each partition round-robin from a position that depends on the
-            # partition, as Spark's coalesce with shuffle does, so output partitions are even.
-            def target(split: int) -> Callable[[Any], int]:
+            # As RDD.coalesce with a shuffle in Spark Core: each partition deals its elements to
+            # the partitions in turn, from a position that depends on the partition, so that the
+            # output partitions hold about as many elements each.
+            outputSerializer = self.ctx._unbatched_serializer
+            limit = self._memory_limit() / 2
+
+            def distribute(split: int, iterator: Iterable[T]) -> Iterable[bytes]:
                 position = random.Random(split).randrange(numPartitions)
-
-                def pid(_: Any) -> int:
-                    nonlocal position
+                buckets: Dict[int, List[T]] = defaultdict(list)
+                c = 0
+                for x in iterator:
                     position = (position + 1) % numPartitions
-                    return position
+                    buckets[position].append(x)
+                    c += 1
+                    if c % 1000 == 0 and (c >= 10 * numPartitions or get_used_memory() > limit):
+                        for pid, items in buckets.items():
+                            yield pack_long(pid)
+                            yield outputSerializer.dumps(items)
+                        buckets.clear()
+                for pid, items in buckets.items():
+                    yield pack_long(pid)
+                    yield outputSerializer.dumps(items)
 
-                return pid
+            return self._shuffle(self.mapPartitionsWithIndex(distribute), numPartitions, None)
 
-            return self._exchange(numPartitions, self._bucketed(numPartitions, target))
-        sealed = self._sealed()
-        if sealed._func is None and sealed._source != rt.SOURCE_CHUNKS:
-            df = sealed._df.coalesce(numPartitions)
-            source = sealed._source
-        else:
-            df = sealed._chunk_df().coalesce(numPartitions)
-            source = rt.SOURCE_CHUNKS
-        # Coalescing never adds partitions, so the count stays unknown when the input's is.
-        known = sealed._num_partitions
-        num = None if known is None else min(numPartitions, known)
-        rdd: RDD[T] = RDD(
-            df, self._cctx, num, source, None, sealed._row_schema, sealed._binary_as_bytes
-        )
-        return rdd
+        input_df = self._df
 
-    def _spread(self: "RDD[T]", minPartitions: int) -> "RDD[T]":
-        """
-        This RDD in at least ``minPartitions`` partitions: as it is when it has that many, and
-        otherwise split into ``minPartitions`` partitions of consecutive elements, which keeps
-        their order as the splits of Spark Classic's file sources do. One job counts the
-        elements of each partition.
-        """
-        from pyspark.sql.connect import functions as F
+        def coalesce(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.coalesce.input.CopyFrom(_relation(input_df, session))
+            relation.coalesce.num_partitions = numPartitions
 
-        rdd = self._sealed()
-        counts = dict(rdd.mapPartitionsWithIndex(lambda i, it: [(i, sum(1 for _ in it))]).collect())
-        rdd._num_partitions = len(counts)
-        if len(counts) >= minPartitions:
-            return rdd
-        total = max(sum(counts.values()), 1)
-        starts: Dict[int, int] = {}
-        position = 0
-        for i in sorted(counts):
-            starts[i] = position
-            position += counts[i]
-
-        def tag(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[bytes, int, int]]:
-            # The element at index g of the RDD goes to the partition g * minPartitions // total.
-            indexed = enumerate(iterator, starts.get(split, 0))
-            for pid, group in itertools.groupby(indexed, lambda e: e[0] * minPartitions // total):
-                for blob, n in rt.encode_chunks(x for _, x in group):
-                    yield blob, n, pid
-
-        tagged = rdd._run(rt.emit_pid_chunks, _pid_chunk_schema(), func=tag).select(
-            rt.CHUNK_COL,
-            rt.COUNT_COL,
-            rt.PID_COL,
-            # The order of the chunks in the RDD, which a partition gets from several tasks.
-            F.monotonically_increasing_id().alias("__seq"),
-        )
-        df = (
-            _place(tagged, minPartitions, F.lit(0).cast("long").alias("__seq"))
-            .sortWithinPartitions("__seq")
-            .select(rt.CHUNK_COL, rt.COUNT_COL, rt.PID_COL)
-        )
-        spread: RDD[T] = RDD(df, self._cctx, minPartitions)
-        spread._df_has_pid = True
-        return spread
+        # Coalescing makes no more partitions than its input has; the server counts them.
+        return self._new(coalesce, self._jrdd_deserializer)
 
     def repartitionAndSortWithinPartitions(
         self: "RDD[Tuple[Any, Any]]",
@@ -1015,10 +862,12 @@ class RDD(RDDFacade, Generic[T_co]):
     ) -> "RDD[Tuple[Any, Any]]":
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
+
         memory = self._memory_limit()
+        serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter[tuple[K, V]](memory * 0.9, _SPILL_SERIALIZER).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda k_v: keyfunc(k_v[0]), reverse=(not ascending)))
 
         return self.partitionBy(numPartitions, partitionFunc).mapPartitions(sortPartition, True)
@@ -1031,15 +880,18 @@ class RDD(RDDFacade, Generic[T_co]):
     ) -> "RDD[Tuple[K, V]]":
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
+
         memory = self._memory_limit()
+        serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter[tuple[K, V]](memory * 0.9, _SPILL_SERIALIZER).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda kv: keyfunc(kv[0]), reverse=(not ascending)))
 
         if numPartitions == 1:
-            rdd = self.coalesce(1) if self.getNumPartitions() > 1 else self
-            return rdd.mapPartitions(sortPartition, True)
+            if self.getNumPartitions() > 1:
+                self = self.coalesce(1)
+            return self.mapPartitions(sortPartition, True)
 
         # first compute the boundary of each part via sampling: we want to partition
         # the key-space into bins such that the bins have roughly the same
@@ -1076,33 +928,78 @@ class RDD(RDDFacade, Generic[T_co]):
     ) -> "RDD[T]":
         return self.keyBy(keyfunc).sortByKey(ascending, numPartitions).values()
 
+    def _spread(self: "RDD[T]", minPartitions: int) -> "RDD[T]":
+        """
+        This RDD in at least ``minPartitions`` partitions, as the file sources of Spark Classic
+        split their files into at least ``minPartitions`` splits: when it has fewer partitions,
+        each partition is split into partitions of consecutive elements, about as many elements
+        each. One job counts the elements of each partition.
+        """
+        num = self.getNumPartitions()
+        if num >= minPartitions:
+            return self
+        counts = dict(
+            self.mapPartitionsWithIndex(lambda i, it: [(i, sum(1 for _ in it))]).collect()
+        )
+        # The number of partitions each partition is split into: at least one, and the rest of
+        # the partitions in proportion to the number of elements, the largest remainders first.
+        pieces = [1] * num
+        extra = minPartitions - num
+        total = sum(counts.values())
+        if total > 0:
+            shares = [extra * counts.get(i, 0) / total for i in range(num)]
+            for i in range(num):
+                pieces[i] += int(shares[i])
+            by_remainder = sorted(
+                range(num), key=lambda i: shares[i] - int(shares[i]), reverse=True
+            )
+            for i in by_remainder[: minPartitions - sum(pieces)]:
+                pieces[i] += 1
+        else:
+            pieces[0] += extra
+        starts = [sum(pieces[:i]) for i in range(num)]
+        outputSerializer = self.ctx._unbatched_serializer
+
+        def split_partition(split: int, iterator: Iterable[T]) -> Iterable[bytes]:
+            # The element at position j of a partition of c elements goes to its piece
+            # j * k // c, so that the pieces hold consecutive elements, in order.
+            k, c = pieces[split], counts.get(split, 0)
+            batch: List[T] = []
+            piece = 0
+            for j, x in enumerate(iterator):
+                target = j * k // c
+                if target != piece or len(batch) >= 1024:
+                    if batch:
+                        yield pack_long(starts[split] + piece)
+                        yield outputSerializer.dumps(batch)
+                    batch = []
+                    piece = target
+                batch.append(x)
+            if batch:
+                yield pack_long(starts[split] + piece)
+                yield outputSerializer.dumps(batch)
+
+        # Each partition of the output gets the elements of one partition of this RDD, in order.
+        return self._shuffle(self.mapPartitionsWithIndex(split_partition), minPartitions, None)
+
     # -- Combining RDDs ------------------------------------------------------------------------
 
     def union(self: "RDD[T]", other: "RDDFacade[U]") -> "RDD[Union[T, U]]":
         if not isinstance(other, RDD):
             raise TypeError("Cannot union a Spark Connect RDD with %s" % type(other).__name__)
-        if self.partitioner is not None and self.partitioner == other.partitioner:
-            # Like Spark Classic's PartitionerAwareUnionRDD: keep the partitioning, with the
-            # elements of each partition of this RDD before those of the other.
-            num = self.partitioner.numPartitions
-            tagged = self._pid_tagged_df(0, 0).union(other._pid_tagged_df(1, num))
-            from pyspark.sql.connect import functions as F
-
-            markers = (F.lit(-1).alias("__side"), F.lit(0).cast("long").alias("__seq"))
-            df = (
-                _place(tagged, num, *markers)
-                .sortWithinPartitions("__side", "__seq")
-                .select(rt.CHUNK_COL, rt.COUNT_COL, rt.PID_COL)
-            )
-            aware: RDD[Union[T, U]] = RDD(df, self._cctx, num)
-            aware.partitioner = self.partitioner
-            aware._df_has_pid = True
-            return aware
-        df = self._union_df([self, other])
-        known = (self._num_partitions, other._num_partitions)
-        total = None if None in known else sum(cast(Tuple[int, int], known))
-        rdd: RDD[Union[T, U]] = RDD(df, self._cctx, total)
-        rdd._df_uses_split = self._uses_split() or other._uses_split()
+        if self._jrdd_deserializer == other._jrdd_deserializer:
+            rdd: "RDD[Union[T, U]]" = _union(self._cctx, [self, other], self._jrdd_deserializer)
+        else:
+            # These RDDs contain data in different serialized formats, so we
+            # must normalize them to the default serializer.
+            self_copy = self._reserialize()
+            other_copy = other._reserialize()
+            rdd = _union(self._cctx, [self_copy, other_copy], self.ctx.serializer)
+        if (
+            self.partitioner == other.partitioner
+            and self.getNumPartitions() == rdd.getNumPartitions()
+        ):
+            rdd.partitioner = self.partitioner
         return rdd
 
     def __add__(self: "RDD[T]", other: "RDDFacade[U]") -> "RDD[Union[T, U]]":
@@ -1140,162 +1037,58 @@ class RDD(RDDFacade, Generic[T_co]):
             .flatMapValues(lambda x: x[0])
         )
 
-    def distinct(self: "RDD[T]", numPartitions: Optional[int] = None) -> "RDD[T]":
-        return (
-            self.map(lambda x: (x, None))
-            .reduceByKey(lambda x, _: x, numPartitions)
-            .map(lambda x: x[0])
-        )
-
     def cartesian(self: "RDD[T]", other: "RDDFacade[U]") -> "RDD[Tuple[T, U]]":
-        from pyspark.sql.connect import functions as F
-
         if not isinstance(other, RDD):
             raise TypeError("Cannot compute the cartesian product with %s" % type(other).__name__)
-        left = self._sealed()._chunk_df().select(F.col(rt.CHUNK_COL).alias("__l"))
-        right = other._sealed()._chunk_df().select(F.col(rt.CHUNK_COL).alias("__r"))
-        crossed = left.crossJoin(right)
+        left_df, right_df = self._df, other._df
 
-        def product(_: int, pairs: Iterator[Tuple[bytes, bytes]]) -> Iterator[Tuple[Any, Any]]:
-            for lblob, rblob in pairs:
-                rights = rt.loads(rblob)
-                for x in rt.loads(lblob):
-                    for y in rights:
-                        yield x, y
+        def cartesian(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.cartesian.left.CopyFrom(_relation(left_df, session))
+            relation.cartesian.right.CopyFrom(_relation(right_df, session))
 
-        return RDD(crossed, self._cctx, None, rt.SOURCE_PAIRS, product)
+        left_num, right_num = self._num_partitions, other._num_partitions
+        num = None if left_num is None or right_num is None else left_num * right_num
+        # Due to batching, we can't use the Java cartesian method.
+        deserializer = CartesianDeserializer(self._jrdd_deserializer, other._jrdd_deserializer)
+        return self._new(cartesian, deserializer, num)
 
     def zip(self: "RDD[T]", other: "RDDFacade[U]") -> "RDD[Tuple[T, U]]":
         if not isinstance(other, RDD):
             raise TypeError("Cannot zip with %s" % type(other).__name__)
+
+        def get_batch_size(ser: Serializer) -> int:
+            if isinstance(ser, BatchedSerializer):
+                return ser.batchSize
+            return 1  # not batched
+
+        def batch_as(rdd: "RDD[Any]", batchSize: int) -> "RDD[Any]":
+            return rdd._reserialize(BatchedSerializer(CPickleSerializer(), batchSize))
+
+        my_batch = get_batch_size(self._jrdd_deserializer)
+        other_batch = get_batch_size(other._jrdd_deserializer)
+        if my_batch != other_batch or not my_batch:
+            # use the smallest batchSize for both of them
+            batchSize = min(my_batch, other_batch)
+            if batchSize <= 0:
+                # auto batched or unlimited
+                batchSize = 100
+            other = batch_as(other, batchSize)
+            self = batch_as(self, batchSize)
+
         num = self.getNumPartitions()
         if num != other.getNumPartitions():
             raise ValueError("Can only zip with RDD which has the same number of partitions")
 
-        def zip_partition(left: Iterable[Any], right: Iterable[Any]) -> Iterator[Tuple[Any, Any]]:
-            lit, rit = iter(left), iter(right)
-            for x in lit:
-                try:
-                    y = next(rit)
-                except StopIteration:
-                    raise ValueError(
-                        "Can only zip RDDs with same number of elements in each partition"
-                    )
-                yield x, y
-            for _ in rit:
-                raise ValueError("Can only zip RDDs with same number of elements in each partition")
+        # There will be an Exception in JVM if there are different number
+        # of items in each partitions.
+        left_df, right_df = self._df, other._df
 
-        if (
-            self._df is other._df
-            and self._source == other._source
-            and self._barrier == other._barrier
-        ):
-            # Both sides derive from the same rows: compute both pipelines in one pass.
-            lfunc = self._func or _identity_partition
-            rfunc = other._func or _identity_partition
+        def zip_partitions(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.zip_partitions.inputs.append(_relation(left_df, session))
+            relation.zip_partitions.inputs.append(_relation(right_df, session))
 
-            def zip_pipelines(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[Any, Any]]:
-                lin, rin = itertools.tee(iterator)
-                return zip_partition(lfunc(split, lin), rfunc(split, rin))
-
-            rdd: RDD[Tuple[T, U]] = RDD(
-                self._df,
-                self._cctx,
-                num,
-                self._source,
-                zip_pipelines,
-                self._row_schema,
-                self._binary_as_bytes,
-            )
-            rdd._func_uses_split = self._func_uses_split or other._func_uses_split
-            rdd._df_uses_split = self._df_uses_split
-            rdd._barrier = self._barrier
-            return rdd
-
-        # Number fixed-size groups of each side's elements per partition, bring the groups with
-        # the same partition and number together, and pair them up in order.
-        group = 1024
-
-        def tagger(side: int) -> PartitionFunc:
-            def tag(split: int, iterator: Iterator[Any]) -> Iterator[Any]:
-                buf: List[Any] = []
-                seq = 0
-                for x in iterator:
-                    buf.append(x)
-                    if len(buf) == group:
-                        yield split, seq, side, rt.dumps(buf)
-                        buf = []
-                        seq += 1
-                if buf:
-                    yield split, seq, side, rt.dumps(buf)
-
-            return tag
-
-        tagged_schema = "__p int, __s int, __side int, __b binary"
-
-        def emit_tagged(split: int, rows: Iterator[Any]) -> Iterator[Any]:
-            import pyarrow as pa
-
-            cols: List[List[Any]] = [[], [], [], []]
-            for row in rows:
-                for col, v in zip(cols, row):
-                    col.append(v)
-                if len(cols[0]) >= 256:
-                    yield pa.RecordBatch.from_arrays(
-                        [
-                            pa.array(cols[0], pa.int32()),
-                            pa.array(cols[1], pa.int32()),
-                            pa.array(cols[2], pa.int32()),
-                            pa.array(cols[3], pa.large_binary()),
-                        ],
-                        names=["__p", "__s", "__side", "__b"],
-                    )
-                    cols = [[], [], [], []]
-            if cols[0]:
-                yield pa.RecordBatch.from_arrays(
-                    [
-                        pa.array(cols[0], pa.int32()),
-                        pa.array(cols[1], pa.int32()),
-                        pa.array(cols[2], pa.int32()),
-                        pa.array(cols[3], pa.large_binary()),
-                    ],
-                    names=["__p", "__s", "__side", "__b"],
-                )
-
-        from pyspark.sql.connect import functions as F
-
-        left = self._sealed() if self._df_uses_split else self
-        right = other._sealed() if other._df_uses_split else other
-        realias = [F.col(c).alias(c) for c in ("__p", "__s", "__side", "__b")]
-        ldf = left._run(emit_tagged, tagged_schema, func=tagger(0)).select(*realias)
-        # The right side runs after the left side's partitions in the union below.
-        rdf = right._run(emit_tagged, tagged_schema, func=tagger(1), offset=num).select(*realias)
-        both = ldf.union(rdf).select("__b", F.lit(0).alias("__n"), "__p", "__s", "__side")
-        grouped = _place(
-            both, num, F.lit(-1).alias("__s"), F.lit(-1).alias("__side"), pid_col="__p"
-        ).sortWithinPartitions("__s", "__side")
-
-        def pair_groups(_: int, rows: Iterator[Tuple[int, int, bytes]]) -> Iterator[Any]:
-            pending: Optional[Tuple[int, int, bytes]] = None
-            for row in rows:
-                if row[0] < 0:
-                    continue  # a marker of the shuffle
-                if pending is None:
-                    pending = row
-                    continue
-                seq, side, blob = pending
-                rseq, rside, rblob = row
-                if seq != rseq or side != 0 or rside != 1:
-                    raise ValueError(
-                        "Can only zip RDDs with same number of elements in each partition"
-                    )
-                yield from zip_partition(rt.loads(blob), rt.loads(rblob))
-                pending = None
-            if pending is not None:
-                raise ValueError("Can only zip RDDs with same number of elements in each partition")
-
-        rows_df = grouped.select("__s", "__side", "__b")
-        return RDD(rows_df, self._cctx, num, rt.SOURCE_TUPLES, pair_groups)
+        deserializer = PairDeserializer(self._jrdd_deserializer, other._jrdd_deserializer)
+        return self._new(zip_partitions, deserializer, num)
 
     # -- Shuffle-based aggregation -------------------------------------------------------------
 
@@ -1309,11 +1102,13 @@ class RDD(RDDFacade, Generic[T_co]):
     ) -> "RDD[Tuple[K, U]]":
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
+
+        serializer = self.ctx.serializer
         memory = self._memory_limit()
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger[K, V, U](agg, memory * 0.9, _SPILL_SERIALIZER)
+            merger = ExternalMerger[K, V, U](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
@@ -1321,7 +1116,7 @@ class RDD(RDDFacade, Generic[T_co]):
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def _mergeCombiners(iterator: Iterable[Tuple[K, U]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger[K, V, U](agg, memory, _SPILL_SERIALIZER)
+            merger = ExternalMerger[K, V, U](agg, memory, serializer)
             merger.mergeCombiners(iterator)
             return merger.items()
 
@@ -1381,30 +1176,23 @@ class RDD(RDDFacade, Generic[T_co]):
             return a
 
         memory = self._memory_limit()
+        serializer = self._jrdd_deserializer
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combine(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, List[V]]]:
-            merger = ExternalMerger[K, V, list[V]](agg, memory * 0.9, _SPILL_SERIALIZER)
+            merger = ExternalMerger[K, V, list[V]](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
         locally_combined = self.mapPartitions(combine, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
-        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, Any]]:
-            merger = ExternalGroupBy[K, V](agg, memory, _SPILL_SERIALIZER)  # type: ignore[arg-type]
+        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, "SizedIterable[V]"]]:
+            merger = ExternalGroupBy[K, V](agg, memory, serializer)  # type: ignore[arg-type]
             merger.mergeCombiners(it)
             return merger.items()
 
         return shuffled.mapPartitions(groupByKey, True).mapValues(ResultIterable)
-
-    def groupBy(
-        self: "RDD[T]",
-        f: Callable[[T], K],
-        numPartitions: Optional[int] = None,
-        partitionFunc: Callable[[K], int] = portable_hash,
-    ) -> "RDD[Tuple[K, Iterable[T]]]":
-        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
     def cogroup(
         self: "RDD[Tuple[K, V]]",
@@ -1452,15 +1240,16 @@ class RDD(RDDFacade, Generic[T_co]):
     # -- Actions -------------------------------------------------------------------------------
 
     def collect(self: "RDD[T]") -> List[T]:
-        if self._func is None and self._source == rt.SOURCE_ROWS:
-            return cast(List[T], self._df.collect())
-        if self._func is None and self._source != rt.SOURCE_CHUNKS:
-            return rt.decode_table(self._df.toArrow(), self._source)
-        return rt.decode_table(self._chunk_df().select(rt.CHUNK_COL).toArrow(), rt.SOURCE_CHUNKS)
+        return self._collect()
 
     def collectWithJobGroup(
         self: "RDD[T]", groupId: str, description: str, interruptOnCancel: bool = False
     ) -> "List[T]":
+        """
+        Collect with the job group ``groupId``: on Spark Connect, the jobs run with the operation
+        tag ``groupId``, which :meth:`SparkContext.cancelJobGroup` cancels. ``description`` and
+        ``interruptOnCancel`` are not used.
+        """
         warnings.warn(
             "Deprecated in 3.1, Use pyspark.InheritableThread with the pinned thread mode enabled.",
             FutureWarning,
@@ -1471,72 +1260,27 @@ class RDD(RDDFacade, Generic[T_co]):
         finally:
             self._cctx._discard_connect_job_tag_if_present(groupId)
 
-    def collectAsMap(self: "RDD[Tuple[K, V]]") -> Dict[K, V]:
-        return dict(self.collect())
-
     def toLocalIterator(self: "RDD[T]", prefetchPartitions: bool = False) -> Iterator[T]:
         """
-        Iterate over the elements one partition at a time; each partition is computed by its
-        own job when it is reached, or while the previous one is consumed with
-        ``prefetchPartitions``.
+        Iterate over the elements one partition at a time. Each partition is computed by its own
+        job when it is reached, or while the previous one is consumed with ``prefetchPartitions``,
+        as in Spark Classic.
         """
         num = self.getNumPartitions()
         if not prefetchPartitions:
             for split in range(num):
-                yield from self._collect_partition(split)
+                yield from self._collect([split])
             return
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(self._collect_partition, 0) if num > 0 else None
+            future = executor.submit(self._collect, [0]) if num > 0 else None
             for split in range(num):
                 assert future is not None
                 items = future.result()
                 if split + 1 < num:
-                    future = executor.submit(self._collect_partition, split + 1)
+                    future = executor.submit(self._collect, [split + 1])
                 yield from items
-
-    def count(self) -> int:
-        from pyspark.sql.connect import functions as F
-
-        if self._func is None:
-            if self._source == rt.SOURCE_CHUNKS:
-                row = self._df.agg(F.sum(rt.COUNT_COL)).first()
-                return int(row[0]) if row is not None and row[0] is not None else 0
-            return int(self._df.count())
-        row = self._run(rt.emit_count, "n long").agg(F.sum("n")).first()
-        return int(row[0]) if row is not None and row[0] is not None else 0
-
-    def take(self: "RDD[T]", num: int) -> List[T]:
-        from pyspark.sql.connect import functions as F
-
-        if num <= 0:
-            return []
-        if self._func is None and self._source == rt.SOURCE_ROWS:
-            return cast(List[T], self._df.limit(num).collect())
-        if self._func is None and self._source != rt.SOURCE_CHUNKS:
-            return rt.decode_table(self._df.limit(num).toArrow(), self._source)
-        chunks = self._chunk_df().filter(F.col(rt.COUNT_COL) > 0).select(rt.CHUNK_COL)
-        # Without the shuffle markers, chunks are never empty, and the first chunks of a
-        # partition hold 1, 2, 4, ... elements, so this many chunks usually cover ``num``
-        # elements; ask for more if they do not.
-        limit = max(1, num.bit_length())
-        while True:
-            table = chunks.limit(limit).toArrow()
-            items = rt.decode_table(table, rt.SOURCE_CHUNKS)
-            if len(items) >= num or table.num_rows < limit:
-                return items[:num]
-            per_chunk = max(len(items) / max(table.num_rows, 1), 1.0)
-            limit = max(limit * 4, int(math.ceil(num / per_chunk)) + 1)
-
-    def first(self: "RDD[T]") -> T:
-        rs = self.take(1)
-        if rs:
-            return rs[0]
-        raise ValueError("RDD is empty")
-
-    def isEmpty(self) -> bool:
-        return self._num_partitions == 0 or len(self.take(1)) == 0
 
     def foreach(self: "RDD[T]", f: Callable[[T], None]) -> None:
         f = fail_on_stopiteration(f)
@@ -1608,6 +1352,9 @@ class RDD(RDDFacade, Generic[T_co]):
                 acc = op(acc, obj)
             yield acc
 
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
@@ -1623,6 +1370,9 @@ class RDD(RDDFacade, Generic[T_co]):
                 acc = seqOp(acc, obj)
             yield acc
 
+        # collecting result of mapPartitions here ensures that the copy of
+        # zeroValue provided to each partition is unique from the one provided
+        # to the final reduce call
         vals = self.mapPartitions(func).collect()
         return reduce(combOp, vals, zeroValue)
 
@@ -1647,7 +1397,7 @@ class RDD(RDDFacade, Generic[T_co]):
 
         partiallyAggregated = self.mapPartitions(aggregatePartition)
         numPartitions = partiallyAggregated.getNumPartitions()
-        scale = max(int(math.ceil(pow(numPartitions, 1.0 / depth))), 2)
+        scale = max(int(ceil(pow(numPartitions, 1.0 / depth))), 2)
         # If creating an extra level doesn't help reduce the wall-clock time, we stop the tree
         # aggregation.
         while numPartitions > scale + numPartitions / scale:
@@ -1676,33 +1426,25 @@ class RDD(RDDFacade, Generic[T_co]):
             return self.reduce(min)  # type: ignore[arg-type]
         return self.reduce(lambda a, b: min(a, b, key=key))
 
-    def sum(self: "RDD[Any]") -> Any:
-        return self.mapPartitions(lambda x: [sum(x)]).fold(0, operator.add)
+    def sum(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+        return self.mapPartitions(lambda x: [sum(x)]).fold(  # type: ignore[return-value]
+            0, operator.add
+        )
 
-    def stats(self: "RDD[Any]") -> StatCounter:
+    def count(self) -> int:
+        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
+
+    def stats(self: "RDD[NumberOrArray]") -> StatCounter:
         def redFunc(left_counter: StatCounter, right_counter: StatCounter) -> StatCounter:
             return left_counter.mergeStats(right_counter)
 
-        return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
-
-    def mean(self: "RDD[Any]") -> float:
-        return self.stats().mean()
-
-    def variance(self: "RDD[Any]") -> float:
-        return self.stats().variance()
-
-    def stdev(self: "RDD[Any]") -> float:
-        return self.stats().stdev()
-
-    def sampleStdev(self: "RDD[Any]") -> float:
-        return self.stats().sampleStdev()
-
-    def sampleVariance(self: "RDD[Any]") -> float:
-        return self.stats().sampleVariance()
+        return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(  # type: ignore[arg-type]
+            redFunc
+        )
 
     def histogram(
-        self: "RDD[Any]", buckets: Union[int, List[Any], Tuple[Any, ...]]
-    ) -> Tuple[Sequence[Any], List[int]]:
+        self: "RDD[S]", buckets: Union[int, List["S"], Tuple["S", ...]]
+    ) -> Tuple[Sequence["S"], List[int]]:
         if isinstance(buckets, int):
             if buckets < 1:
                 raise ValueError("number of buckets must be >= 1")
@@ -1711,14 +1453,14 @@ class RDD(RDDFacade, Generic[T_co]):
             def comparable(x: Any) -> bool:
                 if x is None:
                     return False
-                if type(x) is float and math.isnan(x):
+                if type(x) is float and isnan(x):
                     return False
                 return True
 
             filtered = self.filter(comparable)
 
             # faster than stats()
-            def minmax(a: Tuple[Any, Any], b: Tuple[Any, Any]) -> Tuple[Any, Any]:
+            def minmax(a: Tuple["S", "S"], b: Tuple["S", "S"]) -> Tuple["S", "S"]:
                 return min(a[0], b[0]), max(a[1], b[1])
 
             try:
@@ -1727,26 +1469,22 @@ class RDD(RDDFacade, Generic[T_co]):
                 if " empty " in str(e):
                     raise ValueError("can not generate buckets from empty RDD")
                 raise
-            except ValueError as e:
-                if "empty" in str(e):
-                    raise ValueError("can not generate buckets from empty RDD")
-                raise
 
             if minv == maxv or buckets == 1:
                 return [minv, maxv], [filtered.count()]
 
             try:
-                inc = (maxv - minv) / buckets
+                inc = (maxv - minv) / buckets  # type: ignore[operator]
             except TypeError:
                 raise TypeError("Can not generate buckets with non-number in RDD")
 
-            if math.isinf(inc):
+            if isinf(inc):
                 raise ValueError("Can not generate buckets with infinite value")
 
             # keep them as integer if possible
             inc = int(inc)
-            if inc * buckets != maxv - minv:
-                inc = (maxv - minv) * 1.0 / buckets
+            if inc * buckets != maxv - minv:  # type: ignore[operator]
+                inc = (maxv - minv) * 1.0 / buckets  # type: ignore[operator]
 
             buckets = [i * inc + minv for i in range(buckets)]
             buckets.append(maxv)  # fix accumulated error
@@ -1756,7 +1494,7 @@ class RDD(RDDFacade, Generic[T_co]):
             if len(buckets) < 2:
                 raise ValueError("buckets should have more than one value")
 
-            if any(i is None or isinstance(i, float) and math.isnan(i) for i in buckets):
+            if any(i is None or isinstance(i, float) and isnan(i) for i in buckets):
                 raise ValueError("can not have None or NaN in buckets")
 
             if sorted(buckets) != list(buckets):
@@ -1770,23 +1508,30 @@ class RDD(RDDFacade, Generic[T_co]):
             even = False
             inc = None
             try:
-                steps = [buckets[i + 1] - buckets[i] for i in range(len(buckets) - 1)]
+                steps = [
+                    buckets[i + 1] - buckets[i]  # type: ignore[operator]
+                    for i in range(len(buckets) - 1)
+                ]
             except TypeError:
                 pass  # objects in buckets do not support '-'
             else:
                 if max(steps) - min(steps) < 1e-10:  # handle precision errors
                     even = True
-                    inc = (maxv - minv) / (len(buckets) - 1)
+                    inc = (maxv - minv) / (len(buckets) - 1)  # type: ignore[operator]
 
         else:
             raise TypeError("buckets should be a list or tuple or number(int or long)")
 
-        def histogram(iterator: Iterable[Any]) -> Iterable[List[int]]:
+        def histogram(iterator: Iterable["S"]) -> Iterable[List[int]]:
             counters = [0] * len(buckets)
             for i in iterator:
-                if i is None or (isinstance(i, float) and math.isnan(i)) or i > maxv or i < minv:
+                if i is None or (isinstance(i, float) and isnan(i)) or i > maxv or i < minv:
                     continue
-                t = int((i - minv) / inc) if even else bisect.bisect_right(buckets, i) - 1
+                t = (
+                    int((i - minv) / inc)  # type: ignore[operator]
+                    if even
+                    else bisect.bisect_right(buckets, i) - 1
+                )
                 counters[t] += 1
             # add last two together
             last = counters.pop()
@@ -1797,6 +1542,21 @@ class RDD(RDDFacade, Generic[T_co]):
             return [i + j for i, j in zip(a, b)]
 
         return buckets, self.mapPartitions(histogram).reduce(mergeCounters)
+
+    def mean(self: "RDD[NumberOrArray]") -> float:
+        return self.stats().mean()
+
+    def variance(self: "RDD[NumberOrArray]") -> float:
+        return self.stats().variance()
+
+    def stdev(self: "RDD[NumberOrArray]") -> float:
+        return self.stats().stdev()
+
+    def sampleStdev(self: "RDD[NumberOrArray]") -> float:
+        return self.stats().sampleStdev()
+
+    def sampleVariance(self: "RDD[NumberOrArray]") -> float:
+        return self.stats().sampleVariance()
 
     def countByValue(self: "RDD[K]") -> Dict[K, int]:
         def countPartition(iterator: Iterable[K]) -> Iterable[Dict[K, int]]:
@@ -1812,8 +1572,81 @@ class RDD(RDDFacade, Generic[T_co]):
 
         return self.mapPartitions(countPartition).reduce(mergeMaps)
 
-    def countByKey(self: "RDD[Tuple[K, V]]") -> Dict[K, int]:
-        return self.map(lambda x: x[0]).countByValue()
+    def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], Any]] = None) -> List[T]:
+        def topIterator(iterator: Iterable[T]) -> Iterable[List[T]]:
+            yield heapq.nlargest(num, iterator, key=key)
+
+        def merge(a: List[T], b: List[T]) -> List[T]:
+            return heapq.nlargest(num, a + b, key=key)
+
+        return self.mapPartitions(topIterator).reduce(merge)
+
+    def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], Any]] = None) -> List[T]:
+        if num < 0:
+            raise ValueError("top N cannot be negative.")
+
+        if num == 0 or self.getNumPartitions() == 0:
+            return []
+        else:
+
+            def merge(a: List[T], b: List[T]) -> List[T]:
+                return heapq.nsmallest(num, a + b, key)
+
+            return self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).reduce(merge)
+
+    def take(self: "RDD[T]", num: int) -> List[T]:
+        items: List[T] = []
+        totalParts = self.getNumPartitions()
+        partsScanned = 0
+
+        while len(items) < num and partsScanned < totalParts:
+            # The number of partitions to try in this iteration.
+            # It is ok for this number to be greater than totalParts because
+            # we actually cap it at totalParts in runJob.
+            numPartsToTry = 1
+            if partsScanned > 0:
+                # If we didn't find any rows after the previous iteration,
+                # quadruple and retry.  Otherwise, interpolate the number of
+                # partitions we need to try, but overestimate it by 50%.
+                # We also cap the estimation in the end.
+                if len(items) == 0:
+                    numPartsToTry = partsScanned * 4
+                else:
+                    # the first parameter of max is >=1 whenever partsScanned >= 2
+                    numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
+                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
+
+            left = num - len(items)
+
+            def takeUpToNumLeft(iterator: Iterable[T]) -> Iterable[T]:
+                iterator = iter(iterator)
+                taken = 0
+                while taken < left:
+                    try:
+                        yield next(iterator)
+                    except StopIteration:
+                        return
+                    taken += 1
+
+            p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
+            res = self.context.runJob(self, takeUpToNumLeft, p)
+
+            items += res
+            partsScanned += numPartsToTry
+
+        return items[:num]
+
+    def first(self: "RDD[T]") -> T:
+        rs = self.take(1)
+        if rs:
+            return rs[0]
+        raise ValueError("RDD is empty")
+
+    def isEmpty(self) -> bool:
+        return self.getNumPartitions() == 0 or len(self.take(1)) == 0
+
+    def collectAsMap(self: "RDD[Tuple[K, V]]") -> Dict[K, V]:
+        return dict(self.collect())
 
     def reduceByKeyLocally(self: "RDD[Tuple[K, V]]", func: Callable[[V, V], V]) -> Dict[K, V]:
         func = fail_on_stopiteration(func)
@@ -1831,94 +1664,60 @@ class RDD(RDDFacade, Generic[T_co]):
 
         return self.mapPartitions(reducePartition).reduce(mergeMaps)
 
-    def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], Any]] = None) -> List[T]:
-        def topIterator(iterator: Iterable[T]) -> Iterable[List[T]]:
-            yield heapq.nlargest(num, iterator, key=key)
-
-        def merge(a: List[T], b: List[T]) -> List[T]:
-            return heapq.nlargest(num, a + b, key=key)
-
-        return self.mapPartitions(topIterator).reduce(merge)
-
-    def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], Any]] = None) -> List[T]:
-        if num < 0:
-            raise ValueError("top N cannot be negative.")
-        if num == 0:
-            return []
-
-        def merge(a: List[T], b: List[T]) -> List[T]:
-            return heapq.nsmallest(num, a + b, key)
-
-        partials = self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).collect()
-        return reduce(merge, partials) if partials else []
-
-    def takeSample(
-        self: "RDD[T]", withReplacement: bool, num: int, seed: Optional[int] = None
-    ) -> List[T]:
-        numStDev = 10.0
-        maxSampleSize = sys.maxsize - int(numStDev * math.sqrt(sys.maxsize))
-        if num < 0:
-            raise ValueError("Sample size cannot be negative.")
-        elif num > maxSampleSize:
-            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
-
-        if num == 0 or self.getNumPartitions() == 0:
-            return []
-
-        initialCount = self.count()
-        if initialCount == 0:
-            return []
-
-        rand = random.Random(seed)
-
-        if (not withReplacement) and num >= initialCount:
-            # shuffle current RDD and return
-            samples = self.collect()
-            rand.shuffle(samples)
-            return samples
-
-        fraction = RDD._computeFractionForSampleSize(num, initialCount, withReplacement)
-        samples = self.sample(withReplacement, fraction, seed).collect()
-
-        # If the first sample didn't turn out large enough, keep trying to take samples;
-        # this shouldn't happen often because we use a big multiplier for their initial size.
-        numIters = 0
-        while len(samples) < num:
-            numIters += 1
-            logger.warning(
-                "Needed to re-sample due to insufficient sample size. Repeat #%d" % numIters
-            )
-            seed = rand.randint(0, sys.maxsize)
-            samples = self.sample(withReplacement, fraction, seed).collect()
-
-        rand.shuffle(samples)
-
-        return samples[0:num]
-
-    @staticmethod
-    def _computeFractionForSampleSize(
-        sampleSizeLowerBound: int, total: int, withReplacement: bool
-    ) -> float:
-        fraction = float(sampleSizeLowerBound) / total
-        if withReplacement:
-            numStDev = 5
-            if sampleSizeLowerBound < 12:
-                numStDev = 9
-            return fraction + numStDev * math.sqrt(fraction / total)
-        else:
-            delta = 0.00005
-            gamma = -math.log(delta) / total
-            return min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
+    def countByKey(self: "RDD[Tuple[K, V]]") -> Dict[K, int]:
+        return self.map(lambda x: x[0]).countByValue()
 
     def lookup(self: "RDD[Tuple[K, V]]", key: K) -> List[V]:
         values = self.filter(lambda kv: kv[0] == key).values()
+
         if self.partitioner is not None:
-            return self._cctx.runJob(values, lambda x: x, [self.partitioner(key)])
+            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)])
+
         return values.collect()
 
     def countApprox(self, timeout: int, confidence: float = 0.95) -> int:
         drdd = self.mapPartitions(lambda it: [float(sum(1 for i in it))])
         return int(drdd.sumApprox(timeout, confidence))
+
+    def _approx(
+        self, partial: Callable[[Iterable[Any]], Any], timeout: int
+    ) -> Tuple[List[Any], int, bool]:
+        """
+        Compute ``partial`` per partition in the background and return the results available
+        when ``timeout`` (milliseconds) expires: (results, number of partitions, complete).
+        """
+        total = self.getNumPartitions()
+        if total == 0:
+            return [], 0, True
+        partials = self.mapPartitions(lambda it: [partial(it)])
+        session = self._cctx._session
+        tag = "spark-connect-rdd-approx-" + uuid.uuid4().hex
+        results: List[Any] = []
+        errors: List[BaseException] = []
+        done = threading.Event()
+
+        def run() -> None:
+            try:
+                session.addTag(tag)
+                try:
+                    for items in self._cctx._iterate_rdd(partials._df, partials._jrdd_deserializer):
+                        results.extend(items)
+                finally:
+                    session.removeTag(tag)
+            except BaseException as e:
+                errors.append(e)
+            finally:
+                done.set()
+
+        Thread(target=run, daemon=True).start()
+        complete = done.wait(max(0, timeout) / 1000.0)
+        if not complete:
+            # Python cannot ask for the final value later, so stop the job instead of leaving it
+            # running.
+            session.interruptTag(tag)
+        elif errors:
+            raise errors[0]
+        return list(results), total, complete
 
     def sumApprox(
         self: "RDD[Union[float, int]]", timeout: int, confidence: float = 0.95
@@ -1940,7 +1739,7 @@ class RDD(RDDFacade, Generic[T_co]):
         count_estimate = (counter.count() + 1 - p) / p
         sum_estimate = mean_estimate * count_estimate
         mean_var = counter.sampleVariance() / counter.count()
-        if counter.count() == 1 or math.isnan(mean_var):
+        if counter.count() == 1 or isnan(mean_var):
             return BoundedFloat(sum_estimate, 0.0, float("-inf"), float("inf"))
         count_var = (counter.count() + 1) * (1 - p) / (p * p)
         sum_var = (
@@ -1948,7 +1747,7 @@ class RDD(RDDFacade, Generic[T_co]):
             + count_estimate * count_estimate * mean_var
             + mean_var * count_var
         )
-        bound = _confidence_factor(confidence, counter.count()) * math.sqrt(sum_var)
+        bound = _confidence_factor(confidence, counter.count()) * sqrt(sum_var)
         return BoundedFloat(sum_estimate, confidence, sum_estimate - bound, sum_estimate + bound)
 
     def meanApprox(
@@ -1969,57 +1768,70 @@ class RDD(RDDFacade, Generic[T_co]):
         mean = counter.mean()
         if counter.count() == 1:
             return BoundedFloat(mean, confidence, float("-inf"), float("inf"))
-        stdev = math.sqrt(counter.sampleVariance() / counter.count())
+        stdev = sqrt(counter.sampleVariance() / counter.count())
         bound = _confidence_factor(confidence, counter.count()) * stdev
         return BoundedFloat(mean, confidence, mean - bound, mean + bound)
 
     def countApproxDistinct(self: "RDD[T]", relativeSD: float = 0.05) -> int:
+        """
+        Return the approximate number of distinct elements. On Spark Connect it is counted with
+        Spark SQL's ``approx_count_distinct`` of the hashes of the elements.
+        """
         from pyspark.sql.connect import functions as F
+        from pyspark.sql.types import LongType, StructField, StructType
 
         if relativeSD < 0.000017:
             raise ValueError("relativeSD should be greater than 0.000017")
         # the hash space in Java is 2^32
-        hashes = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)._run(rt.emit_hashes, "h long")
-        row = hashes.agg(F.approx_count_distinct("h", relativeSD)).first()
+        hashes = self.map(lambda x: (portable_hash(x) & 0xFFFFFFFF,))
+        df = hashes._to_dataframe(StructType([StructField("h", LongType(), False)]))
+        row = df.agg(F.approx_count_distinct("h", relativeSD)).first()
         return int(row[0]) if row is not None and row[0] is not None else 0
 
     # -- Output --------------------------------------------------------------------------------
 
-    def saveAsTextFile(self, path: str, compressionCodecClass: Optional[str] = None) -> None:
+    def _to_dataframe(self, struct: Any) -> "DataFrame":
         """
-        Write one line per element, like Spark Classic, through the DataFrame text writer. The
-        path must not exist yet.
+        A DataFrame of this RDD of the internal values of rows of ``struct``, as Spark Classic's
+        SparkSession.createDataFrame creates it from an RDD.
         """
-        from pyspark.sql.connect import functions as F
+        from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
-        def func(_: int, iterator: Iterable[Any]) -> Iterable[bytes]:
-            for x in iterator:
-                if isinstance(x, (bytes, bytearray)):
-                    # Spark Classic decodes bytes elements as UTF-8 on the JVM, replacing
-                    # malformed sequences.
-                    x = bytes(x).decode("utf-8", "replace")
-                elif not isinstance(x, str):
-                    x = str(x)
-                yield x.encode("utf-8")
+        pickled_df = self._pickled()._df
 
-        lines = self._derive(func)._run(rt.emit_lines, "value binary")
-        writer = lines.select(F.col("value").cast("string").alias("value")).write
-        if compressionCodecClass:
-            writer = writer.option("compression", compressionCodecClass)
-        writer.text(path)
+        def to_data_frame(relation: pb2.RDDRelation, session: Any) -> None:
+            relation.to_data_frame.input.CopyFrom(_relation(pickled_df, session))
+            relation.to_data_frame.schema.CopyFrom(pyspark_types_to_proto_types(struct))
 
-    def saveAsPickleFile(self, path: str, batchSize: int = 10) -> None:
-        """
-        Save the pickled elements under ``path`` as Parquet, for
-        :meth:`SparkContext.pickleFile` on Spark Connect to read back. The files are written by
-        the cluster but are not SequenceFiles, so Spark Classic cannot read them, and
-        ``batchSize`` is not used: elements are pickled in chunks of adaptive size.
-        """
-        from pyspark.sql.connect import functions as F
+        df = _RDDRelationPlan.dataframe(self._cctx, to_data_frame, pickled_df)
+        df._cached_schema = struct
+        return df
 
-        self._chunk_df().filter(F.col(rt.COUNT_COL) > 0).select(
-            F.col(rt.CHUNK_COL).alias("value"), F.col(rt.COUNT_COL).alias("n")
-        ).write.parquet(path)
+    def _hadoop_not_supported(self, method: str) -> NoReturn:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "RDD.%s on Spark Connect" % method},
+        )
+
+    def saveAsNewAPIHadoopDataset(
+        self: "RDD[Tuple[K, V]]",
+        conf: Dict[str, str],
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+    ) -> None:
+        self._hadoop_not_supported("saveAsNewAPIHadoopDataset")
+
+    def saveAsNewAPIHadoopFile(
+        self: "RDD[Tuple[K, V]]",
+        path: str,
+        outputFormatClass: str,
+        keyClass: Optional[str] = None,
+        valueClass: Optional[str] = None,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        conf: Optional[Dict[str, str]] = None,
+    ) -> None:
+        self._hadoop_not_supported("saveAsNewAPIHadoopFile")
 
     def saveAsHadoopDataset(
         self: "RDD[Tuple[K, V]]",
@@ -2027,10 +1839,7 @@ class RDD(RDDFacade, Generic[T_co]):
         keyConverter: Optional[str] = None,
         valueConverter: Optional[str] = None,
     ) -> None:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "RDD.saveAsHadoopDataset on Spark Connect"},
-        )
+        self._hadoop_not_supported("saveAsHadoopDataset")
 
     def saveAsHadoopFile(
         self: "RDD[Tuple[K, V]]",
@@ -2043,44 +1852,50 @@ class RDD(RDDFacade, Generic[T_co]):
         conf: Optional[Dict[str, str]] = None,
         compressionCodecClass: Optional[str] = None,
     ) -> None:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "RDD.saveAsHadoopFile on Spark Connect"},
-        )
-
-    def saveAsNewAPIHadoopDataset(
-        self: "RDD[Tuple[K, V]]",
-        conf: Dict[str, str],
-        keyConverter: Optional[str] = None,
-        valueConverter: Optional[str] = None,
-    ) -> None:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "RDD.saveAsNewAPIHadoopDataset on Spark Connect"},
-        )
-
-    def saveAsNewAPIHadoopFile(
-        self: "RDD[Tuple[K, V]]",
-        path: str,
-        outputFormatClass: str,
-        keyClass: Optional[str] = None,
-        valueClass: Optional[str] = None,
-        keyConverter: Optional[str] = None,
-        valueConverter: Optional[str] = None,
-        conf: Optional[Dict[str, str]] = None,
-    ) -> None:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "RDD.saveAsNewAPIHadoopFile on Spark Connect"},
-        )
+        self._hadoop_not_supported("saveAsHadoopFile")
 
     def saveAsSequenceFile(
         self: "RDD[Tuple[K, V]]", path: str, compressionCodecClass: Optional[str] = None
     ) -> None:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "RDD.saveAsSequenceFile on Spark Connect"},
-        )
+        self._hadoop_not_supported("saveAsSequenceFile")
+
+    def saveAsPickleFile(self, path: str, batchSize: int = 10) -> None:
+        """
+        Save the pickled batches of elements under ``path`` as Parquet, for
+        :meth:`SparkContext.pickleFile` on Spark Connect to read back. The files are written by
+        the cluster, but Spark Classic cannot read them.
+        """
+        ser: Serializer
+        if batchSize == 0:
+            ser = AutoBatchedSerializer(CPickleSerializer())
+        else:
+            ser = BatchedSerializer(CPickleSerializer(), batchSize)
+        self._reserialize(ser)._df.write.parquet(path)
+
+    def saveAsTextFile(self, path: str, compressionCodecClass: Optional[str] = None) -> None:
+        """
+        Write one line per element, as Spark Classic does, through the DataFrame text writer.
+        The path must not exist yet.
+        """
+        from pyspark.sql.connect import functions as F
+
+        def func(split: int, iterator: Iterable[Any]) -> Iterable[bytes]:
+            for x in iterator:
+                if isinstance(x, (bytes, bytearray)):
+                    # Spark Classic decodes bytes elements as UTF-8 on the JVM, replacing
+                    # malformed sequences.
+                    yield bytes(x).decode("utf-8", "replace").encode("utf-8")
+                elif isinstance(x, str):
+                    yield x.encode("utf-8")
+                else:
+                    yield str(x).encode("utf-8")
+
+        keyed = self.mapPartitionsWithIndex(func)
+        keyed._bypass_serializer = True  # type: ignore[attr-defined]
+        writer = keyed._df.select(F.col("value").cast("string").alias("value")).write
+        if compressionCodecClass:
+            writer = writer.option("compression", compressionCodecClass)
+        writer.text(path)
 
     def toDF(
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
@@ -2089,22 +1904,180 @@ class RDD(RDDFacade, Generic[T_co]):
         Converts this ``RDD`` into a :class:`pyspark.sql.DataFrame` through the Spark Connect
         session of its :class:`~pyspark.core.connect.context.SparkContext`.
         """
-        if (
-            schema is None
-            and sampleRatio is None
-            and self._func is None
-            and self._source == rt.SOURCE_ROWS
-        ):
-            # ``df.rdd.toDF()``: the rows already are this DataFrame.
-            return self._df
-        session = self._cctx._session
-        return session.createDataFrame(self, schema, sampleRatio)
+        return self._cctx._session.createDataFrame(self, schema, sampleRatio)
+
+
+def _union(ctx: "SparkContext", rdds: Sequence[RDD[Any]], deserializer: Serializer) -> RDD[Any]:
+    """
+    The union of RDDs, as ``SparkContext.union`` of Spark Core makes it: the RDDs that have
+    partitions keep their partitioning if they all have the same partitioner, and are concatenated
+    otherwise.
+    """
+    partitioners = {r._server_partitioner for r in rdds}
+    if partitioners == {None}:
+        non_empty: Sequence[RDD[Any]] = rdds
+        common = None
+    else:
+        non_empty = [r for r in rdds if r.getNumPartitions() > 0]
+        keys = {r._server_partitioner for r in non_empty}
+        common = keys.pop() if non_empty and len(keys) == 1 else None
+    if common is not None:
+        dfs = [r._df for r in non_empty]
+
+        def concatenate(relation: pb2.RDDRelation, session: Any) -> None:
+            for df in dfs:
+                relation.zip_partitions.inputs.append(_relation(df, session))
+            relation.zip_partitions.concatenate = True
+
+        df = _RDDRelationPlan.dataframe(ctx, concatenate, dfs[0])
+        return RDD(df, ctx, deserializer, common[0], common)
+
+    dfs = [r._df for r in rdds]
+
+    def union(relation: pb2.RDDRelation, session: Any) -> None:
+        for df in dfs:
+            relation.union.inputs.append(_relation(df, session))
+
+    counts = [r._num_partitions for r in rdds]
+    num = None if any(c is None for c in counts) else sum(cast(List[int], counts))
+    return RDD(
+        _RDDRelationPlan.dataframe(ctx, union, dfs[0] if dfs else None), ctx, deserializer, num
+    )
+
+
+def _confidence_factor(confidence: float, count: int) -> float:
+    """Two-sided normal or Student's t quantile, as used by Spark's approximate evaluators."""
+    from statistics import NormalDist
+
+    if confidence >= 1.0:
+        return float("inf")
+    if confidence <= 0.0:
+        return 0.0
+    p = 1 - (1 - confidence) / 2
+    z = NormalDist().inv_cdf(p)
+    if count > 100:
+        return z
+    dof = count - 1
+    if dof == 1:
+        return math.tan(math.pi * (p - 0.5))
+    if dof == 2:
+        return (2 * p - 1) / sqrt(2 * p * (1 - p))
+    # Abramowitz and Stegun 26.7.5, accurate to a few parts in 1e4 for three or more degrees of
+    # freedom.
+    g1 = (z**3 + z) / 4
+    g2 = (5 * z**5 + 16 * z**3 + 3 * z) / 96
+    g3 = (3 * z**7 + 19 * z**5 + 17 * z**3 - 15 * z) / 384
+    g4 = (79 * z**9 + 776 * z**7 + 1482 * z**5 - 1920 * z**3 - 945 * z) / 92160
+    return z + g1 / dof + g2 / dof**2 + g3 / dof**3 + g4 / dof**4
+
+
+# The keys of the profiles of the functions of RDDs.
+_profiler_keys = itertools.count(1)
+_profiler_keys_lock = threading.Lock()
+
+
+class PipelinedRDD(RDD[U], Generic[T, U]):
+    """
+    Narrow transformations composed into one Python function of the partitions of the RDD of the
+    first one, which the server runs in one Python stage, as the PythonRDD of Spark Classic.
+    """
+
+    def __init__(
+        self,
+        prev: RDD[T],
+        func: Callable[[int, Iterable[T]], Iterable[U]],
+        preservesPartitioning: bool = False,
+        isFromBarrier: bool = False,
+    ):
+        if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
+            # This transformation is the first in its stage:
+            self.func = func
+            self.preservesPartitioning = preservesPartitioning
+            self._prev_rdd: RDD[Any] = prev
+            self._prev_jrdd_deserializer = prev._jrdd_deserializer
+        else:
+            prev_func: Callable[[int, Iterable[V]], Iterable[T]] = prev.func
+
+            def pipeline_func(split: int, iterator: Iterable[V]) -> Iterable[U]:
+                return func(split, prev_func(split, iterator))
+
+            self.func = pipeline_func
+            self.preservesPartitioning = prev.preservesPartitioning and preservesPartitioning
+            self._prev_rdd = prev._prev_rdd  # maintain the pipeline
+            self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
+        self.is_cached = False
+        self.has_resource_profile = False
+        self.is_checkpointed = False
+        self.ctx = prev.ctx
+        self.prev = prev
+        self._df_cache: Optional["ConnectDataFrame"] = None
+        self._id = None
+        self._jrdd_deserializer = self.ctx.serializer
+        self._bypass_serializer = False
+        self._output_pairs = False
+        self._name = None
+        self._locally_checkpointed = False
+        self._resource_profile = None
+        self._df_with_resources = None
+        self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self._server_partitioner = (
+            self._prev_rdd._server_partitioner if self.preservesPartitioning else None
+        )
+        self.is_barrier = isFromBarrier or prev._is_barrier()
+
+    @property
+    def _num_partitions(self) -> Optional[int]:
+        return self._prev_rdd._num_partitions
+
+    @_num_partitions.setter
+    def _num_partitions(self, value: Optional[int]) -> None:
+        self._prev_rdd._num_partitions = value
+
+    def getNumPartitions(self) -> int:
+        return self._prev_rdd.getNumPartitions()
+
+    @property
+    def _elements_df(self) -> "ConnectDataFrame":
+        if self._df_cache is not None:
+            return self._df_cache
+        if self._bypass_serializer:
+            self._jrdd_deserializer = NoOpSerializer()
+
+        with _profiler_keys_lock:
+            profiler = _runtime.RDDProfiler("RDD<id=%d>" % next(_profiler_keys))
+        command = (self.func, profiler, self._prev_jrdd_deserializer, self._jrdd_deserializer)
+        pickled_command = CloudPickleSerializer().dumps(command)
+        python_ver = "%d.%d" % sys.version_info[:2]
+        hash_seed = self._cctx._python_hash_seed
+        input_df = self._prev_rdd._df
+        is_barrier = self.is_barrier
+        output_pairs = self._output_pairs
+
+        def map_partitions(relation: pb2.RDDRelation, session: Any) -> None:
+            mp = relation.map_partitions
+            mp.input.CopyFrom(_relation(input_df, session))
+            mp.command = pickled_command
+            mp.python_ver = python_ver
+            mp.is_barrier = is_barrier
+            mp.python_hash_seed = hash_seed
+            mp.output_pairs = output_pairs
+
+        self._df_cache = _RDDRelationPlan.dataframe(self._cctx, map_partitions, input_df)
+        return self._df_cache
+
+    def _set_df(self, df: "ConnectDataFrame") -> None:
+        self._df_cache = df
+
+    def _is_pipelinable(self) -> bool:
+        return not (self.is_cached or self.is_checkpointed or self.has_resource_profile)
+
+    def _is_barrier(self) -> bool:
+        return self.is_barrier
 
 
 class RDDBarrier(RDDBarrierFacade[T]):
     """
-    Barrier transformations on Spark Connect: the stage computing them runs through
-    ``mapInArrow(..., barrier=True)``.
+    Wraps an RDD in a barrier stage on Spark Connect.
 
     .. versionadded:: 5.0.0
     """
@@ -2115,14 +2088,14 @@ class RDDBarrier(RDDBarrierFacade[T]):
     def mapPartitions(
         self, f: Callable[[Iterable[T]], Iterable[U]], preservesPartitioning: bool = False
     ) -> RDD[Any]:
-        def func(_: int, iterator: Iterable[T]) -> Iterable[U]:
+        def func(_split: int, iterator: Iterable[T]) -> Iterable[U]:
             return f(iterator)
 
-        return self.rdd._derive(func, preservesPartitioning, barrier=True)
+        return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
 
     def mapPartitionsWithIndex(
         self,
         f: Callable[[int, Iterable[T]], Iterable[U]],
         preservesPartitioning: bool = False,
     ) -> RDD[Any]:
-        return self.rdd._derive(f, preservesPartitioning, uses_split=True, barrier=True)
+        return PipelinedRDD(self.rdd, f, preservesPartitioning, isFromBarrier=True)

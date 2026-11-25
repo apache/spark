@@ -101,8 +101,10 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     VarcharType,
+    _create_converter,
     _has_nulltype,
     _infer_schema,
+    _make_type_verifier,
     _merge_type,
 )
 from pyspark.sql.utils import to_str
@@ -146,15 +148,6 @@ def _is_connect_rdd(obj: Any) -> bool:
     # A Spark Connect RDD only exists once its module was imported, so do not import it here.
     rdd_module = sys.modules.get("pyspark.core.connect.rdd")
     return rdd_module is not None and isinstance(obj, rdd_module.RDD)
-
-
-def _materialize_connect_rdd_with_schema(
-    rdd: Any,
-    struct: StructType,
-    prefers_large_types: bool,
-) -> DataFrame:
-    """Convert the elements of a Spark Connect RDD into rows of ``struct``."""
-    return cast(DataFrame, rdd._to_dataframe(struct, prefers_large_types))
 
 
 if TYPE_CHECKING:
@@ -537,16 +530,15 @@ class SparkSession:
             ),
         )
 
-    def _infer_schema_connect_rdd(
+    def _inferSchema(
         self,
         rdd: Any,
-        samplingRatio: Optional[float],
-        names: Optional[List[str]],
+        samplingRatio: Optional[float] = None,
+        names: Optional[List[str]] = None,
     ) -> StructType:
         """
-        Infer the schema of a Spark Connect :class:`~pyspark.RDD`, like classic ``_inferSchema``.
+        Infer the schema of an RDD of Row, dict, or tuple, as ``_inferSchema`` of Spark Classic.
         """
-
         first = rdd.first()
         if isinstance(first, Sized) and len(first) == 0:
             raise PySparkValueError(
@@ -599,8 +591,9 @@ class SparkSession:
                         messageParameters={},
                     )
         else:
-            sampled_rdd = rdd.sample(False, float(samplingRatio)) if samplingRatio < 0.99 else rdd
-            schema = sampled_rdd.map(
+            if samplingRatio < 0.99:
+                rdd = rdd.sample(False, float(samplingRatio))
+            schema = rdd.map(
                 lambda row: _infer_schema(
                     row,
                     names,
@@ -612,48 +605,79 @@ class SparkSession:
             ).reduce(_merge_type)
         return schema
 
+    def _createFromRDD(
+        self,
+        rdd: Any,
+        schema: Optional[Union[DataType, List[str]]],
+        samplingRatio: Optional[float],
+    ) -> Tuple[Any, StructType]:
+        """
+        Create an RDD of the internal values of the rows of a DataFrame from an RDD, and the
+        schema of the DataFrame, as ``_createFromRDD`` of Spark Classic.
+        """
+        if schema is None or isinstance(schema, (list, tuple)):
+            struct = self._inferSchema(rdd, samplingRatio, names=schema)
+            converter = _create_converter(struct)
+            tupled_rdd = rdd.map(converter)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+        elif isinstance(schema, StructType):
+            struct = schema
+            tupled_rdd = rdd
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
+                    "arg_type": type(schema).__name__,
+                },
+            )
+
+        # convert python objects to sql data
+        internal_rdd = tupled_rdd.map(struct.toInternal)
+        return internal_rdd, struct
+
     def _create_dataframe_from_connect_rdd(
         self,
         data: Any,
-        _schema: Optional[Union[AtomicType, StructType]],
-        _cols: Optional[List[str]],
+        schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
-        prefers_large_types: bool,
+        verifySchema: bool,
     ) -> ParentDataFrame:
-        """Materialize pickled Connect-RDD rows into a SQL :class:`DataFrame`."""
+        """
+        Create a DataFrame from a Spark Connect RDD as ``_create_dataframe`` of Spark Classic does
+        from an RDD: the server applies the schema to the internal values that the RDD pickles.
+        """
+        if isinstance(schema, StructType):
+            verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
-        if data.isEmpty():
-            if _schema is None:
-                raise PySparkValueError(
-                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
-                    messageParameters={},
-                )
-            if isinstance(_schema, StructType):
-                struct = _schema
-            else:
-                struct = StructType().add("value", _schema)
-            return DataFrame(LocalRelation(table=None, schema=struct.json()), self)
+            def prepare(obj: Any) -> Any:
+                verify_func(obj)
+                return obj
 
-        if _schema is None:
-            names_for_infer: Optional[List[str]] = None
-            if _cols is not None:
-                names_for_infer = [
-                    (n.decode("utf-8") if isinstance(n, bytes) else str(n)) for n in _cols
-                ]
-            struct = self._infer_schema_connect_rdd(data, samplingRatio, names_for_infer)
-            if _cols is not None:
-                for i, name in enumerate(_cols):
-                    decoded = name.decode("utf-8") if isinstance(name, bytes) else name
-                    struct.fields[i].name = decoded
-                    struct.names[i] = decoded
-        elif isinstance(_schema, StructType):
-            struct = _schema
+        elif isinstance(schema, DataType):
+            dataType = schema
+            schema = StructType().add("value", schema)
+            verify_func = (
+                _make_type_verifier(dataType, name="field value")
+                if verifySchema
+                else lambda _: True
+            )
+
+            def prepare(obj: Any) -> Any:
+                verify_func(obj)
+                return (obj,)
+
         else:
-            struct = StructType().add("value", _schema)
 
-        return cast(
-            ParentDataFrame, _materialize_connect_rdd_with_schema(data, struct, prefers_large_types)
-        )
+            def prepare(obj: Any) -> Any:
+                return obj
+
+        rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+        return cast(ParentDataFrame, rdd._to_dataframe(struct))
 
     def createDataFrame(
         self,
@@ -669,10 +693,11 @@ class SparkSession:
                 messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
-        if samplingRatio is not None and not _is_connect_rdd(data):
+        is_rdd = _is_connect_rdd(data)
+        if samplingRatio is not None and not is_rdd:
             warnings.warn("'samplingRatio' is ignored. It is not supported with Spark Connect.")
 
-        if verifySchema is not None:
+        if verifySchema is not None and not is_rdd:
             warnings.warn("'verifySchema' is ignored. It is not supported with Spark Connect.")
 
         _schema: Optional[Union[AtomicType, StructType]] = None
@@ -704,6 +729,14 @@ class SparkSession:
                     "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
+            )
+
+        if is_rdd:
+            return self._create_dataframe_from_connect_rdd(
+                data,
+                _cols if _cols is not None else _schema,
+                samplingRatio,
+                True if verifySchema is None else verifySchema,
             )
 
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
@@ -741,15 +774,6 @@ class SparkSession:
         prefers_large_types = configs["spark.sql.execution.arrow.useLargeVarTypes"] == "true"
 
         _table: Optional[pa.Table] = None
-
-        if _is_connect_rdd(data):
-            return self._create_dataframe_from_connect_rdd(
-                data,
-                _schema,
-                _cols,
-                samplingRatio,
-                prefers_large_types,
-            )
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in

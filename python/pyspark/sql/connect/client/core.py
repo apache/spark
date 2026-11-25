@@ -1925,6 +1925,8 @@ class SparkConnectClient(object):
                 }
             if b.HasField("ml_command_result"):
                 yield {"ml_command_result": b.ml_command_result}
+            if b.HasField("rdd_command_result"):
+                yield {"rdd_command_result": b.rdd_command_result}
 
         try:
             if self._use_reattachable_execute:

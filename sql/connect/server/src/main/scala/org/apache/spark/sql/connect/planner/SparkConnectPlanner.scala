@@ -65,6 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.rdd.{RDDCommandHandler, RDDPlanner}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -116,8 +117,11 @@ class SparkConnectPlanner(
     throw SparkException.internalError("executeHolder is not set")
   }
 
-  private lazy val pythonExec =
+  private[connect] lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  // The RDD API of the Python client (see RDDRelation in relations.proto).
+  private lazy val rddPlanner = new RDDPlanner(this)
 
   /**
    * The root of the query plan is a relation and we apply the transformations to it. The resolved
@@ -235,6 +239,10 @@ class SparkConnectPlanner(
         // ML Relation
         case proto.Relation.RelTypeCase.ML_RELATION =>
           MLHandler.transformMLRelation(rel.getMlRelation, sessionHolder).logicalPlan
+
+        // RDD API of the Python client (internal)
+        case proto.Relation.RelTypeCase.RDD_RELATION =>
+          rddPlanner.transformRDDRelation(rel.getRddRelation)
 
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
@@ -1551,7 +1559,7 @@ class SparkConnectPlanner(
       child = transformRelation(rel.getInput))
   }
 
-  private def transformDataType(t: proto.DataType): DataType = {
+  private[connect] def transformDataType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.UNPARSED =>
         parseDatatypeString(t.getUnparsed.getDataTypeString)
@@ -3108,6 +3116,8 @@ class SparkConnectPlanner(
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
+      case proto.Command.CommandTypeCase.RDD_COMMAND =>
+        handleRDDCommand(command.getRddCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
         handlePipelineCommand(command.getPipelineCommand, responseObserver)
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
@@ -3129,6 +3139,20 @@ class SparkConnectPlanner(
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
         .setMlCommandResult(result)
+        .build())
+  }
+
+  private def handleRDDCommand(
+      command: proto.RDDCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val result = new RDDCommandHandler(this).handle(command)
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setRddCommandResult(result)
         .build())
   }
 

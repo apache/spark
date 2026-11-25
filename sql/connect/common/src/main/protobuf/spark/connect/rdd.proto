@@ -1,0 +1,74 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/relations.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
+
+// A command of the RDD API of the Python client (`pyspark.core.connect.rdd`, see
+// [[RDDRelation]]). It is internal: only that API sends it.
+message RDDCommand {
+  oneof command_type {
+    Describe describe = 1;
+    GetContextInfo get_context_info = 2;
+  }
+
+  // Returns the number of partitions of an RDD in `RDDCommandResult.info`.
+  message Describe {
+    // (Required) The RDD.
+    Relation rdd = 1;
+  }
+
+  // Returns the properties of the server that the RDD API uses in
+  // `RDDCommandResult.context_info`.
+  message GetContextInfo {}
+}
+
+// The result of an [[RDDCommand]].
+message RDDCommandResult {
+  oneof result_type {
+    Info info = 1;
+    ContextInfo context_info = 2;
+  }
+
+  // The properties of an RDD (see `RDDCommand.Describe`).
+  message Info {
+    // The number of partitions.
+    int32 num_partitions = 1;
+  }
+
+  // The properties of the server (see `RDDCommand.GetContextInfo`).
+  message ContextInfo {
+    // The default parallelism, as `SparkContext.defaultParallelism` returns it.
+    int32 default_parallelism = 1;
+
+    // Whether `spark.default.parallelism` is set.
+    bool default_parallelism_set = 2;
+
+    // The time when the application started, in milliseconds since the epoch.
+    int64 start_time = 3;
+
+    // The memory of a Python worker for aggregation, `spark.python.worker.memory`.
+    string python_worker_memory = 4;
+  }
+}

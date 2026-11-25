@@ -86,6 +86,9 @@ message Relation {
     Zip zip = 48;
     BinBy bin_by = 49;
 
+    // Internal: a relation of the RDD API of the Python client (see [[RDDRelation]]).
+    RDDRelation rdd_relation = 50;
+
     // NA functions
     NAFill fill_na = 90;
     NADrop drop_na = 91;
@@ -1352,4 +1355,165 @@ message Zip {
 
   // (Required) Right input relation.
   Relation right = 2;
+}
+
+// A relation of the RDD API of the Python client (`pyspark.core.connect.rdd`). It is internal:
+// only that API builds it, and it is not a part of the DataFrame API.
+//
+// An RDD is a relation whose rows hold its elements in the columns that the Python RDD API
+// declares, for instance one binary column of pickled batches of elements. Its partitions are the
+// partitions of the RDD, so these relations keep the partitioning of Spark Classic's RDDs: the
+// partitions of their inputs, the empty partitions included, in the order of the elements.
+message RDDRelation {
+  oneof relation_type {
+    MapPartitions map_partitions = 1;
+    Shuffle shuffle = 2;
+    Values values = 3;
+    Union union = 4;
+    ZipPartitions zip_partitions = 5;
+    Cartesian cartesian = 6;
+    Coalesce coalesce = 7;
+    Parallelize parallelize = 8;
+    FromDataFrame from_data_frame = 9;
+    ToDataFrame to_data_frame = 10;
+    Elements elements = 11;
+    WithResources with_resources = 12;
+  }
+
+  // A Python function of the index and of the elements of each partition of `input`, run as the
+  // PythonRDD of Spark Classic runs it: the Python worker reads each row of `input` as an element
+  // (or as a pair of elements for two columns) of byte arrays, and writes byte arrays. The output
+  // has one binary column, `value`, or, with `output_pairs`, the columns `key` (int) and `value`
+  // (binary) of the pairs that the function writes in turn, as `RDD.partitionBy` writes the
+  // partition index (a long of 8 bytes in big-endian order) and the batch of each pair.
+  message MapPartitions {
+    // (Required) The input RDD, with one or two binary or string columns.
+    Relation input = 1;
+
+    // (Required) The function, as Spark Classic pickles it for its PythonRDD: a tuple of the
+    // function, the profiler, the deserializer and the serializer, pickled with cloudpickle.
+    bytes command = 2;
+
+    // (Required) The version of Python of the client, as "major.minor".
+    string python_ver = 3;
+
+    // (Optional) Whether the partitions are computed in a barrier stage.
+    bool is_barrier = 4;
+
+    // (Optional) The PYTHONHASHSEED of the Python workers, so that they hash strings as the
+    // client does: for instance, to find the partition of a key. The server's when not set.
+    optional string python_hash_seed = 5;
+
+    // (Optional) Whether the function writes pairs of keys and values.
+    bool output_pairs = 6;
+  }
+
+  // A shuffle of the rows of `input`, whose columns are `key` (int) and `value` (binary), to the
+  // partitions given by `key`, as `RDD.partitionBy` shuffles the batches of its pairs. The output
+  // has the columns of `input`, in `num_partitions` partitions.
+  message Shuffle {
+    // (Required) The input RDD, with the columns `key` (int) and `value` (binary).
+    Relation input = 1;
+
+    // (Required) The number of partitions.
+    int32 num_partitions = 2;
+  }
+
+  // The `value` column of the rows of `input`, whose columns are `key` and `value`.
+  message Values {
+    // (Required) The input RDD.
+    Relation input = 1;
+  }
+
+  // The partitions of the inputs one after the other, as the union of RDDs that do not have the
+  // same partitioner.
+  message Union {
+    // (Required) The input RDDs, with the same columns.
+    repeated Relation inputs = 1;
+  }
+
+  // The partitions at the same index of the inputs, which have the same number of partitions:
+  // either their rows at the same position joined, as `RDD.zip` pairs the elements of two RDDs,
+  // or, with `concatenate`, their rows one after the other, as the union of RDDs that have the
+  // same partitioner.
+  message ZipPartitions {
+    // (Required) The input RDDs: two to zip, or the RDDs with the same columns to concatenate.
+    repeated Relation inputs = 1;
+
+    // (Optional) Whether to concatenate the partitions rather than to zip their rows.
+    bool concatenate = 2;
+  }
+
+  // The Cartesian product of two RDDs, as `RDD.cartesian` computes it: the rows of `left` and
+  // `right` joined, in a partition for each pair of partitions of `left` and `right`.
+  message Cartesian {
+    // (Required) The left RDD.
+    Relation left = 1;
+
+    // (Required) The right RDD.
+    Relation right = 2;
+  }
+
+  // The partitions of `input` in `num_partitions` partitions, as `RDD.coalesce` without a shuffle
+  // groups them.
+  message Coalesce {
+    // (Required) The input RDD.
+    Relation input = 1;
+
+    // (Required) The number of partitions.
+    int32 num_partitions = 2;
+  }
+
+  // The rows of local data in `num_slices` partitions, sliced as `SparkContext.parallelize` slices
+  // a sequence: for instance, the pickled batches of a local collection.
+  message Parallelize {
+    // (Required) The local data: a `LocalRelation`, `CachedLocalRelation` or
+    // `ChunkedCachedLocalRelation`.
+    Relation data = 1;
+
+    // (Required) The number of partitions.
+    int32 num_slices = 2;
+  }
+
+  // The rows of a DataFrame pickled in batches, as `DataFrame.rdd` of Spark Classic pickles them:
+  // the output has one binary column, `value`.
+  message FromDataFrame {
+    // (Required) The DataFrame.
+    Relation input = 1;
+  }
+
+  // A DataFrame of an RDD whose elements are the internal values of rows of `schema` (lists or
+  // tuples, as `StructType.toInternal` returns them), as `SparkSession.createDataFrame` of Spark
+  // Classic creates it from an RDD.
+  message ToDataFrame {
+    // (Required) The RDD, with one binary column of pickled batches of elements.
+    Relation input = 1;
+
+    // (Required) The schema, a struct type.
+    DataType schema = 2;
+  }
+
+  // The elements of an RDD, in rows of two columns: `partition` (int), the index of a partition,
+  // and `data` (binary), elements of that partition. `data` holds each row of the RDD as the
+  // PythonRDD of Spark Classic writes an element to Python (see `PythonRDD.writeIteratorToStream`),
+  // so that the deserializer of the RDD reads them. The rows of a partition hold its elements in
+  // order, and the partitions are in the order of their indices.
+  message Elements {
+    // (Required) The RDD, with one or two binary or string columns.
+    Relation input = 1;
+
+    // (Optional) The indices of the partitions to compute, as `SparkContext.runJob` takes them.
+    // All the partitions when it is not set.
+    optional Ints partitions = 2;
+  }
+
+  // The rows of `input`, in a stage that runs with a resource profile, as the stage of an RDD
+  // with the resource profile that `RDD.withResources` sets in Spark Classic.
+  message WithResources {
+    // (Required) The input RDD.
+    Relation input = 1;
+
+    // (Required) The ID of the resource profile (see `CreateResourceProfileCommand`).
+    int32 profile_id = 2;
+  }
 }

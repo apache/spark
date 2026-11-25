@@ -174,6 +174,12 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         self.assertRaises(Exception, rdd.pipe("grep 4", checkCode=True).collect)
         self.assertEqual([], rdd.pipe("grep 4").collect())
 
+    def test_take_on_jrdd(self):
+        # Spark Classic takes from the JVM RDD, `_jrdd`, which a Spark Connect RDD does not have:
+        # take from the RDD itself (SPARK-6294).
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        self.assertEqual(rdd.first(), "0")
+
     def test_null_in_rdd(self):
         self.assertEqual(["a", None, "b"], self.sc.parallelize(["a", None, "b"]).collect())
         self.assertEqual([b"a", None, b"b"], self.sc.parallelize([b"a", None, b"b"]).collect())

@@ -1660,6 +1660,16 @@
           "PythonUserDefinedType requires all the three fields: python_class, serialized_python_class and sql_type."
         ]
       },
+      "RDD_PARALLELIZE_INVALID_DATA" : {
+        "message" : [
+          "The data of an RDD to parallelize must have one binary column, but its schema is <schema>."
+        ]
+      },
+      "RDD_ZIP_INVALID_INPUTS" : {
+        "message" : [
+          "An RDD zips the partitions of two RDDs, but got <numInputs>."
+        ]
+      },
       "REDUCE_SHOULD_CARRY_SCALAR_SCALA_UDF" : {
         "message" : [
           "reduce should carry a scalar scala udf, but got <got>"

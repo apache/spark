@@ -2492,9 +2492,15 @@ class DataFrame(ParentDataFrame):
 
     @property
     def rdd(self) -> "RDD[Row]":
-        from pyspark.core.connect.rdd import RDD as ConnectRDD
+        # As in Spark Classic, the DataFrame keeps its RDD, so that the RDD of every access is
+        # the same RDD on the server, which shares its cache and shuffle outputs.
+        rdd = self.__dict__.get("_lazy_rdd")
+        if rdd is None:
+            from pyspark.core.connect.rdd import RDD as ConnectRDD
 
-        return cast("RDD[Row]", ConnectRDD._from_dataframe(self))
+            rdd = ConnectRDD._from_dataframe(self)
+            self._lazy_rdd = rdd
+        return cast("RDD[Row]", rdd)
 
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:

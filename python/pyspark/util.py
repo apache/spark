@@ -120,6 +120,11 @@ JVM_LONG_MAX: int = (1 << 63) - 1
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
+# Whether PYTHONHASHSEED was found set, which it stays: the hash of strings is fixed when the
+# interpreter starts. Checking os.environ for every key costs more than hashing most keys.
+_python_hash_seed_set = False
+
+
 def portable_hash(x: Hashable) -> int:
     """
     Consistent hash for builtin Spark partition keys (notably ``None`` and tuples containing
@@ -134,12 +139,15 @@ def portable_hash(x: Hashable) -> int:
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
+    global _python_hash_seed_set
 
-    if "PYTHONHASHSEED" not in os.environ:
-        raise PySparkRuntimeError(
-            errorClass="PYTHON_HASH_SEED_NOT_SET",
-            messageParameters={},
-        )
+    if not _python_hash_seed_set:
+        if "PYTHONHASHSEED" not in os.environ:
+            raise PySparkRuntimeError(
+                errorClass="PYTHON_HASH_SEED_NOT_SET",
+                messageParameters={},
+            )
+        _python_hash_seed_set = True
 
     if x is None:
         return 0

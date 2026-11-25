@@ -27,6 +27,7 @@ import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 import "spark/connect/ml.proto";
 import "spark/connect/pipelines.proto";
+import "spark/connect/rdd.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -434,6 +435,9 @@ message ExecutePlanResponse {
     // A signal from the server to the client to execute the query function for a flow, and to
     // register its result with the server.
     PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
+
+    // Internal: the result of a command of the RDD API of the Python client.
+    RDDCommandResult rdd_command_result = 24;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
