@@ -731,6 +731,16 @@ class NumPyCompatTestsMixin:
         )
         self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
 
+    def test_np_log_zero(self):
+        # SPARK-60560: both signed zeros produce negative infinity, which is not missing.
+        pser = pd.Series([-1.0, -0.0, 0.0, 1.0, 2.0, float("nan")], name="value")
+        with np.errstate(divide="ignore", invalid="ignore"):
+            expected = np.log(pser)
+
+        actual = np.log(ps.from_pandas(pser))
+        self.assert_eq(actual, expected, almost=True)
+        self.assert_eq(actual.notna(), expected.notna())
+
     def test_np_logaddexp(self):
         for pdf in (
             pd.DataFrame(

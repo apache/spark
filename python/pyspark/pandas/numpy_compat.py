@@ -75,7 +75,7 @@ unary_np_spark_mappings = {
     "isinf": lambda c: F.coalesce((c == float("inf")) | (c == float("-inf")), F.lit(False)),
     "isnan": F.isnan,
     "isnat": lambda c: NotImplemented,  # pandas-on-Spark and PySpark does not have Nat concept.
-    "log": F.log,
+    "log": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log(c)),
     "log10": F.log10,
     "log1p": F.log1p,
     "log2": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log2(c)),
