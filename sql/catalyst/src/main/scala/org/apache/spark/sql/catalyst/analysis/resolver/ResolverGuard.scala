@@ -592,8 +592,16 @@ class ResolverGuard(
     getMapValue.children.collectFirst { case CheckExpression(reason) => reason }
   }
 
+  /**
+   * Optional references in a lambda function body (e.g. `x -> x.b?` or `x -> x + missing?`) are
+   * unsupported: the single-pass analyzer does not resolve them to NULL in lambda functions yet.
+   */
   private def checkLambdaFunction(lambdaFunction: LambdaFunction) = {
-    lambdaFunction.children.collectFirst { case CheckExpression(reason) => reason }
+    if (OptionalReferences.unresolvedOptionalReference(lambdaFunction.function).isDefined) {
+      Some("optional reference in a lambda function")
+    } else {
+      lambdaFunction.children.collectFirst { case CheckExpression(reason) => reason }
+    }
   }
 
   private def checkUnresolvedNamedLambdaVariable(
@@ -847,12 +855,20 @@ class ResolverGuard(
    * [[SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY]] is true, positional parameters
    * are not bound before analysis, so the child plan will contain [[PosParameter]] nodes and
    * the guard will reject on the expression-level check instead.
+   *
+   * A [[PosParameterizedQuery]] of a statement with optional references is unsupported, because
+   * it must fail with `UNUSED_SQL_PARAMETER_VALUES` when it is given more values than it has
+   * markers, which only the fixed-point [[BindParameters]] rule checks.
    */
   private def checkPosParameterizedQuery(posParameterizedQuery: PosParameterizedQuery) = {
-    checkOperator(posParameterizedQuery.child)
-      .orElse {
-        posParameterizedQuery.args.collectFirst { case CheckExpression(reason) => reason }
-      }
+    if (posParameterizedQuery.hasOptionalReferences) {
+      Some("positional parameters with optional references")
+    } else {
+      checkOperator(posParameterizedQuery.child)
+        .orElse {
+          posParameterizedQuery.args.collectFirst { case CheckExpression(reason) => reason }
+        }
+    }
   }
 
   private def checkBinBy(unresolvedBinBy: UnresolvedBinBy): Option[String] = {
@@ -932,11 +948,20 @@ class ResolverGuard(
     }
   }
 
+  /**
+   * An optional reference through a non-literal IDENTIFIER clause (`IDENTIFIER(expr)?`) is
+   * unsupported: the single-pass analyzer does not keep the name of such a reference that
+   * resolves to NULL yet.
+   */
   private def checkExpressionWithUnresolvedIdentifier(
       expressionWithUnresolvedIdentifier: ExpressionWithUnresolvedIdentifier): Option[String] = {
-    checkExpression(expressionWithUnresolvedIdentifier.identifierExpr).orElse {
-      expressionWithUnresolvedIdentifier.otherExprs.collectFirst {
-        case CheckExpression(reason) => reason
+    if (OptionalReferences.isOptional(expressionWithUnresolvedIdentifier)) {
+      Some("optional reference through an IDENTIFIER clause")
+    } else {
+      checkExpression(expressionWithUnresolvedIdentifier.identifierExpr).orElse {
+        expressionWithUnresolvedIdentifier.otherExprs.collectFirst {
+          case CheckExpression(reason) => reason
+        }
       }
     }
   }

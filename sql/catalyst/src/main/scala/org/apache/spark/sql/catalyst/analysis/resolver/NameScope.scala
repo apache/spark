@@ -802,17 +802,17 @@ class NameScope(
   }
 
   /**
-   * Returns the attributes that [[resolveMultipartName]] matches multipart names against with
-   * `parameters`, regardless of whether they can be referenced in the current clause, in the
-   * groups that [[tryResolveMultipartNameByOutput]] tries one after the other: the main output,
-   * the metadata columns, and the hidden output if `parameters` allow resolving names by it. For
-   * example, used to find the first name part of an optional reference such as `t.col?` that does
-   * not resolve, see `OptionalReferences.firstUnmatchedNamePartIndex`.
+   * Returns the attributes that [[resolveMultipartName]] matches multipart names against,
+   * regardless of whether they can be referenced in the current clause, in the groups that
+   * [[tryResolveMultipartNameByOutput]] tries one after the other: the main output, the metadata
+   * columns, and the hidden output if this scope is marked for hidden output resolution (like in
+   * [[resolveMultipartName]], see [[canResolveNameByHiddenOutput]]). For example, used to find the
+   * first name part of an optional reference such as `t.col?` that does not resolve, see
+   * `OptionalReferences.firstUnmatchedNamePartIndex`.
    */
-  def attributeGroupsForNameMatching(
-      parameters: NameResolutionParameters): Seq[Seq[Attribute]] = {
+  def attributeGroupsForNameMatching(): Seq[Seq[Attribute]] = {
     val attributes = attributesForResolution.attrs
-    val hiddenAttributes = if (parameters.canResolveNameByHiddenOutput) {
+    val hiddenAttributes = if (canResolveNameByHiddenOutput) {
       getHiddenOutputCandidates(attributes, canReferenceAggregatedAccessOnlyAttributes = true)
     } else {
       Seq.empty
@@ -1786,11 +1786,8 @@ class NameScopeStack(
     if (parameters.optionalNamePartIndices.isEmpty) {
       None
     } else {
-      val outerScopeParameters = NameResolutionParameters(
-        canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutputInSubquery
-      )
-      val attributeGroups = current.attributeGroupsForNameMatching(parameters) ++
-        outerScopes.flatMap(_.attributeGroupsForNameMatching(outerScopeParameters))
+      val attributeGroups = current.attributeGroupsForNameMatching() ++
+        outerScopes.flatMap(_.attributeGroupsForNameMatching())
       if (OptionalReferences.resolvesToNull(
           nameParts = multipartName,
           optionalNamePartIndices = parameters.optionalNamePartIndices,

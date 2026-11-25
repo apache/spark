@@ -923,11 +923,22 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUti
           checkResolverGuard(
             plan = PosParameterizedQuery(
               spark.sessionState.sqlParser.parsePlan(query),
-              Seq(Literal(1))
+              Seq(Literal(1)),
+              hasOptionalReferences = false
             ),
             unsupportedReason = None
           )
         }
+      // Only the fixed-point Analyzer checks for unused values of a statement with optional
+      // references.
+      checkResolverGuard(
+        plan = PosParameterizedQuery(
+          spark.sessionState.sqlParser.parsePlan("SELECT 1"),
+          Seq(Literal(1)),
+          hasOptionalReferences = true
+        ),
+        unsupportedReason = Some("positional parameters with optional references")
+      )
     }
   }
 
@@ -1035,6 +1046,28 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUti
   test("Optional named parameters are unsupported") {
     withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
       checkResolverGuard("SELECT :param?", unsupportedReason = Some("optional named parameter"))
+    }
+  }
+
+  test("Optional references in lambda functions are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuard(
+        "SELECT transform(array(named_struct('a', 1)), x -> x.b?)",
+        unsupportedReason = Some("optional reference in a lambda function")
+      )
+      checkResolverGuard(
+        "SELECT transform(array(1, 2), x -> x + missing?) FROM VALUES (1)",
+        unsupportedReason = Some("optional reference in a lambda function")
+      )
+    }
+  }
+
+  test("Optional references through a non-literal IDENTIFIER clause are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuardOnly(
+        "SELECT IDENTIFIER('co' || 'l1')? FROM VALUES (1)",
+        unsupportedReason = Some("optional reference through an IDENTIFIER clause")
+      )
     }
   }
 
