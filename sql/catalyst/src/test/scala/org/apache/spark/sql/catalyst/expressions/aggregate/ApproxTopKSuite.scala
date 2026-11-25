@@ -18,10 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast.ordinalNumber
-import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class ApproxTopKSuite extends SparkFunSuite {
 
@@ -404,5 +407,56 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(badCombine.checkInputDataTypes().isFailure)
     assert(badCombine.checkInputDataTypes() ==
       TypeCheckFailure("State struct must have the fourth field to be string. Got: binary"))
+  }
+
+  /////////////////////////////
+  // Aggregation buffer serialization tests
+  /////////////////////////////
+
+  private def stringRows(values: String*): Seq[InternalRow] =
+    values.map(v => InternalRow(if (v == null) null else UTF8String.fromString(v)))
+
+  private def buildBuffer(agg: ApproxTopK, rows: Seq[InternalRow]): ApproxTopKAggregateBuffer[Any] =
+    rows.foldLeft(agg.createAggregationBuffer())((buffer, row) => agg.update(buffer, row))
+
+  private def topItems(result: Any, itemType: DataType): Seq[(Any, Long)] =
+    result.asInstanceOf[GenericArrayData].array.toSeq.map {
+      case row: InternalRow => (row.get(0, itemType), row.getLong(1))
+    }
+
+  test("SPARK-62341: approx_top_k buffers round-trip through serialize and deserialize") {
+    Seq(
+      StringType -> stringRows("a", "b", "b", null, "c", "c", "c"),
+      LongType -> (Seq(1L, 2L, 2L, 3L, 3L, 3L).map(InternalRow(_)) :+ InternalRow(null))
+    ).foreach { case (dataType, rows) =>
+      val agg = new ApproxTopK(BoundReference(0, dataType, nullable = true), 4, 10)
+      val buffer = buildBuffer(agg, rows)
+      val restored = agg.deserialize(agg.serialize(buffer))
+      val expected = topItems(agg.eval(buffer), dataType)
+      assert(expected.size == 4)
+      assert(topItems(agg.eval(restored), dataType) == expected)
+    }
+  }
+
+  test("SPARK-62341: approx_top_k buffer deserializes from a region of a larger array") {
+    val agg = new ApproxTopK(BoundReference(0, StringType, nullable = true), 3, 10)
+    val buffer = buildBuffer(agg, stringRows("x", "y", "y", null, null, "z", "z", "z"))
+    val bytes = agg.serialize(buffer)
+    val padded = Array.fill[Byte](5)(7) ++ bytes ++ Array.fill[Byte](3)(9)
+    val restored = ApproxTopKAggregateBuffer.deserialize(
+      padded, 5, bytes.length, ApproxTopK.genSketchSerDe(StringType))
+    assert(topItems(restored.eval(3, StringType, StringType), StringType) ==
+      topItems(buffer.eval(3, StringType, StringType), StringType))
+  }
+
+  test("SPARK-62341: approx_top_k_combine state round-trips through serialize and deserialize") {
+    val agg = new ApproxTopK(BoundReference(0, StringType, nullable = true), 3, 10)
+    val sketch = buildBuffer(agg, stringRows("p", "q", "q", "r", "r", "r", null))
+    val restored = CombineInternal.deserialize(
+      new CombineInternal[Any](sketch, StringType, 10).serialize())
+    assert(restored.getItemDataType == StringType)
+    assert(restored.getMaxItemsTracked == 10)
+    assert(topItems(restored.getSketchWithNullCount.eval(3, StringType, StringType), StringType) ==
+      topItems(sketch.eval(3, StringType, StringType), StringType))
   }
 }
