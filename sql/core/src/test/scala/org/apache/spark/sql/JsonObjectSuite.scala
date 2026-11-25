@@ -666,8 +666,9 @@ world'))"""))
         case other => fail(s"expected DataTypeMismatch for a spatial type in $dt, got $other")
       }
     }
-    // A spatial type appearing only as a MAP KEY is fine: JacksonGenerator writes map keys via
-    // toString, so the value-type guard must not over-reject it.
+    // A spatial type appearing only as a MAP KEY is fine: JacksonGenerator writes map keys as
+    // strings, a BINARY key in base64 and other keys with `toString`, so the value-type guard
+    // must not over-reject it.
     val ok = JsonObjectExpr(
       Seq((Literal("k"), Literal.create(null, MapType(GeometryType(4326), IntegerType)))),
       Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)

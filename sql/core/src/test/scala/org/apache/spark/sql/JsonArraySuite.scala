@@ -1793,9 +1793,10 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("a spatial type is accepted when it appears only as a map key") {
-    // JacksonGenerator writes map keys via toString, so a spatial *key* is serializable; only map
-    // values (and struct fields / array elements / top-level) go through a typed writer. The guard
-    // must therefore mirror verifyType and not over-reject a spatial map key.
+    // JacksonGenerator writes map keys as strings, a BINARY key in base64 and other keys with
+    // `toString`, so a spatial *key* is serializable; only map values (and struct fields / array
+    // elements / top-level) go through a typed writer. The guard must therefore mirror verifyType
+    // and not over-reject a spatial map key.
     val ok = JsonArray(
       Seq(Literal.create(null, MapType(GeometryType(4326), IntegerType))),
       Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
