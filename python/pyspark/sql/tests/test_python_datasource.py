@@ -2089,15 +2089,34 @@ class BasePythonDataSourceTestsMixin:
                 self.assertIn(f"empty {field}", str(cm.exception))
 
     def test_write_invalid_column_path(self):
-        with tempfile.TemporaryDirectory(prefix="write_req_bad_column") as d:
-            # A bare string is a common mistake: a column must be a tuple of name parts.
-            self._register_write_requirements_source(
-                "write_req_bad_column", d, distribution=ClusteredDistribution(("key",))
-            )
-            with self.sql_conf(self._write_conf()):
-                with self.assertRaises(AnalysisException) as cm:
-                    self._write_df().write.format("write_req_bad_column").mode("append").save()
-            self.assertIn("DATA_SOURCE_INVALID_COLUMN_PATH", str(cm.exception))
+        # A bare string is a common mistake: a column must be a tuple of name parts.
+        cases = [
+            (
+                "write_req_bad_cluster_column",
+                dict(distribution=ClusteredDistribution(("key",))),
+                "key",
+            ),
+            ("write_req_bad_order_column", dict(ordering=[SortOrder("value")]), "value"),
+            (
+                "write_req_bad_range_column",
+                dict(distribution=OrderedDistribution((SortOrder("value"),))),
+                "value",
+            ),
+            ("write_req_empty_order_column", dict(ordering=[SortOrder(())]), ()),
+            (
+                "write_req_bad_range_column_part",
+                dict(distribution=OrderedDistribution((SortOrder(("value", 1)),))),
+                ("value", 1),
+            ),
+        ]
+        for name, requirements, column in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, **requirements)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_INVALID_COLUMN_PATH", str(cm.exception))
+                self.assertIn(f"invalid column reference: {column!r}", str(cm.exception))
 
     def test_write_invalid_distribution_type(self):
         with tempfile.TemporaryDirectory(prefix="write_req_bad_dist") as d:
