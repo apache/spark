@@ -518,6 +518,40 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
   }
 
+  test("SPARK-62342: BigInt values from 10^18 up are not compact") {
+    val limit = BigInt(10).pow(MAX_LONG_DIGITS)
+    Seq(
+      (limit - 1, true),
+      (-limit + 1, true),
+      (limit, false),
+      (-limit, false),
+      (BigInt(Long.MaxValue), false),
+      (BigInt(Long.MinValue), false)
+    ).foreach { case (value, isCompact) =>
+      Seq(Decimal(value), Decimal(value.bigInteger)).foreach { d =>
+        checkCompact(d, isCompact)
+        checkDecimal(d, value.toString, 38, 0)
+      }
+    }
+  }
+
+  test("SPARK-62342: arithmetic on large BigInt values does not overflow a long") {
+    val min = BigInt(Long.MinValue)
+    val max = BigInt(Long.MaxValue)
+    val results = Seq(
+      -Decimal(min),
+      Decimal(min).abs,
+      Decimal(max) + Decimal(max),
+      Decimal(min) - Decimal(max))
+    assert(results.map(_.toScalaBigInt) === Seq(-min, -min, max + max, min - max))
+  }
+
+  test("SPARK-62342: changePrecision keeps a large BigInt value") {
+    val d = Decimal(BigInt("5000000000000000000"))
+    assert(d.changePrecision(25, 0))
+    checkDecimal(d, "5000000000000000000", 25, 0)
+  }
+
   test("SPARK-26038: toScalaBigInt/toJavaBigInteger") {
     // not fitting long
     val decimal = Decimal("1234568790123456789012348790.1234879012345678901234568790")
