@@ -657,10 +657,10 @@ object SQLConf {
     buildConf("spark.sql.legacy.canonicalization.reassociateInexactArithmetic")
       .internal()
       .doc("When true, canonicalization re-associates chains of FLOAT or DOUBLE addition or " +
-        "multiplication, and chains of DECIMAL addition or multiplication whose result has the " +
-        "maximum precision, so differently associated chains are semantically equal although " +
-        "they can evaluate to different values, as before Spark 4.5. When false, only the two " +
-        "operands of each such operator are reordered.")
+        "multiplication, and chains of DECIMAL addition or multiplication whose result is capped " +
+        "at the maximum precision, so differently associated chains are semantically equal " +
+        "although they can evaluate to different values, as before Spark 4.5. When false, only " +
+        "the two operands of each such operator are reordered.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

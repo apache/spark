@@ -504,6 +504,36 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(Multiply(Multiply(x, y), z).semanticEquals(Multiply(x, Multiply(y, z))))
   }
 
+  test("SPARK-60178: decimal Add/Multiply steps are classified by their uncapped precision") {
+    // Exact steps whose result has exactly 38 digits still re-associate.
+    val Seq(a, b, c) = Seq("a", "b", "c").map(AttributeReference(_, DecimalType(36, 0))())
+    assert(Add(Add(a, b), c).dataType === DecimalType(38, 0))
+    assert(Add(Add(a, b), c).semanticEquals(Add(a, Add(b, c))))
+    val Seq(m, n, o) = Seq("m", "n", "o").map(AttributeReference(_, DecimalType(12, 2))())
+    assert(Multiply(Multiply(m, n), o).dataType === DecimalType(38, 6))
+    assert(Multiply(Multiply(m, n), o).semanticEquals(Multiply(m, Multiply(n, o))))
+
+    // Products of operands below 38 digits can still be capped.
+    val Seq(x, y, z) = Seq("x", "y", "z").map(AttributeReference(_, DecimalType(30, 10))())
+    assert(!Multiply(Multiply(x, y), z).semanticEquals(Multiply(x, Multiply(y, z))))
+
+    // Each step is classified on its own: all steps exact vs. a capped root.
+    val p = AttributeReference("p", DecimalType(37, 0))()
+    val Seq(q, r) = Seq("q", "r").map(AttributeReference(_, DecimalType(10, 0))())
+    assert(Add(p, Add(q, r)).canonicalized.isInstanceOf[MultiCommutativeOp])
+    assert(!Add(Add(p, q), r).canonicalized.isInstanceOf[MultiCommutativeOp])
+  }
+
+  test("SPARK-60178: per-operator canonicalization keeps each operator's eval mode") {
+    val Seq(d1, d2, d3) =
+      Seq("d1", "d2", "d3").map(AttributeReference(_, DecimalType(DecimalType.MAX_PRECISION, 18))())
+    val tryInner = Add(Add(d1, d2, EvalMode.TRY), d3, EvalMode.ANSI)
+    val ansiInner = Add(Add(d1, d2, EvalMode.ANSI), d3, EvalMode.ANSI)
+    assert(!tryInner.semanticEquals(ansiInner))
+    assert(tryInner.semanticEquals(Add(d3, Add(d2, d1, EvalMode.TRY), EvalMode.ANSI)))
+    assert(ansiInner.semanticEquals(Add(d3, Add(d2, d1, EvalMode.ANSI), EvalMode.ANSI)))
+  }
+
   test("SPARK-60178: legacy setting re-associates floating-point and maximum-precision decimal " +
     "Add/Multiply in canonicalization") {
     Seq(DoubleType, DecimalType(DecimalType.MAX_PRECISION, 18)).foreach { dt =>

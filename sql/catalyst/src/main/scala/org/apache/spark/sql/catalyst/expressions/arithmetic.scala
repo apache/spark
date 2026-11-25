@@ -535,16 +535,26 @@ object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 
   /**
-   * Whether re-associating an `Add` or `Multiply` chain with this result type can change its
-   * value. Floating-point steps round, and a decimal step at the maximum precision rounds or
-   * overflows. Below that precision every decimal step is exact, and precision only grows toward
-   * the root, so such chains can still be re-associated.
+   * Whether this resolved `Add` or `Multiply` step rounds or is capped, so that re-associating a
+   * chain of them can change its value. Floating-point steps round. A decimal step is capped at
+   * the maximum precision when its uncapped result precision (see `resultDecimalType`) exceeds
+   * it; otherwise the step is exact. A capped operand always caps its parent, so the exact steps
+   * of a chain sit below its capped ones and can still be re-associated.
+   *
+   * Integral and interval chains are not covered, although their association can decide an
+   * overflow error in ANSI mode or a NULL in TRY mode (SPARK-62225).
    */
-  private[expressions] def isNonAssociative(dataType: DataType): Boolean = dataType match {
-    case FloatType | DoubleType => true
-    case d: DecimalType => d.precision == DecimalType.MAX_PRECISION
-    case _ => false
-  }
+  private[expressions] def isNonAssociative(e: BinaryArithmetic): Boolean =
+    (e.left.dataType, e.right.dataType) match {
+      case (FloatType | DoubleType, _) => true
+      case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+        val uncappedPrecision = e match {
+          case _: Add => max(s1, s2) + max(p1 - s1, p2 - s2) + 1
+          case _: Multiply => p1 + p2 + 1
+        }
+        uncappedPrecision > DecimalType.MAX_PRECISION
+      case _ => false
+    }
 }
 
 @ExpressionDescription(
@@ -632,10 +642,10 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // SPARK-60178: Floating-point and maximum-precision decimal addition is commutative but not
-    // associative, so only the two direct children can be reordered.
+    // SPARK-60178: Floating-point addition, and decimal addition capped at the maximum precision,
+    // is commutative but not associative, so only the two direct children can be reordered.
     orderBinaryCommutative {
-      case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a.dataType) =>
+      case a: Add if a.resolved && BinaryArithmetic.isNonAssociative(a) =>
         Add(_, _, a.evalContext)
     }.getOrElse {
       val reorderResult = buildCanonicalizedPlan(
@@ -832,10 +842,11 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // SPARK-60178: Floating-point and maximum-precision decimal multiplication is commutative but
-    // not associative, so only the two direct children can be reordered.
+    // SPARK-60178: Floating-point multiplication, and decimal multiplication capped at the maximum
+    // precision, is commutative but not associative, so only the two direct children can be
+    // reordered.
     orderBinaryCommutative {
-      case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m.dataType) =>
+      case m: Multiply if m.resolved && BinaryArithmetic.isNonAssociative(m) =>
         Multiply(_, _, m.evalContext)
     }.getOrElse {
       buildCanonicalizedPlan(

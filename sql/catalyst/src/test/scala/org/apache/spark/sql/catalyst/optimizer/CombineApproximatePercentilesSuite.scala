@@ -356,8 +356,10 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
 /**
  * A foldable value whose canonical form ignores the value, so that two instances are canonically
- * equal while they evaluate differently. Covers the guards for such expressions now that no
- * built-in arithmetic is canonicalized that way.
+ * equal while they evaluate differently. Covers the guards for such expressions independently of
+ * built-in arithmetic, which can still produce them through integral chains in ANSI or TRY mode
+ * (SPARK-62225) and through any chain under
+ * `spark.sql.legacy.canonicalization.reassociateInexactArithmetic`.
  */
 private case class CanonicallyEqualValue(value: Literal) extends LeafExpression
   with CodegenFallback {

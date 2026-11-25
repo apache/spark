@@ -338,9 +338,10 @@ abstract class Expression extends TreeNode[Expression] {
    *   2. Reorder the canonicalized child expressions by their hashcode.
    * This means that the lazy `cannonicalized` is called and computed only on the root of the
    * adjacent expressions.
-   * Resolved `Add` and `Multiply` with a FLOAT, DOUBLE or maximum-precision DECIMAL result are the
-   * exception: as they are not associative, each node only reorders its two direct children (see
-   * `orderBinaryCommutative` and `BinaryArithmetic.isNonAssociative`).
+   * Resolved FLOAT and DOUBLE `Add` and `Multiply`, and DECIMAL ones whose result is capped at the
+   * maximum precision, are the exception: as they are not associative, each node only reorders
+   * its two direct children (see `orderBinaryCommutative` and `BinaryArithmetic.isNonAssociative`),
+   * unless `spark.sql.legacy.canonicalization.reassociateInexactArithmetic` is enabled.
    */
   lazy val canonicalized: Expression = withCanonicalizedChildren
 
@@ -1496,18 +1497,31 @@ trait CommutativeExpression extends Expression {
   /**
    * Reorders only the two direct children of a binary commutative operator, without flattening
    * adjacent operators. Used when the operator is commutative but not associative, e.g.
-   * floating-point and maximum-precision decimal addition and multiplication.
+   * floating-point addition and multiplication, and decimal ones capped at the maximum precision.
    *
    * `buildBinaryOp` is defined for the operators of this class that are canonicalized this way,
    * and builds such an operator from its reordered children. This operator and the nested
    * operators of the same class are checked and canonicalized bottom-up without recursion, so a
    * deep chain of them does not overflow the stack. Returns None if `buildBinaryOp` is not
-   * defined for this operator, or if `LEGACY_REASSOCIATE_INEXACT_ARITHMETIC` is enabled.
+   * defined for this operator, or if `LEGACY_REASSOCIATE_INEXACT_ARITHMETIC` is enabled. An
+   * unresolved operand, or one that is not FLOAT, DOUBLE or DECIMAL, rules the chain out before
+   * the walk.
    */
   protected def orderBinaryCommutative(
       buildBinaryOp: PartialFunction[Expression, (Expression, Expression) => Expression])
     : Option[Expression] = {
-    if (SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
+    // Finds an operand of another class in O(1) for left-deep and right-deep chains.
+    var operand: Expression = this
+    while (operand.getClass == getClass) {
+      val Seq(l, r) = operand.children
+      operand = if (r.getClass != getClass) r else l
+    }
+    val operandCanQualify = operand.resolved && (operand.dataType match {
+      case FloatType | DoubleType | _: DecimalType => true
+      case _ => false
+    })
+    if (!operandCanQualify ||
+        SQLConf.get.getConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)) {
       None
     } else {
       val nested = scala.collection.mutable.ArrayBuffer[Expression]()
@@ -1520,6 +1534,9 @@ trait CommutativeExpression extends Expression {
         }
       }
       // Pre-order reversed: every operator comes after the operators nested in it.
+      // The nested forms built here are not shared with the nested operators' own cached
+      // `canonicalized`, so canonicalizing every operator of an n-operand chain, as subexpression
+      // elimination does, builds O(n^2) nodes; reusing those cached forms would make it O(n).
       val canonical = new java.util.IdentityHashMap[Expression, Expression]()
       nested.reverseIterator.foreach { e =>
         buildBinaryOp.lift(e).foreach { build =>
@@ -1562,8 +1579,10 @@ trait CommutativeExpression extends Expression {
  * The MultiCommutativeOp memory optimization is applied to the following commutative
  * expressions:
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
- * Resolved Add and Multiply with a FLOAT, DOUBLE or maximum-precision DECIMAL result never build
- * it, as they are canonicalized per operator (see `CommutativeExpression.orderBinaryCommutative`).
+ * Resolved FLOAT and DOUBLE Add and Multiply, and DECIMAL ones whose result is capped at the
+ * maximum precision, build it only when
+ * `spark.sql.legacy.canonicalization.reassociateInexactArithmetic` is enabled; otherwise they are
+ * canonicalized per operator (see `CommutativeExpression.orderBinaryCommutative`).
  * @param operands A sequence of operands that produces a commutative expression tree.
  * @param opCls The class of the root operator of the expression tree.
  * @param evalContext The optional expression evaluation context.
