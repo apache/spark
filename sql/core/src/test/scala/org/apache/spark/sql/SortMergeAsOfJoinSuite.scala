@@ -2325,7 +2325,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           // A right key that does not overflow: the cursor scan is on, and not used.
           withAsOfJoinCodegenOffAndOn { codegen =>
             val df = join(1L, direction)
-            checkAnswer(df, Row("B", null, null, null) :: Nil)
+            checkAnswer(df, Row("B", null, null) :: Nil)
             val op = assertAsOfJoinCodegen(df, codegen)
             assert(op.metrics("numAsOfCursorTasks").value == 0,
               s"Expected the buffered scan:\n${df.queryExecution.executedPlan}")
