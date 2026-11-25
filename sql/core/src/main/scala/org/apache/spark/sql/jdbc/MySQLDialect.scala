@@ -139,7 +139,9 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
             if fractionalToIntegral && d.precision - d.scale <= maxIntegerDigits(t) =>
           val value = if (d.scale == 0) expr else truncateFractionalValue(expr, d).get
           s"CAST($value AS SIGNED)"
-        case (_, _: IntegralType) if fractionalToIntegral => cannotPushCast(exprDataType, dataType)
+        case (_, _: IntegralType) if fractionalToIntegral =>
+          cannotPushCast(exprDataType, dataType, "MySQL can only cast to 64-bit SIGNED, which " +
+            "doesn't fail like Spark on source values out of the target's range")
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }

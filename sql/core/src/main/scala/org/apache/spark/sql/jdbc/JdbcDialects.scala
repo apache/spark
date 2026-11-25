@@ -463,7 +463,8 @@ abstract class JdbcDialect extends Serializable with Logging {
       val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
       if (!legacyIntegralCastPushdown && exprDataType.isInstanceOf[DatetimeType] &&
           dataType.isInstanceOf[NumericType] && !castsDatetimeToNumericLikeSpark) {
-        cannotPushCast(exprDataType, dataType)
+        cannotPushCast(exprDataType, dataType, "the dialect doesn't declare that the database " +
+          "converts datetimes to numbers like Spark (JdbcDialect.castsDatetimeToNumericLikeSpark)")
       }
       if (!legacyIntegralCastPushdown && isFractionalToIntegral(exprDataType, dataType)) {
         val databaseTypeDefinition = mappedType.getOrElse(dataType match {
@@ -477,7 +478,9 @@ abstract class JdbcDialect extends Serializable with Logging {
         val value = exprDataType match {
           case d: DecimalType if d.scale == 0 => expr
           case f: FractionalType =>
-            truncateFractionalValue(expr, f).getOrElse(cannotPushCast(exprDataType, dataType))
+            truncateFractionalValue(expr, f).getOrElse(cannotPushCast(exprDataType, dataType,
+              "the dialect has no way to truncate the fraction like Spark " +
+                "(JdbcDialect.truncateFractionalValue)"))
         }
         s"CAST($value AS $databaseTypeDefinition)"
       } else {
@@ -490,9 +493,9 @@ abstract class JdbcDialect extends Serializable with Logging {
     protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
       from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
 
-    protected def cannotPushCast(from: DataType, to: DataType): Nothing =
+    protected def cannotPushCast(from: DataType, to: DataType, reason: String): Nothing =
       throw new UnsupportedOperationException(
-        s"Cannot cast $from to $to without changing the result")
+        s"Spark evaluates CAST(${from.sql} AS ${to.sql}) instead of pushing it down: $reason")
 
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
@@ -580,7 +583,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * round such casts return the database's truncating function, and dialects for databases whose
    * cast already truncates return `expr` unchanged. The default returns `None`, so Spark evaluates
    * casts that drop a fraction instead of pushing them down. Casts from a `DECIMAL` with scale 0
-   * have no fraction to drop and are pushed down without calling this.
+   * have no fraction to drop and are pushed down without calling this. Only the default
+   * `compileExpression` calls this; a dialect that overrides `compileExpression` with its own
+   * expression builder must handle these casts in that builder's `visitCast`.
    * @param expr The SQL string of the value being cast.
    * @param from The type of the value being cast.
    * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
@@ -591,7 +596,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Whether the database converts TIMESTAMP and TIME values to numbers as Spark does, for example
    * a TIMESTAMP to seconds since the epoch. Spark pushes down a cast of such a value to a numeric
-   * type only when this is true; the default is false.
+   * type only when this is true; the default is false. Only the default `compileExpression` reads
+   * this; a dialect that overrides `compileExpression` with its own expression builder must handle
+   * these casts in that builder's `visitCast`.
    */
   @Since("4.4.0")
   def castsDatetimeToNumericLikeSpark: Boolean = false
