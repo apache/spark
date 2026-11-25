@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Offset}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class EliminateOffsetsSuite extends PlanTest {
@@ -93,8 +92,15 @@ class EliminateOffsetsSuite extends PlanTest {
     val originalQuery = child.offset(2).offset(3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = child.offset(Add(Literal(3), Literal(2))).analyze
+    val correctAnswer = child.offset(5).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-61109: Do not combine Offset operators if the sum overflows") {
+    // The relation has no maxRows, so that the offsets are not replaced with an empty relation.
+    val relation = RelationWithoutMaxRows(Seq("a".attr.int))
+    val plan = Offset(Int.MaxValue, Offset(10, relation))
+    comparePlans(EliminateOffsets(plan), plan)
   }
 }
