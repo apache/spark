@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -745,13 +745,29 @@ object UnsupportedOperationChecker extends Logging {
    * left semi join drops it. Both are final only if later rows of the other input cannot match
    * the row. So the other input's watermark must bound this input's state, through the
    * equality key that eviction uses or through a range condition.
+   *
+   * TODO: [SPARK-62002] [SPARK-61989] [SPARK-61990] The check still accepts, as earlier versions
+   *  did, joins whose eviction can lose matches or never output unmatched rows: an input without
+   *  its own watermark, whose state the other input's watermarked key evicts while its own later
+   *  rows are not filtered, or, without such a key, is never evicted; a key at the eviction
+   *  ordinal that its own input's watermark does not bound, such as `lt - INTERVAL 10 SECONDS =
+   *  rt`; and, without a watermarked key, a range condition on a column other than the
+   *  watermarked one, which eviction does not compare. It also reads the analyzed keys, so a
+   *  later rewrite other than the removal of a no-op cast can still move the eviction ordinal.
    */
   private def checkStreamStreamJoinWatermarkDirection(join: Join): Unit = {
     val (leftKeys, rightKeys) = join match {
       case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) => (leftKeys, rightKeys)
       case _ => (Nil, Nil)
     }
-    val keyOrdinal = StreamingJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+    // Eviction reads the keys of the optimized plan, from which SimplifyCasts removes a cast to the
+    // type its input already has, so the ordinal is found through such casts too.
+    def withoutNoOpCasts(key: Expression): Expression = key match {
+      case Cast(child, dataType, _, _) if child.dataType == dataType => withoutNoOpCasts(child)
+      case _ => key
+    }
+    val keyOrdinal = StreamingJoinHelper.findJoinKeyOrdinalForWatermark(
+      leftKeys.map(withoutNoOpCasts), rightKeys.map(withoutNoOpCasts))
 
     def checkInput(
         stateSide: String,

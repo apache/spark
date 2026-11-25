@@ -26,8 +26,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 ## Upgrading from Structured Streaming 4.4 to 4.5
 
 - Since Spark 4.5, a stream-stream left outer, left semi, right outer or full outer join fails
-  analysis unless the watermark of the other input bounds the state of each input whose rows the
-  join outputs once, as the join support table of the programming guide requires. For example,
+  analysis unless the watermark of the other input bounds the state of each input whose unmatched
+  rows the join outputs with NULLs or, in a left semi join, drops: the left input of a left outer
+  or left semi join, the right input of a right outer join, and both inputs of a full outer join,
+  as the join support table of the programming guide requires. For example,
   a left outer join on `leftTime = rightTime` with a watermark only on `leftTime` is rejected:
   a later right row could match a left row that was already output with NULLs. So are joins on
   a key shifted backward, such as `leftTime = rightTime - INTERVAL 10 SECONDS`, and on a key in

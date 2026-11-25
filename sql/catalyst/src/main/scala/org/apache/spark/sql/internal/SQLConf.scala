@@ -4511,8 +4511,11 @@ object SQLConf {
       .internal()
       .doc("When true, a stream-stream left outer, left semi, right outer or full outer join " +
         "fails analysis unless the other input's watermark bounds the state of each input " +
-        "whose rows the join outputs once: through an equality on the other input's event-time " +
-        "column, optionally shifted forward by a constant, or through a range condition. " +
+        "whose unmatched rows the join outputs with NULLs or, in a left semi join, drops (the " +
+        "left input of a left outer or left semi join, the right input of a right outer join, " +
+        "and both inputs of a full outer join): through an equality on the other input's " +
+        "event-time column, optionally shifted forward by a constant, or through a range " +
+        "condition. " +
         "Otherwise, later rows of the other input can match rows that were already evicted, " +
         "or, in a full outer join without a watermarked equality key, the join never evicts " +
         "that input, so its unmatched rows are never output. When false, only the check of " +

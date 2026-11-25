@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 
@@ -38,6 +38,59 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
     val e = intercept[AnalysisException] {
       testStream(joined)(
         AddData(leftInput, (1, 5)),
+        CheckNewAnswer())
+    }
+    assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
+      "state of the left input"))
+  }
+
+  private def watermarkedInputs(): (MemoryStream[(Int, Int, Int)], MemoryStream[(Int, Int, Int)],
+      DataFrame, DataFrame) = {
+    val leftInput = MemoryStream[(Int, Int, Int)]
+    val rightInput = MemoryStream[(Int, Int, Int)]
+    val left = leftInput.toDF().toDF("lk", "t", "b")
+      .select($"lk", timestamp_seconds($"t").as("lt"), timestamp_seconds($"b").as("lb"))
+      .withWatermark("lt", "10 seconds")
+    val right = rightInput.toDF().toDF("rk", "t", "a")
+      .select($"rk", timestamp_seconds($"t").as("rt"), timestamp_seconds($"a").as("ra"))
+      .withWatermark("rt", "10 seconds")
+    (leftInput, rightInput, left, right)
+  }
+
+  test("a no-op cast does not move the key that the check reads") {
+    // The optimizer removes the cast, so eviction uses the key `lt = ra`, which the right
+    // watermark does not bound, whichever way the condition spells it.
+    Seq("CAST(lt AS TIMESTAMP) = ra", "lt = ra").foreach { key =>
+      val (leftInput, _, left, right) = watermarkedInputs()
+      val joined = left.join(right, expr(s"lk = rk AND $key AND lb = rt"), "left_outer")
+      val e = intercept[AnalysisException] {
+        testStream(joined)(
+          AddData(leftInput, (1, 5, 5)),
+          CheckNewAnswer())
+      }
+      assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
+        "state of the left input"), key)
+    }
+  }
+
+  test("a key shifted forward from the right event time bounds the left state") {
+    Seq("rt + INTERVAL 10 SECONDS", "timestampadd(SECOND, 10, rt)").foreach { shifted =>
+      val (leftInput, rightInput, left, right) = watermarkedInputs()
+      val joined = left.join(right, expr(s"lk = rk AND lt = $shifted"), "left_outer")
+        .select($"lk", $"lt".cast("long"), $"rt".cast("long"))
+      testStream(joined)(
+        AddData(leftInput, (1, 15, 0)),
+        AddData(rightInput, (1, 5, 0)),
+        CheckNewAnswer((1, 15L, 5L)))
+    }
+  }
+
+  test("a key shifted backward from the right event time does not bound the left state") {
+    val (leftInput, _, left, right) = watermarkedInputs()
+    val joined = left.join(right, expr("lk = rk AND lt = rt - INTERVAL 10 SECONDS"), "left_outer")
+    val e = intercept[AnalysisException] {
+      testStream(joined)(
+        AddData(leftInput, (1, 5, 0)),
         CheckNewAnswer())
     }
     assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
