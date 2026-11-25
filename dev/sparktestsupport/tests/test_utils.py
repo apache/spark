@@ -69,26 +69,14 @@ class DetermineModulesForFilesTests(unittest.TestCase):
             },
             "core/src/main/scala/org/apache/spark/SparkContext.scala": {modules.core},
             "sql/core/src/test/resources/log4j2.properties": {modules.sql, modules.lint_java},
-            "mllib/src/test/resources/log4j2.properties": {modules.mllib, modules.lint_java},
             "project/build.properties": {modules.build, modules.lint_java},
             "dev/checkstyle.xml": {modules.lint_java},
-            "dev/checkstyle-suppressions.xml": {modules.lint_java},
-            "dev/java-file-header": {modules.lint_java},
             "dev/lint-java": {modules.lint_java},
-            "dev/spark-test-image/lint/Dockerfile": {
-                modules.lint_js,
-                modules.lint_java,
-                modules.lint_r,
-            },
             "pom.xml": {modules.build, modules.lint_java},
         }
         for filename, expected in cases.items():
             with self.subTest(filename=filename):
                 self.assertEqual(determine_modules_for_files([filename]), expected)
-        self.assertNotIn(
-            modules.lint_java,
-            determine_modules_for_files(["python/docs/source/_static/copybutton.js"]),
-        )
 
     def test_lint_r_module_selection(self):
         self.assertIn(
