@@ -50,7 +50,7 @@ import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterF
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetricInfo, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
@@ -599,6 +599,62 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assert(metrics(driverMetric2.id) === expectedValue2)
   }
 
+  test("SPARK-60759: driver updates for an accumulator that tasks also report") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val accumId = 1000L
+    val planInfo = new SparkPlanInfo("TestNode", "TestNode", Nil, Map.empty,
+      Seq(new SQLMetricInfo("size", accumId, MetricUtils.SIZE_METRIC)))
+    // Task 1 reports the largest task value. The stage has 8 tasks, and the ones that have not
+    // reported yet contribute 0.
+    val taskValues = Seq(100L, 200L)
+    val allTaskValues = taskValues.padTo(8, 0L)
+
+    def render(executionId: Int, driverValues: Seq[Long]): String = {
+      val stageId = executionId
+      listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        executionId,
+        Some(executionId),
+        "test",
+        "test",
+        "",
+        planInfo,
+        System.currentTimeMillis(),
+        Map.empty))
+      listener.onJobStart(SparkListenerJobStart(
+        jobId = executionId,
+        time = System.currentTimeMillis(),
+        stageInfos = Seq(createStageInfo(stageId, 0)),
+        createProperties(executionId)))
+      listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(stageId, 0)))
+      taskValues.indices.foreach { taskId =>
+        listener.onTaskStart(SparkListenerTaskStart(stageId, 0, createTaskInfo(taskId, 0)))
+      }
+      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("",
+        taskValues.zipWithIndex.map { case (value, taskId) =>
+          (taskId.toLong, stageId, 0, createAccumulatorInfos(Map(accumId -> value)))
+        }))
+      listener.onOtherEvent(SparkListenerDriverAccumUpdates(
+        executionId, driverValues.map(accumId -> _)))
+      statusStore.executionMetrics(executionId)(accumId)
+    }
+
+    // The largest driver value comes after a smaller one and exceeds the task max.
+    val driverMax = Seq(50L, 400L, 50L)
+    val driverMaxRendered = render(0, driverMax)
+    assert(driverMaxRendered === MetricUtils.stringValue(
+      MetricUtils.SIZE_METRIC, (allTaskValues ++ driverMax).toArray, Array.empty[Long]))
+    assert(driverMaxRendered.contains("(driver)"))
+
+    // All driver values, including a repeated one, stay below the task max.
+    val belowTaskMax = Seq(150L, 50L, 150L)
+    val belowTaskMaxRendered = render(1, belowTaskMax)
+    assert(belowTaskMaxRendered === MetricUtils.stringValue(
+      MetricUtils.SIZE_METRIC, (allTaskValues ++ belowTaskMax).toArray, Array(200L, 1L, 0L, 1L)))
+    assert(belowTaskMaxRendered.contains("(stage 1.0: task 1)"))
+  }
+
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
     val json = JsonProtocol.sparkEventToJsonString(event)
@@ -1044,7 +1100,6 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long, expectedValue2:
     sc.emptyRDD
   }
 }
-
 
 class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
 

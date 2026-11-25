@@ -55,7 +55,7 @@ Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_customer_sk:bigint,ss_store_sk:bigint,ss_ticket_number:bigint,ss_net_paid:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 2]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, ss_sold_date_sk#6]
@@ -73,7 +73,7 @@ Output [6]: [i_item_sk#8, i_current_price#9, i_size#10, i_color#11, i_units#12, 
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_color), EqualTo(i_color,pale                ), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:bigint,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (6) ColumnarToRow [codegen id : 1]
 Input [6]: [i_item_sk#8, i_current_price#9, i_size#10, i_color#11, i_units#12, i_manager_id#13]
@@ -84,7 +84,7 @@ Condition : ((isnotnull(i_color#11) AND (i_color#11 = pale                )) AND
 
 (8) BroadcastExchange
 Input [6]: [i_item_sk#8, i_current_price#9, i_size#10, i_color#11, i_units#12, i_manager_id#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_item_sk#1]
@@ -109,7 +109,7 @@ Output [4]: [c_customer_sk#14, c_first_name#15, c_last_name#16, c_birth_country#
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country)]
-ReadSchema: struct<c_customer_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
+ReadSchema: struct<c_customer_sk:bigint,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (14) ColumnarToRow [codegen id : 4]
 Input [4]: [c_customer_sk#14, c_first_name#15, c_last_name#16, c_birth_country#17]
@@ -149,7 +149,7 @@ Output [3]: [sr_item_sk#18, sr_ticket_number#19, sr_returned_date_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
+ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
 (23) ColumnarToRow [codegen id : 8]
 Input [3]: [sr_item_sk#18, sr_ticket_number#19, sr_returned_date_sk#20]
@@ -185,7 +185,7 @@ Output [5]: [s_store_sk#21, s_store_name#22, s_market_id#23, s_state#24, s_zip#2
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
 (31) ColumnarToRow [codegen id : 10]
 Input [5]: [s_store_sk#21, s_store_name#22, s_market_id#23, s_state#24, s_zip#25]
@@ -228,7 +228,7 @@ Input [7]: [s_store_sk#21, s_store_name#22, s_state#24, s_zip#25, ca_state#26, c
 
 (40) BroadcastExchange
 Input [5]: [s_store_sk#21, s_store_name#22, s_state#24, ca_state#26, ca_country#28]
-Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[4, string, true])),false), [plan_id=8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true], upper(input[4, string, true])),false), [plan_id=8]
 
 (41) BroadcastHashJoin [codegen id : 12]
 Left keys [2]: [ss_store_sk#3, c_birth_country#17]
@@ -337,7 +337,7 @@ Output [6]: [ss_item_sk#40, ss_customer_sk#41, ss_store_sk#42, ss_ticket_number#
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_customer_sk:bigint,ss_store_sk:bigint,ss_ticket_number:bigint,ss_net_paid:decimal(7,2)>
 
 (51) ColumnarToRow [codegen id : 2]
 Input [6]: [ss_item_sk#40, ss_customer_sk#41, ss_store_sk#42, ss_ticket_number#43, ss_net_paid#44, ss_sold_date_sk#45]
@@ -355,7 +355,7 @@ Output [5]: [s_store_sk#46, s_store_name#47, s_market_id#48, s_state#49, s_zip#5
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
 (55) ColumnarToRow [codegen id : 1]
 Input [5]: [s_store_sk#46, s_store_name#47, s_market_id#48, s_state#49, s_zip#50]
@@ -370,7 +370,7 @@ Input [5]: [s_store_sk#46, s_store_name#47, s_market_id#48, s_state#49, s_zip#50
 
 (58) BroadcastExchange
 Input [4]: [s_store_sk#46, s_store_name#47, s_state#49, s_zip#50]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=12]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=12]
 
 (59) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_store_sk#42]
@@ -395,7 +395,7 @@ Output [6]: [i_item_sk#51, i_current_price#52, i_size#53, i_color#54, i_units#55
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:bigint,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (64) ColumnarToRow [codegen id : 4]
 Input [6]: [i_item_sk#51, i_current_price#52, i_size#53, i_color#54, i_units#55, i_manager_id#56]
@@ -563,7 +563,7 @@ Output [3]: [s_store_sk#21, s_market_id#23, s_zip#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
-ReadSchema: struct<s_store_sk:int,s_market_id:int,s_zip:string>
+ReadSchema: struct<s_store_sk:bigint,s_market_id:int,s_zip:string>
 
 (98) ColumnarToRow [codegen id : 1]
 Input [3]: [s_store_sk#21, s_market_id#23, s_zip#25]

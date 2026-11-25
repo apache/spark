@@ -27,7 +27,7 @@ Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), GreaterThanOrEqual(d_date_sk,2451149), LessThanOrEqual(d_date_sk,2451179), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (2) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
@@ -42,7 +42,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 
 (5) BroadcastExchange
 Input [2]: [d_date_sk#1, d_year#2]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (6) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
@@ -50,7 +50,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#6), (ss_sold_date_sk#6 >= 2451149), (ss_sold_date_sk#6 <= 2451179), dynamicpruningexpression(ss_sold_date_sk#6 IN dynamicpruning#7)]
 PushedFilters: [IsNotNull(ss_item_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_ext_sales_price:decimal(7,2)>
 
 (7) ColumnarToRow
 Input [3]: [ss_item_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
@@ -74,7 +74,7 @@ Output [4]: [i_item_sk#8, i_category_id#9, i_category#10, i_manager_id#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_category_id:int,i_category:string,i_manager_id:int>
+ReadSchema: struct<i_item_sk:bigint,i_category_id:int,i_category:string,i_manager_id:int>
 
 (12) ColumnarToRow [codegen id : 2]
 Input [4]: [i_item_sk#8, i_category_id#9, i_category#10, i_manager_id#11]
@@ -89,7 +89,7 @@ Input [4]: [i_item_sk#8, i_category_id#9, i_category#10, i_manager_id#11]
 
 (15) BroadcastExchange
 Input [3]: [i_item_sk#8, i_category_id#9, i_category#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (16) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#4]

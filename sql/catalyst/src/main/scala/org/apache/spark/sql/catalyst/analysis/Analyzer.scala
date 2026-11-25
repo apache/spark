@@ -59,7 +59,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1538,17 +1537,10 @@ class Analyzer(
       case r @ RelationChanges(u: UnresolvedRelation, ctx) =>
         relationResolution.resolveChangelog(u, ctx).getOrElse(r)
 
-      case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
-        relationResolution.lookupTableOrView(identifier).map {
-          case v: ResolvedPersistentView =>
-            val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.expectTableNotViewError(
-              nameParts, cmd, suggestAlternative, u)
-          case _: ResolvedTempView =>
-            throw QueryCompilationErrors.expectTableNotViewError(
-              identifier, cmd, suggestAlternative, u)
-          case table => table
-        }.getOrElse(u)
+      case u: UnresolvedTable =>
+        relationResolution.lookupTableOrView(u.multipartIdentifier)
+          .map(DdlTargetValidation.validateTable(u, _))
+          .getOrElse(u)
 
       // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
       // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
@@ -1571,13 +1563,10 @@ class Analyzer(
           case other => other
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, cmd, allowTempView, _) =>
-        relationResolution.lookupTableOrView(identifier).map {
-          case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
-              identifier, cmd, u)
-          case other => other
-        }.getOrElse(u)
+      case u: UnresolvedTableOrView =>
+        relationResolution.lookupTableOrView(u.multipartIdentifier)
+          .map(DdlTargetValidation.validateTableOrView(u, _))
+          .getOrElse(u)
     }
 
     def resolveRelation(
@@ -2475,18 +2464,9 @@ class Analyzer(
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
       ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
-      case u @ UnresolvedFunctionName(nameParts, _, _) =>
-        functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
-          .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-        }.getOrElse {
-          val CatalogAndIdentifier(catalog, ident) =
-            relationResolution.expandIdentifier(nameParts)
-          val fullName = catalog.name +: ident.namespace :+ ident.name
-          CatalogV2Util.loadFunction(catalog, ident).map { func =>
-            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
-        }
+      case unresolvedFunctionName: UnresolvedFunctionName =>
+        functionResolution.resolveFunctionName(
+          unresolvedFunctionName, lookupCatalog = Analyzer.this)
 
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
