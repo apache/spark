@@ -246,6 +246,8 @@ class AutoBatchedSerializer(BatchedSerializer):
     Choose the size of batch automatically based on the size of object
     """
 
+    _MAX_FRAME_SIZE = (1 << 31) - 1
+
     def __init__(self, serializer, bestSize=1 << 16):
         BatchedSerializer.__init__(self, serializer, self.UNKNOWN_BATCH_SIZE)
         self.bestSize = bestSize
@@ -259,14 +261,38 @@ class AutoBatchedSerializer(BatchedSerializer):
                 break
 
             bytes = self.serializer.dumps(vs)
-            write_int(len(bytes), stream)
-            stream.write(bytes)
-
             size = len(bytes)
+            if size > self._MAX_FRAME_SIZE:
+                # Release the oversized payload before serializing smaller batches.
+                del bytes
+                self._write_split_batch(vs, stream)
+            else:
+                write_int(size, stream)
+                stream.write(bytes)
+
             if size < best:
                 batch *= 2
             elif size > best * 10 and batch > 1:
                 batch //= 2
+
+    def _write_split_batch(self, values, stream):
+        if len(values) == 1:
+            raise ValueError("can not serialize object larger than 2G")
+        batch_size = len(values) // 2
+        offset = 0
+        while offset < len(values):
+            end = min(offset + batch_size, len(values))
+            bytes = self.serializer.dumps(values[offset:end])
+            size = len(bytes)
+            if size > self._MAX_FRAME_SIZE:
+                del bytes
+                if end - offset == 1:
+                    raise ValueError("can not serialize object larger than 2G")
+                batch_size //= 2
+            else:
+                write_int(size, stream)
+                stream.write(bytes)
+                offset = end
 
     def __repr__(self):
         return "AutoBatchedSerializer(%s)" % self.serializer
