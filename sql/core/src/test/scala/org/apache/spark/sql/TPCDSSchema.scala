@@ -20,15 +20,14 @@ package org.apache.spark.sql
 /**
  * Base trait for TPC-DS related tests.
  *
- * Datatype mapping for TPC-DS and Spark SQL, fully matching schemas defined in `tpcds.sql` of the
- * official tpcds toolkit
- * see more at:
+ * Datatype mapping for TPC-DS and Spark SQL, matching the official TPC-DS specification
+ * (with `Identifier` mapped to `BIGINT` to support large scale factors such as SF10000+):
  *   http://www.tpc.org/tpc_documents_current_versions/pdf/tpc-ds_v2.9.0.pdf
  *
  *    |---------------|---------------|
  *    |    TPC-DS     |  Spark  SQL   |
  *    |---------------|---------------|
- *    |  Identifier   |      INT      |
+ *    |  Identifier   |    BIGINT     |
  *    |---------------|---------------|
  *    |    Integer    |      INT      |
  *    |---------------|---------------|
@@ -46,16 +45,16 @@ trait TPCDSSchema {
   protected val tableColumns: Map[String, String] = Map(
     "store_sales" ->
       """
-        |`ss_sold_date_sk` INT,
-        |`ss_sold_time_sk` INT,
-        |`ss_item_sk` INT,
-        |`ss_customer_sk` INT,
-        |`ss_cdemo_sk` INT,
-        |`ss_hdemo_sk` INT,
-        |`ss_addr_sk` INT,
-        |`ss_store_sk` INT,
-        |`ss_promo_sk` INT,
-        |`ss_ticket_number` INT,
+        |`ss_sold_date_sk` BIGINT,
+        |`ss_sold_time_sk` BIGINT,
+        |`ss_item_sk` BIGINT,
+        |`ss_customer_sk` BIGINT,
+        |`ss_cdemo_sk` BIGINT,
+        |`ss_hdemo_sk` BIGINT,
+        |`ss_addr_sk` BIGINT,
+        |`ss_store_sk` BIGINT,
+        |`ss_promo_sk` BIGINT,
+        |`ss_ticket_number` BIGINT,
         |`ss_quantity` INT,
         |`ss_wholesale_cost` DECIMAL(7,2),
         |`ss_list_price` DECIMAL(7,2),
@@ -72,16 +71,16 @@ trait TPCDSSchema {
       """.stripMargin,
     "store_returns" ->
       """
-        |`sr_returned_date_sk` INT,
-        |`sr_return_time_sk` INT,
-        |`sr_item_sk` INT,
-        |`sr_customer_sk` INT,
-        |`sr_cdemo_sk` INT,
-        |`sr_hdemo_sk` INT,
-        |`sr_addr_sk` INT,
-        |`sr_store_sk` INT,
-        |`sr_reason_sk` INT,
-        |`sr_ticket_number` INT,
+        |`sr_returned_date_sk` BIGINT,
+        |`sr_return_time_sk` BIGINT,
+        |`sr_item_sk` BIGINT,
+        |`sr_customer_sk` BIGINT,
+        |`sr_cdemo_sk` BIGINT,
+        |`sr_hdemo_sk` BIGINT,
+        |`sr_addr_sk` BIGINT,
+        |`sr_store_sk` BIGINT,
+        |`sr_reason_sk` BIGINT,
+        |`sr_ticket_number` BIGINT,
         |`sr_return_quantity` INT,
         |`sr_return_amt` DECIMAL(7,2),
         |`sr_return_tax` DECIMAL(7,2),
@@ -95,24 +94,24 @@ trait TPCDSSchema {
       """.stripMargin,
     "catalog_sales" ->
       """
-        |`cs_sold_date_sk` INT,
-        |`cs_sold_time_sk` INT,
-        |`cs_ship_date_sk` INT,
-        |`cs_bill_customer_sk` INT,
-        |`cs_bill_cdemo_sk` INT,
-        |`cs_bill_hdemo_sk` INT,
-        |`cs_bill_addr_sk` INT,
-        |`cs_ship_customer_sk` INT,
-        |`cs_ship_cdemo_sk` INT,
-        |`cs_ship_hdemo_sk` INT,
-        |`cs_ship_addr_sk` INT,
-        |`cs_call_center_sk` INT,
-        |`cs_catalog_page_sk` INT,
-        |`cs_ship_mode_sk` INT,
-        |`cs_warehouse_sk` INT,
-        |`cs_item_sk` INT,
-        |`cs_promo_sk` INT,
-        |`cs_order_number` INT,
+        |`cs_sold_date_sk` BIGINT,
+        |`cs_sold_time_sk` BIGINT,
+        |`cs_ship_date_sk` BIGINT,
+        |`cs_bill_customer_sk` BIGINT,
+        |`cs_bill_cdemo_sk` BIGINT,
+        |`cs_bill_hdemo_sk` BIGINT,
+        |`cs_bill_addr_sk` BIGINT,
+        |`cs_ship_customer_sk` BIGINT,
+        |`cs_ship_cdemo_sk` BIGINT,
+        |`cs_ship_hdemo_sk` BIGINT,
+        |`cs_ship_addr_sk` BIGINT,
+        |`cs_call_center_sk` BIGINT,
+        |`cs_catalog_page_sk` BIGINT,
+        |`cs_ship_mode_sk` BIGINT,
+        |`cs_warehouse_sk` BIGINT,
+        |`cs_item_sk` BIGINT,
+        |`cs_promo_sk` BIGINT,
+        |`cs_order_number` BIGINT,
         |`cs_quantity` INT,
         |`cs_wholesale_cost` DECIMAL(7,2),
         |`cs_list_price` DECIMAL(7,2),
@@ -132,23 +131,23 @@ trait TPCDSSchema {
       """.stripMargin,
     "catalog_returns" ->
       """
-        |`cr_returned_date_sk` INT,
-        |`cr_returned_time_sk` INT,
-        |`cr_item_sk` INT,
-        |`cr_refunded_customer_sk` INT,
-        |`cr_refunded_cdemo_sk` INT,
-        |`cr_refunded_hdemo_sk` INT,
-        |`cr_refunded_addr_sk` INT,
-        |`cr_returning_customer_sk` INT,
-        |`cr_returning_cdemo_sk` INT,
-        |`cr_returning_hdemo_sk` INT,
-        |`cr_returning_addr_sk` INT,
-        |`cr_call_center_sk` INT,
-        |`cr_catalog_page_sk` INT,
-        |`cr_ship_mode_sk` INT,
-        |`cr_warehouse_sk` INT,
-        |`cr_reason_sk` INT,
-        |`cr_order_number` INT,
+        |`cr_returned_date_sk` BIGINT,
+        |`cr_returned_time_sk` BIGINT,
+        |`cr_item_sk` BIGINT,
+        |`cr_refunded_customer_sk` BIGINT,
+        |`cr_refunded_cdemo_sk` BIGINT,
+        |`cr_refunded_hdemo_sk` BIGINT,
+        |`cr_refunded_addr_sk` BIGINT,
+        |`cr_returning_customer_sk` BIGINT,
+        |`cr_returning_cdemo_sk` BIGINT,
+        |`cr_returning_hdemo_sk` BIGINT,
+        |`cr_returning_addr_sk` BIGINT,
+        |`cr_call_center_sk` BIGINT,
+        |`cr_catalog_page_sk` BIGINT,
+        |`cr_ship_mode_sk` BIGINT,
+        |`cr_warehouse_sk` BIGINT,
+        |`cr_reason_sk` BIGINT,
+        |`cr_order_number` BIGINT,
         |`cr_return_quantity` INT,
         |`cr_return_amount` DECIMAL(7,2),
         |`cr_return_tax` DECIMAL(7,2),
@@ -162,24 +161,24 @@ trait TPCDSSchema {
       """.stripMargin,
     "web_sales" ->
       """
-        |`ws_sold_date_sk` INT,
-        |`ws_sold_time_sk` INT,
-        |`ws_ship_date_sk` INT,
-        |`ws_item_sk` INT,
-        |`ws_bill_customer_sk` INT,
-        |`ws_bill_cdemo_sk` INT,
-        |`ws_bill_hdemo_sk` INT,
-        |`ws_bill_addr_sk` INT,
-        |`ws_ship_customer_sk` INT,
-        |`ws_ship_cdemo_sk` INT,
-        |`ws_ship_hdemo_sk` INT,
-        |`ws_ship_addr_sk` INT,
-        |`ws_web_page_sk` INT,
-        |`ws_web_site_sk` INT,
-        |`ws_ship_mode_sk` INT,
-        |`ws_warehouse_sk` INT,
-        |`ws_promo_sk` INT,
-        |`ws_order_number` INT,
+        |`ws_sold_date_sk` BIGINT,
+        |`ws_sold_time_sk` BIGINT,
+        |`ws_ship_date_sk` BIGINT,
+        |`ws_item_sk` BIGINT,
+        |`ws_bill_customer_sk` BIGINT,
+        |`ws_bill_cdemo_sk` BIGINT,
+        |`ws_bill_hdemo_sk` BIGINT,
+        |`ws_bill_addr_sk` BIGINT,
+        |`ws_ship_customer_sk` BIGINT,
+        |`ws_ship_cdemo_sk` BIGINT,
+        |`ws_ship_hdemo_sk` BIGINT,
+        |`ws_ship_addr_sk` BIGINT,
+        |`ws_web_page_sk` BIGINT,
+        |`ws_web_site_sk` BIGINT,
+        |`ws_ship_mode_sk` BIGINT,
+        |`ws_warehouse_sk` BIGINT,
+        |`ws_promo_sk` BIGINT,
+        |`ws_order_number` BIGINT,
         |`ws_quantity` INT,
         |`ws_wholesale_cost` DECIMAL(7,2),
         |`ws_list_price` DECIMAL(7,2),
@@ -199,20 +198,20 @@ trait TPCDSSchema {
       """.stripMargin,
     "web_returns" ->
       """
-        |`wr_returned_date_sk` INT,
-        |`wr_returned_time_sk` INT,
-        |`wr_item_sk` INT,
-        |`wr_refunded_customer_sk` INT,
-        |`wr_refunded_cdemo_sk` INT,
-        |`wr_refunded_hdemo_sk` INT,
-        |`wr_refunded_addr_sk` INT,
-        |`wr_returning_customer_sk` INT,
-        |`wr_returning_cdemo_sk` INT,
-        |`wr_returning_hdemo_sk` INT,
-        |`wr_returning_addr_sk` INT,
-        |`wr_web_page_sk` INT,
-        |`wr_reason_sk` INT,
-        |`wr_order_number` INT,
+        |`wr_returned_date_sk` BIGINT,
+        |`wr_returned_time_sk` BIGINT,
+        |`wr_item_sk` BIGINT,
+        |`wr_refunded_customer_sk` BIGINT,
+        |`wr_refunded_cdemo_sk` BIGINT,
+        |`wr_refunded_hdemo_sk` BIGINT,
+        |`wr_refunded_addr_sk` BIGINT,
+        |`wr_returning_customer_sk` BIGINT,
+        |`wr_returning_cdemo_sk` BIGINT,
+        |`wr_returning_hdemo_sk` BIGINT,
+        |`wr_returning_addr_sk` BIGINT,
+        |`wr_web_page_sk` BIGINT,
+        |`wr_reason_sk` BIGINT,
+        |`wr_order_number` BIGINT,
         |`wr_return_quantity` INT,
         |`wr_return_amt` DECIMAL(7,2),
         |`wr_return_tax` DECIMAL(7,2),
@@ -226,18 +225,18 @@ trait TPCDSSchema {
       """.stripMargin,
     "inventory" ->
       """
-        |`inv_date_sk` INT,
-        |`inv_item_sk` INT,
-        |`inv_warehouse_sk` INT,
+        |`inv_date_sk` BIGINT,
+        |`inv_item_sk` BIGINT,
+        |`inv_warehouse_sk` BIGINT,
         |`inv_quantity_on_hand` INT
       """.stripMargin,
     "store" ->
       """
-        |`s_store_sk` INT,
+        |`s_store_sk` BIGINT,
         |`s_store_id` CHAR(16),
         |`s_rec_start_date` DATE,
         |`s_rec_end_date` DATE,
-        |`s_closed_date_sk` INT,
+        |`s_closed_date_sk` BIGINT,
         |`s_store_name` VARCHAR(50),
         |`s_number_employees` INT,
         |`s_floor_space` INT,
@@ -265,12 +264,12 @@ trait TPCDSSchema {
       """.stripMargin,
     "call_center" ->
       """
-        |`cc_call_center_sk` INT,
+        |`cc_call_center_sk` BIGINT,
         |`cc_call_center_id` CHAR(16),
         |`cc_rec_start_date` DATE,
         |`cc_rec_end_date` DATE,
-        |`cc_closed_date_sk` INT,
-        |`cc_open_date_sk` INT,
+        |`cc_closed_date_sk` BIGINT,
+        |`cc_open_date_sk` BIGINT,
         |`cc_name` VARCHAR(50),
         |`cc_class` VARCHAR(50),
         |`cc_employees` INT,
@@ -299,10 +298,10 @@ trait TPCDSSchema {
       """.stripMargin,
     "catalog_page" ->
       """
-        |`cp_catalog_page_sk` INT,
+        |`cp_catalog_page_sk` BIGINT,
         |`cp_catalog_page_id` CHAR(16),
-        |`cp_start_date_sk` INT,
-        |`cp_end_date_sk` INT,
+        |`cp_start_date_sk` BIGINT,
+        |`cp_end_date_sk` BIGINT,
         |`cp_department` VARCHAR(50),
         |`cp_catalog_number` INT,
         |`cp_catalog_page_number` INT,
@@ -311,13 +310,13 @@ trait TPCDSSchema {
       """.stripMargin,
     "web_site" ->
       """
-        |`web_site_sk` INT,
+        |`web_site_sk` BIGINT,
         |`web_site_id` CHAR(16),
         |`web_rec_start_date` DATE,
         |`web_rec_end_date` DATE,
         |`web_name` VARCHAR(50),
-        |`web_open_date_sk` INT,
-        |`web_close_date_sk` INT,
+        |`web_open_date_sk` BIGINT,
+        |`web_close_date_sk` BIGINT,
         |`web_class` VARCHAR(50),
         |`web_manager` VARCHAR(40),
         |`web_mkt_id` INT,
@@ -340,14 +339,14 @@ trait TPCDSSchema {
       """.stripMargin,
     "web_page" ->
       """
-        |`wp_web_page_sk` INT,
+        |`wp_web_page_sk` BIGINT,
         |`wp_web_page_id` CHAR(16),
         |`wp_rec_start_date` DATE,
         |`wp_rec_end_date` DATE,
-        |`wp_creation_date_sk` INT,
-        |`wp_access_date_sk` INT,
+        |`wp_creation_date_sk` BIGINT,
+        |`wp_access_date_sk` BIGINT,
         |`wp_autogen_flag` CHAR(1),
-        |`wp_customer_sk` INT,
+        |`wp_customer_sk` BIGINT,
         |`wp_url` VARCHAR(100),
         |`wp_type` CHAR(50),
         |`wp_char_count` INT,
@@ -357,7 +356,7 @@ trait TPCDSSchema {
       """.stripMargin,
     "warehouse" ->
       """
-        |`w_warehouse_sk` INT,
+        |`w_warehouse_sk` BIGINT,
         |`w_warehouse_id` CHAR(16),
         |`w_warehouse_name` VARCHAR(20),
         |`w_warehouse_sq_ft` INT,
@@ -374,13 +373,13 @@ trait TPCDSSchema {
       """.stripMargin,
     "customer" ->
       """
-        |`c_customer_sk` INT,
+        |`c_customer_sk` BIGINT,
         |`c_customer_id` CHAR(16),
-        |`c_current_cdemo_sk` INT,
-        |`c_current_hdemo_sk` INT,
-        |`c_current_addr_sk` INT,
-        |`c_first_shipto_date_sk` INT,
-        |`c_first_sales_date_sk` INT,
+        |`c_current_cdemo_sk` BIGINT,
+        |`c_current_hdemo_sk` BIGINT,
+        |`c_current_addr_sk` BIGINT,
+        |`c_first_shipto_date_sk` BIGINT,
+        |`c_first_sales_date_sk` BIGINT,
         |`c_salutation` CHAR(10),
         |`c_first_name` CHAR(20),
         |`c_last_name` CHAR(30),
@@ -391,11 +390,11 @@ trait TPCDSSchema {
         |`c_birth_country` VARCHAR(20),
         |`c_login` CHAR(13),
         |`c_email_address` CHAR(50),
-        |`c_last_review_date` INT
+        |`c_last_review_date` BIGINT
       """.stripMargin,
     "customer_address" ->
       """
-        |`ca_address_sk` INT,
+        |`ca_address_sk` BIGINT,
         |`ca_address_id` CHAR(16),
         |`ca_street_number` CHAR(10),
         |`ca_street_name` VARCHAR(60),
@@ -411,7 +410,7 @@ trait TPCDSSchema {
       """.stripMargin,
     "customer_demographics" ->
       """
-        |`cd_demo_sk` INT,
+        |`cd_demo_sk` BIGINT,
         |`cd_gender` CHAR(1),
         |`cd_marital_status` CHAR(1),
         |`cd_education_status` CHAR(20),
@@ -423,7 +422,7 @@ trait TPCDSSchema {
       """.stripMargin,
     "date_dim" ->
       """
-        |`d_date_sk` INT,
+        |`d_date_sk` BIGINT,
         |`d_date_id` CHAR(16),
         |`d_date` DATE,
         |`d_month_seq` INT,
@@ -454,15 +453,15 @@ trait TPCDSSchema {
       """.stripMargin,
     "household_demographics" ->
       """
-        |`hd_demo_sk` INT,
-        |`hd_income_band_sk` INT,
+        |`hd_demo_sk` BIGINT,
+        |`hd_income_band_sk` BIGINT,
         |`hd_buy_potential` CHAR(15),
         |`hd_dep_count` INT,
         |`hd_vehicle_count` INT
       """.stripMargin,
     "item" ->
       """
-        |`i_item_sk` INT,
+        |`i_item_sk` BIGINT,
         |`i_item_id` CHAR(16),
         |`i_rec_start_date` DATE,
         |`i_rec_end_date` DATE,
@@ -487,17 +486,17 @@ trait TPCDSSchema {
       """.stripMargin,
     "income_band" ->
       """
-        |`ib_income_band_sk` INT,
+        |`ib_income_band_sk` BIGINT,
         |`ib_lower_bound` INT,
         |`ib_upper_bound` INT
       """.stripMargin,
     "promotion" ->
       """
-        |`p_promo_sk` INT,
+        |`p_promo_sk` BIGINT,
         |`p_promo_id` CHAR(16),
-        |`p_start_date_sk` INT,
-        |`p_end_date_sk` INT,
-        |`p_item_sk` INT,
+        |`p_start_date_sk` BIGINT,
+        |`p_end_date_sk` BIGINT,
+        |`p_item_sk` BIGINT,
         |`p_cost` DECIMAL(15,2),
         |`p_response_target` INT,
         |`p_promo_name` CHAR(50),
@@ -515,13 +514,13 @@ trait TPCDSSchema {
       """.stripMargin,
     "reason" ->
       """
-        |`r_reason_sk` INT,
+        |`r_reason_sk` BIGINT,
         |`r_reason_id` CHAR(16),
         |`r_reason_desc` CHAR(100)
       """.stripMargin,
     "ship_mode" ->
       """
-        |`sm_ship_mode_sk` INT,
+        |`sm_ship_mode_sk` BIGINT,
         |`sm_ship_mode_id` CHAR(16),
         |`sm_type` CHAR(30),
         |`sm_code` CHAR(10),
@@ -530,7 +529,7 @@ trait TPCDSSchema {
       """.stripMargin,
     "time_dim" ->
       """
-        |`t_time_sk` INT,
+        |`t_time_sk` BIGINT,
         |`t_time_id` CHAR(16),
         |`t_time` INT,
         |`t_hour` INT,

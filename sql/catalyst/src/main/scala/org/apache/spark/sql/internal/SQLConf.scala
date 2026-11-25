@@ -670,17 +670,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
-    buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
-    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-    .doc("When true, split a projection into several projections with the filters which " +
-      "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
-      "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
-      s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val REGEX_PATTERN_COST_ESTIMATE_VERSION =
     buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
     .internal()
@@ -1287,10 +1276,14 @@ object SQLConf {
     buildConf("spark.sql.join.sortMergeAsOfJoin.cursorScan.enabled")
       .internal()
       .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
-        "the join is backward or forward, has no residual join condition, and its as-of " +
-        "condition compares the two sort keys, left one first and of the same type. Other " +
-        "joins, and joins on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type " +
-        "keys, buffer each right-side group and scan the buffer again for every left row.")
+        "the join is backward or forward, and its as-of condition compares the two sort " +
+        "keys, left one first and of the same type. One tolerance bound can follow it or be " +
+        "the whole residual join condition, such as r >= l - 10 for a backward join. The " +
+        "bound has the right sort key first, which must be a column, then >= or > for a " +
+        "backward join or <= or < for a forward join, then the left sort key, alone or plus " +
+        "or minus a constant. Other joins, and joins on STRUCT, ARRAY, TIME, nanosecond " +
+        "timestamp or user-defined type keys, buffer each right-side group and scan the " +
+        "buffer again for every left row.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -1934,6 +1927,46 @@ object SQLConf {
         "evaluated in the order of the condition on every row, not only on rows where a " +
         "conjunct is NULL.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val EVALUATE_NOT_NULL_CHECKS_IN_ORDER =
+    buildConf("spark.sql.optimizer.evaluateNotNullChecksInOrder")
+      .internal()
+      .doc("When true, an IS NOT NULL check in a filter condition, including the FILTER clause " +
+        "of an aggregate function, is evaluated in the order of the condition, as the " +
+        "interpreted evaluation does, so that it drops a row before an error that a later " +
+        "conjunct raises on the row. With whole-stage codegen, a check that cannot raise an " +
+        "error is evaluated at its position before a conjunct that can raise one, is " +
+        "nondeterministic, calls a user-defined function, or evaluates a column that the same " +
+        "stage computes on demand by an expression that can raise, instead of just before the " +
+        "first conjunct that references its column; a check whose column the same stage has " +
+        "not computed yet, by an expression that can raise, keeps the latter placement, except " +
+        "after a conjunct that can be NULL, as when false. So does a check that can raise an " +
+        "error itself, so a check after it can drop a row on which the interpreted evaluation " +
+        "raises the error of that check. Also, a check on a column is still evaluated before " +
+        "the first conjunct that references the column, even when it is written after it, " +
+        "for example `isnotnull(x)` before `coalesce(x, 1) + y > 0` in " +
+        "`coalesce(x, 1) + y > 0 AND x > 0`. A predicate that the optimizer " +
+        "infers from the condition is placed just before the first conjunct at which the " +
+        "conjuncts so far imply it, instead of at the front of the condition, so with " +
+        "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
+        "function conjuncts that precede that one, and after the ones that can raise an " +
+        "error: for example, an inferred `isnotnull(x)` no longer drops a row with a NULL `x` " +
+        "before `y + 1 > 0` raises on it in `y + 1 > 0 AND x > 0`. To place the inferred " +
+        "predicates, the optimizer computes the constraints of up to every prefix of the " +
+        "condition, which grows quadratically with the number of conjuncts, e.g. about 0.1 " +
+        "seconds for 200 conjuncts. A predicate pushed down " +
+        "to a DSv2 data source is still evaluated before the others, by the source or after " +
+        "the scan, while " +
+        "after the scan of a DSv1 source, a pushed predicate that the source does not handle " +
+        "is evaluated after the ones that cannot be pushed down. When false, with whole-stage " +
+        "codegen, a check is evaluated just before the first conjunct that references its " +
+        "column, or after all conjuncts, except after a conjunct that can be NULL (see " +
+        s"${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct before that " +
+        "position can raise an error on a row that the check rejects.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -7182,6 +7215,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN =
+    buildConf("spark.sql.optimizer.propagateEmptyRelationCanPruneStreamingUnionChildren")
+      .internal()
+      .doc("Allow PropagateEmptyRelation to remove the empty children of a streaming Union, " +
+        "such as a source without data in a micro-batch. This flag is to restore prior " +
+        "behavior for streaming queries whose checkpoint was written with it.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -10594,6 +10638,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
+  def evaluateNotNullChecksInOrder: Boolean = getConf(EVALUATE_NOT_NULL_CHECKS_IN_ORDER)
+
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
@@ -11191,9 +11237,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
-
-  def splitProjectionForExpensiveFilters: Boolean =
-    getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 

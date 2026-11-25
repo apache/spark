@@ -34,7 +34,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#4), (ss_sold_date_sk#4 >= 2451545), (ss_sold_date_sk#4 <= 2451910), dynamicpruningexpression(ss_sold_date_sk#4 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_store_sk:bigint,ss_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 4]
 Input [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
@@ -61,7 +61,7 @@ Output [3]: [s_store_sk#8, s_store_name#9, s_company_name#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_name:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_name:string,s_company_name:string>
 
 (8) ColumnarToRow [codegen id : 2]
 Input [3]: [s_store_sk#8, s_store_name#9, s_company_name#10]
@@ -72,7 +72,7 @@ Condition : isnotnull(s_store_sk#8)
 
 (10) BroadcastExchange
 Input [3]: [s_store_sk#8, s_store_name#9, s_company_name#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
 
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#2]
@@ -89,7 +89,7 @@ Output [4]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [Or(And(In(i_category, [Books                                             ,Electronics                                       ,Home                                              ]),In(i_class, [musical                                           ,parenting                                         ,wallpaper                                         ])),And(In(i_category, [Jewelry                                           ,Men                                               ,Shoes                                             ]),In(i_class, [birdal                                            ,pants                                             ,womens                                            ]))), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string>
+ReadSchema: struct<i_item_sk:bigint,i_brand:string,i_class:string,i_category:string>
 
 (14) ColumnarToRow [codegen id : 3]
 Input [4]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14]
@@ -100,7 +100,7 @@ Condition : (((i_category#14 IN (Home                                           
 
 (16) BroadcastExchange
 Input [4]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_item_sk#1]
@@ -169,7 +169,7 @@ Output [3]: [d_date_sk#6, d_year#21, d_moy#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (29) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#21, d_moy#7]
@@ -184,6 +184,6 @@ Input [3]: [d_date_sk#6, d_year#21, d_moy#7]
 
 (32) BroadcastExchange
 Input [2]: [d_date_sk#6, d_moy#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=5]
 
 
