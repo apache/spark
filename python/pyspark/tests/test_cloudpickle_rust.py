@@ -278,11 +278,18 @@ print(json.dumps(results))
 
 
 class CloudPickleRustTests(unittest.TestCase):
-    def run_python(self, code, *args, env_value=None):
+    def run_python(self, code, *args, env_value=None, extra_env=None):
         env = dict(os.environ)
-        env.pop("PYSPARK_CLOUDPICKLE_RUST", None)
+        for name in (
+            "PYSPARK_CLOUDPICKLE_RUST",
+            "SPARK_CONNECT_MODE_ENABLED",
+            "SPARK_SKIP_CONNECT_COMPAT_TESTS",
+            "SPARK_PYTHON_RUNTIME",
+        ):
+            env.pop(name, None)
         if env_value is not None:
             env["PYSPARK_CLOUDPICKLE_RUST"] = env_value
+        env.update(extra_env or {})
         result = subprocess.run(
             [sys.executable, "-c", code, *args], env=env, capture_output=True, text=True
         )
@@ -294,6 +301,46 @@ class CloudPickleRustTests(unittest.TestCase):
         expected = "cloudpickle_rust" if have_cloudpickle_rust else "pyspark.cloudpickle"
         self.assertEqual(self.run_python(code), expected)
         self.assertEqual(self.run_python(code, env_value="0"), "pyspark.cloudpickle")
+
+    def test_spark_connect_clients_opt_in(self):
+        code = "from pyspark.serializers import _cloudpickle; print(_cloudpickle().__name__)"
+        rust = "cloudpickle_rust" if have_cloudpickle_rust else "pyspark.cloudpickle"
+        # A Spark Connect client, of a remote session or of a remote-only PySpark: the Python
+        # workers of its server, of another environment and possibly version, load its payloads.
+        for client in (
+            {"SPARK_CONNECT_MODE_ENABLED": "1"},
+            {"SPARK_SKIP_CONNECT_COMPAT_TESTS": "1"},
+        ):
+            self.assertEqual(self.run_python(code, extra_env=client), "pyspark.cloudpickle")
+            self.assertEqual(self.run_python(code, env_value="1", extra_env=client), rust)
+            self.assertEqual(
+                self.run_python(code, env_value="0", extra_env=client), "pyspark.cloudpickle"
+            )
+        # A Python worker, also of a server in local mode, which inherits the variable of its
+        # client: this version loads its payloads.
+        worker = {"SPARK_CONNECT_MODE_ENABLED": "1", "SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}
+        self.assertEqual(self.run_python(code, extra_env=worker), rust)
+        self.assertEqual(
+            self.run_python(code, env_value="0", extra_env=worker), "pyspark.cloudpickle"
+        )
+
+    def test_becoming_a_spark_connect_client(self):
+        # A Spark Classic driver that pickles, then becomes a Spark Connect client, as
+        # SparkSession.builder.remote makes it (it imports the Spark Connect client and sets
+        # SPARK_CONNECT_MODE_ENABLED), which it then stays.
+        code = (
+            "import os, sys, types\n"
+            "from pyspark.serializers import _cloudpickle\n"
+            "before = _cloudpickle().__name__\n"
+            "name = 'pyspark.sql.connect.client.core'\n"
+            "sys.modules.setdefault(name, types.ModuleType(name))\n"
+            "os.environ['SPARK_CONNECT_MODE_ENABLED'] = '1'\n"
+            "client = _cloudpickle().__name__\n"
+            "del os.environ['SPARK_CONNECT_MODE_ENABLED'], sys.modules[name]\n"
+            "print(before, client, _cloudpickle().__name__)\n"
+        )
+        rust = "cloudpickle_rust" if have_cloudpickle_rust else "pyspark.cloudpickle"
+        self.assertEqual(self.run_python(code), f"{rust} pyspark.cloudpickle pyspark.cloudpickle")
 
     def test_old_cloudpickle_rust(self):
         # Before 0.3.0, cloudpickle_rust has no DYNAMIC_CODE_FILENAME: the vendored one is used.
