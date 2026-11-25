@@ -224,8 +224,9 @@ class UnsafeRowWriterSuite extends SparkFunSuite with SQLHelper {
         .filter(_.abs.compareTo(limit) < 0)
       values.foreach { v =>
         val inputs = Seq(Decimal(new JavaBigDecimal(v, scale), precision, scale)) ++ {
-          if (v.abs.compareTo(compactUnscaledLimit) < 0) {
-            val compact = Decimal(v.longValueExact(), precision, scale)
+          if (v.bitLength() < java.lang.Long.SIZE) {
+            // createUnsafe keeps any Long compact, including values outside the compact limit.
+            val compact = Decimal.createUnsafe(v.longValueExact(), precision, scale)
             assert(compact.isCompact)
             Seq(compact)
           } else {

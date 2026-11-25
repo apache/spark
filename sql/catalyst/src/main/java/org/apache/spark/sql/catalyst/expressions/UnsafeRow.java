@@ -65,7 +65,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   public static final int WORD_SIZE = 8;
 
-  /** Unscaled values of a compact (Long-backed) Decimal are strictly within +-10^18. */
+  // Exclusive bound (10^18) on unscaled values that getDecimal returns as a compact (Long-backed)
+  // Decimal when precision > 18. Decimal.setOrNull uses the same limit; createUnsafe checks none.
   private static final long COMPACT_UNSCALED_LIMIT = Decimal.POW_10()[Decimal.MAX_LONG_DIGITS()];
 
   //////////////////////////////////////////////////////////////////////////////
