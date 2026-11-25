@@ -591,7 +591,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *             with a nonzero scale.
    * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
    */
-  @Since("4.4.0")
+  @Since("4.5.0")
   def truncateFractionalValue(expr: String, from: NumericType): Option[String] = None
 
   /**
@@ -601,7 +601,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * this; a dialect that overrides `compileExpression` with its own expression builder must handle
    * these casts in that builder's `visitCast`.
    */
-  @Since("4.4.0")
+  @Since("4.5.0")
   def castsDatetimeToNumericLikeSpark: Boolean = false
 
   /**

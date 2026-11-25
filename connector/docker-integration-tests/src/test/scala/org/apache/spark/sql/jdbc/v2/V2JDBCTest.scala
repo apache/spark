@@ -1372,7 +1372,7 @@ private[v2] trait V2JDBCTest
   // Whether a cast of `col` to `target` is pushed down.
   protected def pushesIntegralCast(col: String, target: String): Boolean = true
 
-  // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.
+  // Whether this database accepts the SQL that Spark 4.4 pushed for a cast to `target`.
   protected def acceptsLegacyIntegralCast(target: String): Boolean = true
 
   // `table` holds 1.6, 2.6 and -1.6 in each of `cols`, labeled a, b and c. A pushed filter cast

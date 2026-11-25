@@ -7857,14 +7857,14 @@ object SQLConf {
   val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
     buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
       .internal()
-      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.3 " +
+      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.4 " +
         "sent. A cast from a fractional type to an integral type then follows the database's own " +
         "semantics, so databases that round it return different results than Spark, which " +
         "truncates toward zero. Such casts are pushed down again to dialects that can't " +
         "truncate, and so are casts from datetime types to numeric types, although databases " +
         "convert them differently than Spark. Casts that the database rejects fail again, or, " +
         "in an aggregate, are evaluated by Spark.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

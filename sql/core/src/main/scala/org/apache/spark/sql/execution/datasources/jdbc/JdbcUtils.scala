@@ -1260,7 +1260,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     override def initialValue: Option[Boolean] = None
   }
 
-  // Whether pushed casts compile to the SQL Spark 4.3 sent. Inside
+  // Whether pushed casts compile to the SQL Spark 4.4 sent. Inside
   // `withLegacyIntegralCastPushdown`, the value passed there instead of the conf.
   private[sql] def legacyIntegralCastPushdown: Boolean =
     scopedLegacyIntegralCastPushdown.get.getOrElse(conf.legacyJdbcRoundIntegralCastPushdown)
