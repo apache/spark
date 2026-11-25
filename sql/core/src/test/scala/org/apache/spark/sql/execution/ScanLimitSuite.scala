@@ -58,6 +58,14 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
           "limit" -> "1 bytes \\(1\\.0 B\\)",
           "config" -> "\"spark.sql.execution.maxScanBytes\""))
     }
+    checkNothingTracked()
+  }
+
+  /** Checks that the listener keeps nothing of the queries with a limit that have ended. */
+  private def checkNothingTracked(): Unit = {
+    val listener = spark.sharedState.scanLimitListener
+    assert(listener.numExecutions == 0)
+    assert(listener.numStages == 0)
   }
 
   test("a query that reads more than the limit is cancelled") {
@@ -73,6 +81,7 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1g") {
         checkAnswer(spark.read.parquet(path), spark.range(4).toDF())
       }
+      checkNothingTracked()
     }
   }
 
@@ -106,6 +115,7 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
           }
           assert(e eq error)
         }
+        checkNothingTracked()
       }
     }
   }

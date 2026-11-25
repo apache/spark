@@ -201,6 +201,11 @@ class ScanLimitListenerSuite extends SparkFunSuite {
     assert(cancelledTags.toSeq == Seq(otherJobTag))
     // What the stage read before the job of the other execution started does not count for it.
     assert(listener.bytesReadOverLimit(otherExecutionId).contains(101))
+
+    // Once no execution depends on a stage, the listener keeps nothing of it.
+    listener.unregister(otherExecutionId)
+    assert(listener.numExecutions == 0)
+    assert(listener.numStages == 0)
   }
 
   test("counts a running stage that an execution without a limit submitted") {
@@ -243,6 +248,8 @@ class ScanLimitListenerSuite extends SparkFunSuite {
     assert(cancelledTags.isEmpty)
 
     listener.unregister(executionId)
+    assert(listener.numExecutions == 0)
+    assert(listener.numStages == 0)
     endTask(stageId = 1, taskId = 2, partitionId = 0, bytesRead = 1000)
     assert(cancelledTags.isEmpty)
     assert(listener.bytesReadOverLimit(executionId).isEmpty)

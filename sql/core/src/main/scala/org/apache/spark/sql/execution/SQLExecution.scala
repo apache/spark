@@ -258,14 +258,15 @@ object SQLExecution extends Logging {
       // The jobs of its nested executions have its root execution ID and its job tag, so they
       // count towards the same limit. Streaming queries are not limited: neither their batches
       // nor the queries that their sources run on the thread of the stream while they plan a
-      // batch, with whichever session they hold. The thread of a stream has its query ID for as
-      // long as it runs. A thread inherits both local properties from the thread that starts it,
-      // so the queries on a thread started during a stream are not limited either. The ones on
-      // a thread started during a query are nested in it: they count towards its limit while it
-      // runs, and are not limited after it ends. Under Spark Connect, the queries that a Python
-      // foreachBatch function runs come back to the server from its Python worker, on threads
-      // without the query ID of the stream, so they are root executions of their own and are
-      // limited.
+      // batch, with whichever session they hold. The thread of a stream has the query ID of the
+      // stream (StreamExecution.QUERY_ID_KEY) for as long as it runs. A thread copies the local
+      // properties of the thread that creates it, including that query ID and the root
+      // execution ID (EXECUTION_ROOT_ID_KEY), so the queries on a thread created during a
+      // stream are not limited either. The ones on a thread created during a query are nested
+      // in it: they count towards its limit while it runs, and are not limited after it ends.
+      // Under Spark Connect, the queries that a Python foreachBatch function runs come back to
+      // the server from its Python worker, on threads without the query ID of the stream, so
+      // they are root executions of their own and are limited.
       val hasScanLimit = existingRootId == null && maxScanBytes >= 0 &&
         sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null
       // sparkContext.getCallSite() would first try to pick up any call site that was previously

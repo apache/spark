@@ -85,6 +85,12 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
     Option(executions.get(rootExecutionId)).flatMap(_.bytesReadOverLimit)
   }
 
+  /** The number of the executions that the listener tracks. For tests. */
+  private[execution] def numExecutions: Int = executions.size
+
+  /** The number of the stages that the listener tracks. For tests. */
+  private[execution] def numStages: Int = synchronized { stages.size }
+
   /** The registered execution of a job with the given properties, if any. */
   private def executionOf(properties: Properties): Option[ExecutionScanState] = {
     Option(properties)

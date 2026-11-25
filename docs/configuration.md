@@ -3106,6 +3106,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.scanLimit.capacity</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>
+    Capacity for scanLimit queue in Spark listener bus, which holds events for the listener that
+    enforces <code>spark.sql.execution.maxScanBytes</code>. The events that this queue drops make
+    that limit count fewer bytes than the queries read. Consider increasing value if the listener
+    events corresponding to scanLimit queue are dropped. Increasing this value may result in the
+    driver using more memory.
+  </td>
+  <td>4.5.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.resource.profileMergeConflicts</code></td>
   <td>false</td>
   <td>

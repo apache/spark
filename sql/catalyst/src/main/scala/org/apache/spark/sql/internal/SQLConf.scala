@@ -2700,9 +2700,9 @@ object SQLConf {
       "(spark.executor.heartbeatInterval) and when a task ends, so a query can read more " +
       "than the limit before it is cancelled: about what all its running tasks read in one " +
       "heartbeat interval, which grows with the size of the cluster. Only the bytes that a " +
-      "task reads through a Hadoop FileSystem count. The built-in file sources read through " +
-      "it, while sources such as JDBC, or connectors with a storage client of their own, " +
-      "report none. Reading cached data counts the size of the cached blocks. Streaming " +
+      "task reads through a Hadoop FileSystem, and the size of the cached blocks it reads, " +
+      "count. The built-in file sources read through a Hadoop FileSystem, while sources " +
+      "such as JDBC, or connectors with a storage client of their own, report none. Streaming " +
       "queries are not limited, nor are the jobs that run outside the execution of a query, " +
       "such as the RDD jobs that infer the schema of a file source while the query is " +
       "analyzed, the jobs on the RDD that Dataset.rdd returns, and the jobs that " +
