@@ -160,15 +160,20 @@ class CTEReuseWithAQESuite
         sql("CREATE TABLE metric_src (id INT) USING parquet")
         sql(
           "INSERT INTO metric_src VALUES (1), (2), (3), (4), (5)")
+        // The UDF returns a fresh value on every call, so a second evaluation of the body would
+        // give the two references different values for an id. rand() would not show it: its fixed
+        // seed and the identical scan partitions reproduce the same values on every evaluation.
+        spark.udf.register("shared_inner_uuid",
+          udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
         val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
-            |  SELECT id, rand() as r FROM metric_src
+            |  SELECT id, shared_inner_uuid() as r FROM metric_src
             |)
             |SELECT * FROM cte c1 JOIN cte c2 ON c1.id = c2.id
             |""".stripMargin)
-        val rows = df.collect().map(r => (r.getInt(0), r.getDouble(1), r.getInt(2), r.getDouble(3)))
+        val rows = df.collect().map(r => (r.getInt(0), r.getString(1), r.getInt(2), r.getString(3)))
         assert(rows.map(_._1).sorted.toSeq == (1 to 5), rows.mkString(", "))
-        // One materialization: both references return the same random value for each id.
+        // One materialization: both references return the same fresh value for each id.
         assert(rows.forall { case (id1, r1, id2, r2) => id1 == id2 && r1 == r2 },
           rows.mkString(", "))
         // Two refs create two CTEReuseQueryStageExec wrappers, both sharing one inner AQE.
@@ -690,16 +695,21 @@ class CTEReuseWithAQESuite
       withTable("result_stage_src") {
         sql("CREATE TABLE result_stage_src (id INT) USING parquet")
         sql("INSERT INTO result_stage_src VALUES (1), (2), (3)")
+        // The UDF returns a fresh value on every call, so a second evaluation of the body, by one
+        // of the references or by the second collect, would show as different values for an id.
+        spark.udf.register("result_stage_uuid",
+          udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
         // The result stage reads both CTE reuse stages directly (no exchange above them).
         val df = sqlWithForcedCTEReuse(
-          """WITH cte AS (SELECT id, rand() AS r FROM result_stage_src)
+          """WITH cte AS (SELECT id, result_stage_uuid() AS r FROM result_stage_src)
             |SELECT id, r FROM cte UNION ALL SELECT id, r FROM cte
             |""".stripMargin)
-        val first = df.collect().toSeq.map(r => (r.getInt(0), r.getDouble(1))).sorted
-        val second = df.collect().toSeq.map(r => (r.getInt(0), r.getDouble(1))).sorted
+        val first = df.collect().toSeq.map(r => (r.getInt(0), r.getString(1))).sorted
+        val second = df.collect().toSeq.map(r => (r.getInt(0), r.getString(1))).sorted
         assert(first == second)
         // One materialization: both references see the same rows.
-        assert(first.grouped(2).forall(pair => pair.distinct.size == 1), first)
+        assert(first.size == 6 && first.grouped(2).forall(pair => pair.distinct.size == 1), first)
+        assertInnerAQEShared(df)
         val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
           case s: CTEReuseQueryStageExec => s
         }
@@ -895,6 +905,37 @@ class CTEReuseWithAQESuite
     }
   }
 
+  test("a CTE whose body equals a sealed forced body reads its shared inner AQE") {
+    withCTEReuseEnabled {
+      withTable("twin_body_src") {
+        sql("CREATE TABLE twin_body_src (id INT, v INT) USING parquet")
+        sql("INSERT INTO twin_body_src VALUES (1, 10), (2, 20)")
+        // `a` is forced and read twice; `b` has the same deterministic body but is read once, as
+        // a forced CTE or as an ordinary MATERIALIZED CTE, so it is not sealed on its own.
+        val body = "SELECT id, v * 2 AS w FROM twin_body_src"
+        Seq(
+          "forced CTE read once" -> (s"b AS ($body)", Set("a", "b")),
+          "MATERIALIZED CTE" -> (s"b AS MATERIALIZED ($body)", Set("a"))).foreach {
+          case (name, (twin, forced)) =>
+            Seq(s"a AS ($body), $twin", s"$twin, a AS ($body)").foreach { defs =>
+              val df = sqlWithForcedCTEs(
+                s"""WITH $defs
+                   |SELECT * FROM a UNION ALL SELECT * FROM a UNION ALL SELECT * FROM b
+                   |""".stripMargin, forced)
+              checkAnswer(df, Seq.fill(3)(Seq(Row(1, 20), Row(2, 40))).flatten)
+              // Every reference, `b`'s included, reads the one shared inner plan, so the body is
+              // materialized once.
+              val executed = df.queryExecution.executedPlan
+              val stages = collectWithSubqueries(executed) { case s: CTEReuseQueryStageExec => s }
+              assert(stages.size == 3,
+                s"$name ($defs): expected every reference to read a CTE reuse stage:\n$executed")
+              assertInnerAQEShared(df)
+            }
+        }
+      }
+    }
+  }
+
   // -----------------------------------------------------------------
   // A forced CTE copied through a retained CTE
   // -----------------------------------------------------------------
@@ -902,13 +943,17 @@ class CTEReuseWithAQESuite
   test("a forced CTE read once inside a MATERIALIZED CTE read twice is materialized once") {
     withCTEReuseEnabled {
       // Without exchange reuse, each reference of `m` runs its own copy of `m`'s body, so only
-      // sealing `f` keeps the two copies of its random values the same.
+      // sealing `f` makes the two copies of `f`'s body read one materialization. The UDF returns a
+      // fresh value on every call, so a second evaluation of `f`'s body would give the two
+      // references of `m` different values for an id, which rand() with its fixed seed would hide.
+      spark.udf.register("copied_cte_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
       withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         withTable("copied_src") {
           sql("CREATE TABLE copied_src (id INT) USING parquet")
           sql("INSERT INTO copied_src VALUES (1), (2), (3), (4), (5)")
           val df = sqlWithForcedCTEs(
-            """WITH f AS (SELECT /*+ REPARTITION(3) */ id, rand() AS r FROM copied_src),
+            """WITH f AS (SELECT /*+ REPARTITION(3) */ id, copied_cte_uuid() AS r FROM copied_src),
               |  m AS MATERIALIZED (SELECT id, r FROM f)
               |SELECT m1.id, m1.r = m2.r AS same FROM m m1 JOIN m m2 ON m1.id = m2.id
               |""".stripMargin, names = Set("f"))
@@ -1350,7 +1395,8 @@ class CTEReuseWithAQESuite
               |""".stripMargin)
           val byKey = dpp.collect().toSeq.groupBy(r => (r.getInt(0), r.getInt(1)))
           assert(byKey.keySet == Set((1, 10), (2, 20), (2, 30)), byKey)
-          // One materialization: both references return the same random value for each row.
+          // Both references return the same random value for each row; the shared inner plan
+          // checked below is what shows that they read one materialization.
           assert(byKey.values.forall(rows => rows.size == 2 && rows.map(_.getDouble(2)).distinct
             .size == 1), byKey)
           assert(collectCTEReuseRelations(dpp).size == 2,

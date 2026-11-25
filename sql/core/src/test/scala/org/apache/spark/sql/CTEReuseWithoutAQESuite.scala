@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningExpression, DynamicPruningSubquery}
@@ -119,6 +121,18 @@ class CTEReuseWithoutAQESuite
     val analyzed = spark.sql(text).queryExecution.analyzed
     val tagged = analyzed.transformWithSubqueries {
       case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
+  /** Like [[sqlWithForcedCTEReuse]], but forces only the CTEs named in `names`. */
+  private def sqlWithForcedCTEs(text: String, names: Set[String]): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef if (d.child match {
+        case a: SubqueryAlias => names.contains(a.alias)
+        case _ => false
+      }) => d.copy(forceSkipInline = true)
     }
     classic.Dataset.ofRows(spark, tagged)
   }
@@ -465,16 +479,33 @@ class CTEReuseWithoutAQESuite
           // With exchange reuse off, the CTE shuffles are not deduplicated. VerifyCTEReuse sees
           // >= 2 live shuffles sharing a cteId; FAIL_ON_CTE_REUSE_WITHOUT_AQE governs whether
           // that throws. Turn the flag off here so VerifyCTEReuse only logs, and check that no
-          // shuffle is reused and that the query still runs.
+          // shuffle is reused, that the miss is logged and that the query still runs.
           withSQLConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE.key -> "false") {
             val df = sqlWithForcedCTEReuse(
               """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
                 |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
                 |""".stripMargin)
+            val logAppender = new LogAppender("CTE reuse verification warning")
+            withLogAppender(logAppender) {
+              df.queryExecution.executedPlan
+            }
             val executedPlan = df.queryExecution.executedPlan
             assert(executedPlan.collectWithSubqueries { case r: ReusedExchangeExec => r }.isEmpty,
               s"Expected no ReusedExchangeExec when exchange reuse is disabled:\n" +
                 executedPlan.treeString)
+            // The warning is the only signal of the miss in this mode: it names the cteId of the
+            // two live shuffles and their number.
+            val cteIds = liveCTEShuffles(df).map(_.shuffleOrigin).collect {
+              case LOCAL_SHUFFLE_FOR_CTE(cteId) => cteId
+            }
+            assert(cteIds.size == 2 && cteIds.distinct.size == 1,
+              s"Expected two live shuffles of one CTE:\n${executedPlan.treeString}")
+            val expectedWarning = "Guaranteed CTE shuffle reuse (AQE off) not applied for " +
+              s"cteId=${cteIds.head} (2 shuffles)."
+            val warnings = logAppender.loggingEvents.filter(_.getLevel == Level.WARN)
+              .map(_.getMessage.getFormattedMessage)
+            assert(warnings.contains(expectedWarning),
+              s"Expected the warning '$expectedWarning', got:\n${warnings.mkString("\n")}")
             // VerifyCTEReuse ran with the fail flag off, so the query runs without throwing.
             df.collect()
           }
@@ -1179,6 +1210,38 @@ class CTEReuseWithoutAQESuite
           "SELECT id, v * 2 AS w FROM reuse_src", "SELECT id, v * 3 AS w FROM reuse_src")
         assert(liveCTEShuffles(different).size == 2,
           s"Expected two live CTE shuffles:\n${different.queryExecution.executedPlan}")
+      }
+    }
+  }
+
+  test("a CTE whose body equals a sealed forced body reuses its CTE shuffle") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        // `a` is forced and read twice; `b` has the same deterministic body but is read once, as
+        // a forced CTE or as an ordinary MATERIALIZED CTE, so it is not sealed on its own.
+        val body = "SELECT id, v * 2 AS w FROM reuse_src"
+        Seq(
+          "forced CTE read once" -> (s"b AS ($body)", Set("a", "b")),
+          "MATERIALIZED CTE" -> (s"b AS MATERIALIZED ($body)", Set("a"))).foreach {
+          case (name, (twin, forced)) =>
+            Seq(s"a AS ($body), $twin", s"$twin, a AS ($body)").foreach { defs =>
+              val df = sqlWithForcedCTEs(
+                s"""WITH $defs
+                   |SELECT * FROM a UNION ALL SELECT * FROM a UNION ALL SELECT * FROM b
+                   |""".stripMargin, forced)
+              // One live CTE shuffle, which the two other copies, `b`'s included, reuse; no plain
+              // shuffle of the body is left.
+              val executed = df.queryExecution.executedPlan
+              assertCTEReuseApplied(df)
+              assert(liveCTEShuffles(df).size == 1 &&
+                executed.collectWithSubqueries { case r: ReusedExchangeExec => r }.size == 2,
+                s"$name ($defs): expected one live CTE shuffle, reused twice:\n$executed")
+              assert(executed.collectWithSubqueries {
+                case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
+              }.isEmpty, s"$name ($defs): expected no plain shuffle of the body:\n$executed")
+              assert(df.collect().length == 15)
+            }
+        }
       }
     }
   }

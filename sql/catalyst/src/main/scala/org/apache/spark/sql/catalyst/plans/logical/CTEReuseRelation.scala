@@ -37,20 +37,27 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * is handled separately by the inner AQE thread.
  *
  * This node is generated from [[RepartitionByExpression]] nodes marked for plan reuse (the
- * references of a shared `forceSkipInline` CTE definition are first turned into such repartitions
- * by [[ReplaceCTERefWithRepartition]]). This generation happens in the
+ * references of a shared `forceSkipInline` CTE definition, and of any definition whose
+ * deterministic body equals such a shared body, are first turned into such repartitions by
+ * [[ReplaceCTERefWithRepartition]]). This generation happens in the
  * [[ReplaceRepartitionWithCTEReuse]] rule.
  *
- * @param cteId The plan-reuse id of the shared body: every reference of one forced definition
- *              carries it, and forced definitions whose deterministic bodies are canonically equal
+ * @param cteId The plan-reuse id of the shared body: every reference of one sealed definition
+ *              carries it, and sealed definitions whose deterministic bodies are canonically equal
  *              share it. It is not the [[CTERelationDef]] id that plans print.
  * @param partitioning Pre-determined partitioning for the shared exchange, taken from the
  *                     plan-reuse repartition at the root of [[sharedSubplan]]: the pinned
  *                     HashPartitioning when the CTE is pinned via forcePartitioning; for a wrapped
  *                     root, round-robin over the session shuffle partitions, or over a coalesce
  *                     root's own partition count; or the partitioning of a root stamped in place,
- *                     which can be a hash, range, round-robin or pass-through partitioning. Any of
- *                     these is SinglePartition when its partition count is one.
+ *                     which can be a hash, range, round-robin or pass-through partitioning. A
+ *                     repartition wrapped around the root of another, unsealed definition that
+ *                     the plan also reads elsewhere keeps the partitioning that root would get if
+ *                     it were stamped in place, so it can be any partitioning listed for a wrapped
+ *                     or stamped root: for example round-robin over n partitions for a
+ *                     REPARTITION(n) root, a hash partitioning on the keys of a rebalance or
+ *                     REPARTITION(k) root, or a range partitioning for a range repartition root.
+ *                     Any of these is SinglePartition when its partition count is one.
  * @param sharedSubplan The logical plan of the CTE definition. NOT a child node.
  */
 case class CTEReuseRelation(

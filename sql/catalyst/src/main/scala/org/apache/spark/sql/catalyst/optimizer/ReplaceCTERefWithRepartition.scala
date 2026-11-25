@@ -42,11 +42,16 @@ import org.apache.spark.sql.internal.SQLConf
  * by the copies of the plan that holds them: a reference inside the body of a definition that is
  * not sealed counts once per copy of that body, a reference inside a sealed definition, whose body
  * all of its references share, counts once, and a reference inside a definition that nothing
- * reads counts zero. Every other definition, including a forced definition read only once and
- * every definition of a streaming query, keeps the plain lowering: a repartition without a
- * plan-reuse id, or no extra repartition when the body already repartitions or hosts a merged
- * scalar subquery. The one exception is a forced definition pinned through `forcePartitioning`
- * while the flag is on: it is repartitioned on its pin even when it is not sealed.
+ * reads counts zero. A definition that the plan reads but that is not sealed on its own, such as a
+ * forced definition read only once or an ordinary retained or MATERIALIZED CTE, is sealed together
+ * with a sealed definition when its deterministic body, lowered as a sealed root, is canonically
+ * equal to that definition's root: it then shares that body's plan-reuse id, so the body is still
+ * computed once, as canonical exchange reuse did for their plain repartitions (see
+ * `LoweringContext.unsealedTwins`). Every other definition, including every definition of a
+ * streaming query, keeps the plain lowering: a repartition without a plan-reuse id, or no extra
+ * repartition when the body already repartitions or hosts a merged scalar subquery. The one
+ * exception is a forced definition pinned through `forcePartitioning` while the flag is on: it is
+ * repartitioned on its pin even when it is not sealed.
  *
  * Note that this rule should be called at the very end of the optimization phase to best guarantee
  * that CTE repartition shuffles are reused.
@@ -56,19 +61,40 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
     case _ =>
-      val (sealedIds, copies) = sealedDefinitions(plan)
-      val ctx = new LoweringContext(sealedIds, copies)
-      replaceWithRepartition(plan, mutable.HashMap.empty[Long, LogicalPlan], ctx)
+      val (lowered, ctx) = lowerPlan(plan, twins = Set.empty)
+      val twins = ctx.unsealedTwins
+      if (twins.isEmpty) {
+        lowered
+      } else {
+        // Lower again with the twins sealed too, so that each shares the plan-reuse id of the
+        // sealed body it equals. Sealing a twin that the plan reads more than once lowers the
+        // number of copies of the bodies it references, which can change their lowering and so
+        // the twin's own root. Keep the first lowering when a twin then no longer shares the id
+        // of a definition sealed on its own.
+        val (relowered, twinCtx) = lowerPlan(plan, twins)
+        if (twinCtx.twinsShareSealedIds(twins)) relowered else lowered
+      }
+  }
+
+  private def lowerPlan(plan: LogicalPlan, twins: Set[Long]): (LogicalPlan, LoweringContext) = {
+    val (sealedIds, copies) = sealedDefinitions(plan, twins)
+    val ctx = new LoweringContext(sealedIds, copies)
+    (replaceWithRepartition(plan, mutable.HashMap.empty[Long, LogicalPlan], ctx), ctx)
   }
 
   /**
    * The ids of the definitions to seal for guaranteed reuse: with the reuse flag on and in a batch
    * query, each `forceSkipInline` definition whose body the lowered plan holds two or more copies
-   * of. Streaming queries seal nothing, so the per-micro-batch rewrites, such as the reseeding of
-   * random expressions, keep reaching every copy of a body. Also returns the number of copies of
-   * every definition's body in the lowered plan (empty when nothing is sealed).
+   * of, and each definition in `twins` (see `LoweringContext.unsealedTwins`) whose body the lowered
+   * plan holds at least one copy of. Streaming queries seal nothing, so the per-micro-batch
+   * rewrites, such as the reseeding of random expressions, keep reaching every copy of a body.
+   * Also returns the number of copies of every definition's body in the lowered plan (empty when
+   * the plan is streaming, the reuse flag is off, or the plan has no `forceSkipInline`
+   * definition).
    */
-  private def sealedDefinitions(plan: LogicalPlan): (Set[Long], Map[Long, Int]) = {
+  private def sealedDefinitions(
+      plan: LogicalPlan,
+      twins: Set[Long]): (Set[Long], Map[Long, Int]) = {
     // A plan with no forced definition, inside subqueries included, has nothing to seal.
     if (plan.isStreaming || !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) ||
         !plan.containsPattern(FORCE_SKIP_INLINE_CTE_DEF)) {
@@ -118,7 +144,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
           count * copiesOf(enclosing)
         }.sum).getOrElse(0)
         copies(id) = n
-        if (n >= 2 && defs.get(id).exists(_.forceSkipInline)) {
+        if ((n >= 2 && defs.get(id).exists(_.forceSkipInline)) || (n >= 1 && twins.contains(id))) {
           toSeal += id
         }
         n
@@ -130,11 +156,18 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   /**
    * Per-query state of the lowering: the definitions to seal, the number of copies of each
    * definition's body, the definition that lowered each root, and the plan-reuse id assigned to
-   * each deterministic shared body, so that forced definitions with canonically equal bodies are
-   * materialized once, as canonical exchange reuse does for plain CTE repartitions.
+   * each deterministic shared body, so that sealed definitions with canonically equal bodies are
+   * materialized once, as canonical exchange reuse does for plain CTE repartitions. It also keeps
+   * the root that each definition the plan reads but does not seal would be sealed with, so that
+   * such a definition whose deterministic body equals a sealed body can share that body's single
+   * materialization instead of computing it once more (see `unsealedTwins`).
    */
   private class LoweringContext(sealedIds: Set[Long], copies: Map[Long, Int]) {
     private val idByBody = mutable.HashMap.empty[LogicalPlan, Long]
+    // The plan-reuse id each sealed definition's root was given.
+    private val idByDef = mutable.HashMap.empty[Long, Long]
+    // The root each definition that the plan reads but does not seal would be sealed with.
+    private val unsealedRoots = mutable.LinkedHashMap.empty[Long, RepartitionByExpression]
     // The definition whose lowering produced each lowered plan, by identity. A definition whose
     // body only selects another definition lowers to that definition's plan object itself, which
     // keeps its first owner.
@@ -159,7 +192,46 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       }
     }
 
-    def assignId(root: RepartitionByExpression): RepartitionByExpression = {
+    /** Gives `root`, the sealed root of the definition `cteId`, its plan-reuse id. */
+    def seal(cteId: Long, root: RepartitionByExpression): RepartitionByExpression = {
+      val sealedRoot = assignId(root)
+      idByDef(cteId) = sealedRoot.repartitionId
+      sealedRoot
+    }
+
+    /**
+     * Records `root`, the root that the definition `cteId`, which is not sealed, would be sealed
+     * with. Only a plan that seals a definition and reads `cteId` records it.
+     */
+    def recordUnsealed(cteId: Long, root: => RepartitionByExpression): Unit = {
+      if (sealedIds.nonEmpty && copies.getOrElse(cteId, 0) >= 1) {
+        unsealedRoots(cteId) = root
+      }
+    }
+
+    /**
+     * The definitions that the plan reads but does not seal whose deterministic root, as it would
+     * be sealed, is canonically equal to the root of a sealed definition. On the base lowering
+     * their plain repartitions and the sealed definition's were canonically equal, so exchange
+     * reuse computed the body once; the protected shuffle of a sealed body no longer matches a
+     * plain one, so they must be sealed with it to keep that single computation. A root that
+     * already carries a plan-reuse id, of a sealed definition the body only selects, already
+     * shares it. A twin is found whichever definition comes first, because this is read after the
+     * whole plan is lowered.
+     */
+    def unsealedTwins: Set[Long] = unsealedRoots.iterator.collect {
+      case (cteId, root) if !root.isForPlanReuse && root.deterministic &&
+          idByBody.contains(root.canonicalized) => cteId
+    }.toSet
+
+    /** Whether every one of `twins` shares the plan-reuse id of a definition sealed on its own. */
+    def twinsShareSealedIds(twins: Set[Long]): Boolean = {
+      val ownIds = idByDef.iterator.collect { case (cteId, id) if !twins.contains(cteId) => id }
+        .toSet
+      twins.forall(cteId => idByDef.get(cteId).exists(ownIds.contains))
+    }
+
+    private def assignId(root: RepartitionByExpression): RepartitionByExpression = {
       if (root.isForPlanReuse) {
         // The root already is the plan-reuse repartition of another shared definition that this
         // body merely selects (e.g. `SELECT * FROM other_cte`), so it shares that identity.
@@ -229,46 +301,56 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       cteDef: CTERelationDef,
       inlined: LogicalPlan,
       ctx: LoweringContext): LogicalPlan = {
-    // The reuse-oriented lowering (pinned partitioning, plan-reuse id) only runs for a
-    // `forceSkipInline` definition with guaranteed reuse enabled; otherwise this rule keeps the
-    // plain lowering, so turning the flag off fully rolls the feature back. A pin on a definition
-    // that is not `forceSkipInline` is ignored because such a definition may be inlined by
-    // `InlineCTE` before this rule runs.
-    if (!cteDef.forceSkipInline || !conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)) {
-      return plainLowering(cteDef, inlined)
-    }
-    // Only a definition whose body a batch query holds two or more copies of is sealed for reuse
-    // (see `sealedDefinitions`). A single copy already runs the body once.
-    val seal = ctx.shouldSeal(cteDef.id)
-    cteDef.forcePartitioning match {
-      case Some(h: HashPartitioning) =>
-        // A pinned partitioning materializes the CTE as a RepartitionByExpression on the pinned
-        // expressions and partition count, whether or not it is sealed. It takes precedence over
-        // `canSkipExtraRepartition`: the pin states the exact partitioning we must produce.
-        val pinned = RepartitionByExpression(h.expressions, inlined, Some(h.numPartitions))
-        if (seal) ctx.assignId(pinned) else pinned
-      case Some(other) =>
-        // forcePartitioning is an internal dev API; only HashPartitioning is supported
-        // today (see CTERelationDef.forcePartitioning).
-        throw new UnsupportedOperationException(
-          s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
-            s"${other.getClass.getSimpleName}")
-      case None if seal && ctx.isRetainedElsewhere(cteDef.id, inlined) =>
+    // A pin is only honored for a `forceSkipInline` definition with guaranteed reuse enabled; with
+    // the flag off, every definition keeps the plain lowering, so turning the flag off fully rolls
+    // the feature back. A pin on a definition that is not `forceSkipInline` is ignored because
+    // such a definition may be inlined by `InlineCTE` before this rule runs.
+    val pinned =
+      if (cteDef.forceSkipInline && conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)) {
+        cteDef.forcePartitioning match {
+          case Some(h: HashPartitioning) =>
+            // A pinned partitioning materializes the CTE as a RepartitionByExpression on the
+            // pinned expressions and partition count, whether or not it is sealed. It takes
+            // precedence over `canSkipExtraRepartition`: the pin states the exact partitioning we
+            // must produce.
+            Some(RepartitionByExpression(h.expressions, inlined, Some(h.numPartitions)))
+          case Some(other) =>
+            // forcePartitioning is an internal dev API; only HashPartitioning is supported
+            // today (see CTERelationDef.forcePartitioning).
+            throw new UnsupportedOperationException(
+              s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
+                s"${other.getClass.getSimpleName}")
+          case None => None
+        }
+      } else {
+        None
+      }
+    // The root this definition carries the plan-reuse id on when it is sealed.
+    def sealedRoot: RepartitionByExpression = pinned.getOrElse {
+      if (ctx.isRetainedElsewhere(cteDef.id, inlined)) {
         // The body only selects another, unsealed definition that the plan also reads outside
         // this one, so `inlined` is that definition's lowered root, shared with its other copies.
         // Keep that root unchanged, so every copy of the other body still plans to one shuffle,
         // and seal a new repartition above it with the same partitioning. This costs one more
         // shuffle of this definition's output than stamping the root in place.
         val converted = sealableRoot(inlined)
-        ctx.assignId(RepartitionByExpression(
+        RepartitionByExpression(
           converted.partitionExpressions,
           inlined,
           converted.optNumPartitions,
-          converted.optAdvisoryPartitionSize))
-      case None if seal =>
-        ctx.assignId(sealableRoot(inlined))
-      case None =>
-        plainLowering(cteDef, inlined)
+          converted.optAdvisoryPartitionSize)
+      } else {
+        sealableRoot(inlined)
+      }
+    }
+    // Only a forced definition whose body a batch query holds two or more copies of, or a
+    // definition whose deterministic body equals such a sealed body, is sealed for reuse (see
+    // `sealedDefinitions`). A single copy of any other body already runs it once.
+    if (ctx.shouldSeal(cteDef.id)) {
+      ctx.seal(cteDef.id, sealedRoot)
+    } else {
+      ctx.recordUnsealed(cteDef.id, sealedRoot)
+      pinned.getOrElse(plainLowering(cteDef, inlined))
     }
   }
 

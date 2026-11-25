@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.adaptive
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{classic, SparkSession}
+import org.apache.spark.sql.{classic, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
-import org.apache.spark.sql.execution.exchange.{PipelinedShuffleTestSession, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, PipelinedShuffleTestSession, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /** End-to-end coverage of channel eligibility and regular-shuffle fallbacks under AQE. */
@@ -238,6 +239,46 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
         s"no exchange of a plan reading a CTE reuse stage may be pipelined; plan:\n$plan")
       // The second collect of the same DataFrame must succeed with the same rows.
       assert(run() === expected)
+    }
+  }
+
+  test("the initial adaptive plan of a forced CTE self-join stays regular") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      session.conf.set(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      // The plan the AQE preparation rules, this rule included, give the query before any stage
+      // is created.
+      def initialPlan(df: DataFrame): SparkPlan = df.queryExecution.executedPlan match {
+        case a: AdaptiveSparkPlanExec => a.initialPlan
+        case other => fail(s"expected an adaptive plan; plan:\n$other")
+      }
+      // Without a CTE, the same join shape pipelines both join inputs in its initial plan.
+      val control = session.sql(
+        """SELECT a.k FROM (SELECT id AS k FROM range(0, 100, 1, 2)) a
+          |JOIN (SELECT id AS k FROM range(0, 100, 1, 2)) b ON a.k = b.k
+          |""".stripMargin)
+      assert(pipelinedExchanges(initialPlan(control)).size == 2,
+        s"expected the control's join inputs pipelined; plan:\n${initialPlan(control)}")
+
+      val analyzed = session.sql(
+        """WITH cte AS (SELECT id AS k, rand() AS r FROM range(0, 100, 1, 2))
+          |SELECT c1.k, c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+        case d: CTERelationDef => d.copy(forceSkipInline = true)
+      })
+      // Before stage creation, the join inputs are exchanges over the CTE references, which are
+      // still CTEReuseExchange leaves rather than CTE reuse stages.
+      val initial = initialPlan(df)
+      val overReferences = collect(initial) {
+        case s: ShuffleExchangeExec if s.child.isInstanceOf[CTEReuseExchange] => s
+      }
+      assert(overReferences.size == 2,
+        s"expected both join inputs to read a CTE reference; plan:\n$initial")
+      assert(pipelinedExchanges(initial).isEmpty,
+        s"no exchange of a plan reading a CTE reference may be pipelined; plan:\n$initial")
+      assert(df.collect().forall(_.getBoolean(1)))
     }
   }
 

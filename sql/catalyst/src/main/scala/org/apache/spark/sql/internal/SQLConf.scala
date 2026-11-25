@@ -7643,8 +7643,10 @@ object SQLConf {
         "that every reference reads. With AQE off, the copies are deduplicated by exchange " +
         "reuse, which is best effort: a miss is only detected, and logged or, under " +
         "spark.sql.cteReuse.failOnMissWithoutAQE, thrown. Such a definition can also pin its " +
-        "partitioning. Ordinary retained or user MATERIALIZED CTEs keep plain repartitions and " +
-        "are unaffected. When false, forceSkipInline definitions are lowered like any other " +
+        "partitioning. An ordinary retained or user MATERIALIZED CTE, like a forceSkipInline " +
+        "CTE read once, keeps a plain repartition, unless its deterministic body equals the " +
+        "body of such a sealed CTE: it is then sealed with it and shares its single " +
+        "materialization. When false, forceSkipInline definitions are lowered like any other " +
         "retained CTE.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

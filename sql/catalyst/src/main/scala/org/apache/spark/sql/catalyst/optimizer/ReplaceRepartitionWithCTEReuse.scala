@@ -28,17 +28,18 @@ import org.apache.spark.sql.internal.SQLConf
  * Converts plan-reuse repartitions into [[CTEReuseRelation]] nodes for guaranteed exchange reuse.
  *
  * By the time this runs, [[ReplaceCTERefWithRepartition]] has turned the references of each
- * `forceSkipInline` definition that a batch query holds two or more copies of into plan-reuse
- * [[RepartitionByExpression]]s: copies of the definition's lowered body that all carry the same
- * nonzero `repartitionId`. No other rule assigns such ids. This rule seals every id that still has
+ * `forceSkipInline` definition that a batch query holds two or more copies of, and of each
+ * definition whose deterministic body equals such a sealed body, into plan-reuse
+ * [[RepartitionByExpression]]s: copies of the lowered body that all carry the same nonzero
+ * `repartitionId`. No other rule assigns such ids. This rule seals every id that still has
  * two or more copies into [[CTEReuseRelation]]s sharing that id as their `cteId`. With AQE on, the
  * body is then materialized once, by one inner adaptive plan that every reference reads. With AQE
  * off, the copies are deduplicated by exchange reuse, which is best effort: a miss, for example
  * with `spark.sql.exchange.reuse` off, is only detected by `VerifyCTEReuse`, which logs it or,
  * under [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]], throws.
  *
- * [[ReplaceCTERefWithRepartition]] assigns an id only to a definition whose body the plan holds two
- * or more copies of, so every id is expected to have two or more copies here. As a defensive
+ * [[ReplaceCTERefWithRepartition]] assigns an id only to a body the plan holds two or more copies
+ * of, so every id is expected to have two or more copies here. As a defensive
  * fallback, an id with a single copy is not sealed, and its id is reset to zero so the repartition
  * plans as an ordinary shuffle. If the sealed plan fails
  * [[LogicalPlanIntegrity.validateCTEReuseRelations]], every id is reset instead and nothing is

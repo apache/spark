@@ -65,6 +65,10 @@ case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
         // run the preprocessing rules on it, planning its subqueries and any nested CTE, without
         // building another inner AQE. A subquery that cannot be planned adaptively backs the whole
         // query off AQE, as it does when the inner AQE is built below.
+        // TODO: This compiles the body's subqueries again for every later reference of the cteId,
+        // only to give that reference its canonical form, although the stage runs the shared
+        // inner AQE. Planning each shared body, its subqueries included, once per plan-reuse id
+        // is deferred to a follow-up.
         val preprocessed = try {
           InsertAdaptiveSparkPlan(adaptiveExecutionContext).preprocess(re.subplan)._1
         } catch {

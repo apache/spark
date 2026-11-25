@@ -2366,8 +2366,9 @@ object RepartitionIdGenerator {
  * carries a nonzero id that every copy of the same shared body keeps, used to guarantee exchange
  * reuse across references. [[RepartitionByExpression]] is the only implementation, and
  * `ReplaceCTERefWithRepartition` assigns ids only for `forceSkipInline` CTE definitions whose body
- * the lowered plan holds two or more copies of; `ReplaceRepartitionWithCTEReuse` then seals those
- * copies into `CTEReuseRelation` nodes, planned as `CTEReuseExchange`.
+ * the lowered plan holds two or more copies of, and for definitions whose deterministic body
+ * equals such a sealed body; `ReplaceRepartitionWithCTEReuse` then seals those copies into
+ * `CTEReuseRelation` nodes, planned as `CTEReuseExchange`.
  */
 trait PlanReusableRepartition extends RepartitionOperation {
   /**
@@ -2378,7 +2379,7 @@ trait PlanReusableRepartition extends RepartitionOperation {
   def repartitionId: Long
 
   /**
-   * Whether this repartition is used for plan reuse (today only for forced CTE definitions).
+   * Whether this repartition is used for plan reuse (today only for sealed CTE definitions).
    * True when repartitionId is non-zero.
    */
   def isForPlanReuse: Boolean = repartitionId != 0L

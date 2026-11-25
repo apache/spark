@@ -52,6 +52,18 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     classic.Dataset.ofRows(spark, tagged)
   }
 
+  /** Like [[sqlWithForcedCTEReuse]], but forces only the CTEs named in `names`. */
+  private def sqlWithForcedCTEs(text: String, names: Set[String]): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef if (d.child match {
+        case a: SubqueryAlias => names.contains(a.alias)
+        case _ => false
+      }) => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
   // Runs the two guaranteed-reuse rules, ReplaceCTERefWithRepartition and then
   // ReplaceRepartitionWithCTEReuse (SparkOptimizer runs them in two consecutive Once batches), with
   // the reuse flag set to `enabled`, so tests can drive them on a hand-built plan.
@@ -289,8 +301,8 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   // ---------------------------------------------------------------------------
 
   test("a plan-reuse id with one copy is not sealed and is reset, two copies are sealed") {
-    // Build plans directly: ReplaceCTERefWithRepartition assigns plan-reuse ids only to forced
-    // definitions whose body the plan holds two or more copies of, so SQL cannot produce an id
+    // Build plans directly: ReplaceCTERefWithRepartition assigns plan-reuse ids only to bodies
+    // the plan holds two or more copies of, so SQL cannot produce an id
     // with a single copy, and resetting such an id is a defensive fallback. Exercise
     // ReplaceRepartitionWithCTEReuse on plan-reuse repartitions carrying an id.
     val rel = LocalRelation(AttributeReference("a", IntegerType)())
@@ -615,6 +627,9 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     val b = AttributeReference("b", IntegerType)()
     val cteBody = LocalRelation(a, b)
     val pin = Some(HashPartitioning(Seq(b), 7))
+    // Under the same two conditions, a pin of a kind the lowering does not support is ignored
+    // too, rather than rejected as it is when honored.
+    val ignoredPins = Seq(pin, Some(RangePartitioning(Seq(SortOrder(b, Ascending)), 3)))
     // The references share the definition's attributes, so the lowering keeps the body's exprIds
     // and the plans compare exactly.
     def plan(cteDef: CTERelationDef): LogicalPlan = WithCTE(Union(Seq.fill(2) {
@@ -630,15 +645,18 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       case Project(list, `cteBody`) => list.map(_.toAttribute)
     }.exists(_ == Seq(a))
 
-    Seq(
-      "not forceSkipInline" -> (CTERelationDef(cteBody), true),
-      "reuse flag off" -> (CTERelationDef(cteBody, forceSkipInline = true), false)).foreach {
-      case (name, (unpinned, enabled)) =>
-        val withoutPin = optimize(unpinned, enabled)
-        val withPin = optimize(unpinned.copy(forcePartitioning = pin), enabled)
-        assert(prunedToA(withoutPin), s"$name: expected `b` to be pruned:\n$withoutPin")
-        assert(withPin == withoutPin,
-          s"$name: expected an ignored pin to leave the plan unchanged:\n$withPin")
+    for {
+      (name, (unpinned, enabled)) <- Seq(
+        "not forceSkipInline" -> (CTERelationDef(cteBody), true),
+        "reuse flag off" -> (CTERelationDef(cteBody, forceSkipInline = true), false))
+      ignoredPin <- ignoredPins
+    } {
+      val pinName = s"$name, ${ignoredPin.get.getClass.getSimpleName} pin"
+      val withoutPin = optimize(unpinned, enabled)
+      val withPin = optimize(unpinned.copy(forcePartitioning = ignoredPin), enabled)
+      assert(prunedToA(withoutPin), s"$pinName: expected `b` to be pruned:\n$withoutPin")
+      assert(withPin == withoutPin,
+        s"$pinName: expected an ignored pin to leave the plan unchanged:\n$withPin")
     }
 
     // An honored pin keeps `b` through pruning and repartitions the shared body on it.
@@ -823,6 +841,80 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
         "Expected identical non-deterministic bodies to keep separate cteIds")
       assert(cteIds(query(same, "SELECT id, id * 3 AS v FROM range(10)")).size == 2,
         "Expected different bodies to keep separate cteIds")
+    }
+  }
+
+  test("a CTE whose deterministic body equals a sealed forced body shares its plan-reuse id") {
+    // `forced` is read twice and sealed. `twin`'s deterministic body is canonically equal, but
+    // `twin` is not sealed on its own: it is a forced CTE read once or an ordinary MATERIALIZED
+    // CTE. The plain lowering planned all three copies to equal shuffles that exchange reuse ran
+    // once, so `twin` is sealed with `forced` under one plan-reuse id, whichever comes first.
+    Seq(
+      "plain body" -> (() => rel),
+      "REPARTITION(n) root" -> (() => Repartition(3, shuffle = true, rel))).foreach {
+      case (bodyName, body) =>
+        Seq(
+          "forced CTE read once" -> CTERelationDef(body(), forceSkipInline = true),
+          "MATERIALIZED CTE" -> CTERelationDef(body(), materialized = Some(true))).foreach {
+          case (twinName, twin) =>
+            val forced = CTERelationDef(body(), forceSkipInline = true)
+            Seq(Seq(forced, twin), Seq(twin, forced)).foreach { defs =>
+              val order = if (defs.head eq forced) "defined second" else "defined first"
+              withClue(s"$bodyName, $twinName $order: ") {
+                val result = runReuseRules(
+                  WithCTE(Union(Seq(refTo(forced), refTo(forced), refTo(twin))), defs))
+                assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 3)
+                assert(numRepartitionLike(result) == 0,
+                  s"Expected no plain copy of the body:\n${result.treeString}")
+              }
+            }
+        }
+    }
+  }
+
+  test("only a CTE's own deterministic body shares a sealed body's plan-reuse id") {
+    // A non-deterministic twin of a sealed body keeps its plain lowering, so it computes its own
+    // values.
+    def nondeterministic(): LogicalPlan = {
+      val base = rel
+      Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base)
+    }
+    val forced = CTERelationDef(nondeterministic(), forceSkipInline = true)
+    val twin = CTERelationDef(nondeterministic(), forceSkipInline = true)
+    val result = runReuseRules(
+      WithCTE(Union(Seq(refTo(forced), refTo(forced), refTo(twin))), Seq(forced, twin)))
+    assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 2)
+    val plain = result.collect { case r: RepartitionByExpression => r }
+    assert(plain.size == 1 && !plain.head.isForPlanReuse,
+      s"Expected the non-deterministic twin's plain lowering:\n${result.treeString}")
+
+    // A repartition outside any CTE that equals the sealed root keeps its plain plan.
+    val deterministic = CTERelationDef(rel, forceSkipInline = true)
+    val outside = RepartitionByExpression(Seq.empty, rel, None)
+    val withOutside = runReuseRules(WithCTE(
+      Union(Seq(refTo(deterministic), refTo(deterministic), outside)), Seq(deterministic)))
+    assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(withOutside), refCount = 2)
+    assert(withOutside.collect { case r: RepartitionByExpression => r } == Seq(outside),
+      s"Expected the repartition outside the CTE unchanged:\n${withOutside.treeString}")
+  }
+
+  test("a MATERIALIZED CTE whose body equals a sealed forced body is sealed with it") {
+    withCTEReuseEnabled {
+      val text =
+        """WITH f AS (SELECT id, id * 2 AS v FROM range(10)),
+          |  m AS MATERIALIZED (SELECT id, id * 2 AS v FROM range(10))
+          |SELECT * FROM f UNION ALL SELECT * FROM f UNION ALL SELECT * FROM m
+          |""".stripMargin
+      val df = sqlWithForcedCTEs(text, names = Set("f"))
+      assertAllRefsShareOneNonzeroId(
+        collectCTEReuseRelations(df.queryExecution.optimizedPlan), refCount = 3)
+      val expected = withSQLConf(cteReuseConfKey -> "false") {
+        val unsealed = sqlWithForcedCTEs(text, names = Set("f"))
+        assert(collectCTEReuseRelations(unsealed.queryExecution.optimizedPlan).isEmpty)
+        unsealed.collect().toSeq
+      }
+      assert(expected.size == 30)
+      checkAnswer(df, expected)
     }
   }
 
