@@ -695,20 +695,27 @@ class CTEReuseWithAQESuite
       withTable("result_stage_src") {
         sql("CREATE TABLE result_stage_src (id INT) USING parquet")
         sql("INSERT INTO result_stage_src VALUES (1), (2), (3)")
-        // The UDF returns a fresh value on every call, so a second evaluation of the body, by one
-        // of the references or by the second collect, would show as different values for an id.
+        // The UDF returns a fresh value on every call, so a second evaluation of the body by one
+        // of the references would give the two references different values `u` for an id. A
+        // second collect may evaluate the body again, since tests clean up shuffle files at the
+        // end of each execution, so the two collects are compared on `r`: rand() reproduces its
+        // values on every evaluation.
         spark.udf.register("result_stage_uuid",
           udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
         // The result stage reads both CTE reuse stages directly (no exchange above them).
         val df = sqlWithForcedCTEReuse(
-          """WITH cte AS (SELECT id, result_stage_uuid() AS r FROM result_stage_src)
-            |SELECT id, r FROM cte UNION ALL SELECT id, r FROM cte
+          """WITH cte AS (SELECT id, rand() AS r, result_stage_uuid() AS u FROM result_stage_src)
+            |SELECT id, r, u FROM cte UNION ALL SELECT id, r, u FROM cte
             |""".stripMargin)
-        val first = df.collect().toSeq.map(r => (r.getInt(0), r.getString(1))).sorted
-        val second = df.collect().toSeq.map(r => (r.getInt(0), r.getString(1))).sorted
-        assert(first == second)
-        // One materialization: both references see the same rows.
-        assert(first.size == 6 && first.grouped(2).forall(pair => pair.distinct.size == 1), first)
+        def run(): Seq[(Int, Double, String)] =
+          df.collect().toSeq.map(r => (r.getInt(0), r.getDouble(1), r.getString(2))).sorted
+        val first = run()
+        val second = run()
+        assert(first.map(row => (row._1, row._2)) == second.map(row => (row._1, row._2)))
+        // One materialization per collect: both references see the same rows.
+        Seq(first, second).foreach { rows =>
+          assert(rows.size == 6 && rows.grouped(2).forall(pair => pair.distinct.size == 1), rows)
+        }
         assertInnerAQEShared(df)
         val stages = collectWithSubqueries(df.queryExecution.executedPlan) {
           case s: CTEReuseQueryStageExec => s

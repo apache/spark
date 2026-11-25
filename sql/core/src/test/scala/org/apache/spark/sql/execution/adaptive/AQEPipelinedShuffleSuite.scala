@@ -242,7 +242,7 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
     }
   }
 
-  test("the initial adaptive plan of a forced CTE self-join stays regular") {
+  test("the initial adaptive plan of a join of forced CTE references stays regular") {
     withAqePipelinedSession { spark =>
       val session = spark.asInstanceOf[classic.SparkSession]
       session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
@@ -253,32 +253,43 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
         case a: AdaptiveSparkPlanExec => a.initialPlan
         case other => fail(s"expected an adaptive plan; plan:\n$other")
       }
-      // Without a CTE, the same join shape pipelines both join inputs in its initial plan.
-      val control = session.sql(
-        """SELECT a.k FROM (SELECT id AS k FROM range(0, 100, 1, 2)) a
-          |JOIN (SELECT id AS k FROM range(0, 100, 1, 2)) b ON a.k = b.k
-          |""".stripMargin)
-      assert(pipelinedExchanges(initialPlan(control)).size == 2,
-        s"expected the control's join inputs pipelined; plan:\n${initialPlan(control)}")
+      val range = "range(0, 100, 1, 2)"
+      // Without a CTE, each shape pipelines both join inputs in its initial plan. A self-join's
+      // two inputs are canonically equal, which leaves them regular while exchange reuse is on,
+      // so it runs with exchange reuse off.
+      Seq(
+        ("a self-join", false,
+          s"""SELECT a.k FROM (SELECT id AS k FROM $range) a
+             |JOIN (SELECT id AS k FROM $range) b ON a.k = b.k""".stripMargin,
+          "SELECT c1.k FROM cte c1 JOIN cte c2 ON c1.k = c2.k", 100),
+        ("a join of differently projected references", true,
+          s"""SELECT a.k FROM (SELECT id AS k FROM $range) a
+             |JOIN (SELECT id + 1 AS k FROM $range) b ON a.k = b.k""".stripMargin,
+          "SELECT c1.k FROM cte c1 JOIN (SELECT k + 1 AS k FROM cte) c2 ON c1.k = c2.k", 99)
+      ).foreach { case (name, reuse, control, query, numRows) =>
+        session.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, reuse.toString)
+        val controlPlan = initialPlan(session.sql(control))
+        assert(pipelinedExchanges(controlPlan).size == 2,
+          s"$name: expected the control's join inputs pipelined; plan:\n$controlPlan")
 
-      val analyzed = session.sql(
-        """WITH cte AS (SELECT id AS k, rand() AS r FROM range(0, 100, 1, 2))
-          |SELECT c1.k, c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.k = c2.k
-          |""".stripMargin).queryExecution.analyzed
-      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
-        case d: CTERelationDef => d.copy(forceSkipInline = true)
-      })
-      // Before stage creation, the join inputs are exchanges over the CTE references, which are
-      // still CTEReuseExchange leaves rather than CTE reuse stages.
-      val initial = initialPlan(df)
-      val overReferences = collect(initial) {
-        case s: ShuffleExchangeExec if s.child.isInstanceOf[CTEReuseExchange] => s
+        // forceSkipInline has no SQL syntax: tag the analyzed CTE definition and re-run it.
+        val analyzed = session.sql(s"WITH cte AS (SELECT id AS k FROM $range) $query")
+          .queryExecution.analyzed
+        val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+          case d: CTERelationDef => d.copy(forceSkipInline = true)
+        })
+        // Before stage creation, the join inputs are exchanges over the CTE references, which
+        // are still CTEReuseExchange leaves rather than CTE reuse stages.
+        val initial = initialPlan(df)
+        val overReferences = collect(initial) {
+          case s: ShuffleExchangeExec if s.child.exists(_.isInstanceOf[CTEReuseExchange]) => s
+        }
+        assert(overReferences.size == 2,
+          s"$name: expected both join inputs to read a CTE reference; plan:\n$initial")
+        assert(pipelinedExchanges(initial).isEmpty,
+          s"$name: no exchange of a plan reading a CTE reference may be pipelined; plan:\n$initial")
+        assert(df.collect().length == numRows)
       }
-      assert(overReferences.size == 2,
-        s"expected both join inputs to read a CTE reference; plan:\n$initial")
-      assert(pipelinedExchanges(initial).isEmpty,
-        s"no exchange of a plan reading a CTE reference may be pipelined; plan:\n$initial")
-      assert(df.collect().forall(_.getBoolean(1)))
     }
   }
 
