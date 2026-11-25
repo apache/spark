@@ -98,7 +98,6 @@ class AggregateResolver(
       cteRegistry.currentScope.failIfScopeHasSelfReference()
 
       scopes.current.clearAvailableAliases()
-      scopes.current.clearUnaggregatedAccessOnlyIds()
 
       val resolvedAggregateExpressions = expressionResolver.resolveAggregateExpressions(
         unresolvedAggregate.aggregateExpressions,

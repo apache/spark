@@ -177,23 +177,13 @@ class OperatorResolutionContextStack {
    * Returns whether Limit All should be applied to the current context according to the following
    * rules:
    * - [[LimitAll]] sets the flag to true
-   * - The root of a subquery expression plan resets the flag to false, because the fixed-point
-   * [[ApplyLimitAll]] only follows plan children and never descends into subquery expressions:
-   * {{{
-   *   -- `t` in the scalar subquery keeps the recursion row limit.
-   *   WITH RECURSIVE t AS (...) SELECT (SELECT count(*) FROM t) LIMIT ALL;
-   * }}}
    * - Allow-listed operators (from [[ApplyLimitAll.propagatesLimitAll]]) propagate the flag from
    * the parent context
    * - All other operators reset the flag to false
    */
-  private def currentContextIsResolvingLimitAll(
-      plan: LogicalPlan,
-      isSubqueryRoot: Boolean): Boolean = plan match {
+  private def currentContextIsResolvingLimitAll(plan: LogicalPlan): Boolean = plan match {
     case _: LimitAll =>
       true
-    case _ if isSubqueryRoot =>
-      false
     case _ if propagatesLimitAll(plan) =>
       current.resolvingLimitAll
     case _ =>
@@ -237,7 +227,7 @@ class OperatorResolutionContextStack {
         isResolvingTreeUnderHaving = isResolvingTreeUnderHaving,
         isResolvingSetVariableSource = isResolvingSetVariableSource,
         parameterNamesToValues = current.parameterNamesToValues,
-        resolvingLimitAll = currentContextIsResolvingLimitAll(unresolvedPlan, isSubqueryRoot),
+        resolvingLimitAll = currentContextIsResolvingLimitAll(unresolvedPlan),
         enclosingHintApplicationContexts = enclosingHintApplicationContextsForChild(isSubqueryRoot),
         isSubqueryRoot = isSubqueryRoot
       )

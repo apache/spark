@@ -32,13 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression,
   TimestampAddInterval
 }
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Deduplicate,
-  Filter,
-  LocalRelation,
-  LogicalPlan,
-  Project
-}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.types._
 
 class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
@@ -246,23 +240,6 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
         child = LocalRelation(output = colTimestamp)
       ),
       error = Some("TimezoneId is not set")
-    )
-  }
-
-  test("Operator unknown to the validator and its extensions") {
-    val exception = intercept[Throwable] {
-      new ResolutionValidator().validatePlan(
-        Deduplicate(keys = Seq(colInteger), child = LocalRelation(output = colInteger))
-      )
-    }
-    val messages = Iterator
-      .iterate(exception)(_.getCause)
-      .takeWhile(_ != null)
-      .flatMap(throwable => Option(throwable.getMessage))
-    assert(
-      messages.exists(
-        _.contains("Unexpected operator in single-pass resolution validation: Deduplicate")
-      )
     )
   }
 

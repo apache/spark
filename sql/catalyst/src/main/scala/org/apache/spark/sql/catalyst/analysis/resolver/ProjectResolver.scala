@@ -60,18 +60,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    *
    * We need to clear [[NameScope.availableAliases]]. Those are only relevant for the immediate
    * project list for output prioritization to work correctly in
-   * [[NameScope.tryResolveMultipartNameByOutput]]. For the same reason we clear
-   * [[NameScope.unaggregatedAccessOnlyIds]], which only HAVING and ORDER BY directly above a
-   * grouping analytics [[Aggregate]] may use.
-   *
-   * A [[Project]] that does not become an [[Aggregate]] clears the [[Aggregate]] state of the
-   * current [[QueryBlockScope]], so that a [[Sort]] above it resolves against the [[Project]]
-   * output, like in the fixed-point Analyzer:
-   *
-   * {{{
-   *   // `sum(b)` is not extracted into the Aggregate, so this fails with UNRESOLVED_COLUMN.
-   *   df.groupBy("a").agg(max("c")).select("a").orderBy(sum("b"))
-   * }}}
+   * [[NameScope.tryResolveMultipartNameByOutput]].
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
     scopes.pushScope()
@@ -81,7 +70,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       val childHasRecursiveSelfReference = cteRegistry.currentScope.hasRecursiveSelfReference
 
       scopes.current.clearAvailableAliases()
-      scopes.current.clearUnaggregatedAccessOnlyIds()
 
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
@@ -113,7 +101,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
         )
       } else if (resolvedProjectList.hasLateralColumnAlias) {
-        queryBlockScopes.current.clearAggregateState()
         buildProjectWithLca(
           resolvedProjectList = resolvedProjectList,
           resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns,
@@ -123,7 +110,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           )
         )
       } else {
-        queryBlockScopes.current.clearAggregateState()
         val resolvedProject =
           Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
 

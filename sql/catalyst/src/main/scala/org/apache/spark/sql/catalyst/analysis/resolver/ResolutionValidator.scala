@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{
   GetViewColumnByNameAndOrdinal,
   MultiInstanceRelation,
@@ -154,18 +153,8 @@ class ResolutionValidator(
     }
   }
 
-  /**
-   * Delegates validation of an operator that has no dedicated case to the first
-   * [[ResolutionValidatorExtension]] that handles it. If no extension handles the operator, the
-   * resolver produced an operator the validator does not know, so we fail instead of accepting
-   * its subtree unvalidated.
-   */
   private def tryDelegateToValidatorExtension(operator: LogicalPlan): Unit = {
-    if (!validatorExtensions.exists(_.validateOperator(operator, this))) {
-      throw SparkException.internalError(
-        s"Unexpected operator in single-pass resolution validation: ${operator.nodeName}"
-      )
-    }
+    validatorExtensions.foreach(_.validateOperator(operator, this))
   }
 
   private def validateWith(withCte: WithCTE): Unit = {

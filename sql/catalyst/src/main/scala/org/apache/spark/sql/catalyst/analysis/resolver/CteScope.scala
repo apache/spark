@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   WithCTE
 }
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The [[CteScope]] is responsible for keeping track of visible and known CTE definitions at a given
@@ -502,21 +501,9 @@ class CteScope(
    */
   def cteExists(name: String): Boolean = {
     visibleCtes.get(name).isDefined || {
-      recursiveCteParameters.exists(params => isRecursiveSelfReferenceName(params, name))
+      recursiveCteParameters.exists(params => params.cteName == name)
     }
   }
-
-  /**
-   * Whether `name` refers to the recursive CTE that is being defined. The names are compared
-   * using the session resolver, like the fixed-point [[CTESubstitution]] does, so that a
-   * differently-cased self-reference still recurses in a case-insensitive session:
-   *
-   * {{{
-   *   WITH RECURSIVE R(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) SELECT * FROM R;
-   * }}}
-   */
-  private def isRecursiveSelfReferenceName(params: RecursiveCteParameters, name: String): Boolean =
-    SQLConf.get.resolver(params.cteName, name)
 
   /**
    * Gets a visible CTE definition by its name. In case of Recursive CTEs, attempts to see whether
@@ -528,7 +515,7 @@ class CteScope(
     val cte = visibleCtes.get(name)
     cte.orElse {
       recursiveCteParameters match {
-        case Some(params) if isRecursiveSelfReferenceName(params, name) =>
+        case Some(params) if params.cteName == name =>
           recursiveCteState.foreach(_.referencedRecursively = true)
           val anchorOutput = recursiveCteState.flatMap(_.anchorOutput).getOrElse {
             throw new AnalysisException(
