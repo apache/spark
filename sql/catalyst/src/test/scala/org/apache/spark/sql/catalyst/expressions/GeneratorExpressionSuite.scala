@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -84,22 +85,24 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Stack(Seq(Literal(1))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     checkError(
       exception = intercept[AnalysisException] {
         Stack(Seq(Literal(1.0))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
     assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==
@@ -193,11 +196,12 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Unnest(Seq.empty, withOrdinality = false).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`unnest`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
 
     // A non-array argument is rejected, reporting the offending 1-based parameter index.
     assert(Unnest(Seq(int_array, Literal(3)), withOrdinality = false).checkInputDataTypes() ==

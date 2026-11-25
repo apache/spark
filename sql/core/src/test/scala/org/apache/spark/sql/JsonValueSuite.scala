@@ -409,6 +409,7 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
       Seq(s"$func('{}')", s"$func('{}', '$$.a', '$$.b')").foreach { call =>
         val e = intercept[AnalysisException](sql(s"SELECT $call").collect())
         assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", s"for $call")
+        assert(e.getSqlState == "42605", s"for $call")
       }
     }
   }

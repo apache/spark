@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.util.IllegalFormatConversionException
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelatio
 import org.apache.spark.sql.catalyst.util.CharsetProvider
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.ToNumberParser
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -164,22 +165,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Elt(Seq.empty).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     checkError(
       exception = intercept[AnalysisException] {
         Elt(Seq(Literal(1))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
@@ -2424,11 +2427,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ParseUrl(Seq(Literal("1"))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     checkError(
       exception = intercept[AnalysisException] {
@@ -2436,11 +2440,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("4"))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "4",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -2552,11 +2557,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expr1.checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`elt`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     // first input to function etl should have IntegerType

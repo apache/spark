@@ -29,11 +29,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.{PrimitiveObjectI
 import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, TypeInfo}
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -331,11 +332,12 @@ class HiveUDAFSuite extends QueryTest
           sql(s"SELECT $functionName(100)")
         },
         condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        sqlState = "42605",
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
           "actualNum" -> "1",
-          "docroot" -> SPARK_DOC_ROOT),
+          "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,

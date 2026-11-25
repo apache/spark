@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -6021,11 +6022,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
         "actualNum" -> "4",
-        "docroot" -> SPARK_DOC_ROOT),
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
       context = ExpectedContext(
         fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
         start = 0,
@@ -6122,12 +6124,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.select(coalesce())
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6135,12 +6137,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("coalesce()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6148,12 +6150,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.select(hash())
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6161,12 +6163,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("hash()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6174,12 +6176,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.select(xxhash64())
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6187,12 +6189,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("xxhash64()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6200,12 +6202,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.select(greatest())
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6213,12 +6215,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("greatest()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6226,12 +6228,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.select(least())
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     checkError(
@@ -6239,12 +6241,12 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         df.selectExpr("least()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      sqlState = None,
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
   }
 

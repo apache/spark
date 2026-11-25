@@ -23,9 +23,10 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,11 +56,12 @@ class DateFunctionsSuite extends SharedSparkSession {
         sql("SELECT CURDATE(1)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot
       ),
       context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
     )

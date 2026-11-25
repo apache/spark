@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.IsNotNull
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{FilterExec, FormattedMode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -872,11 +873,12 @@ class StringFunctionsSuite extends SharedSparkSession {
         df.selectExpr("sentences()")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot
       ),
       context = ExpectedContext(
         fragment = "sentences()",
@@ -1089,11 +1091,12 @@ class StringFunctionsSuite extends SharedSparkSession {
           sql(s"select $funcName('a', 'b', 'c')")
         },
         condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        sqlState = "42605",
         parameters = Map(
           "functionName" -> s"`$funcName`",
           "expectedNum" -> "2",
           "actualNum" -> "3",
-          "docroot" -> SPARK_DOC_ROOT),
+          "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
         context = ExpectedContext("", "", 7, 21 + funcName.length, s"$funcName('a', 'b', 'c')"))
       checkError(
         exception = intercept[AnalysisException] {

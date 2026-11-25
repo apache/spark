@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.time.{Duration, LocalTime}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
@@ -95,11 +96,12 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         HourExpressionBuilder.build("hour", Seq.empty)
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`hour`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     // test TIME-typed child should build HoursOfTime
@@ -165,11 +167,12 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         MinuteExpressionBuilder.build("minute", Seq.empty)
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`minute`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     // test TIME-typed child should build MinutesOfTime for default precision value
@@ -269,11 +272,12 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         SecondExpressionBuilder.build("second", Seq.empty)
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`second`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     // test TIME-typed child should build SecondsOfTime

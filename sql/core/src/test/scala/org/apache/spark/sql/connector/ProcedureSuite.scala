@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{registerTestUDF, shouldTestPythonUDFs, TestPythonUDF}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,6 +40,7 @@ import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
@@ -335,11 +336,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         sql("CALL cat.ns.sum(1, 2, 3)")
       ),
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("sum"),
         "expectedNum" -> "2",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("custom default catalog") {
@@ -748,11 +750,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         sql(s"CALL cat.ns.simple_ts($tsExpr, 'x', 1)")
       ),
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("simple_ts"),
         "expectedNum" -> "[1, 2]",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("SPARK-61506: other late-resolving arguments") {

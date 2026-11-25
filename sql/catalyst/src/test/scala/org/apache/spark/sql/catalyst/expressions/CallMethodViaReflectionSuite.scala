@@ -23,7 +23,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -147,22 +148,24 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
         CallMethodViaReflection(Seq.empty).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     checkError(
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT)
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
     assert(CallMethodViaReflection(
       Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==

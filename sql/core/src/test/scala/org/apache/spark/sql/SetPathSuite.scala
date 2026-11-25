@@ -528,6 +528,7 @@ class SetPathSuite extends SharedSparkSession {
         sql("SELECT current_path(1)")
       }
       assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", e.getMessage)
+      assert(e.getSqlState == "42605", e.getMessage)
     }
   }
 

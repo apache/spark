@@ -230,6 +230,7 @@ class DataFrameTableValuedFunctionsSuite extends SharedSparkSession {
       spark.tvf.json_tuple(lit("""{"a":1,"b":2}""")).collect()
     }
     assert(ex.errorClass.get == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
+    assert(ex.getSqlState == "42605")
     assert(ex.messageParameters("functionName") == "`json_tuple`")
   }
 

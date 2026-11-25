@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BinaryNode, ExecuteExternalUDF,
   Filter, Join, JoinHint, LocalLimit, LocalRelation, LogicalPlan, MapPartitionsExternalUDF, Project,
   Range, Window}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, StructField,
@@ -349,11 +350,12 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = exception,
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`tooFewInputTypes`",
         "expectedNum" -> "1",
         "actualNum" -> "2",
-        "docroot" -> "https://spark.apache.org/docs/latest"))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("external UDF input types reject more declarations than arguments") {
@@ -372,11 +374,12 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = exception,
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`tooManyInputTypes`",
         "expectedNum" -> "2",
         "actualNum" -> "1",
-        "docroot" -> "https://spark.apache.org/docs/latest"))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("an external UDF in a higher-order function lambda is rejected") {

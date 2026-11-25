@@ -1161,6 +1161,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("functionName" -> toSQLId(functionName)))
   }
 
+  /**
+   * The documentation root used by the `WRONG_NUM_ARGS.WITHOUT_SUGGESTION` error to point users
+   * at the SQL built-in functions reference (`<docroot>/sql-ref-functions.html`).
+   */
+  def sqlFunctionsDocumentationRoot: String = "https://spark.apache.org/docs/latest"
+
   def wrongNumArgsError(
       name: String,
       validParametersCount: Seq[Any],
@@ -1182,7 +1188,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
           "functionName" -> toSQLId(name),
           "expectedNum" -> expectedNumberOfParameters,
           "actualNum" -> actualNumber.toString,
-          "docroot" -> SPARK_DOC_ROOT))
+          "docroot" -> sqlFunctionsDocumentationRoot))
     } else {
       new AnalysisException(
         errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
