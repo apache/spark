@@ -33,8 +33,9 @@ abstract class CTEInlineSuiteBase
 
   import testImplicits._
 
-  // ReplaceCTERefWithRepartition has replaced each materialized CTE definition with its body
-  // under a RepartitionOperation by the time optimizedPlan is available.
+  // ReplaceCTERefWithRepartition has replaced each reference to a CTE that is not inlined with
+  // a copy of its definition's body under a RepartitionOperation, so this returns one body per
+  // reference, not one per definition.
   private def cteDefBodiesWithSubquery(df: DataFrame): Seq[RepartitionOperation] = {
     df.queryExecution.optimizedPlan.collectWithSubqueries {
       case r: RepartitionOperation
@@ -1122,6 +1123,68 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("SPARK-61957: same-attribute CTE copies retain pushdown and pruning") {
+    val df = sql(
+      """with c as materialized (select id, id * 2 as v, id * 3 as w from range(100))
+        |select id from c where id > 90
+        |""".stripMargin)
+    val union = df.union(df)
+    val expected = (91L to 99L).flatMap(id => Seq(Row(id), Row(id)))
+    checkAnswer(union.sort("id"), expected)
+
+    // Reusing the DataFrame creates distinct definition instances with the same attributes.
+    // Tracking them independently must retain the filter and pruned projection in both copies.
+    val cteRepartitions = union.queryExecution.optimizedPlan.collect {
+      case r: RepartitionOperation => r
+    }
+    assert(cteRepartitions.length == 2,
+      s"Expected both CTE copies after optimization: ${union.queryExecution.optimizedPlan}")
+    cteRepartitions.foreach { r =>
+      assert(r.output.map(_.name) == Seq("id"), s"CTE columns should be pruned: $r")
+      assert(r.collectFirst {
+        case f @ Filter(GreaterThan(_, Literal(90, _)), _) => f
+      }.isDefined, s"Predicate 'id > 90' should be pushed into the CTE definition: $r")
+    }
+  }
+
+  test("SPARK-61957: CTE copies handle different projected columns") {
+    val df = sql(
+      """with c as materialized (select id, id * 2 as v, id * 3 as w from range(10))
+        |select * from c
+        |""".stripMargin)
+
+    // Each branch needs a different column from the reused CTE. Independent lexical state lets
+    // each copy keep exactly the column its own branch reads, without mixing attribute mappings.
+    val expected = (0 until 10).map(i => Row(i * 2L)) ++ (0 until 10).map(i => Row(i * 3L))
+    val union = df.select("v").union(df.select("w"))
+    checkAnswer(union, expected)
+
+    val copies = union.queryExecution.optimizedPlan.collect {
+      case r: RepartitionOperation => r
+    }
+    assert(copies.length == 2, union.queryExecution.optimizedPlan)
+    assert(copies.map(_.output.map(_.name)).toSet == Set(Seq("v"), Seq("w")),
+      s"Each CTE copy should retain its branch's column: $copies")
+  }
+
+  test("SPARK-61957: correlated domain reuses CTE without losing columns") {
+    withTempView("t2", "t3") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(100).selectExpr("id", "id % 10 as k", "id % 7 as d")
+        .createOrReplaceTempView("t3")
+
+      // rewriteDomainJoins reuses the outer plan for the correlated domain, so both WithCTE
+      // nodes contain the same definition. The outer reference needs id and k, while the
+      // domain needs only k; gathering the domain must not discard id.
+      val df = sql(
+        """select * from (with y as materialized (select id, k from t2) select * from y) o
+          |where o.id > (select max(t.id) - 95 from t3 t where t.k < o.k)
+          |""".stripMargin)
+      val expected = (0L until 100L).filter(id => id % 10 != 0).map(id => Row(id, id % 10))
+      checkAnswer(df, expected)
+    }
+  }
+
   test("SPARK-61957: predicate referencing a nested MATERIALIZED CTE stays in its scope") {
     withTempView("t2", "small") {
       spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
@@ -1173,19 +1236,17 @@ abstract class CTEInlineSuiteBase
   }
 
   test("SPARK-61957: reference to a later CTE in a nested subquery stays in its scope") {
-    withTempView("t2", "small") {
-      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+    withTempView("small") {
       spark.range(5).createOrReplaceTempView("small")
 
-      // The scan of c1's predicate sees u in the outer scalar subquery, but must also find
-      // the later sibling c2 in the nested scalar subquery and reject the pushdown.
+      // The outer scalar subquery has no direct CTE reference. Only recursive traversal can
+      // find the later sibling c2 in the nested scalar subquery and reject the pushdown.
       val df = sql(
-        """with u as materialized (select id, k from t2 where k < 6)
-          |select (with c1 as materialized (select id from small),
-          |             c2 as materialized (select id from small where id > 0)
-          |        select min(id) from c1
-          |        where id >= (select min(u.id) from u
-          |                     where u.id >= (select min(id) from c2))) x
+        """with c1 as materialized (select id from small),
+          |     c2 as materialized (select id from small where id > 0)
+          |select min(id) from c1
+          |where id >= (select min(id) from small
+          |             where id >= (select min(id) from c2))
           |""".stripMargin)
       checkAnswer(df, Row(1))
       assertNoSubqueryInCTEDef(df)
@@ -1216,14 +1277,13 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("SPARK-61957: repeated WithCTE traversal preserves sibling predicate pushdown") {
+  test("SPARK-61957: nested CTE pushdown preserves sibling visibility across iterations") {
     withTempView("t2", "small") {
       spark.range(100).createOrReplaceTempView("t2")
       spark.range(5).createOrReplaceTempView("small")
 
-      // The outer reference's subqueriesAll and the recursive subquery traversal both visit
-      // the nested WithCTE. Its definitions must retain their first-visit order so that c2
-      // can accept a predicate referring to its earlier sibling c1.
+      // The outer predicate is copied into x on the next optimizer iteration. Both copies of c2
+      // must retain the sibling visibility that lets them accept a predicate referring to c1.
       val df = sql(
         """with x as materialized (select id from t2)
           |select count(*) from x

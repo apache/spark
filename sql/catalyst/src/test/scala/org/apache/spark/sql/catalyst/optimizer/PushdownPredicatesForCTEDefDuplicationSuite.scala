@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.expressions.{GreaterThan, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Max
@@ -27,17 +28,15 @@ import org.apache.spark.sql.catalyst.plans.logical.{Union, WithCTE}
 import org.apache.spark.sql.types.LongType
 
 /**
- * Tests for distinct CTE definitions that share an ID after InlineCTE copies an enclosing
- * definition. Attribute deduplication gives the copies different expression IDs, so predicate
- * pushdown and column pruning state gathered for one copy cannot be applied to the other.
+ * Tests for distinct CTE definition occurrences that share an ID after inlining. Lexical scope
+ * must keep their predicate-pushdown and column-pruning state independent, whether or not
+ * attribute deduplication also gives the copies different expression IDs.
  */
 class PushdownPredicatesForCTEDefDuplicationSuite extends PlanTest {
 
-  test("SPARK-61957: duplicated CTE definitions do not share predicates") {
-    // The two inner definitions share cteId 1 but have different attributes.
-    // Each reference's predicate points at the outer r (cteId 0). A predicate
-    // gathered for one copy cannot be pushed into the other, so the rule must
-    // leave both copies unchanged.
+  test("SPARK-61957: duplicated CTE definitions track predicates independently") {
+    // The two inner definitions share cteId 1 but have different attributes. Each reference's
+    // predicate points at the outer r (cteId 0) and must be translated to its own definition.
     val rId = AttributeReference("id", LongType, nullable = false)()
     val rCteId = 0L
     val rDef = CTERelationDef(LocalRelation(rId), rCteId, materialized = Some(true))
@@ -50,13 +49,73 @@ class PushdownPredicatesForCTEDefDuplicationSuite extends PlanTest {
       Project(ref.output, Filter(GreaterThan(ref.output.head, ScalarSubquery(maxR)), ref))
     }, Seq(rDef))
 
-    comparePlans(plan, PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan))
+    val optimized = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+    SimpleAnalyzer.checkAnalysis(optimized)
+    val innerDefs = optimized.collectWithSubqueries {
+      case d: CTERelationDef if d.id != rCteId => d
+    }
+    assert(innerDefs.length == 2, s"Expected both inner definitions: $optimized")
+    innerDefs.foreach { cteDef =>
+      val filter = cteDef.child match {
+        case f: Filter => f
+        case other => fail(s"Expected an independently translated filter: $other")
+      }
+      assert(filter.condition.references.forall(cteDef.outputSet.contains))
+    }
   }
 
-  test("SPARK-61957: duplicated CTE definitions do not share pruning attributes") {
-    // Each reference projects only d. Since the two definitions have different attributes, the
-    // pruning state gathered for one cannot be used to rewrite the other. The rule must leave
-    // both copies unchanged.
+  test("SPARK-61957: same-attribute copies track predicates by lexical scope") {
+    val a = AttributeReference("a", LongType, nullable = false)()
+    val n = AttributeReference("n", LongType, nullable = false)()
+    val aCteId = 0L
+    val xCteId = 1L
+    val nCteId = 2L
+
+    def maxOf(ref: CTERelationRef): ScalarSubquery = ScalarSubquery(Aggregate(
+      Nil, Seq(Alias(Max(ref.output.head).toAggregateExpression(), "max")()), ref))
+
+    def nCopy(ref: CTERelationRef, predicate: ScalarSubquery): WithCTE = {
+      val cteDef = CTERelationDef(LocalRelation(n), nCteId, materialized = Some(true))
+      WithCTE(Project(ref.output, Filter(GreaterThan(ref.output.head, predicate), ref)),
+        Seq(cteDef))
+    }
+
+    val aRef = CTERelationRef(aCteId, true, Seq(a.newInstance()), false)
+    val firstNRef = CTERelationRef(nCteId, true, Seq(n.newInstance()), false)
+    val firstN = nCopy(firstNRef, maxOf(aRef))
+    val xDef = CTERelationDef(Project(Seq(Alias(firstN.output.head, "x")()), firstN),
+      xCteId, materialized = Some(true))
+    val xRef = CTERelationRef(xCteId, true, xDef.output.map(_.newInstance()), false)
+    val secondNRef = CTERelationRef(nCteId, true, Seq(n.newInstance()), false)
+
+    // The first n copy is defined inside x and can see a but not x. The second is in the outer
+    // body and can see x. Both definitions deliberately reuse nCteId and n's expression ID.
+    val plan = WithCTE(nCopy(secondNRef, maxOf(xRef)),
+      Seq(CTERelationDef(LocalRelation(a), aCteId, materialized = Some(true)), xDef))
+
+    val optimized = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+    SimpleAnalyzer.checkAnalysis(optimized)
+    val nDefs = optimized.collectWithSubqueries {
+      case d: CTERelationDef if d.output.map(_.exprId) == Seq(n.exprId) => d
+    }
+    assert(nDefs.length == 2, s"Expected both n copies: $optimized")
+    val referencedCteIds = nDefs.map { cteDef =>
+      val filter = cteDef.child match {
+        case f: Filter => f
+        case other => fail(s"Expected a pushed filter in each n copy: $other")
+      }
+      assert(filter.condition.references.forall(cteDef.outputSet.contains))
+      filter.condition.collect {
+        case s: ScalarSubquery => s.plan.collect { case r: CTERelationRef => r.cteId }
+      }.flatten
+    }
+    assert(referencedCteIds.toSet == Set(Seq(aCteId), Seq(xCteId)))
+    comparePlans(optimized, PushdownPredicatesAndPruneColumnsForCTEDef.apply(optimized))
+  }
+
+  test("SPARK-61957: duplicated CTE definitions track pruning independently") {
+    // Each reference projects only d. Both definitions can be pruned, but only using attribute
+    // requirements and mappings gathered from their own references.
     val id = AttributeReference("id", LongType, nullable = false)()
     val k = AttributeReference("k", LongType, nullable = false)()
     val d = AttributeReference("d", LongType, nullable = false)()
@@ -64,7 +123,16 @@ class PushdownPredicatesForCTEDefDuplicationSuite extends PlanTest {
       Project(Seq(ref.output(2)), ref)
     }
 
-    comparePlans(plan, PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan))
+    val optimized = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+    SimpleAnalyzer.checkAnalysis(optimized)
+    val cteDefs = optimized.collectWithSubqueries { case d: CTERelationDef => d }
+    assert(cteDefs.length == 2, s"Expected both definitions: $optimized")
+    cteDefs.foreach { cteDef =>
+      assert(cteDef.child.isInstanceOf[Project], s"Expected independent pruning: $cteDef")
+      assert(cteDef.child.output.map(_.name) == Seq("d"))
+    }
+    val cteRefs = optimized.collectWithSubqueries { case r: CTERelationRef => r }
+    assert(cteRefs.nonEmpty && cteRefs.forall(_.output.map(_.name) == Seq("d")))
   }
 
   /**

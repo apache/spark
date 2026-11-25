@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
 /**
  * Infer predicates and column pruning for [[CTERelationDef]] from its reference points, and push
@@ -32,17 +33,44 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
  */
 object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with PredicateHelper {
 
-  // CTE_id - (CTE_definition, precedence, predicates_to_push_down, attributes_to_prune)
-  private type CTEMap = mutable.HashMap[Long, (CTERelationDef, Int, Seq[Expression], AttributeSet)]
+  // A definition occurrence is identified by its path from the root, not by its CTE ID: inlining
+  // can leave distinct occurrences with the same ID. Child and subquery steps use different tags.
+  private type PlanPath = List[(Boolean, Int)]
+  private type CTEIdScope = List[(Long, CTEState)]
+  private type CTEMap = mutable.HashMap[PlanPath, CTEState]
+
+  private case class CTEState(
+      cteDef: CTERelationDef,
+      definitionSiteScope: CTEIdScope,
+      var predicates: Seq[Expression] = Seq.empty,
+      var attributes: AttributeSet = AttributeSet.empty)
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = new CTEMap
-      val duplicated = mutable.Set.empty[Long]
-      gatherPredicatesAndAttributes(plan, cteMap, duplicated)
-      pushdownPredicatesAndAttributes(plan, cteMap, duplicated)
+      gatherPredicatesAndAttributes(plan, cteMap, Nil, Nil)
+      pushdownPredicatesAndAttributes(plan, cteMap)
     } else {
       plan
+    }
+  }
+
+  private def childPath(path: PlanPath, index: Int): PlanPath = (false, index) :: path
+
+  private def subqueryPath(path: PlanPath, index: Int): PlanPath = (true, index) :: path
+
+  // A CTERelationDef is unary, so its definition query is always child 0.
+  private def cteDefQueryPath(cteDefPath: PlanPath): PlanPath =
+    childPath(cteDefPath, 0)
+
+  private def resolve(scope: CTEIdScope, cteId: Long): Option[CTEState] =
+    scope.collectFirst { case (id, state) if id == cteId => state }
+
+  private def resolveState(scope: CTEIdScope, ref: CTERelationRef): CTEState = {
+    resolve(scope, ref.cteId).getOrElse {
+      val visibleIds = scope.map(_._1).mkString("[", ", ", "]")
+      throw SparkException.internalError(
+        s"CTE reference ${ref.cteId} is not visible in lexical scope $visibleIds.")
     }
   }
 
@@ -55,77 +83,119 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
   }
 
   /**
-   * Gather all the predicates and referenced attributes on different points of CTE references
-   * using pattern `PhysicalOperation` and combine those predicates and attributes that belong
-   * to the same CTE definition. `PhysicalOperation` still returns a single filter even when it
-   * is non-deterministic, so such predicates are excluded below.
-   * For the same CTE definition, if any of its references does not have pushable predicates, the
-   * combined predicate will be a TRUE literal, which means there will be no predicate push-down
-   * for that definition at all, including for its other references.
+   * Gather predicates and referenced attributes into the state of each lexical definition
+   * occurrence. `PhysicalOperation` still returns a single filter even when it is
+   * non-deterministic, so such predicates are excluded below. For one occurrence, if any of its
+   * references has no pushable predicate, TRUE disables predicate pushdown for that occurrence.
    */
   private def gatherPredicatesAndAttributes(
-      plan: LogicalPlan, cteMap: CTEMap, duplicated: mutable.Set[Long]): Unit = {
+      plan: LogicalPlan, cteMap: CTEMap, scope: CTEIdScope, path: PlanPath): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        cteDefs.foreach { cteDef =>
-          gatherPredicatesAndAttributes(cteDef.child, cteMap, duplicated)
-          // InlineCTE can copy a definition with the same ID but different attributes. Such
-          // copies cannot share gathered state, unlike repeated visits to the same instance.
-          cteMap.get(cteDef.id).foreach { case (seen, _, _, _) =>
-            if (!(seen eq cteDef)) duplicated += cteDef.id
-          }
-          // The precedence is the visiting order across all scopes, not the index within
-          // this WithCTE: a definition visited later is either a later sibling (a real
-          // forward reference) or lives in a nested scope, and an earlier definition
-          // cannot see either. (A definition nested in an earlier sibling sorts lower
-          // yet is also invisible, but no reference site can see both it and the
-          // current definition, so that case never reaches the guard.)
-          // Keep the original precedence when repeated subquery traversal revisits a definition:
-          // replacing an existing id does not increase cteMap.size.
-          val precedence = cteMap.get(cteDef.id).map(_._2).getOrElse(cteMap.size)
-          cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, AttributeSet.empty))
+        var scopeSoFar = scope
+        cteDefs.zipWithIndex.foreach { case (cteDef, index) =>
+          val cteDefPath = childPath(path, index)
+          val state = cteMap.getOrElseUpdate(cteDefPath, CTEState(cteDef, scopeSoFar))
+          gatherPredicatesAndAttributes(
+            cteDef.child, cteMap, scopeSoFar, cteDefQueryPath(cteDefPath))
+          scopeSoFar = (cteDef.id, state) :: scopeSoFar
         }
-        gatherPredicatesAndAttributes(child, cteMap, duplicated)
+        gatherPredicatesAndAttributes(
+          child, cteMap, scopeSoFar, childPath(path, cteDefs.size))
 
       case PhysicalOperation(projects, predicates, ref: CTERelationRef) =>
-        val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
+        val state = resolveState(scope, ref)
+        val cteDef = state.cteDef
         val attrMapping = AttributeMap(ref.output.zip(cteDef.output))
-        val newPredicates = if (isTruePredicate(preds)) {
+        val preds = state.predicates
+        state.predicates = if (isTruePredicate(preds)) {
           preds
         } else {
-          // Only push down deterministic predicates that do not contain forward CTE references.
           // A reference keeps its own predicates, so a non-deterministic one pushed into the
-          // shared definition as well would be evaluated a second time.
+          // definition as well would be evaluated a second time.
           val deterministicPredicates = predicates.filter(_.deterministic)
-          val filteredPredicates = restoreCTEDefAttrs(deterministicPredicates.filter(_.find {
-            case s: SubqueryExpression =>
-              // Definitions the subquery brings along travel with the predicate.
-              val definedInside = s.plan.collectWithSubqueries {
-                case WithCTE(_, defs) => defs.map(_.id)
-              }.flatten.toSet
-              s.plan.collectFirstWithSubqueries {
-                case r: CTERelationRef if !definedInside.contains(r.cteId) &&
-                    (!cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence) => r
-              }.nonEmpty
-            case _ => false
-          }.isEmpty), attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
+          val filteredPredicates = restoreCTEDefAttrs(deterministicPredicates.filter { predicate =>
+            predicate.find {
+              case s: SubqueryExpression => !canMoveSubquery(s.plan, scope, state)
+              case _ => false
+            }.isEmpty
+          }, attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
           if (filteredPredicates.isEmpty) {
             Seq(Literal.TrueLiteral)
           } else {
-            preds :+ filteredPredicates.reduce(And)
+            val newPred = filteredPredicates.reduce(And)
+            if (preds.exists(_.semanticEquals(newPred))) preds else preds :+ newPred
           }
         }
-        val newAttributes = attrs ++
+        state.attributes ++=
           AttributeSet(restoreCTEDefAttrs(projects.flatMap(_.references), attrMapping)) ++
           AttributeSet(restoreCTEDefAttrs(predicates.flatMap(_.references), attrMapping))
 
-        cteMap.update(ref.cteId, (cteDef, precedence, newPredicates, newAttributes))
-        plan.subqueriesAll.foreach(s => gatherPredicatesAndAttributes(s, cteMap, duplicated))
+        gatherFromOperationChainSubqueries(plan, cteMap, scope, path)
 
       case _ =>
-        plan.children.foreach(c => gatherPredicatesAndAttributes(c, cteMap, duplicated))
-        plan.subqueries.foreach(s => gatherPredicatesAndAttributes(s, cteMap, duplicated))
+        plan.children.zipWithIndex.foreach { case (child, index) =>
+          gatherPredicatesAndAttributes(child, cteMap, scope, childPath(path, index))
+        }
+        plan.subqueries.zipWithIndex.foreach { case (subquery, index) =>
+          gatherPredicatesAndAttributes(subquery, cteMap, scope, subqueryPath(path, index))
+        }
     }
+  }
+
+  /**
+   * Walks an already-processed PhysicalOperation chain and delegates each immediate subquery to
+   * gatherPredicatesAndAttributes. The operation's terminal reference is not processed again.
+   */
+  private def gatherFromOperationChainSubqueries(
+      plan: LogicalPlan, cteMap: CTEMap, scope: CTEIdScope, path: PlanPath): Unit = {
+    // Fully gather each immediate subquery, including its nested subqueries.
+    plan.subqueries.zipWithIndex.foreach { case (subquery, index) =>
+      gatherPredicatesAndAttributes(subquery, cteMap, scope, subqueryPath(path, index))
+    }
+
+    // Walk the rest of the collapsed chain without reprocessing its terminal CTE reference.
+    plan.children.zipWithIndex.foreach { case (child, index) =>
+      gatherFromOperationChainSubqueries(child, cteMap, scope, childPath(path, index))
+    }
+  }
+
+  /**
+   * Checks that every reference in a moved subquery remains valid at the target definition site.
+   * Definitions brought along by the subquery are local and need no outer visibility. Any other
+   * reference must resolve to the same definition occurrence in both the reference and target
+   * scopes, even when distinct occurrences share a CTE ID.
+   */
+  private def canMoveSubquery(
+      subquery: LogicalPlan, referenceScope: CTEIdScope, target: CTEState): Boolean = {
+    def check(current: LogicalPlan, scope: CTEIdScope, localStates: List[CTEState]): Boolean = {
+      current match {
+        case w: WithCTE =>
+          var scopeSoFar = scope
+          var locals = localStates
+          val definitionsValid = w.cteDefs.forall { cteDef =>
+            val valid = check(cteDef.child, scopeSoFar, locals)
+            val localState = CTEState(cteDef, scopeSoFar)
+            locals = localState :: locals
+            scopeSoFar = (cteDef.id, localState) :: scopeSoFar
+            valid
+          }
+          definitionsValid && check(w.plan, scopeSoFar, locals)
+
+        case ref: CTERelationRef =>
+          resolve(scope, ref.cteId) match {
+            case Some(state) if localStates.exists(_ eq state) => true
+            case Some(state) => resolve(target.definitionSiteScope, ref.cteId).exists(_ eq state)
+            case None => false
+          }
+
+        case _ =>
+          current.children.forall(check(_, scope, localStates)) &&
+            current.subqueries.forall(check(_, scope, localStates))
+      }
+    }
+
+    check(subquery, referenceScope, Nil)
   }
 
   /**
@@ -146,58 +216,84 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * row of the CTE definition.
    */
   private def pushdownPredicatesAndAttributes(
-      plan: LogicalPlan,
-      cteMap: CTEMap,
-      duplicated: mutable.Set[Long]): LogicalPlan = plan.transformWithSubqueries {
-    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _)
-        if !duplicated.contains(id) =>
-      val (_, _, newPreds, newAttrSet) = cteMap(id)
-      val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
-      if (!isTruePredicate(newPreds) &&
-          newPreds.exists(newPred => !preds.exists(_.semanticEquals(newPred)))) {
-        val basePlan = originalPlanWithPredicates match {
-          case Some((_, prevPreds)) if prevPreds.nonEmpty =>
-            // Remove the push-down filter this rule placed in the previous iteration. It is
-            // usually the top-level node of the child, but rules sharing the fixedPoint
-            // batches with this rule (e.g. `PushDownPredicates`) may have moved it deeper,
-            // possibly across attribute-renaming projections - hence the comparison is done
-            // on canonicalized conditions. If the previous push-down can no longer be found
-            // (another rule rewrote or merged it with other filters), the current child is
-            // used as-is: re-pushing the combined predicate is redundant but always
-            // semantics-preserving, since the disjunction of the reference predicates is
-            // valid for every row of the CTE definition.
-            removePushedDownFilter(child, prevPreds.reduce(Or))
-          case _ => child
-        }
-        val newCombinedPred = newPreds.reduce(Or)
-        val newChild = if (needsPruning(basePlan, newAttrSet)) {
-          Project(newAttrSet.toSeq, basePlan)
-        } else {
-          basePlan
-        }
-        cteDef.copy(child = Filter(newCombinedPred, newChild),
-          // The plan component of `originalPlanWithPredicates` is recorded but never read
-          // back: on the next iteration only the pushed predicates are consulted (see the
-          // `basePlan` computation above).
-          originalPlanWithPredicates = Some((basePlan, newPreds)))
-      } else if (needsPruning(cteDef.child, newAttrSet)) {
-        cteDef.copy(child = Project(newAttrSet.toSeq, cteDef.child))
-      } else {
-        cteDef
-      }
+      plan: LogicalPlan, cteMap: CTEMap): LogicalPlan = {
+    def rewrite(current: LogicalPlan, scope: CTEIdScope, path: PlanPath): LogicalPlan = {
+      current match {
+        case w: WithCTE =>
+          var scopeSoFar = scope
+          val newDefs = w.cteDefs.zipWithIndex.map { case (cteDef, index) =>
+            val cteDefPath = childPath(path, index)
+            val state = cteMap(cteDefPath)
+            val newChild = rewrite(cteDef.child, scopeSoFar, cteDefQueryPath(cteDefPath))
+            scopeSoFar = (cteDef.id, state) :: scopeSoFar
+            pushdownDefinition(cteDef, newChild, state)
+          }
+          w.copy(
+            plan = rewrite(w.plan, scopeSoFar, childPath(path, newDefs.size)), cteDefs = newDefs)
 
-    case cteRef @ CTERelationRef(cteId, _, output, _, _, _, _, _)
-        if !duplicated.contains(cteId) =>
-      val (cteDef, _, _, newAttrSet) = cteMap(cteId)
-      if (needsPruning(cteDef.child, newAttrSet)) {
-        val indices = newAttrSet.toSeq.map(cteDef.output.indexOf)
-        val newOutput = indices.map(output)
-        cteRef.copy(output = newOutput)
-      } else {
-        // Do not change the order of output columns if no column is pruned, in which case there
-        // might be no Project and the order is important.
-        cteRef
+        case ref: CTERelationRef =>
+          val state = resolveState(scope, ref)
+          val cteDef = state.cteDef
+          if (needsPruning(cteDef.child, state.attributes)) {
+            val indices = state.attributes.toSeq.map(cteDef.output.indexOf)
+            ref.copy(output = indices.map(ref.output))
+          } else {
+            // Do not change output order when no column is pruned; there might be no Project.
+            ref
+          }
+
+        case _ =>
+          var childIndex = 0
+          val withNewChildren = current.mapChildren { child =>
+            val newChild = rewrite(child, scope, childPath(path, childIndex))
+            childIndex += 1
+            newChild
+          }
+          var subqueryIndex = 0
+          withNewChildren.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+            case s: SubqueryExpression =>
+              val newPlan = rewrite(
+                s.plan, scope, subqueryPath(path, subqueryIndex))
+              subqueryIndex += 1
+              if (newPlan == s.plan) s else s.withNewPlan(newPlan)
+          }
       }
+    }
+
+    rewrite(plan, Nil, Nil)
+  }
+
+  private def pushdownDefinition(
+      cteDef: CTERelationDef, child: LogicalPlan, state: CTEState): CTERelationDef = {
+    val newPreds = state.predicates
+    val newAttrSet = state.attributes
+    val originalPlanWithPredicates = cteDef.originalPlanWithPredicates
+    val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
+    if (!isTruePredicate(newPreds) &&
+        newPreds.exists(newPred => !preds.exists(_.semanticEquals(newPred)))) {
+      val basePlan = originalPlanWithPredicates match {
+        case Some((_, prevPreds)) if prevPreds.nonEmpty =>
+          // Remove the previous push-down wherever shared predicate-pushdown rules moved it. If
+          // it cannot be found, re-pushing the disjunction is redundant but semantics-preserving.
+          removePushedDownFilter(child, prevPreds.reduce(Or))
+        case _ => child
+      }
+      val newCombinedPred = newPreds.reduce(Or)
+      val newChild = if (needsPruning(basePlan, newAttrSet)) {
+        Project(newAttrSet.toSeq, basePlan)
+      } else {
+        basePlan
+      }
+      cteDef.copy(child = Filter(newCombinedPred, newChild),
+        // Only the predicates are read back on the next iteration, not the recorded plan.
+        originalPlanWithPredicates = Some((basePlan, newPreds)))
+    } else if (needsPruning(child, newAttrSet)) {
+      cteDef.copy(child = Project(newAttrSet.toSeq, child))
+    } else if (child != cteDef.child) {
+      cteDef.copy(child = child)
+    } else {
+      cteDef
+    }
   }
 
   /**
