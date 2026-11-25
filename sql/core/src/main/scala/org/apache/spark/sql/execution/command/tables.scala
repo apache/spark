@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedPersistentView, ResolvedTable, ResolvedTempView, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedPersistentView, ResolvedTable, ResolvedTempView, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -960,15 +960,21 @@ case class ShowTablesCommand(
       // Show the information of tables.
       val tables =
         tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-      tables.map { tableIdent =>
+      tables.flatMap { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
         val isTemp = catalog.isTempView(tableIdent)
         if (isExtended) {
-          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
-          Row(database, tableName, isTemp, s"$information\n")
+          // A table can be dropped between `listTables` and loading its metadata. Skip it, as
+          // if it had been dropped before the listing, instead of failing the whole command.
+          try {
+            val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
+            Some(Row(database, tableName, isTemp, s"$information\n"))
+          } catch {
+            case _: NoSuchTableException => None
+          }
         } else {
-          Row(database, tableName, isTemp)
+          Some(Row(database, tableName, isTemp))
         }
       }
     } else {

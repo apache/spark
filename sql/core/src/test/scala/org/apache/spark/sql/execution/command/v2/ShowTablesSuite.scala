@@ -21,7 +21,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, InMemoryRelationCatalog, TableSummary}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
@@ -138,6 +138,22 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("SPARK-62356: show table extended skips a table dropped after listing") {
+    val staleCatalog = "stale_listing_catalog"
+    withSQLConf(s"spark.sql.catalog.$staleCatalog" -> classOf[StaleListingCatalog].getName) {
+      withNamespaceAndTable("ns", "tbl", staleCatalog) { t =>
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+        // The catalog lists `StaleListingCatalog.droppedTable`, which cannot be loaded.
+        checkAnswer(
+          sql(s"SHOW TABLES IN $staleCatalog.ns").select("tableName"),
+          Seq(Row("tbl"), Row(StaleListingCatalog.droppedTable)))
+        checkAnswer(
+          sql(s"SHOW TABLE EXTENDED IN $staleCatalog.ns LIKE '*'").select("tableName"),
+          Row("tbl"))
+      }
+    }
+  }
+
   override protected def extendedPartInNonPartedTableError(
       catalog: String,
       namespace: String,
@@ -159,4 +175,17 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
        | |-- data: string (nullable = true)""".stripMargin
 
   protected override def selectCommandSchema: Array[String] = Array("id", "data")
+}
+
+/**
+ * A catalog whose `listTables` also returns a table that no longer exists, as if it had been
+ * dropped between listing the namespace and loading the table.
+ */
+class StaleListingCatalog extends InMemoryCatalog {
+  override def listTables(namespace: Array[String]): Array[Identifier] =
+    super.listTables(namespace) :+ Identifier.of(namespace, StaleListingCatalog.droppedTable)
+}
+
+object StaleListingCatalog {
+  val droppedTable = "dropped_tbl"
 }

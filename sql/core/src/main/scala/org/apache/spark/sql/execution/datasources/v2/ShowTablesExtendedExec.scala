@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, ToPrettyString}
@@ -47,14 +47,22 @@ case class ShowTablesExtendedExec(
     // fetch tables
     // TODO We need a new listTable overload that takes a pattern string.
     val tables = catalog.listTables(namespace.toArray)
-    tables.map { tableIdent =>
+    tables.foreach { tableIdent =>
       if (StringUtils.filterPattern(Seq(tableIdent.name()), pattern).nonEmpty) {
-        val table = catalog.loadTable(tableIdent)
-        val information = getTableDetails(catalog.name, tableIdent, table)
-        rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
-          s"$information\n")
+        // A table can be dropped between `listTables` and `loadTable`. Skip it, as if it had
+        // been dropped before the listing, instead of failing the whole command.
+        val tableOpt = try {
+          Some(catalog.loadTable(tableIdent))
+        } catch {
+          case _: NoSuchTableException => None
+        }
+        tableOpt.foreach { table =>
+          val information = getTableDetails(catalog.name, tableIdent, table)
+          rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
+            s"$information\n")
         }
       }
+    }
 
     // fetch temp views, includes: global temp view, local temp view
     val sessionCatalog = session.sessionState.catalog
