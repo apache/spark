@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, Coalesce, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.connector.catalog.functions.BucketFunction
+import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions.{coalesce, col}
@@ -486,5 +488,126 @@ class FullOuterJoinPartitioningSuite
           .forall(_.isInstanceOf[HashPartitioning]), key)
       }
     }
+  }
+
+  test("FULL OUTER keyed partitioning preserves the layout and makes merged keys nullable") {
+    val left = keyedLayout(keyedLeft)
+    val right = keyedLayout(keyedRight)
+    Seq(HASH_ROUTING, ROUTING_LOST).foreach { origin =>
+      Seq(
+        left.withLayout(_.copy(isCollapsed = true, unknownKeysOrigin = Some(origin))) -> right,
+        left -> right.withLayout(_.copy(isCollapsed = true, unknownKeysOrigin = Some(origin))))
+        .foreach { case (l, r) =>
+          val ps = PartitioningCollection.flatten(keyedJoin(l, r).outputPartitioning)
+            .map(_.asInstanceOf[KeyedPartitioning])
+          val nl = keyedLeft.withNullability(true)
+          val nr = keyedRight.withNullability(true)
+          assert(ps.map(_.expressions) ==
+            Seq(Seq(Coalesce(Seq(nl, nr))), Seq(Coalesce(Seq(nr, nl)))))
+          assert(ps.forall(_.layout eq ps.head.layout))
+          assert(ps.forall(p => p.partitionKeys == left.partitionKeys &&
+            p.keyDataTypes == left.keyDataTypes && p.numPartitions == 2 && p.isGrouped &&
+            p.isCollapsed && p.unknownKeysOrigin.contains(origin) && p.ungroupingOrigin.isEmpty))
+        }
+    }
+  }
+
+  test("FULL OUTER keyed partitioning coalesces transform arguments, not transform results") {
+    val left = TransformExpression(BucketFunction, Seq(keyedLeft), Some(4))
+    val right = TransformExpression(BucketFunction, Seq(keyedRight), Some(4))
+    val ps = PartitioningCollection.flatten(keyedJoin(
+      KeyedPartitioning(Seq(left), Seq(InternalRow(1), InternalRow(2))),
+      KeyedPartitioning(Seq(right), Seq(InternalRow(1), InternalRow(2)))).outputPartitioning)
+      .map(_.asInstanceOf[KeyedPartitioning])
+    val nl = keyedLeft.withNullability(true)
+    val nr = keyedRight.withNullability(true)
+    assert(ps.map(_.expressions) == Seq(
+      Seq(left.copy(children = Seq(Coalesce(Seq(nl, nr))))),
+      Seq(left.copy(children = Seq(Coalesce(Seq(nr, nl)))))))
+  }
+
+  test("FULL OUTER keyed partitioning pairs every compatible collection member") {
+    val alias = keyedLeft.newInstance()
+    val left = PartitioningCollection.fromPartitionings(
+      Seq(keyedLayout(keyedLeft), keyedLayout(alias)))
+    val ps = PartitioningCollection.flatten(keyedJoin(left, keyedLayout(keyedRight),
+      Seq(keyedLeft, alias), Seq(keyedRight, keyedRight)).outputPartitioning)
+      .map(_.asInstanceOf[KeyedPartitioning])
+    assert(ps.size == 4)
+    assert(ps.map(_.expressions).distinct.size == 4)
+    assert(ps.forall(_.layout eq ps.head.layout))
+  }
+
+  test("FULL OUTER keyed partitioning compares actual key order without regrouping") {
+    // createShuffleSpec would sort the reversed keys under this config, hiding the mismatch.
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val left = keyedLayout(keyedLeft)
+      val right = keyedLayout(keyedRight)
+      Seq(
+        right.withLayout(l => l.copy(partitionKeys = l.partitionKeys.reverse)),
+        KeyedPartitioning(Seq(keyedRight), Seq(InternalRow(1L), InternalRow(3L))),
+        KeyedPartitioning(Seq(keyedRight), Seq(InternalRow(1L))))
+        .foreach { r =>
+          assert(keyedJoin(left, r).outputPartitioning == UnknownPartitioning(2))
+        }
+    }
+  }
+
+  test("FULL OUTER keyed partitioning rejects split and ungrouped layouts") {
+    val left = keyedLayout(keyedLeft)
+    val right = keyedLayout(keyedRight)
+    Seq(
+      left.withLayout(_.copy(isGrouped = false)) ->
+        right.withLayout(_.copy(isGrouped = false)),
+      left.withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN))) ->
+        right.withLayout(_.copy(ungroupingOrigin = Some(REPLICATED_FOR_JOIN))))
+      .foreach { case (l, r) =>
+        assert(keyedJoin(l, r).outputPartitioning == UnknownPartitioning(2))
+      }
+  }
+
+  test("FULL OUTER keyed partitioning rejects unsupported expression shapes and transforms") {
+    val left = TransformExpression(BucketFunction, Seq(keyedLeft), Some(4))
+    val right = TransformExpression(BucketFunction, Seq(keyedRight), Some(4))
+    val reducedLeft = left.copy(reducedWith = Some(right.copy(numBucketsOpt = Some(6)).functionId))
+    val reducedRight = right.copy(numBucketsOpt = Some(6), reducedWith = Some(left.functionId))
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    Seq(
+      left -> right.copy(numBucketsOpt = Some(8)),
+      left -> right.copy(storedKey = true),
+      reducedLeft -> reducedRight,
+      left.copy(children = Seq(Add(keyedLeft, Literal(1L)))) ->
+        right.copy(children = Seq(Add(keyedRight, Literal(1L)))),
+      left.copy(children = Seq(keyedLeft, keyedLeft)) ->
+        right.copy(children = Seq(keyedRight, keyedRight)))
+      .foreach { case (l, r) =>
+        assert(keyedJoin(KeyedPartitioning(Seq(l), keys), KeyedPartitioning(Seq(r), keys))
+          .outputPartitioning == UnknownPartitioning(2))
+      }
+    assert(keyedJoin(keyedLayout(keyedLeft.newInstance()), keyedLayout(keyedRight))
+      .outputPartitioning == UnknownPartitioning(2))
+    assert(keyedJoin(
+      KeyedPartitioning(Seq(Add(keyedLeft, Literal(1L))), Seq(InternalRow(1L), InternalRow(2L))),
+      KeyedPartitioning(Seq(Add(keyedRight, Literal(1L))), Seq(InternalRow(1L), InternalRow(2L))))
+      .outputPartitioning == UnknownPartitioning(2))
+  }
+
+  private val keyedLeft = AttributeReference("leftKey", LongType, nullable = false)()
+  private val keyedRight = AttributeReference("rightKey", LongType, nullable = false)()
+
+  private def keyedLayout(key: Attribute): KeyedPartitioning =
+    KeyedPartitioning(Seq(key), Seq(InternalRow(1L), InternalRow(2L)))
+
+  private def keyedJoin(
+      left: Partitioning,
+      right: Partitioning,
+      leftKeys: Seq[Attribute] = Seq(keyedLeft),
+      rightKeys: Seq[Attribute] = Seq(keyedRight)): SortMergeJoinExec = {
+    // Empty scans let us exercise the real join's metadata guards with layouts the planner would
+    // normally repair before execution, such as mismatched key orders and ungrouped inputs.
+    val rows = spark.sparkContext.emptyRDD[InternalRow]
+    SortMergeJoinExec(leftKeys, rightKeys, FullOuter, None,
+      RDDScanExec(leftKeys.distinct, rows, "left", left),
+      RDDScanExec(rightKeys.distinct, rows, "right", right))
   }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Q
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, BloomFilterMightContain, Descending, DynamicPruningExpression, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
-import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, FullOuter, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
@@ -11128,8 +11128,7 @@ class KeyGroupedPartitioningSuite
             df.queryExecution.executedPlan)
       }
 
-      // FULL OUTER exposes UnknownPartitioning, so it is already safe regardless of the shuffle
-      // direction; correctness is the guard.
+      // Projecting only t.id discards the FULL OUTER join's merged-key partitioning claim.
       val fullQuery =
         """
           |SELECT r.id, u.data
@@ -11143,9 +11142,7 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df, expected)
         assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
           Seq(true, true))
-        // The downstream join must not storage-partition on the first join's unknown-keyed
-        // layout; FULL OUTER keeps it safe only because the join output exposes
-        // UnknownPartitioning.
+        // The downstream join must shuffle the projection of just one side's key.
         assert(collectGroupPartitions(df.queryExecution.executedPlan).isEmpty,
           s"downstream join must not storage-partition on an unknown-keyed layout, got: " +
             df.queryExecution.executedPlan)
@@ -13007,6 +13004,125 @@ class KeyGroupedPartitioningSuite
         s"the aggregate's side is grouped over the join:\n$plan")
     }
   }
+
+  Seq(
+    ("SMJ", "MERGE(l, r)", "false", classOf[SortMergeJoinExec]),
+    ("SHJ", "SHUFFLE_HASH(r)", "false", classOf[ShuffledHashJoinExec]),
+    ("AQE", "MERGE(l, r)", "true", classOf[SortMergeJoinExec]))
+    .foreach { case (name, hint, adaptive, joinClass) =>
+      test(s"FULL OUTER keyed partitioning: USING aggregate with $name") {
+        withSQLConf(fullOuterKeyedConfs :+
+            (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive): _*) {
+          val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+          createTable("fo1", cols, Array(identity("id")))
+          createTable("fo2", cols, Array(identity("id")))
+          sql("INSERT INTO testcat.ns.fo1 VALUES " +
+            "(NULL, 'ln'), (1, 'l1'), (2, 'l2a'), (2, 'l2b')")
+          sql("INSERT INTO testcat.ns.fo2 VALUES (NULL, 'rn'), (2, 'r2'), (3, 'r3')")
+          val df = sql(
+            s"""SELECT /*+ $hint */ id, count(*)
+               |FROM testcat.ns.fo1 l FULL OUTER JOIN testcat.ns.fo2 r USING (id)
+               |GROUP BY id""".stripMargin)
+          checkAnswer(df, Seq(Row(null, 2L), Row(1, 1L), Row(2, 2L), Row(3, 1L)))
+          val plan = df.queryExecution.executedPlan
+          val joins = collect(plan) { case j: ShuffledJoin => j }
+          assert(joins.size == 1 && joinClass.isInstance(joins.head), plan)
+          assert(allExchanges(plan).isEmpty, plan)
+          val ps = keyedPartitioningsOf(joins)
+          assert(ps.size == 2 && ps.forall(_.numPartitions > 1), plan)
+          assert(satisfiesRequirements(plan), plan)
+        }
+      }
+    }
+
+  Seq(
+    ("bucket", bucket(4, "k"), LongType, (0 to 5).map(_.toString)),
+    ("days", days("k"), TimestampType, Seq(
+      "TIMESTAMP '2020-01-01 01:00:00'", "TIMESTAMP '2020-01-01 02:00:00'",
+      "TIMESTAMP '2020-01-02 00:00:00'", "TIMESTAMP '2020-01-03 00:00:00'",
+      "TIMESTAMP '2020-01-04 00:00:00'", "TIMESTAMP '2020-01-05 00:00:00'")))
+    .foreach { case (name, partition, keyType, keys) =>
+      test(s"FULL OUTER keyed partitioning: $name transform and merged-key consumers") {
+        withSQLConf(fullOuterKeyedConfs: _*) {
+          val cols = Array(Column.create("k", keyType), Column.create("data", StringType))
+          Seq("fo1", "fo2", "fo3").foreach(createTable(_, cols, Array(partition)))
+          sql(s"INSERT INTO testcat.ns.fo1 VALUES " +
+            s"(${keys(0)}, 'l0'), (${keys(1)}, 'l1'), (${keys(2)}, 'l2a'), (${keys(2)}, 'l2b')")
+          sql(s"INSERT INTO testcat.ns.fo2 VALUES " +
+            s"(${keys(2)}, 'r2'), (${keys(3)}, 'r3'), (${keys(4)}, 'r4')")
+          sql(s"INSERT INTO testcat.ns.fo3 VALUES (${keys(1)}, 't1'), (${keys(5)}, 't5')")
+          Seq("coalesce(l.k, r.k)", "coalesce(r.k, l.k)").foreach { merged =>
+            val joined = s"SELECT $merged AS k FROM testcat.ns.fo1 l " +
+              "FULL OUTER JOIN testcat.ns.fo2 r ON l.k = r.k"
+            checkFullOuterKeyedQuery(s"SELECT k, count(*) FROM ($joined) GROUP BY k")
+          }
+          val joined = "SELECT coalesce(l.k, r.k) AS k FROM testcat.ns.fo1 l " +
+            "FULL OUTER JOIN testcat.ns.fo2 r ON l.k = r.k"
+          checkFullOuterKeyedQuery(
+            s"SELECT k, count(*) OVER (PARTITION BY k) FROM ($joined)")
+          checkFullOuterKeyedQuery(s"SELECT k, count(*) FROM ($joined) j " +
+            "FULL OUTER JOIN testcat.ns.fo3 USING (k) GROUP BY k")
+        }
+      }
+    }
+
+  test("FULL OUTER keyed partitioning retains unknown keys and shuffles a subset aggregate") {
+    withSQLConf(fullOuterKeyedConfs ++ Seq(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "false"): _*) {
+      val cols = Array(Column.create("id", IntegerType), Column.create("g", IntegerType))
+      createTable("fo1", cols, Array(identity("id"), identity("g")))
+      sql("INSERT INTO testcat.ns.fo1 VALUES (1, 1), (2, 1)")
+      withTable("fo_unknown") {
+        sql("CREATE TABLE fo_unknown (id INT, g INT) USING parquet")
+        sql("INSERT INTO fo_unknown VALUES (2, 1), (3, 1), (4, 1), (5, 1), (3, 2)")
+        val joined = "testcat.ns.fo1 FULL OUTER JOIN fo_unknown USING (id, g)"
+        val fullKeys = sql(s"SELECT id, g, count(*) FROM $joined GROUP BY id, g")
+        checkAnswer(fullKeys, Seq(
+          Row(1, 1, 1L), Row(2, 1, 1L), Row(3, 1, 1L),
+          Row(4, 1, 1L), Row(5, 1, 1L), Row(3, 2, 1L)))
+        val fullPlan = fullKeys.queryExecution.executedPlan
+        assert(allExchanges(fullPlan).size == 1, fullPlan)
+        val ps = keyedPartitioningsOf(collect(fullPlan) { case j: ShuffledJoin => j })
+        assert(ps.size == 2 && ps.forall(_.unknownKeysOrigin.contains(HASH_ROUTING)), fullPlan)
+        assert(satisfiesRequirements(fullPlan), fullPlan)
+
+        val subset = sql(s"SELECT g, count(*) FROM $joined GROUP BY g")
+        checkAnswer(subset, Seq(Row(1, 5L), Row(2, 1L)))
+        val subsetPlan = subset.queryExecution.executedPlan
+        assert(allExchanges(subsetPlan).size == 2, subsetPlan)
+        assert(satisfiesRequirements(subsetPlan), subsetPlan)
+      }
+    }
+  }
+
+  private val fullOuterKeyedConfs = Seq(
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+    SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+    SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+    SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+    SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+    SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+    SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+    SQLConf.SHUFFLE_PARTITIONS.key -> "5")
+
+  private def checkFullOuterKeyedQuery(query: String): Unit = {
+    // Disable storage partitioning for the reference answer so it cannot reuse the same claim.
+    val expected = withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+      sql(query).collect().toSeq
+    }
+    val df = sql(query)
+    checkAnswer(df, expected)
+    val plan = df.queryExecution.executedPlan
+    val joins = collect(plan) { case j: ShuffledJoin if j.joinType == FullOuter => j }
+    assert(joins.nonEmpty, plan)
+    assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).size == 2), plan)
+    assert(joins.forall(_.outputPartitioning.numPartitions > 1), plan)
+    assert(allExchanges(plan).isEmpty, plan)
+    assert(satisfiesRequirements(plan), plan)
+  }
+
 }
 
 /**
