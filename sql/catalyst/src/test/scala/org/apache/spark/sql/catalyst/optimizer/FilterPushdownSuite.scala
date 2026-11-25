@@ -1013,6 +1013,85 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(outerQuery), outerAnswer)
   }
 
+  test("SPARK-62143: a condition that can fail is not pushed through a generate that can drop " +
+    "rows") {
+    // The division is built in ANSI mode, where it can fail, and is not throwable. The generate
+    // outputs no row for an empty array, so below it the division would see rows it never sees
+    // above it, even though nothing is written before it. A condition that can not fail is still
+    // pushed.
+    val divide = Divide($"b", $"a", NumericEvalContext(EvalMode.ANSI))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(divide > 1 && $"b" > 1)
+      .analyze
+    val correctAnswer = testRelationWithArrayType.where($"b" > 1)
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(divide > 1)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // With the legacy conf, only a throwable condition stays above the generate, as before.
+    withSQLConf(SQLConf.LEGACY_PUSH_FAILABLE_FILTERS_THROUGH_GENERATE.key -> "true") {
+      val throwable = IsNull(RaiseError(Literal("boom")))
+      val legacyQuery = testRelationWithArrayType
+        .generate(Explode($"c_arr"), alias = Some("arr"))
+        .where(divide > 1 && throwable)
+        .analyze
+      val legacyAnswer = testRelationWithArrayType.where(divide > 1)
+        .generate(Explode($"c_arr"), alias = Some("arr"))
+        .where(throwable)
+        .analyze
+      comparePlans(Optimize.execute(legacyQuery), legacyAnswer)
+    }
+  }
+
+  test("SPARK-62143: a dynamic pruning or runtime filter is pushed through a generate that can " +
+    "drop rows unless its key can fail") {
+    // Their subqueries and bloom filters are computed once, wherever the filters are, so only
+    // their keys could fail on the rows the generate drops.
+    val Seq(a, b, _) = testRelationWithArrayType.output
+    val generate = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr")).analyze.asInstanceOf[Generate]
+    def dynamicPruning(key: Expression): Expression = DynamicPruningSubquery(
+      key, testRelation1, testRelation1.output, Seq(0), onlyInBroadcast = false)()
+    val runtimeFilters = dynamicPruning(a) &&
+      BloomFilterMightContain(ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(b))) &&
+      PerPartitionRuntimeFilterSubquery(b, testRelation1, PerPartitionSizing(1L, None, 1L))
+    comparePlans(Optimize.execute(Filter(runtimeFilters, generate)),
+      generate.copy(child = Filter(runtimeFilters, generate.child)))
+
+    // A FLOAT or DOUBLE key comes from the join normalized (see `NormalizeFloatingNumbers`).
+    val doubleRelation = LocalRelation($"x".double, $"x_arr".array(IntegerType))
+    val doubleGenerate = doubleRelation
+      .generate(Explode($"x_arr"), alias = Some("arr")).analyze.asInstanceOf[Generate]
+    val normalizedKey =
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(doubleRelation.output.head))
+    val buildSide = LocalRelation($"y".double)
+    val normalizedFilters = DynamicPruningSubquery(
+      normalizedKey, buildSide, buildSide.output, Seq(0), onlyInBroadcast = false)() &&
+      BloomFilterMightContain(
+        ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(normalizedKey))) &&
+      PerPartitionRuntimeFilterSubquery(normalizedKey, buildSide, PerPartitionSizing(1L, None, 1L))
+    comparePlans(Optimize.execute(Filter(normalizedFilters, doubleGenerate)),
+      doubleGenerate.copy(child = Filter(normalizedFilters, doubleGenerate.child)))
+
+    // The key is built in ANSI mode, where it can fail.
+    val failingKey = Filter(
+      dynamicPruning(Add(a, Literal(1), NumericEvalContext(EvalMode.ANSI))), generate)
+    comparePlans(Optimize.execute(failingKey), failingKey)
+  }
+
+  test("SPARK-62143: a condition that can fail is not pushed through a script transformation") {
+    // The division is built in ANSI mode, where it can fail. The script can output no row for its
+    // input rows. Its output replaces its input, so only a condition that reads no column could be
+    // pushed below it.
+    val script = ScriptTransformation("cat", Seq($"value".string), testRelation,
+      ScriptInputOutputSchema(Nil, Nil, None, None, Nil, Nil, None, None, schemaLess = false))
+    val divide = Divide(Literal(1.0), Literal(0.0), NumericEvalContext(EvalMode.ANSI))
+    val query = script.where(divide > 1.0)
+    comparePlans(Optimize.execute(query), query)
+  }
+
   test("SPARK-60633: a throwable condition is not pushed through an aggregate ahead of the " +
     "conditions before it") {
     val originalQuery = testRelation.groupBy($"a")($"a", count($"b") as "c")

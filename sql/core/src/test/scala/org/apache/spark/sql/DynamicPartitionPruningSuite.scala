@@ -2636,6 +2636,25 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("SPARK-62143: DPP through a generate on a DOUBLE partition key") {
+    withTable("fact_generate", "dim_generate") {
+      spark.range(40).select($"id", array($"id") as "items", ($"id" % 4).cast("double") as "k")
+        .write.partitionBy("k").format(tableFormat).saveAsTable("fact_generate")
+      spark.range(4).select($"id".cast("double") as "k", $"id" as "filterCol")
+        .write.format(tableFormat).saveAsTable("dim_generate")
+      // The DPP filter takes its pruning key from the join, where `NormalizeFloatingNumbers`
+      // has normalized the DOUBLE key, and is pushed below the generate to reach the scan.
+      val df = sql(
+        """
+          |SELECT f.id, f.i FROM (
+          |  SELECT id, k, i FROM fact_generate LATERAL VIEW explode(items) t AS i) f
+          |JOIN dim_generate d ON f.k = d.k WHERE d.filterCol = 3
+        """.stripMargin)
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      checkAnswer(df, (3L until 40L by 4).map(i => Row(i, i)))
+    }
+  }
+
   /**
    * Check the static scan metrics with and without DPP
    */
