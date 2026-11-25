@@ -550,6 +550,28 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (left, right) => Lcm(left, right), LongType, LongType)
   }
 
+  test("gcd and lcm input types") {
+    // Narrower integral arguments are widened to BIGINT.
+    checkEvaluation(Gcd(Literal(24.toByte), Literal(36.toShort)), 12L)
+    checkEvaluation(Lcm(Literal(4), Literal(6L)), 12L)
+    checkEvaluation(Gcd(Literal(Int.MinValue), Literal(0)), 2147483648L)
+    checkEvaluation(Lcm(Literal(Int.MaxValue), Literal(Int.MaxValue - 2)),
+      Int.MaxValue.toLong * (Int.MaxValue - 2))
+    Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (left, right) => Gcd(left, right), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (left, right) => Lcm(left, right), dt, dt)
+    }
+    // Fractional arguments fail type checking instead of being truncated.
+    Seq(Literal(7.5), Literal(7.5f), Literal(BigDecimal("7.5"))).foreach { fractional =>
+      assert(Gcd(fractional, Literal(15L)).checkInputDataTypes().isFailure)
+      assert(Gcd(Literal(15L), fractional).checkInputDataTypes().isFailure)
+      assert(Lcm(fractional, Literal(3L)).checkInputDataTypes().isFailure)
+      assert(Lcm(Literal(3L), fractional).checkInputDataTypes().isFailure)
+    }
+  }
+
   test("rint") {
     testUnary(Rint, math.rint)
     checkConsistencyBetweenInterpretedAndCodegen(Rint, DoubleType)

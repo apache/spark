@@ -814,141 +814,299 @@ Project [positive(cast(null as double)) AS (+ NULL)#x]
 -- !query
 SELECT gcd(24, 36)
 -- !query analysis
-Project [gcd(cast(24 as bigint), cast(36 as bigint), false) AS gcd(24, 36)#xL]
+Project [gcd(24, 36, false) AS gcd(24, 36)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(17, 5)
 -- !query analysis
-Project [gcd(cast(17 as bigint), cast(5 as bigint), false) AS gcd(17, 5)#xL]
+Project [gcd(17, 5, false) AS gcd(17, 5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(-24, 36)
 -- !query analysis
-Project [gcd(cast(-24 as bigint), cast(36 as bigint), false) AS gcd(-24, 36)#xL]
+Project [gcd(-24, 36, false) AS gcd(-24, 36)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(24, -36)
 -- !query analysis
-Project [gcd(cast(24 as bigint), cast(-36 as bigint), false) AS gcd(24, -36)#xL]
+Project [gcd(24, -36, false) AS gcd(24, -36)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(-24, -36)
 -- !query analysis
-Project [gcd(cast(-24 as bigint), cast(-36 as bigint), false) AS gcd(-24, -36)#xL]
+Project [gcd(-24, -36, false) AS gcd(-24, -36)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(0, 0)
 -- !query analysis
-Project [gcd(cast(0 as bigint), cast(0 as bigint), false) AS gcd(0, 0)#xL]
+Project [gcd(0, 0, false) AS gcd(0, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(0, -7)
 -- !query analysis
-Project [gcd(cast(0 as bigint), cast(-7 as bigint), false) AS gcd(0, -7)#xL]
+Project [gcd(0, -7, false) AS gcd(0, -7)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(7, 0)
 -- !query analysis
-Project [gcd(cast(7 as bigint), cast(0 as bigint), false) AS gcd(7, 0)#xL]
+Project [gcd(7, 0, false) AS gcd(7, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(null, 5)
 -- !query analysis
-Project [gcd(cast(null as bigint), cast(5 as bigint), false) AS gcd(NULL, 5)#xL]
+Project [gcd(cast(null as int), 5, false) AS gcd(NULL, 5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT gcd(5, null)
 -- !query analysis
-Project [gcd(cast(5 as bigint), cast(null as bigint), false) AS gcd(5, NULL)#xL]
+Project [gcd(5, cast(null as int), false) AS gcd(5, NULL)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT))
+-- !query analysis
+Project [gcd(cast(24 as tinyint), cast(36 as smallint), false) AS gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(7.5, 15)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "gcd(7.5, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(7.5D, 15)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(7.5D, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(15, 7.5D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(15, 7.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(15, 7.5D)"
+  } ]
+}
 
 
 -- !query
 SELECT lcm(4, 6)
 -- !query analysis
-Project [lcm(cast(4 as bigint), cast(6 as bigint), false) AS lcm(4, 6)#xL]
+Project [lcm(4, 6, false) AS lcm(4, 6)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(17, 5)
 -- !query analysis
-Project [lcm(cast(17 as bigint), cast(5 as bigint), false) AS lcm(17, 5)#xL]
+Project [lcm(17, 5, false) AS lcm(17, 5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(-4, 6)
 -- !query analysis
-Project [lcm(cast(-4 as bigint), cast(6 as bigint), false) AS lcm(-4, 6)#xL]
+Project [lcm(-4, 6, false) AS lcm(-4, 6)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(4, -6)
 -- !query analysis
-Project [lcm(cast(4 as bigint), cast(-6 as bigint), false) AS lcm(4, -6)#xL]
+Project [lcm(4, -6, false) AS lcm(4, -6)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(-4, -6)
 -- !query analysis
-Project [lcm(cast(-4 as bigint), cast(-6 as bigint), false) AS lcm(-4, -6)#xL]
+Project [lcm(-4, -6, false) AS lcm(-4, -6)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(0, 0)
 -- !query analysis
-Project [lcm(cast(0 as bigint), cast(0 as bigint), false) AS lcm(0, 0)#xL]
+Project [lcm(0, 0, false) AS lcm(0, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(0, 5)
 -- !query analysis
-Project [lcm(cast(0 as bigint), cast(5 as bigint), false) AS lcm(0, 5)#xL]
+Project [lcm(0, 5, false) AS lcm(0, 5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(5, 0)
 -- !query analysis
-Project [lcm(cast(5 as bigint), cast(0 as bigint), false) AS lcm(5, 0)#xL]
+Project [lcm(5, 0, false) AS lcm(5, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(null, 5)
 -- !query analysis
-Project [lcm(cast(null as bigint), cast(5 as bigint), false) AS lcm(NULL, 5)#xL]
+Project [lcm(cast(null as int), 5, false) AS lcm(NULL, 5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT lcm(5, null)
 -- !query analysis
-Project [lcm(cast(5 as bigint), cast(null as bigint), false) AS lcm(5, NULL)#xL]
+Project [lcm(5, cast(null as int), false) AS lcm(5, NULL)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT lcm(CAST(4 AS TINYINT), 6L)
+-- !query analysis
+Project [lcm(cast(4 as tinyint), 6, false) AS lcm(CAST(4 AS TINYINT), 6)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(2.9, 3)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "lcm(2.9, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(2.9D, 3)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(2.9D, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(3, 2.9D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(3, 2.9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(3, 2.9D)"
+  } ]
+}
 
 
 -- !query

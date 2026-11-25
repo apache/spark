@@ -162,6 +162,11 @@ SELECT gcd(0, -7);
 SELECT gcd(7, 0);
 SELECT gcd(null, 5);
 SELECT gcd(5, null);
+SELECT gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT));
+-- Fractional arguments fail type checking instead of being truncated.
+SELECT gcd(7.5, 15);
+SELECT gcd(7.5D, 15);
+SELECT gcd(15, 7.5D);
 
 -- Lcm
 SELECT lcm(4, 6);
@@ -176,6 +181,11 @@ SELECT lcm(0, 5);
 SELECT lcm(5, 0);
 SELECT lcm(null, 5);
 SELECT lcm(5, null);
+SELECT lcm(CAST(4 AS TINYINT), 6L);
+-- Fractional arguments fail type checking instead of being truncated.
+SELECT lcm(2.9, 3);
+SELECT lcm(2.9D, 3);
+SELECT lcm(3, 2.9D);
 -- Dividing by the gcd before multiplying keeps a representable result in range: the naive product
 -- 4611686018427387904 * 2 would overflow, while the least common multiple does not.
 SELECT lcm(4611686018427387904L, 2L);

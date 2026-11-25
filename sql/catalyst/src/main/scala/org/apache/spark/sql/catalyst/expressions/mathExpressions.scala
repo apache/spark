@@ -794,7 +794,8 @@ case class Gcd(
   def this(left: Expression, right: Expression) =
     this(left, right, ansiEnabled = SQLConf.get.ansiEnabled)
 
-  override def inputTypes: Seq[DataType] = Seq(LongType, LongType)
+  // Not LongType: an implicit cast would silently truncate a fractional argument.
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegralType)
 
   override def dataType: DataType = LongType
 
@@ -809,7 +810,8 @@ case class Gcd(
 
   protected override def nullSafeEval(left: Any, right: Any): Any = {
     MathUtils.gcd(
-      left.asInstanceOf[Long], right.asInstanceOf[Long], ansiEnabled, getContextOrNull())
+      left.asInstanceOf[Number].longValue, right.asInstanceOf[Number].longValue, ansiEnabled,
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -818,7 +820,7 @@ case class Gcd(
     nullSafeCodeGen(ctx, ev, (leftValue, rightValue) => {
       s"""
         java.lang.Long $result = org.apache.spark.sql.catalyst.util.MathUtils.gcd(
-          $leftValue, $rightValue, $ansiEnabled, $errorContext);
+          (long) $leftValue, (long) $rightValue, $ansiEnabled, $errorContext);
         if ($result == null) {
           ${ev.isNull} = true;
         } else {
@@ -860,7 +862,8 @@ case class Lcm(
   def this(left: Expression, right: Expression) =
     this(left, right, ansiEnabled = SQLConf.get.ansiEnabled)
 
-  override def inputTypes: Seq[DataType] = Seq(LongType, LongType)
+  // Not LongType: an implicit cast would silently truncate a fractional argument.
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegralType)
 
   override def dataType: DataType = LongType
 
@@ -875,7 +878,8 @@ case class Lcm(
 
   protected override def nullSafeEval(left: Any, right: Any): Any = {
     MathUtils.lcm(
-      left.asInstanceOf[Long], right.asInstanceOf[Long], ansiEnabled, getContextOrNull())
+      left.asInstanceOf[Number].longValue, right.asInstanceOf[Number].longValue, ansiEnabled,
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -884,7 +888,7 @@ case class Lcm(
     nullSafeCodeGen(ctx, ev, (leftValue, rightValue) => {
       s"""
         java.lang.Long $result = org.apache.spark.sql.catalyst.util.MathUtils.lcm(
-          $leftValue, $rightValue, $ansiEnabled, $errorContext);
+          (long) $leftValue, (long) $rightValue, $ansiEnabled, $errorContext);
         if ($result == null) {
           ${ev.isNull} = true;
         } else {

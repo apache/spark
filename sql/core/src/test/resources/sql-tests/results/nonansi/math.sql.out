@@ -1008,6 +1008,92 @@ NULL
 
 
 -- !query
+SELECT gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT))
+-- !query schema
+struct<gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT)):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(7.5, 15)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "gcd(7.5, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(7.5D, 15)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(7.5D, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(15, 7.5D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(15, 7.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(15, 7.5D)"
+  } ]
+}
+
+
+-- !query
 SELECT lcm(4, 6)
 -- !query schema
 struct<lcm(4, 6):bigint>
@@ -1085,6 +1171,92 @@ SELECT lcm(5, null)
 struct<lcm(5, NULL):bigint>
 -- !query output
 NULL
+
+
+-- !query
+SELECT lcm(CAST(4 AS TINYINT), 6L)
+-- !query schema
+struct<lcm(CAST(4 AS TINYINT), 6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(2.9, 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "lcm(2.9, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(2.9D, 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(2.9D, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(3, 2.9D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(3, 2.9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(3, 2.9D)"
+  } ]
+}
 
 
 -- !query
