@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import gc
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 import uuid
 from collections.abc import Generator
 from typing import Any, Optional, Union
@@ -1076,6 +1079,63 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             execute_ops=ResponseGenerator(execute) if execute is not None else None,
             attach_ops=ResponseGenerator(attach) if attach is not None else None,
         )
+
+    def test_release_does_not_collect_cycles_inside_rpc(self):
+        def check_release(release_all):
+            finalized_during_rpc = []
+            inside_rpc = False
+
+            class CyclicResource:
+                def __init__(self):
+                    self.cycle = self
+
+                def __del__(self):
+                    finalized_during_rpc.append(inside_rpc)
+
+            def release(*args, **kwargs):
+                nonlocal inside_rpc
+                inside_rpc = True
+                original_threshold = gc.get_threshold()
+                try:
+                    # Allocations in a blocking RPC can run unrelated finalizers.
+                    # Keep allocating until the resource is collected, or until the
+                    # protected call has performed enough allocations to trigger GC.
+                    resource = CyclicResource()
+                    del resource
+                    gc.set_threshold(1, 1, 1)
+                    for _ in range(100):
+                        cycle = []
+                        cycle.append(cycle)
+                finally:
+                    gc.set_threshold(*original_threshold)
+                    inside_rpc = False
+
+            gc.collect()
+            stub = self._stub_with([self.response])
+            stub.ReleaseExecute = release
+            iterator = ExecutePlanResponseReattachableIterator(
+                self.request, stub, self.retrying, []
+            )
+            with (
+                ThreadPoolExecutor(max_workers=1) as pool,
+                patch.object(
+                    ExecutePlanResponseReattachableIterator,
+                    "_release_thread_pool_instance",
+                    pool,
+                ),
+            ):
+                if release_all:
+                    iterator._release_all()
+                else:
+                    iterator._release_until("1")
+                self.assertTrue(pool.submit(gc.isenabled).result(timeout=10))
+            gc.collect()
+            self.assertTrue(finalized_during_rpc)
+            self.assertFalse(any(finalized_during_rpc))
+
+        for release_all in [False, True]:
+            with self.subTest(release_all=release_all):
+                check_release(release_all)
 
     def test_basic_flow(self):
         stub = self._stub_with([self.response, self.finished])
