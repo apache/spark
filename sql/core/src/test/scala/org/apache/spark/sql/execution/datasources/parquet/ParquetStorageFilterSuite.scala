@@ -1287,9 +1287,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("a later accumulator set of a variable-length key is charged per value") {
     // Six survivors over a capacity of 4 fill one set of four 1000-byte keys and a second of two
     // 2000-byte ones. Every set grows as its values arrive, the way the first one does. Each value
-    // is charged four times its bytes plus its row's fixed part of 17, and the one range adds 40.
-    // So the row group is charged 4 * (4000 + 17) + 2 * (8000 + 17) + 40 = 32142 bytes. A cap of
-    // 32142 keeps splicing and one of 32141 gives it up, which a missing or a double charge would
+    // is charged twice its bytes plus its row's fixed part of 13, and the one range adds 40.
+    // So the row group is charged 4 * (2000 + 13) + 2 * (4000 + 13) + 40 = 16118 bytes. A cap of
+    // 16118 keeps splicing and one of 16117 gives it up, which a missing or a double charge would
     // each get wrong. And the keys must come back right whichever path the row group took.
     //
     // The same holds for dictionary-encoded keys. Phase 1 decodes those lazily and writes no
@@ -1301,10 +1301,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     Seq(false, true).foreach { dictionary =>
       withTempDir { dir =>
         val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 2000, dictionary)
-        assertSpliceCharge(32142L, rows = 6) { cap =>
+        assertSpliceCharge(16118L, rows = 6) { cap =>
           readUnderCap(path, laterSetSchema, filter, cap, batchSize = 4)
         }
-        Seq(Long.MaxValue, 32142L, 32141L).foreach { cap =>
+        Seq(Long.MaxValue, 16118L, 16117L).foreach { cap =>
           val (rows, reader) = readAllWith(
             path, Seq("k", "v"), createFilter(filter, laterSetSchema, allMetrics(), cap),
             (b, i) =>
@@ -1321,10 +1321,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("what a row group of scattered survivors is charged does not depend on the cap") {
     // Keys 9 to 12 fill the first set over a capacity of 4, and keys 14 and 17 come scattered, each
     // in a range of its own. Every set grows as values arrive and is charged per value, so the row
-    // group's charge is one number: the first set's 16068, three ranges of 40 and the second
-    // set's 8034, 24222 in all. A cap of it splices and one byte under it gives splicing up.
-    // Larger caps splice too, which a few of them check, among them 32216 to 32221. Those gave
-    // splicing up when a later set was sized from the one before it with no room for its ranges.
+    // group's charge is one number: the first set's 8052, three ranges of 40 and the second
+    // set's 4026, 12198 in all. A cap of it splices and one byte under it gives splicing up. A few
+    // caps well above it are also checked to confirm splicing keeps working past the exact charge.
     // The second set is not sized at all, so its byte child grows to 2000 bytes for its two
     // 1000-byte values, where sizing it from the first set would have reserved 8000.
     withTempDir { dir =>
@@ -1333,9 +1332,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val keys = Seq("0009", "0010", "0011", "0012", "0014", "0017").map(Literal(_))
       def readUnder(cap: String): (Int, Long) =
         readUnderCap(path, laterSetSchema, Seq(In(prefix, keys)), cap, batchSize = 4)
-      assertSpliceCharge(24222L, rows = 6)(readUnder)
+      assertSpliceCharge(12198L, rows = 6)(readUnder)
       val (_, uncapped) = readUnder("64MB")
-      Seq(32215L, 32216L, 32221L, 32222L).foreach { cap =>
+      Seq(13000L, 16000L, 20000L, 32000L).foreach { cap =>
         val (rows, bytes) = readUnder(s"${cap}b")
         assert(rows == 6 && bytes == uncapped,
           s"a cap of $cap must keep the six rows and splicing; got $rows rows")
@@ -1354,11 +1353,11 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("two key columns are both charged") {
     // Seven survivors in one range cost 7 * (9 + 9) + 40 = 166 bytes with two long keys. A cap of
     // 166 keeps splicing and one of 165 gives it up, so charging one key alone would show. Two
-    // 4-byte string keys each cost their fixed part of 17 and four times their 4 bytes per row,
-    // so 7 * (33 + 33) + 40 = 502. That also shows a value charge only one of them adds.
+    // 4-byte string keys each cost their fixed part of 13 and twice their 4 bytes per row,
+    // so 7 * (21 + 21) + 40 = 334. That also shows a value charge only one of them adds.
     Seq(
       ("id", LongType, Literal(394L), Literal(0L), 166L),
-      ("LPAD(CAST(id AS STRING), 4, '0')", StringType, Literal("0394"), Literal(""), 502L)
+      ("LPAD(CAST(id AS STRING), 4, '0')", StringType, Literal("0394"), Literal(""), 334L)
     ).foreach { case (keyExpr, keyType, from, anything, charge) =>
       withTempDir { dir =>
         val df = spark.range(1, 401)

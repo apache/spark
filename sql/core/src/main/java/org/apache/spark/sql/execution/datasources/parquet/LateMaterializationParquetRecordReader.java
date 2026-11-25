@@ -108,13 +108,14 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       SparkLoggerFactory.getLogger(LateMaterializationParquetRecordReader.class);
 
   /**
-   * What one buffered variable-length value costs, as a multiple of its own bytes. The byte child
-   * holds a null byte per byte, and {@link WritableColumnVector#reserve} doubles it when it grows,
-   * so this is the most the value takes on heap, and what the task's memory manager is asked for.
-   * That holds at the default growth. A {@code hugeVectorReserveRatio} above 2 makes it
-   * under-count past {@code hugeVectorThreshold}, which is off by default.
+   * What one buffered variable-length value costs, as a multiple of its own bytes. The byte
+   * child holds no null bits of its own (a null marks the whole value, on the parent), and
+   * {@link WritableColumnVector#reserve} doubles it when it grows, so this is the most the
+   * value takes on heap, and what the task's memory manager is asked for. That holds at the
+   * default growth. A {@code hugeVectorReserveRatio} above 2 makes it under-count past
+   * {@code hugeVectorThreshold}, which is off by default.
    */
-  private static final long VARIABLE_LENGTH_BYTES_FACTOR = 4L;
+  private static final long VARIABLE_LENGTH_BYTES_FACTOR = 2L;
 
   /**
    * What one surviving row range costs to hold, parquet's {@code RowRanges.Range} with its object
@@ -485,12 +486,13 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       keys[i] = new KeyColumn(batchSlot, rowPosition, column.descriptor().get(),
           column.required(), type, ValueCopier.forType(type), variableLength);
       // A null byte, plus the value's width, or for a variable-length value its int offset and
-      // length and the byte child's default size per row, with a null byte each. A decimal of up
-      // to 9 digits is held as an int.
+      // length and the byte child's default size per row. The byte child holds no null bits of
+      // its own (see `VARIABLE_LENGTH_BYTES_FACTOR`). A decimal of up to 9 digits is held as an
+      // int.
       int valueWidth = type instanceof DecimalType && DecimalType.is32BitDecimalType(type)
           ? 4 : type.defaultSize();
       fixedBytesPerRow +=
-          variableLength ? 1 + 4 + 4 + 2 * DEFAULT_CHILD_BYTES_PER_ROW : 1 + valueWidth;
+          variableLength ? 1 + 4 + 4 + DEFAULT_CHILD_BYTES_PER_ROW : 1 + valueWidth;
     }
     keyFixedBytesPerRow = fixedBytesPerRow;
     keyOnlyColumns = Arrays.stream(keys).map(KeyColumn::descriptor).toList();

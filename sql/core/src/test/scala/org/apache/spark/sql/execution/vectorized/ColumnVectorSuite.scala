@@ -1061,6 +1061,115 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-61210: The byte data of a string column vector holds no null bits") {
+    Array(new OnHeapColumnVector(32, StringType),
+      new OffHeapColumnVector(32, StringType)).foreach { vector =>
+      try {
+        // `isNullAt` alone can't tell a freed null buffer apart from one that is merely never
+        // read, since both answer "never null" once `tracksNulls` is false. Check directly that
+        // the byte-data child holds no null buffer at all, right after construction.
+        assert(!vector.arrayData().hasNullBuffer())
+
+        vector.putByteArray(0, "hello".getBytes)
+        assert(!vector.arrayData().isNullAt(0))
+        // A null marks a whole value on the string vector, not a byte of its data.
+        vector.putNull(0)
+        assert(vector.isNullAt(0))
+        assert(!vector.arrayData().isNullAt(0))
+        // Writing nulls to the byte data itself changes nothing there.
+        vector.arrayData().putNull(1)
+        assert(!vector.arrayData().isNullAt(1))
+        assert(!vector.arrayData().hasNullBuffer())
+      } finally {
+        vector.close()
+      }
+    }
+  }
+
+  test("SPARK-61210: an array's element child still tracks null bits") {
+    // Unlike the byte data of a string, an array's elements can be null each on their own, so
+    // an element vector keeps its null bits.
+    val arrayVector = new OnHeapColumnVector(32, ArrayType(ByteType, containsNull = true))
+    try {
+      assert(arrayVector.arrayData().hasNullBuffer())
+      arrayVector.arrayData().putNull(0)
+      assert(arrayVector.arrayData().isNullAt(0))
+    } finally {
+      arrayVector.close()
+    }
+  }
+
+  test("SPARK-61210: Growing the byte data of a string column vector keeps earlier values") {
+    Array(new OnHeapColumnVector(4, StringType),
+      new OffHeapColumnVector(4, StringType)).foreach { vector =>
+      try {
+        val byteData = vector.arrayData()
+        val initialCapacity = byteData.capacity
+
+        // Fits within the byte-data child's initial capacity, so this does not grow it; these
+        // bytes sit in the region a later growth must carry over.
+        val first = (0 until 10).map(_.toByte).toArray
+        vector.putByteArray(0, first)
+        assert(byteData.capacity == initialCapacity)
+
+        // Exceeds the remaining capacity, forcing the byte-data child - which holds no null
+        // bits of its own - to grow. The no-null-tracking oldCapacity computation in
+        // OffHeapColumnVector#reserveInternal must still treat `first`, already written above,
+        // as live data and carry it over, rather than silently dropping it.
+        val second = (10 until 30).map(_.toByte).toArray
+        vector.putByteArray(1, second)
+        assert(byteData.capacity > initialCapacity)
+        // The no-null-tracking check in reserveInternal must still skip allocating a null
+        // buffer for this grown byte-data child.
+        assert(!byteData.hasNullBuffer())
+
+        assert(vector.getBinary(0) === first)
+        assert(vector.getBinary(1) === second)
+      } finally {
+        vector.close()
+      }
+    }
+  }
+
+  test("SPARK-61210: Growing the byte data of a string column vector after a huge-vector " +
+      "reset keeps earlier values") {
+    withSQLConf(
+        SQLConf.VECTORIZED_HUGE_VECTOR_THRESHOLD.key -> "20",
+        SQLConf.VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key -> "1.2") {
+      Array(new OnHeapColumnVector(4, StringType),
+        new OffHeapColumnVector(4, StringType)).foreach { vector =>
+        try {
+          val byteData = vector.arrayData()
+          val defaultCapacity = byteData.capacity
+
+          // Grows the byte-data child past the huge-vector threshold (20 bytes). Resetting the
+          // parent then releases this child and re-reserves it at its default capacity - at
+          // which point its `capacity` field already reads that default, while its `data` is
+          // freshly freed. OffHeapColumnVector#reserveInternal's oldCapacity computation must
+          // read `data`, not `capacity`, right there, or it tries to copy bytes from a freed
+          // native address and crashes.
+          vector.putByteArray(0, (0 until 30).map(_.toByte).toArray)
+          assert(byteData.capacity > defaultCapacity)
+          assert(!byteData.hasNullBuffer())
+          vector.reset()
+          assert(byteData.capacity == defaultCapacity)
+
+          // Writing and growing again afterward must behave exactly like an ordinary growth.
+          val first = (0 until 4).map(_.toByte).toArray
+          vector.putByteArray(0, first)
+          val second = (4 until 30).map(_.toByte).toArray
+          vector.putByteArray(1, second)
+          assert(byteData.capacity > defaultCapacity)
+          assert(!byteData.hasNullBuffer())
+          assert(vector.getBinary(0) === first)
+          assert(vector.getBinary(1) === second)
+        } finally {
+          vector.close()
+        }
+      }
+    }
+  }
+
   DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
     val structType = new StructType().add(dt.typeName, dt)
     testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
