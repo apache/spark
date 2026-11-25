@@ -23,6 +23,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    ClassVar,
     Dict,
     Iterable,
     Iterator,
@@ -31,10 +32,12 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    TypeVar,
     cast,
 )
 
+# The type variables of the RDD facade, which the Python workers import (see
+# pyspark.core.connect.rdd).
+from pyspark.core.rdd import T, U
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.serializers import (
     AutoBatchedSerializer,
@@ -53,9 +56,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.dataframe import DataFrame
 
-
-T = TypeVar("T")
-U = TypeVar("U")
 
 # Sentinel so default ``serializer`` is not recreated per call site (would break equality checks).
 _CONNECT_SC_SERIALIZER_ARG_UNSPECIFIED = object()
@@ -301,6 +301,9 @@ class SparkContext:
         if session is not None and not session.is_stopped:
             return session.sparkContext
         return cls(conf=conf)
+
+    # The active SparkContext of Spark Classic, which Spark Connect never has.
+    _active_spark_context: ClassVar[None] = None
 
     # The serializers of the elements, as Spark Classic's SparkContext has them by default.
     _unbatched_serializer: Serializer = CPickleSerializer()

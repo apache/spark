@@ -64,6 +64,12 @@ if not is_remote_only():
     sys.modules["pyspark.files"] = files
     sys.modules["pyspark.status"] = status
     sys.modules["pyspark.broadcast"] = broadcast
+else:
+    # The RDD API of Spark Connect.
+    from pyspark.core import rdd
+    from pyspark.core.rdd import RDD, RDDBarrier
+
+    sys.modules["pyspark.rdd"] = rdd
 
 from pyspark._globals import _NoValue  # noqa: F401
 from pyspark.accumulators import Accumulator, AccumulatorParam
@@ -127,6 +133,9 @@ if not is_remote_only():
 
     # for back compatibility
     from pyspark.sql import HiveContext, SQLContext  # noqa: F401
+else:
+    # The SparkContext of the sessions of Spark Connect.
+    from pyspark.core.connect.context import SparkContext  # type: ignore[assignment]
 
 from pyspark.sql import Row  # noqa: F401
 

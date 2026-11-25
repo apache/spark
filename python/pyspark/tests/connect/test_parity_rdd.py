@@ -16,18 +16,18 @@
 #
 
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 import uuid
-
-from py4j.protocol import Py4JJavaError
 
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.errors.exceptions.connect import PythonException
 from pyspark.sql import Row
 from pyspark.storagelevel import StorageLevel
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.utils import QuietTest, have_numpy, have_pandas
+from pyspark.testing.utils import Py4JJavaError, QuietTest, have_numpy, have_pandas
 from pyspark.tests.test_rdd import RDDTestsMixin
 
 _CONNECT_STOPITER_EXCEPTIONS = (Py4JJavaError, RuntimeError, PythonException)
@@ -240,8 +240,14 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         from pyspark.serializers import BatchedSerializer, MarshalSerializer
         from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
-        # The constructor creates a new session on the server, which becomes the active one.
-        sc = ConnectSparkContext(appName="serializer", serializer=MarshalSerializer(), batchSize=2)
+        # The constructor creates a new session on the server of the tests, which becomes the
+        # active one.
+        sc = ConnectSparkContext(
+            "sc://" + self.spark.client._builder.endpoint,
+            appName="serializer",
+            serializer=MarshalSerializer(),
+            batchSize=2,
+        )
         try:
             self.assertIsInstance(sc.serializer, BatchedSerializer)
             self.assertIsInstance(sc.serializer.serializer, MarshalSerializer)
@@ -257,6 +263,51 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
             sc._session.client.close()
             ConnectSparkSession._set_default_and_active_session(self.spark)
         self.assertEqual(self.sc.parallelize(range(3)).collect(), [0, 1, 2])
+
+    def test_commands_do_not_import_the_client(self):
+        # The Python workers of the server load the commands of the RDD API, which must not import
+        # the Spark Connect client: every worker would then import grpc, protobuf and pyarrow.
+        rdds = [
+            self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max),
+            self.sc.range(10).map(lambda x: (x, -x)).sortByKey(numPartitions=2),
+            self.sc.range(10).zipWithIndex().groupByKey(),
+            self.spark.range(3).rdd.map(lambda r: r.id),
+        ]
+        commands = []
+
+        def collect(message):
+            if message.DESCRIPTOR.name == "MapPartitions":
+                commands.append(message.command)
+            for field, value in message.ListFields():
+                if field.message_type is not None:
+                    for child in value if field.label == field.LABEL_REPEATED else [value]:
+                        collect(child)
+
+        for rdd in rdds:
+            collect(rdd._df._plan.plan(self.spark.client))
+        self.assertGreater(len(commands), 4)
+        code = """
+import sys
+from pyspark.serializers import CloudPickleSerializer
+before = set(sys.modules)
+for path in sys.argv[1:]:
+    with open(path, "rb") as f:
+        CloudPickleSerializer().loads(f.read())
+client = ("pyspark.core.connect.rdd", "pyspark.core.connect.context", "pyspark.sql.connect", "grpc")
+print(sorted(m for m in set(sys.modules) - before if m.startswith(client)))
+"""
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i, command in enumerate(commands):
+                paths.append(os.path.join(d, "command-%d" % i))
+                with open(paths[-1], "wb") as f:
+                    f.write(command)
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+            result = subprocess.run(
+                [sys.executable, "-c", code, *paths], env=env, capture_output=True, text=True
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "[]")
 
     def test_set_checkpoint_dir_not_supported(self):
         with self.assertRaises(PySparkNotImplementedError):

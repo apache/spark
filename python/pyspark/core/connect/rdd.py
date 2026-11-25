@@ -58,7 +58,6 @@ from typing import (
     Callable,
     Dict,
     Generic,
-    Hashable,
     Iterable,
     Iterator,
     List,
@@ -66,7 +65,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypeVar,
     Union,
     cast,
 )
@@ -74,7 +72,11 @@ from typing import (
 import pyspark.sql.connect.proto as pb2
 from pyspark.core.connect import _runtime
 from pyspark.core.rdd import RDD as RDDFacade
-from pyspark.core.rdd import BoundedFloat, Partitioner
+
+# The type variables of the facade: cloudpickle pickles type variables by reference, as in the
+# annotations of the functions of the commands, so the Python workers import their module, which
+# must not import the Spark Connect client.
+from pyspark.core.rdd import BoundedFloat, K, Partitioner, T, T_co, U, V
 from pyspark.core.rdd import RDDBarrier as RDDBarrierFacade
 from pyspark.errors import (
     PySparkNotImplementedError,
@@ -123,12 +125,6 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["RDD", "RDDBarrier"]
-
-T = TypeVar("T")
-T_co = TypeVar("T_co", covariant=True)
-U = TypeVar("U")
-K = TypeVar("K", bound=Hashable)
-V = TypeVar("V")
 
 
 class _RDDRelationPlan:
@@ -1359,23 +1355,29 @@ class RDD(RDDFacade, Generic[T_co]):
         job when it is reached, or while the previous one is consumed with ``prefetchPartitions``,
         as in Spark Classic.
         """
-        num = self.getNumPartitions()
-        # The jobs of the partitions share the shuffles of this RDD.
-        rdd = self._pinned() if num > 1 else self
-        if not prefetchPartitions:
-            for split in range(num):
-                yield from rdd._collect([split])
-            return
-        from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(rdd._collect, [0]) if num > 0 else None
-            for split in range(num):
-                assert future is not None
-                items = future.result()
-                if split + 1 < num:
-                    future = executor.submit(rdd._collect, [split + 1])
-                yield from items
+        def partitions() -> Iterator[List[T]]:
+            # Nothing runs before the first element is asked for.
+            num = self.getNumPartitions()
+            # The jobs of the partitions share the shuffles of this RDD.
+            rdd = self._pinned() if num > 1 else self
+            if not prefetchPartitions:
+                for split in range(num):
+                    yield rdd._collect([split])
+                return
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(rdd._collect, [0]) if num > 0 else None
+                for split in range(num):
+                    assert future is not None
+                    items = future.result()
+                    if split + 1 < num:
+                        future = executor.submit(rdd._collect, [split + 1])
+                    yield items
+
+        # The elements of each partition in turn, without a generator of the elements in between.
+        return itertools.chain.from_iterable(partitions())
 
     def foreach(self: "RDD[T]", f: Callable[[T], None]) -> None:
         f = fail_on_stopiteration(f)

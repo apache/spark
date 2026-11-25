@@ -1015,7 +1015,8 @@ def is_remote_only() -> bool:
     if _is_remote_only is not None:
         return _is_remote_only
     try:
-        from pyspark import core  # noqa: F401
+        # The implementations of Spark Classic, which pyspark-client does not have.
+        from pyspark.core import classic  # noqa: F401
 
         _is_remote_only = False
         return _is_remote_only

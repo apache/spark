@@ -163,6 +163,14 @@ connect_requirement_message = (
 
 should_test_connect = not connect_requirement_message
 
+try:
+    from py4j.protocol import Py4JJavaError
+except ImportError:
+    # Without Py4J, as with pyspark-client, only the tests of Spark Connect run, which do not
+    # raise it.
+    class Py4JJavaError(Exception):  # type: ignore[no-redef]
+        pass
+
 
 is_ansi_mode_test = True
 if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":

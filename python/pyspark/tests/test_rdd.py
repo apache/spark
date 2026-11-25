@@ -25,8 +25,6 @@ import uuid
 from datetime import datetime, timedelta
 from glob import glob
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark import RDD, shuffle
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.serializers import (
@@ -40,7 +38,13 @@ from pyspark.serializers import (
 from pyspark.sql import SparkSession
 from pyspark.storagelevel import StorageLevel
 from pyspark.testing.sqlutils import SPARK_HOME
-from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
+from pyspark.testing.utils import (
+    Py4JJavaError,
+    QuietTest,
+    ReusedPySparkTestCase,
+    have_numpy,
+    have_pandas,
+)
 
 global_func = lambda: "Hi"  # noqa: E731
 
