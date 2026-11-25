@@ -735,7 +735,7 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
       try {
         val e = intercept[SparkArithmeticException](writer.writeBatch(batch))
-        assert(e.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+        assert(e.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT")
         // The vector of a, which was converted, is released with the failure.
         assert(writer.allocator.getAllocatedMemory == 0)
       } finally {

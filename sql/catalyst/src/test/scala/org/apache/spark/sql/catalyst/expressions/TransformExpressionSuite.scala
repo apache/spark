@@ -697,7 +697,7 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(TransformExpression.failureText(lookup) == "Couldn't find method invoke with " +
       "arguments (int, class java.lang.Object) on class java.lang.String.")
     val outOfRange = new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT",
       messageParameters = Map("roundedValue" -> "1.5", "originalValue" -> "1.45",
         "precision" -> "1", "scale" -> "0"),
       context = Array.empty, summary = "")
