@@ -167,8 +167,8 @@ private[spark] class NettyBlockTransferService(
 
   /**
    * Stop retrying a synchronous connection-creation failure when the driver reports the executor
-   * dead, matching fetchBlocks. Async RPC failures never reach this check and are retried by the
-   * transferor.
+   * dead, matching fetchBlocks. Async RPC failures never reach this check; the transferor retries
+   * those that are IO failures.
    */
   override protected def createHostLocalDirsStarter(
       host: String,

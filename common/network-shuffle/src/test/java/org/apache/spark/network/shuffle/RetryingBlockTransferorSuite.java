@@ -488,14 +488,14 @@ public class RetryingBlockTransferorSuite {
     TransportClient failingClient =
       clientFailingWith(new IOException("Connection from localhost/127.0.0.1:12345 closed"));
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenReturn(failingClient)
       .thenReturn(succeedingClient);
 
     Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -504,28 +504,28 @@ public class RetryingBlockTransferorSuite {
     TransportClient failingClient =
       clientFailingWith(new RuntimeException(new IOException("Connection reset by peer")));
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenReturn(failingClient)
       .thenReturn(succeedingClient);
 
     Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
   public void testGetHostLocalDirsRetriesOnCreateClientFailure() throws Exception {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenThrow(new IOException("Connection reset by peer"))
       .thenReturn(succeedingClient);
 
     Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -533,7 +533,7 @@ public class RetryingBlockTransferorSuite {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
     TransportClient failingClient =
       clientFailingWith(new RuntimeException("Executor is not registered"));
-    when(clientFactory.createClient(HOST, PORT)).thenReturn(failingClient);
+    when(clientFactory.createClient(HOST, PORT, true)).thenReturn(failingClient);
 
     CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
     ExecutionException error =
@@ -541,7 +541,7 @@ public class RetryingBlockTransferorSuite {
 
     assertTrue(error.getCause() instanceof RuntimeException);
     assertEquals("Executor is not registered", error.getCause().getMessage());
-    verify(clientFactory, times(1)).createClient(HOST, PORT);
+    verify(clientFactory, times(1)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -553,7 +553,7 @@ public class RetryingBlockTransferorSuite {
       clientFailingWith(new IOException("Connection reset by peer (2)"));
     TransportClient thirdClient =
       clientFailingWith(new IOException("Connection reset by peer (3)"));
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenReturn(firstClient)
       .thenReturn(secondClient)
       .thenReturn(thirdClient);
@@ -568,7 +568,7 @@ public class RetryingBlockTransferorSuite {
     assertTrue(error.getCause() instanceof IOException);
     assertEquals("Connection reset by peer (3)", error.getCause().getMessage());
     // The initial attempt plus two retries.
-    verify(clientFactory, times(3)).createClient(HOST, PORT);
+    verify(clientFactory, times(3)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -627,11 +627,54 @@ public class RetryingBlockTransferorSuite {
   }
 
   @Test
+  public void testGetHostLocalDirsOneShotPropagatesRuntimeExceptionOnCreateClient()
+      throws Exception {
+    for (Map<String, String> conf : List.of(
+        Map.of("spark.shuffle.io.hostLocalDirsRetry.enabled", "false"),
+        Map.of("spark.shuffle.io.maxRetries", "0"))) {
+      TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+      SaslTimeoutException saslTimeout =
+        new SaslTimeoutException(new TimeoutException("SASL handshake timed out"));
+      when(clientFactory.createClient(HOST, PORT)).thenThrow(saslTimeout);
+
+      TransportConf transportConf = new TransportConf("shuffle", new MapConfigProvider(conf));
+      TestBlockStoreClient client = new TestBlockStoreClient(clientFactory, transportConf);
+      CompletableFuture<Map<String, String[]>> future = new CompletableFuture<>();
+      SaslTimeoutException thrown = assertThrows(SaslTimeoutException.class,
+        () -> client.getHostLocalDirs(HOST, PORT, new String[] {EXEC_ID}, future));
+
+      assertSame(saslTimeout, thrown);
+      assertFalse(future.isDone());
+      verify(clientFactory, times(1)).createClient(HOST, PORT);
+    }
+  }
+
+  @Test
+  public void testGetHostLocalDirsOneShotCompletesFutureOnInterruptedException()
+      throws Exception {
+    for (Map<String, String> conf : List.of(
+        Map.of("spark.shuffle.io.hostLocalDirsRetry.enabled", "false"),
+        Map.of("spark.shuffle.io.maxRetries", "0"))) {
+      TransportClientFactory clientFactory = mock(TransportClientFactory.class);
+      when(clientFactory.createClient(HOST, PORT))
+        .thenThrow(new InterruptedException("cancelled"));
+
+      CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory, conf);
+      assertTrue(Thread.interrupted());
+      ExecutionException error =
+        assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+
+      assertTrue(error.getCause() instanceof InterruptedException);
+      verify(clientFactory, times(1)).createClient(HOST, PORT);
+    }
+  }
+
+  @Test
   public void testGetHostLocalDirsHonorsConfiguredRetryWait() throws Exception {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
     TransportClient failingClient = clientFailingWith(new IOException("Connection reset by peer"));
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenReturn(failingClient)
       .thenReturn(succeedingClient);
 
@@ -646,7 +689,7 @@ public class RetryingBlockTransferorSuite {
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
     assertTrue(elapsedMs >= 800, "retry wait was not honored: " + elapsedMs + " ms");
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -654,21 +697,21 @@ public class RetryingBlockTransferorSuite {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
     SaslTimeoutException saslTimeout =
       new SaslTimeoutException(new TimeoutException("SASL handshake timed out"));
-    when(clientFactory.createClient(HOST, PORT)).thenThrow(saslTimeout);
+    when(clientFactory.createClient(HOST, PORT, true)).thenThrow(saslTimeout);
 
     CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
     ExecutionException error =
       assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
 
     assertSame(saslTimeout, error.getCause());
-    verify(clientFactory, times(1)).createClient(HOST, PORT);
+    verify(clientFactory, times(1)).createClient(HOST, PORT, true);
   }
 
   @Test
   public void testGetHostLocalDirsRetriesSaslTimeoutWhenEnabled() throws Exception {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenThrow(new SaslTimeoutException(
         new TimeoutException("SASL handshake timed out")))
       .thenReturn(succeedingClient);
@@ -679,13 +722,13 @@ public class RetryingBlockTransferorSuite {
       "spark.shuffle.io.retryWait", "0s")).get(30, TimeUnit.SECONDS);
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
   public void testGetHostLocalDirsDoesNotRetryInterruptedException() throws Exception {
     TransportClientFactory clientFactory = mock(TransportClientFactory.class);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenThrow(new InterruptedException("cancelled"));
 
     CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
@@ -695,7 +738,7 @@ public class RetryingBlockTransferorSuite {
       assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
 
     assertTrue(error.getCause() instanceof InterruptedException);
-    verify(clientFactory, times(1)).createClient(HOST, PORT);
+    verify(clientFactory, times(1)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -708,12 +751,12 @@ public class RetryingBlockTransferorSuite {
       callback.onSuccess(ByteBuffer.wrap(new byte[] {99}));
       return 0L;
     }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
-    when(clientFactory.createClient(HOST, PORT)).thenReturn(client);
+    when(clientFactory.createClient(HOST, PORT, true)).thenReturn(client);
 
     CompletableFuture<Map<String, String[]>> future = fetchHostLocalDirs(clientFactory);
     assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
 
-    verify(clientFactory, times(1)).createClient(HOST, PORT);
+    verify(clientFactory, times(1)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -728,7 +771,7 @@ public class RetryingBlockTransferorSuite {
       return 0L;
     }).when(firstClient).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
     TransportClient succeedingClient = clientReturning(LOCAL_DIRS);
-    when(clientFactory.createClient(HOST, PORT))
+    when(clientFactory.createClient(HOST, PORT, true))
       .thenReturn(firstClient)
       .thenReturn(succeedingClient);
 
@@ -736,7 +779,7 @@ public class RetryingBlockTransferorSuite {
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
     // The duplicate failure must not schedule a second retry.
-    verify(clientFactory, times(2)).createClient(HOST, PORT);
+    verify(clientFactory, after(500).times(2)).createClient(HOST, PORT, true);
   }
 
   @Test
@@ -750,12 +793,12 @@ public class RetryingBlockTransferorSuite {
       callback.onFailure(new IOException("Connection reset by peer"));
       return 0L;
     }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
-    when(clientFactory.createClient(HOST, PORT)).thenReturn(client);
+    when(clientFactory.createClient(HOST, PORT, true)).thenReturn(client);
 
     Map<String, String[]> result = fetchHostLocalDirs(clientFactory).get(30, TimeUnit.SECONDS);
 
     assertArrayEquals(new String[] {"/tmp/dir0"}, result.get(EXEC_ID));
-    verify(clientFactory, times(1)).createClient(HOST, PORT);
+    verify(clientFactory, after(500).times(1)).createClient(HOST, PORT, true);
   }
 
   @Test

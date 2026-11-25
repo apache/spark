@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.mockito.ArgumentMatchers.{any, anyInt}
+import org.mockito.ArgumentMatchers.{any, anyInt, eq => eqTo}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -127,7 +127,7 @@ class NettyBlockTransferServiceSuite
 
     val clientFactory = mock(classOf[TransportClientFactory])
     var createClientCount = 0
-    when(clientFactory.createClient(any[String](), anyInt())).thenAnswer(_ => {
+    when(clientFactory.createClient(any[String](), anyInt(), eqTo(true))).thenAnswer(_ => {
       createClientCount += 1
       throw new IOException()
     })
@@ -157,7 +157,7 @@ class NettyBlockTransferServiceSuite
     })
     val clientFactory = mock(classOf[TransportClientFactory])
     var createClientCount = 0
-    when(clientFactory.createClient(any[String](), anyInt())).thenAnswer(_ => {
+    when(clientFactory.createClient(any[String](), anyInt(), eqTo(true))).thenAnswer(_ => {
       createClientCount += 1
       if (createClientCount == 1) {
         throw new IOException()

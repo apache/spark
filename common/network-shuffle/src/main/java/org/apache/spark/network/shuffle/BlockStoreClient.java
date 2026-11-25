@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -225,11 +226,11 @@ public abstract class BlockStoreClient implements Closeable {
         throw new IllegalStateException("BlockStoreClient has been closed");
       }
       // Ask the factory for a client on every attempt: it opens a new connection when the
-      // pooled one is no longer active, which is what a retry needs. The block fetch starters'
-      // fastFail flag is omitted: a stale pooled connection is an RPC failure (not a
-      // createClient failure), and a retry sleeps the full retryWait, outlasting the window.
+      // pooled one is no longer active, which is what a retry needs. Pass fastFail=true
+      // (matching fetchBlocks, since this starter runs only when maxRetries > 0) so concurrent
+      // lookups do not queue behind repeated connect timeouts; retryWait outlasts the window.
       try {
-        TransportClient client = factory.createClient(host, port);
+        TransportClient client = factory.createClient(host, port, true);
         client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
           @Override
           public void onSuccess(ByteBuffer response) {
@@ -271,7 +272,7 @@ public abstract class BlockStoreClient implements Closeable {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       completeHostLocalDirsExceptionally(hostLocalDirsCompletable, e, execIds);
-    } catch (Exception e) {
+    } catch (IOException e) {
       completeHostLocalDirsExceptionally(hostLocalDirsCompletable, e, execIds);
     }
   }

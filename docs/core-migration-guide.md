@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.4 to 4.5
+
+- Since Spark 4.5, the host-local directories lookup made by host-local shuffle reads and push-merged-local reads retries connection-level failures according to `spark.shuffle.io.maxRetries` and `spark.shuffle.io.retryWait`, and non-retried connection-creation failures (such as authentication timeouts) while retry is active surface as a shuffle fetch failure for host-local reads or trigger the fallback to the original blocks for push-merged-local reads rather than failing the task. Lookups that keep failing against an unreachable shuffle service or peer executor therefore take longer before failing or falling back. To restore the previous behavior, set `spark.shuffle.io.hostLocalDirsRetry.enabled` to `false`.
+
 ## Upgrading from Core 4.3 to 4.4
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
