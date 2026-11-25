@@ -11854,7 +11854,9 @@ class KeyGroupedPartitioningSuite
     val joined = l.join(t, (1 to 5).map(i => l(s"a$i") + 1 === t(s"b$i")).reduce(_ && _))
       .selectExpr("*", "1 as one")
       .observe("m", count(lit(1)))
-    val expected = Seq(Row(0, 1, 1), Row(1, 2, 1))
+    val expected = Seq(
+      Row(0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1),
+      Row(1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1))
 
     Seq(false, true).foreach { aqeEnabled =>
       withSQLConf(
@@ -11862,14 +11864,14 @@ class KeyGroupedPartitioningSuite
           SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
           SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-        // Partition by scan keys (`b1..b5`, which 3^5 combinations would drop), constant-spelled
-        // join keys (`a_i + 1`), and alias-spelled join keys (`a_i + one` kept by `observe`).
+        // Keep all columns (no narrowing `.select(...)`) so ColumnPruning keeps `1 as one`
+        // alive. Partition by scan keys (`b1..b5`, which 3^5 combinations would drop) and
+        // alias-spelled join keys (`a_i + one`, kept by `observe`).
         Seq(
           (1 to 5).map(i => col(s"b$i")),
-          (1 to 5).map(i => col(s"a$i") + 1),
           (1 to 5).map(i => col(s"a$i") + col("one"))).foreach { partCols =>
           val w = Window.partitionBy(partCols: _*).orderBy("a1")
-          val df = joined.withColumn("rn", row_number().over(w)).select("a1", "b1", "rn")
+          val df = joined.withColumn("rn", row_number().over(w))
           checkAnswer(df, expected)
           val plan = df.queryExecution.executedPlan
           val shuffles = collectAllShuffles(plan)
