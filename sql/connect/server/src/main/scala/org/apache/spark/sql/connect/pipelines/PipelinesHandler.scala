@@ -298,7 +298,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
-              language = Option(Python())),
+              language = Some(Python)),
             format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
             isStreamingTable = output.getOutputType == proto.OutputType.TABLE))
@@ -318,7 +318,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Some(Python())),
+              language = Some(Python)),
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
@@ -338,7 +338,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Some(Python()))))
+              language = Some(Python))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
@@ -594,7 +594,7 @@ private[connect] object PipelinesHandler extends Logging {
       flow.getSourceCodeLocation.getLineNumber),
     objectType = Some(QueryOriginType.Flow.toString),
     objectName = Option(flowIdentifier.unquotedString),
-    language = Some(Python()))
+    language = Some(Python))
 
   private def startRun(
       cmd: proto.PipelineCommand.StartRun,

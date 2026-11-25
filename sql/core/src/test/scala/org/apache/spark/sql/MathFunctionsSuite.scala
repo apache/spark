@@ -730,6 +730,29 @@ class MathFunctionsSuite extends SharedSparkSession {
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
 
+  test("SPARK-62149: try_abs and try_negative") {
+    val df = Seq[(Integer, java.lang.Long)](
+      (Int.MinValue, Long.MinValue), (-1, 1L), (Int.MaxValue, Long.MaxValue), (null, null)
+    ).toDF("i", "l")
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // NULL on overflow in both modes, as try_add.
+        val expected = Seq(
+          Row(null, null, null, null),
+          Row(1, 1L, 1, -1L),
+          Row(Int.MaxValue, Long.MaxValue, -Int.MaxValue, -Long.MaxValue),
+          Row(null, null, null, null))
+        checkAnswer(
+          df.selectExpr("try_abs(i)", "try_abs(l)", "try_negative(i)", "try_negative(l)"),
+          expected)
+        checkAnswer(
+          df.select(try_abs(col("i")), try_abs(col("l")), try_negative(col("i")),
+            try_negative(col("l"))),
+          expected)
+      }
+    }
+  }
+
   test("try_add") {
     val df = Seq((1982, 15)).toDF("birth", "age")
 
