@@ -248,10 +248,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   private def actualLongVal: Long = longVal / POW_10(_scale)
 
-  // A compact value with a negative scale, possible only with
-  // spark.sql.legacy.allowNegativeScaleOfDecimal, has no POW_10 entry to divide by, so it is
-  // converted the way a BigDecimal-backed value is.
-  private def hasActualLongVal: Boolean = decimalVal.eq(null) && _scale >= 0
+  // POW_10 has no entry to divide by for a scale outside 0 to 18, so a compact value with such a
+  // scale is converted the way a BigDecimal-backed value is. The scale is negative only with
+  // spark.sql.legacy.allowNegativeScaleOfDecimal; a cast that raises it can leave it above 18.
+  private def hasActualLongVal: Boolean =
+    decimalVal.eq(null) && _scale >= 0 && _scale <= MAX_LONG_DIGITS
 
   def toLong: Long = {
     if (hasActualLongVal) {
