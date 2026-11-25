@@ -46,9 +46,10 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * A job can depend on a stage that a job of another execution is already running, and that stage
  * is not submitted again. So the listener learns from the start of each job which stages it
- * depends on, and counts what a stage reads against every execution that depends on it. If no
- * execution with a limit depended on the stage before, the tasks that were already running then
- * only count when they end.
+ * depends on, and from then on counts what a stage reads against every execution that depends on
+ * it: what the stage read before was read for another execution. If no execution with a limit
+ * depended on the stage before, the tasks that were already running then only count when they
+ * end.
  *
  * @param cancelJobsWithTag cancels the active jobs that have the given tag, for the given reason
  */

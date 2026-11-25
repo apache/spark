@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
@@ -25,6 +28,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.functions.{broadcast, max, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ThreadUtils
 
 class ScanLimitSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -47,16 +51,21 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  /** Checks that `query` is cancelled for reading more than a limit of 1 byte. */
-  private def checkScanLimitExceeded(query: => Unit): Unit = {
-    withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
+  /** Checks that `query` is cancelled for reading more than a limit of `limit` bytes. */
+  private def checkScanLimitExceeded(query: => Unit, limit: Long = 1): Unit = {
+    withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> limit.toString) {
+      val e = intercept[SparkException](query)
       checkErrorMatchPVals(
-        exception = intercept[SparkException](query),
+        exception = e,
         condition = "SCAN_BYTES_LIMIT_EXCEEDED",
         parameters = Map(
-          "scannedBytes" -> "\\d+ bytes \\(.+ B\\)",
-          "limit" -> "1 bytes \\(1\\.0 B\\)",
+          "scannedBytes" -> "\\d+ bytes \\(.+B\\)",
+          // A limit below 2 KiB is shown in bytes.
+          "limit" -> s"$limit bytes \\($limit\\.0 B\\)",
           "config" -> "\"spark.sql.execution.maxScanBytes\""))
+      // The error shows what the query had read when it went over the limit.
+      val scannedBytes = e.getMessageParameters.get("scannedBytes").takeWhile(_.isDigit).toLong
+      assert(scannedBytes > limit)
     }
     checkNothingTracked()
   }
@@ -80,6 +89,51 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
     withData { path =>
       withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1g") {
         checkAnswer(spark.read.parquet(path), spark.range(4).toDF())
+      }
+      checkNothingTracked()
+    }
+  }
+
+  test("a limit of 0 bytes cancels a query that reads any data") {
+    withData { path =>
+      checkScanLimitExceeded(spark.read.parquet(path).select(block($"id")).collect(), limit = 0)
+    }
+  }
+
+  test("the cached blocks that a query reads count towards its limit") {
+    // A range reads no data source, so the query only reads the cached blocks.
+    val cached = spark.range(0, 4, 1, 1).toDF().cache()
+    try {
+      cached.count()
+      checkScanLimitExceeded {
+        cached.select(block($"id")).collect()
+      }
+    } finally {
+      cached.unpersist(blocking = true)
+    }
+  }
+
+  test("cancelling a query does not cancel the other queries of its session") {
+    withData { path =>
+      withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
+        val executor = ThreadUtils.newDaemonSingleThreadExecutor("scan-limit-other-query")
+        try {
+          // The other query reads no data source, so it stays within the limit, and it runs for
+          // about 2 seconds.
+          val other = Future {
+            spark.range(0, 10, 1, 1).select(slow($"id")).as[Long].collect()
+          }(ExecutionContext.fromExecutorService(executor))
+          eventually(timeout(1.minute)) {
+            assert(spark.sparkContext.statusTracker.getActiveJobIds().nonEmpty)
+          }
+          val e = intercept[SparkException] {
+            spark.read.parquet(path).select(block($"id")).collect()
+          }
+          assert(e.getCondition == "SCAN_BYTES_LIMIT_EXCEEDED")
+          assert(ThreadUtils.awaitResult(other, 1.minute).toSeq == (0L until 10L))
+        } finally {
+          executor.shutdown()
+        }
       }
       checkNothingTracked()
     }
