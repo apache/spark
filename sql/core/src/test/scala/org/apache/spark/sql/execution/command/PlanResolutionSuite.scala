@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, EmptyFunctionRegistry, KeepLegacyOutputs, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedNamespace, ResolvedTable, ResolveSessionCatalog, ShowCommandHelper, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, DescribeCommandHelper, EmptyFunctionRegistry, KeepLegacyOutputs, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedNamespace, ResolvedTable, ResolveSessionCatalog, ShowCommandHelper, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowFunctions, ShowTableProperties, ShowTables, ShowTablesExtended, ShowViews, SubqueryAlias, TableSpec, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeNamespace, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowFunctions, ShowTableProperties, ShowTables, ShowTablesExtended, ShowViews, SubqueryAlias, TableSpec, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -1239,6 +1239,70 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  gridTest("DESCRIBE lowering preserves command output")(
+      Seq("DESC TABLE v1Table", "DESC TABLE EXTENDED v1Table",
+        "DESC TABLE v1Table PARTITION(a=1)", "DESC TABLE v1Table i",
+        "DESC NAMESPACE default")) { statement =>
+    withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> "true",
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "false",
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val command = parsePlan(statement)
+      val analyzer = new Analyzer(catalogManagerWithoutDefault) {
+        override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
+          new ResolveSessionCatalog(this.catalogManager))
+      }
+      val analyzed = analyzer.execute(command)
+      assert(analyzed.isInstanceOf[RunnableCommand])
+      assert(analyzed.output == command.output)
+    }
+  }
+
+  gridTest("DESCRIBE NAMESPACE preserves the owning rule's deferred configuration")(
+      Seq(false, true)) { useV1Command =>
+    withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> (!useV1Command).toString,
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val ownerConf = new SQLConf
+      ownerConf.setConf(SQLConf.LEGACY_USE_V1_COMMAND, useV1Command)
+      var reads = 0
+      val rule = new ResolveSessionCatalog(catalogManagerWithoutDefault) {
+        override def conf: SQLConf = {
+          reads += 1
+          ownerConf
+        }
+      }
+      val command = DescribeNamespace(
+        ResolvedNamespace(v2SessionCatalog, Seq("default")), extended = false)
+      val resolved = rule(command)
+      assert(resolved.isInstanceOf[DescribeDatabaseCommand] == useV1Command)
+      assert(resolved.output == command.output)
+      if (!useV1Command) assert(resolved eq command)
+      assert(reads == 1)
+
+      reads = 0
+      val v2Command = command.copy(namespace = ResolvedNamespace(testCat, Seq("ns")))
+      assert(rule(v2Command) eq v2Command)
+      assert(reads == 0)
+
+      val invalid = command.copy(
+        namespace = ResolvedNamespace(v2SessionCatalog, Seq("db", "nested")))
+      checkError(
+        exception = intercept[AnalysisException](rule(invalid)),
+        condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+        parameters = Map("namespace" -> "`db`.`nested`"))
+      assert(reads == 0)
+    }
+  }
+
+  test("DESCRIBE helpers return an unhandled command unchanged") {
+    val relation = parseAndResolve("DESC TABLE testcat.tab").asInstanceOf[DescribeRelation]
+    assert(DescribeCommandHelper.rewriteDescribeRelation(relation) eq relation)
+    val partition = parseAndResolve("DESC TABLE testcat.tab PARTITION(a=1)")
+      .asInstanceOf[DescribeTablePartition]
+    assert(DescribeCommandHelper.rewriteDescribeTablePartition(partition) eq partition)
   }
 
   test("DELETE FROM") {

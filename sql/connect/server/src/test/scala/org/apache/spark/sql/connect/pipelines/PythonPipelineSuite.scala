@@ -170,11 +170,11 @@ class PythonPipelineSuite
       cond = flowProgressEvent =>
         flowProgressEvent.origin.sourceCodeLocation == Option(
           QueryOrigin(
-            language = Option(Python()),
-            filePath = Option("<string>"),
-            line = Option(36),
-            objectName = Option("spark_catalog.default.table1"),
-            objectType = Option(QueryOriginType.Flow.toString))),
+            language = Some(Python),
+            filePath = Some("<string>"),
+            line = Some(36),
+            objectName = Some("spark_catalog.default.table1"),
+            objectType = Some(QueryOriginType.Flow.toString))),
       errorChecker = ex =>
         ex.getMessage.contains(
           "A column, variable, or function parameter with name `name` cannot be resolved."),
@@ -230,11 +230,11 @@ class PythonPipelineSuite
         cond = flowProgressEvent =>
           flowProgressEvent.origin.sourceCodeLocation == Option(
             QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(42),
-              objectName = Option("spark_catalog.default.mv2"),
-              objectType = Option(QueryOriginType.Flow.toString))),
+              language = Some(Python),
+              filePath = Some("<string>"),
+              line = Some(42),
+              objectName = Some("spark_catalog.default.mv2"),
+              objectType = Some(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
 
       assertFlowProgressEvent(
@@ -244,11 +244,11 @@ class PythonPipelineSuite
         cond = flowProgressEvent =>
           flowProgressEvent.origin.sourceCodeLocation == Option(
             QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(46),
-              objectName = Option("spark_catalog.default.mv"),
-              objectType = Option(QueryOriginType.Flow.toString))),
+              language = Some(Python),
+              filePath = Some("<string>"),
+              line = Some(46),
+              objectName = Some("spark_catalog.default.mv"),
+              objectType = Some(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
     }
 
@@ -262,11 +262,11 @@ class PythonPipelineSuite
           cond = flowProgressEvent =>
             flowProgressEvent.origin.sourceCodeLocation == Option(
               QueryOrigin(
-                language = Option(Python()),
-                filePath = Option("<string>"),
-                line = Option(36),
-                objectName = Option("spark_catalog.default.table1"),
-                objectType = Option(QueryOriginType.Flow.toString))),
+                language = Some(Python),
+                filePath = Some("<string>"),
+                line = Some(36),
+                objectName = Some("spark_catalog.default.table1"),
+                objectType = Some(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
 
         assertFlowProgressEvent(
@@ -276,11 +276,11 @@ class PythonPipelineSuite
           cond = flowProgressEvent =>
             flowProgressEvent.origin.sourceCodeLocation == Option(
               QueryOrigin(
-                language = Option(Python()),
-                filePath = Option("<string>"),
-                line = Option(51),
-                objectName = Option("spark_catalog.default.standalone_flow1"),
-                objectType = Option(QueryOriginType.Flow.toString))),
+                language = Some(Python),
+                filePath = Some("<string>"),
+                line = Some(51),
+                objectName = Some("spark_catalog.default.standalone_flow1"),
+                objectType = Some(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
       }
   }

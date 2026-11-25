@@ -386,11 +386,26 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
     logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
     CommandUtils.uncacheTableOrView(session, viewIdent)
 
+    // EVOLUTION views no longer store query column names, and schema syncs leave names written
+    // by older versions as they are. Rebuild such names from the schema when their count
+    // differs; names with a matching count may belong to a column list, so keep them.
+    // TODO(SPARK-62261): names with a matching count may also be stale, for example after the
+    // referenced query's columns are reordered or renamed; they are kept unrepaired for now.
+    val schemaFieldNames = viewMeta.schema.fieldNames
+    val storedColumnNames = viewMeta.viewQueryColumnNames
+    val queryColumnNames =
+      if (viewMeta.viewSchemaMode == SchemaEvolution && storedColumnNames.nonEmpty &&
+          storedColumnNames.length != schemaFieldNames.length) {
+        schemaFieldNames
+      } else {
+        storedColumnNames.toArray
+      }
+
     val newProperties = generateViewProperties(
       viewMeta.properties,
       session,
-      viewMeta.viewQueryColumnNames.toArray,
-      viewMeta.schema.fieldNames,
+      queryColumnNames,
+      schemaFieldNames,
       viewSchemaMode,
       captureNewPath = false)
 

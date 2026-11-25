@@ -12,13 +12,8 @@ for that directory's scope. A directory may carry these instructions as `CLAUDE.
 `AGENTS.md`, so check **both** names. Where both exist, one is a symlink to the other, and reading
 either one is sufficient.
 
-New instructions go in `AGENTS.md` or the `.agents/` directory beside it. Keep a rule in
-`AGENTS.md` if most tasks need it, or if an agent could break it without noticing it is in that
-situation. Move procedures and reference material to `.agents/`, behind a pointer that starts with
-its trigger. When adding instructions to a directory that has neither file, create `AGENTS.md` as
-the real file and add a `CLAUDE.md` symlink beside it (`ln -s AGENTS.md CLAUDE.md`). After editing
-agent docs, run `dev/agent_docs_lint.py --strict`, which CI also runs: it checks the pairing, that
-every pointer resolves and every `.agents/` file has one, and Codex's 32 KiB budget per chain.
+Agent instructions go in `AGENTS.md` or the `.agents/` directory beside it. Before adding or
+editing them: read `.agents/agent-docs.md`.
 
 ## Pre-flight Checks
 
@@ -42,6 +37,18 @@ Before the first code edit or running test in a session, ensure a clean working 
   read `.agents/build-and-test.md`. For setup and local troubleshooting: `docs/building-spark.md`.
 - Before writing a new Scala or Python test suite: read `.agents/test-base-classes.md` and pick
   the lowest base class that provides what the test actually needs.
+- When writing or changing a test, pin the configs its assertions depend on: runtime SQL configs
+  with `withSQLConf` (`self.sql_conf` in Python), static SQL and core configs in the suite's conf
+  (`sparkConf` in `SharedSparkSession` suites, `conf` in `SharedSparkContext` suites, `conf()` in
+  Python). Scheduled jobs rerun the suites with other defaults set through env vars: Non-ANSI
+  (`SPARK_ANSI_SQL_MODE=false`), UDS (`PYSPARK_UDS_MODE=true`), JDK codegen
+  (`SPARK_CODEGEN_COMPILER=jdk`) and RocksDB UI (`LIVE_UI_LOCAL_STORE_DIR=<dir>`). The RocksDB UI
+  job keeps the live UI store on disk, and no config switches it back to memory, so a UI or
+  listener test must pass with either store. When a result differs by ANSI mode and both matter,
+  assert both modes instead of pinning one. To check, rerun the suite with the job's env var set.
+- Never remove, skip or weaken a failing test (`ignore`, `assume(false)`, `@unittest.skip`, or an
+  expected value or golden file updated just to match), or mock the code under test, unless asked.
+  Explain each new mock in a code comment.
 - SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class
   documentation before running or updating these tests. DO NOT edit the generated golden files
   (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make
@@ -53,27 +60,24 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 - Keep source lines within 100 characters; the linters enforce this for Scala, Java, and Python.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
-  content requires it). Before committing Scala, Java or Python changes: run the spot-checks in
-  `.agents/code-conventions.md`.
+  content requires it). When changing Scala, Java or Python code: read
+  `.agents/code-conventions.md`, and run its spot-checks before committing.
+- Every new text file that `dev/.rat-excludes` does not already match needs the Apache License
+  header, copied from a neighboring file of the same type and placed after the `#!` line of an
+  executable script; the license check in CI fails otherwise. If one cannot carry a header, such
+  as test data, add a `dev/.rat-excludes` entry that matches no other file or directory name: RAT
+  matches each entry against bare names anywhere in the tree. Binary files need neither.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.
 - Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`.
   Read the README there before modifying proto definitions.
-- A change that needs a version (`@since`, config `.version("...")`, new `MimaExcludes`
-  sections): read `.agents/versioning.md` first. It is usually not `master`'s version.
+- A change that needs a version (`@since`, config `.version("...")`, a `MimaExcludes` entry): read
+  `.agents/versioning.md` first. It is usually not `master`'s version.
 
 ## Pull Requests
 
-- PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit
-  the JIRA ID. The component tag comes from the `COMPONENTS` registry in `dev/merge_spark_pr.py`,
-  the source of truth: each entry pairs a PR-title tag with its canonical JIRA component name and
-  accepted aliases (e.g. `Documentation` → `[DOC]`, `Pandas API on Spark` → `[PS]`,
-  `SQL` → `[SQL]`). Read that registry to pick the right tag.
-- Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased earlier PRs. For
-  separately planned work, non-trivial changes, or work outside the earlier JIRA's scope, create a
-  separate JIRA ticket for each PR and use the normal title format without `[FOLLOWUP]`.
-- Before creating a JIRA ticket or a PR, or writing a PR description: read
+- Before creating a JIRA ticket or a PR, or writing a PR title or description: read
   `.agents/pr-workflow.md`.
 - DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on
   the upstream repo.
