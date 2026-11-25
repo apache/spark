@@ -1053,6 +1053,269 @@ Note that stream-static joins are not stateful, so no state management is necess
 However, a few types of stream-static outer joins are not yet supported.
 These are listed at the [end of this Join section](#support-matrix-for-joins-in-streaming-queries).
 
+##### External Lookup Joins
+
+An ordinary stream-static join reads the whole static side in every micro-batch. Since Spark
+4.4.0, a stream-static join can *look up* rows instead: in each micro-batch, Spark sends the join
+keys of the stream rows to the data source of the static side, and joins only the rows that come
+back. This is an *external lookup join*. Use it when the static side is a key-value store, a
+database or a service that is too large to read in full in every micro-batch, or that changes
+while the query runs. For a static side that is small enough to read in full, an ordinary
+stream-static join is simpler.
+
+The data source of the static side must support lookups. A join then runs as an external lookup
+join in one of two cases:
+
+- **The table supports only lookups.** Spark cannot scan such a table, so it always joins it by
+  lookups, and no hint is needed. Reading the table outside such a join fails.
+- **The table supports both lookups and batch reads.** Spark keeps an ordinary join, unless you add
+  the `EXTERNAL_LOOKUP` hint to the lookup side.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+customers = spark.read. ...  # a table whose data source supports lookups
+orders = spark.readStream. ...
+
+# A table that supports only lookups needs no hint.
+orders.join(customers, orders.customerId == customers.id)
+
+# A table that also supports batch reads needs the hint on its side of the join.
+orders.join(customers.hint("external_lookup"), orders.customerId == customers.id, "left_outer")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val customers = spark.read. ...  // a table whose data source supports lookups
+val orders = spark.readStream. ...
+
+// A table that supports only lookups needs no hint.
+orders.join(customers, orders("customerId") === customers("id"))
+
+// A table that also supports batch reads needs the hint on its side of the join.
+val hinted = customers.hint("external_lookup")
+orders.join(hinted, orders("customerId") === hinted("id"), "left_outer")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> customers = spark.read(). ...;  // a table whose data source supports lookups
+Dataset<Row> orders = spark.readStream(). ...;
+
+// A table that supports only lookups needs no hint.
+orders.join(customers, orders.col("customerId").equalTo(customers.col("id")));
+
+// A table that also supports batch reads needs the hint on its side of the join.
+Dataset<Row> hinted = customers.hint("external_lookup");
+orders.join(hinted, orders.col("customerId").equalTo(hinted.col("id")), "left_outer");
+{% endhighlight %}
+
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+-- orders is a temporary view of a streaming DataFrame.
+-- The hint names the lookup side, here c.
+SELECT /*+ EXTERNAL_LOOKUP(c) */ o.*, c.name
+FROM orders o LEFT OUTER JOIN customers c ON o.customerId = c.id
+{% endhighlight %}
+
+</div>
+
+</div>
+
+The hint must mark the lookup side. Put it on the lookup side's DataFrame, or name the lookup
+relation in a SQL hint, as in `EXTERNAL_LOOKUP(c)`. A hint on the stream side, or a hint without a
+relation name above the whole join, fails with `INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE`.
+Other join hints only log a warning when Spark cannot follow them. This hint is stricter: when
+Spark cannot run the hinted join as an external lookup join, the query fails and the error says
+why. A join strategy hint such as `BROADCAST` on an external lookup join also fails. With
+`spark.sql.optimizer.disableHints` set to true, Spark removes the hint, so a table that also
+supports batch reads uses an ordinary join.
+
+###### Supported External Lookup Joins
+
+- **Sides.** The left side must be the stream, and the right side the lookup table. A lookup
+  table on the left side, or a left side that is not a stream, fails.
+- **Join types.** Inner, left outer, left semi and left anti. Spark treats a cross join as an
+  inner join. Other join types fail with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE`.
+- **Lookup conditions.** The join condition must compare a column of the lookup table with an
+  expression over the stream, using `=`, `<=>`, `<`, `<=`, `>` or `>=`. The lookup column must be
+  the bare column, with no cast or function applied to it: to compare values of different types,
+  cast the stream-side expression instead. For an inner join, the comparison may also be in a
+  `WHERE` clause above the join. The data source chooses which of these comparisons
+  it uses to find rows. Spark evaluates the rest of the condition on the returned rows.
+- **Column types.** Spark uses a comparison to look up rows only when data stores reliably compare
+  the column type in the same way as Spark:
+  - `=` and `<=>`: integral types, `BOOLEAN`, `DECIMAL`, `DATE`, `TIMESTAMP`, `TIMESTAMP_NTZ`,
+    `BINARY`, and `STRING` or `VARCHAR` with a collation that compares bytes, such as the default
+    `UTF8_BINARY`. `VARCHAR` is not used when
+    `spark.sql.charVarchar.standardSemantics.enabled` is true.
+  - `<`, `<=`, `>` and `>=`: integral types, `DECIMAL`, `DATE`, `TIMESTAMP` and `TIMESTAMP_NTZ`.
+    The stream-side expression must not be able to fail. For example, a widening cast or
+    `try_cast` is allowed.
+
+  Other types, such as `FLOAT`, `DOUBLE`, `CHAR` and strings with other collations, are never used
+  to look up rows. A join with no comparison that Spark can use fails with
+  `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE`. A join whose data source uses none of
+  the comparisons fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE`.
+- **The lookup side.** The lookup side can be the table itself, or reach it through aliases,
+  temporary views, views, `WITH` clauses, and projections and filters. Spark pushes a filter on
+  lookup columns, such as `c.tier >= 2`, to the data source, as for any other join. The lookup side
+  cannot contain other operators, such as an aggregation or another join. It also cannot contain
+  Python UDFs, external UDFs, subqueries, non-deterministic expressions, metadata columns or a
+  `MATERIALIZED` CTE. The join
+  condition cannot contain a subquery.
+
+Spark reports most unsupported queries with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED` when you build the
+DataFrame. Some errors depend on the optimized plan or on the data source. Spark checks those when
+the query starts, and stops the query before it processes any data. You see the error from
+`awaitTermination()` or `StreamingQuery.exception()`.
+
+###### Semantic Guarantees of External Lookup Joins
+
+- **Lookups read current data.** Each request reads the data that the source holds at that time.
+  Requests are not a consistent snapshot: the requests of one micro-batch may see different
+  versions of the data.
+- **Retries can see new values.** A retried or speculative task sends its requests again, and can
+  get different rows. For example, Spark recomputes the join when it loses the output of a shuffle
+  that follows the join. When the new output differs, Spark reruns the stages that read that
+  shuffle, or fails the query.
+- **A failure is never a miss.** When the data source fails a request, the task fails. Spark never
+  treats a failed request as a key without matches.
+- **Spark checks the returned rows.** Spark evaluates the join condition, and the filters that it
+  pushed to the data source, again on every returned row. So a data source that matches more
+  loosely than Spark, for example without case sensitivity, does not change the result. Spark also
+  checks returned values against the schema, and fails the task with
+  `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP` when a value does not fit. Spark cannot detect a row that
+  the data source fails to return.
+- **Otherwise, the result is the result of an ordinary join** over the rows that the lookups
+  return.
+- **The DataFrame cache is not used for the lookup side.** If you cache the lookup side's DataFrame,
+  the join still looks up current data.
+
+###### Requests and the Lookup Cache
+
+Each task collects stream rows into requests, removes repeated keys, and sends one request at a
+time. A request holds at most 1000 rows, and no more than the data source allows. It stops taking
+rows when their size reaches `spark.sql.join.externalLookup.maxBatchBytes`.
+
+By default, each task also caches the result of each key that it has looked up, including a key
+with no matches, so a repeated key is not looked up again. There is one cache per input partition
+of a task, and it ends with the task. So a change in the source may not be seen for a key that the
+task has already looked up. The cache evicts the least recently used keys when it is full. You
+can also set a time to live, after which a cached result is looked up again.
+
+You can set the cache for a join in its hint with options of the form `key=value`. A hint option
+overrides the matching configuration for that join:
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+orders.join(customers.hint("external_lookup", "cache_ttl=30s"), orders.customerId == customers.id)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val hinted = customers.hint("external_lookup", "cache_ttl=30s")
+orders.join(hinted, orders("customerId") === hinted("id"))
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> hinted = customers.hint("external_lookup", "cache_ttl=30s");
+orders.join(hinted, orders.col("customerId").equalTo(hinted.col("id")));
+{% endhighlight %}
+
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+SELECT /*+ EXTERNAL_LOOKUP(c, 'cache_enabled=false') */ o.*, c.name
+FROM orders o JOIN customers c ON o.customerId = c.id
+{% endhighlight %}
+
+</div>
+
+</div>
+
+<table>
+<thead><tr><th>Configuration</th><th>Hint option</th><th>Default</th><th>Meaning</th></tr></thead>
+<tr>
+  <td><code>spark.sql.join.externalLookup.cache.enabled</code></td>
+  <td><code>cache_enabled</code></td>
+  <td><code>true</code></td>
+  <td>Whether a task caches lookup results.</td>
+</tr>
+<tr>
+  <td><code>spark.sql.join.externalLookup.cache.maxBytes</code></td>
+  <td><code>cache_max_bytes</code></td>
+  <td><code>16m</code></td>
+  <td>The maximum size of one cache, that is, of one input partition of a task. A key whose
+  result takes more than a sixteenth of it is not cached.</td>
+</tr>
+<tr>
+  <td><code>spark.sql.join.externalLookup.cache.ttl</code></td>
+  <td><code>cache_ttl</code></td>
+  <td><code>0</code></td>
+  <td>How long a cached result is used, counted from when it was cached, such as <code>30s</code>.
+  <code>0</code> means no limit.</td>
+</tr>
+<tr>
+  <td><code>spark.sql.join.externalLookup.maxBatchBytes</code></td>
+  <td></td>
+  <td><code>64m</code></td>
+  <td>The size of stream rows at which a request stops taking rows.</td>
+</tr>
+<tr>
+  <td><code>spark.sql.join.externalLookup.realTimeMode.maxBatchRows</code></td>
+  <td></td>
+  <td><code>1</code></td>
+  <td>The number of stream rows at which a request stops taking rows in
+  <a href="real-time-mode.html">Real-time Mode</a>.</td>
+</tr>
+</table>
+
+A range comparison (`<`, `<=`, `>` or `>=`) with a stream-side value works differently, when the
+data source uses it to find rows. Each request then holds one key only, and the join caches
+nothing.
+
+###### External Lookup Joins in Real-time Mode
+
+External lookup joins also run in [Real-time Mode](real-time-mode.html). A real-time batch runs
+until its duration ends, not until its input ends. So by default each request holds one stream
+row, and Spark sends it as soon as it reads the row. Keys that repeat are served from the cache.
+To send fewer requests, raise `spark.sql.join.externalLookup.realTimeMode.maxBatchRows`. A row
+then waits until its request is full, until the key of a range lookup changes, or until the batch
+ends, even when its key is cached. The cache lives for one batch. As in a micro-batch, Spark loads
+the lookup table's definition once per batch, and `current_timestamp()` is fixed for the batch.
+
+###### Data Sources that Serve Lookups
+
+A data source serves lookups when its table reports the `EXTERNAL_LOOKUP` capability, and its scan
+builder implements `SupportsExternalLookup`. A table that reports `EXTERNAL_LOOKUP` without
+`BATCH_READ` supports only lookups. The Javadoc of
+[`SupportsExternalLookup`](../api/java/org/apache/spark/sql/connector/read/SupportsExternalLookup.html)
+and of the related interfaces in the same package describes the contract.
+
 #### Stream-stream Joins
 In Spark 2.3, we have added support for stream-stream joins, that is, you can join two streaming
 Datasets/DataFrames. The challenge of generating join results between two data streams is that,
