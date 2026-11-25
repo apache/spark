@@ -1148,39 +1148,39 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val backward = asOfJoin("inner", "backward", None)
       assert(isGenerated(backward))
       checkAnswer(backward,
-        Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+        Seq(Row(1, 5, 0, "a"), Row(1, 11, 10, "c"), Row(2, 12, 8, "d")))
       assert(cursorTasks(backward) > 0, "Expected the cursor scan")
 
       // Cursor scan, forward: a trade with no later quote keeps nulls in a left outer join.
       val forward = asOfJoin("leftouter", "forward", None)
       assert(isGenerated(forward))
-      checkAnswer(forward, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, null, null, null),
-        Row(12, 2, null, null, null), Row(3, 3, 9, 3, "e")))
+      checkAnswer(forward, Seq(Row(1, 5, 7, "b"), Row(1, 11, null, null),
+        Row(2, 12, null, null), Row(3, 3, 9, "e")))
       assert(cursorTasks(forward) > 0, "Expected the cursor scan")
 
       // With a tolerance of 2, only trade 11 has a quote close enough, with either scan.
       val tolerance = asOfJoin("inner", "backward", Some(2))
       assert(isGenerated(tolerance))
-      checkAnswer(tolerance, Seq(Row(11, 1, 10, 1, "c")))
+      checkAnswer(tolerance, Seq(Row(1, 11, 10, "c")))
       assert(cursorTasks(tolerance) > 0, "Expected the cursor scan")
       withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
         val buffered = asOfJoin("inner", "backward", Some(2))
         assert(isGenerated(buffered))
-        checkAnswer(buffered, Seq(Row(11, 1, 10, 1, "c")))
+        checkAnswer(buffered, Seq(Row(1, 11, 10, "c")))
         assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
       }
 
       // Nearest joins keep the interpreted scan.
       val nearest = asOfJoin("inner", "nearest", None)
       assert(hasAsOfJoin(nearest) && !isGenerated(nearest))
-      checkAnswer(nearest, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, 10, 1, "c"),
-        Row(12, 2, 8, 2, "d"), Row(3, 3, 9, 3, "e")))
+      checkAnswer(nearest, Seq(Row(1, 5, 7, "b"), Row(1, 11, 10, "c"),
+        Row(2, 12, 8, "d"), Row(3, 3, 9, "e")))
 
       // With the codegen off, the interpreted scan gives the same rows.
       withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> "false") {
         val off = asOfJoin("inner", "backward", None)
         assert(hasAsOfJoin(off) && !isGenerated(off))
-        checkAnswer(off, Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+        checkAnswer(off, Seq(Row(1, 5, 0, "a"), Row(1, 11, 10, "c"), Row(2, 12, 8, "d")))
       }
     }
   }
