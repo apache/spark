@@ -26,7 +26,7 @@ import org.apache.spark.sql.classic.{DataFrame => ClassicDataFrame, Dataset => C
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
-import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream, LowLatencyMemoryStreamOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
@@ -123,6 +123,20 @@ class RealTimeModeSourceEvolutionSuite extends StreamRealTimeModeSuiteBase {
     }
   }
 
+  /** The JSON of each source's offset in the latest offset log entry, keyed by source name. */
+  private def committedOffsets(checkpointDir: File): Map[String, String] =
+    latestOffsetMap(checkpointDir).offsetsMap.map { case (name, offset) =>
+      assert(offset.isDefined, s"Source $name should have a real offset")
+      name -> offset.get.json()
+    }
+
+  /**
+   * The JSON of a single-partition memory stream's offset after it has read `numRecords` records.
+   * The offset is a record count, independent of the record values.
+   */
+  private def memoryOffset(numRecords: Int): String =
+    LowLatencyMemoryStreamOffset(Map(0 -> numRecords)).json()
+
   // =============================================
   // Named sources drive the RTM checkpoint layout
   // =============================================
@@ -190,41 +204,36 @@ class RealTimeModeSourceEvolutionSuite extends StreamRealTimeModeSuiteBase {
       val input1 = LowLatencyMemoryStream.singlePartition[Int]
       val input2 = LowLatencyMemoryStream.singlePartition[Int]
 
-      // Run 1: alpha then beta.
+      // Run 1: alpha then beta. The sources read different numbers of records, so their
+      // committed offsets differ and a swap between them is observable.
       testRealTimeStream(namedStream(input1, "alpha").union(namedStream(input2, "beta")))(
-        AddData(input1, 1),
-        AddData(input2, 2),
+        AddData(input1, 10),
+        AddData(input2, 20, 21, 22),
         StartStream(checkpointLocation = checkpointPath),
-        CheckAnswerRowsContainsWithTimeout(rtmTimeoutMs, 1, 2),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 10, 20, 21, 22),
         WaitUntilCurrentBatchProcessed,
         StopStream
       )
-
-      val offsetsAfterFirstRun = latestOffsetMap(checkpointDir).offsetsMap
-        .collect { case (name, Some(offset)) => name -> offset.json() }
-      assert(offsetsAfterFirstRun.keySet === Set("alpha", "beta"))
+      assert(committedOffsets(checkpointDir) ===
+        Map("alpha" -> memoryOffset(1), "beta" -> memoryOffset(3)))
 
       // Run 2: beta then alpha. The plan's leaf order changed, but names are position-independent,
-      // so each source must resume from its own offset rather than the other's.
+      // so each source must resume from its own offset. If the offsets were swapped, alpha would
+      // skip its new record and beta would re-read records 21 and 22, so the fresh sink must hold
+      // exactly the two new records.
       testRealTimeStream(namedStream(input2, "beta").union(namedStream(input1, "alpha")))(
-        AddData(input1, 3),
-        AddData(input2, 4),
+        AddData(input1, 11),
+        AddData(input2, 23),
         StartStream(checkpointLocation = checkpointPath),
-        CheckAnswerRowsContainsWithTimeout(rtmTimeoutMs, 3, 4),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 11, 23),
         // Reordering must not fall back to positional source paths.
         Execute { q => assert(sourceMetadataPathSuffixes(q) === Set("alpha", "beta")) },
         WaitUntilCurrentBatchProcessed,
+        CheckAnswerWithTimeout(rtmTimeoutMs, 11, 23),
         StopStream
       )
-
-      val offsetsAfterSecondRun = latestOffsetMap(checkpointDir).offsetsMap
-        .collect { case (name, Some(offset)) => name -> offset.json() }
-      assert(offsetsAfterSecondRun.keySet === Set("alpha", "beta"))
-      // Each source advanced past where it was, and neither inherited the other's offset.
-      offsetsAfterSecondRun.foreach { case (name, offset) =>
-        assert(offset != offsetsAfterFirstRun(name),
-          s"Source $name should have advanced after run 2")
-      }
+      assert(committedOffsets(checkpointDir) ===
+        Map("alpha" -> memoryOffset(2), "beta" -> memoryOffset(4)))
     }
   }
 
@@ -237,35 +246,28 @@ class RealTimeModeSourceEvolutionSuite extends StreamRealTimeModeSuiteBase {
       testRealTimeStream(namedStream(input1, "alpha"))(
         AddData(input1, 1),
         StartStream(checkpointLocation = checkpointPath),
-        CheckAnswerRowsContainsWithTimeout(rtmTimeoutMs, 1),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 1),
         Execute { q => assert(sourceMetadataPathSuffixes(q) === Set("alpha")) },
         WaitUntilCurrentBatchProcessed,
         StopStream
       )
-      val alphaOffsetAfterFirstRun =
-        latestOffsetMap(checkpointDir).offsetsMap("alpha").map(_.json())
-      assert(alphaOffsetAfterFirstRun.isDefined)
+      assert(committedOffsets(checkpointDir) === Map("alpha" -> memoryOffset(1)))
 
-      // Run 2: add beta.
+      // Run 2: add beta. alpha must resume from its committed offset, so the fresh sink must not
+      // contain record 1 again; beta, which has no committed offset, reads from the start.
       val input2 = LowLatencyMemoryStream.singlePartition[Int]
       testRealTimeStream(namedStream(input1, "alpha").union(namedStream(input2, "beta")))(
         AddData(input1, 2),
         AddData(input2, 3),
         StartStream(checkpointLocation = checkpointPath),
-        CheckAnswerRowsContainsWithTimeout(rtmTimeoutMs, 2, 3),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 2, 3),
         Execute { q => assert(sourceMetadataPathSuffixes(q) === Set("alpha", "beta")) },
         WaitUntilCurrentBatchProcessed,
+        CheckAnswerWithTimeout(rtmTimeoutMs, 2, 3),
         StopStream
       )
-
-      // alpha resumed from its own checkpointed offset (it advanced rather than restarting), and
-      // beta was added alongside it under its own name.
-      val offsetMap = latestOffsetMap(checkpointDir)
-      assert(offsetMap.offsetsMap.keySet === Set("alpha", "beta"))
-      assert(offsetMap.offsetsMap("alpha").map(_.json()) != alphaOffsetAfterFirstRun,
-        "alpha should have advanced past the offset it committed in run 1")
-      assert(offsetMap.offsetsMap("beta").isDefined,
-        "The newly added beta source should have a real offset")
+      assert(committedOffsets(checkpointDir) ===
+        Map("alpha" -> memoryOffset(2), "beta" -> memoryOffset(1)))
     }
   }
 

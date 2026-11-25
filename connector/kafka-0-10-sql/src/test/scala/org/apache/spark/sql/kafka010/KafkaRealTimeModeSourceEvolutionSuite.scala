@@ -26,7 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.{LowLatencyClock, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.{SerializedOffset, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -42,7 +42,8 @@ import org.apache.spark.util.SystemClock
  * through `spark.readStream`, sources are named with the `.name()` API directly rather than by
  * wrapping the logical plan, which is how a user actually names a Kafka source. The checks confirm
  * that named Kafka sources get name-keyed checkpoint paths and a v2 name-keyed offset log under
- * RTM, and that the naming enforcement rules fire on the RTM path.
+ * RTM, that restarts which reorder sources or change their topics keep each name tied to its own
+ * offsets, and that the naming enforcement rules fire on the RTM path.
  */
 class KafkaRealTimeModeSourceEvolutionSuite extends KafkaSourceTest with Matchers {
   import testImplicits._
@@ -131,6 +132,17 @@ class KafkaRealTimeModeSourceEvolutionSuite extends KafkaSourceTest with Matcher
     }
   }
 
+  /** Each source's Kafka offset in the latest offset log entry, keyed by source name. */
+  private def committedOffsets(checkpointDir: File): Map[String, KafkaSourceOffset] =
+    latestOffsetMap(checkpointDir).offsetsMap.map { case (name, offset) =>
+      assert(offset.isDefined, s"Source $name should have a real offset")
+      name -> KafkaSourceOffset(SerializedOffset(offset.get.json()))
+    }
+
+  /** The offset of a source that has read `numRecords` records from partition 0 of `topic`. */
+  private def kafkaOffset(topic: String, numRecords: Long): KafkaSourceOffset =
+    KafkaSourceOffset((topic, 0, numRecords))
+
   // =============================================
   // Named sources drive the RTM checkpoint layout
   // =============================================
@@ -192,6 +204,163 @@ class KafkaRealTimeModeSourceEvolutionSuite extends KafkaSourceTest with Matcher
       assert(offsetMap.offsetsMap.keySet === Set("alpha", "beta"))
       assert(offsetMap.offsetsMap.values.forall(_.isDefined),
         s"Both named sources should have real offsets, got ${offsetMap.offsetsMap}")
+    }
+  }
+
+  // ===========================================
+  // Restarts that change the Kafka sources
+  // ===========================================
+
+  testWithSourceEvolution("RTM named Kafka sources keep their offsets when reordered") {
+    withTempDir { checkpointDir =>
+      val checkpointPath = checkpointDir.getAbsolutePath
+      val topic1 = newTopic()
+      val topic2 = newTopic()
+      testUtils.createTopic(topic1, partitions = 1)
+      testUtils.createTopic(topic2, partitions = 1)
+      // The sources read different numbers of records, so their committed offsets differ.
+      testUtils.sendMessages(topic1, Array("10"), Some(0))
+      testUtils.sendMessages(topic2, Array("20", "21", "22"), Some(0))
+
+      // Run 1: alpha then beta.
+      testStream(
+        namedKafka(topic1, Some("alpha")).union(namedKafka(topic2, Some("beta"))),
+        Update,
+        sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 10, 20, 21, 22),
+        WaitUntilCurrentBatchProcessed,
+        StopStream
+      )
+      assert(committedOffsets(checkpointDir) ===
+        Map("alpha" -> kafkaOffset(topic1, 1), "beta" -> kafkaOffset(topic2, 3)))
+
+      testUtils.sendMessages(topic1, Array("11"), Some(0))
+      testUtils.sendMessages(topic2, Array("23"), Some(0))
+
+      // Run 2: beta then alpha. Each name must resume from its own topic's offset, so the fresh
+      // sink holds exactly the two new records.
+      testStream(
+        namedKafka(topic2, Some("beta")).union(namedKafka(topic1, Some("alpha"))),
+        Update,
+        sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 11, 23),
+        Execute { q => assert(sourceMetadataPathSuffixes(q) === Set("alpha", "beta")) },
+        WaitUntilCurrentBatchProcessed,
+        CheckAnswerWithTimeout(rtmTimeoutMs, 11, 23),
+        StopStream
+      )
+      assert(committedOffsets(checkpointDir) ===
+        Map("alpha" -> kafkaOffset(topic1, 2), "beta" -> kafkaOffset(topic2, 4)))
+    }
+  }
+
+  testWithSourceEvolution("RTM replaces a named Kafka source with a new name on another topic") {
+    withTempDir { checkpointDir =>
+      val checkpointPath = checkpointDir.getAbsolutePath
+      val topic1 = newTopic()
+      val topic2 = newTopic()
+      testUtils.createTopic(topic1, partitions = 1)
+      testUtils.createTopic(topic2, partitions = 1)
+      testUtils.sendMessages(topic1, Array("1", "2"), Some(0))
+      testUtils.sendMessages(topic2, Array("3", "4"), Some(0))
+
+      // Run 1: alpha reads topic1.
+      testStream(namedKafka(topic1, Some("alpha")), Update, sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 1, 2),
+        WaitUntilCurrentBatchProcessed,
+        StopStream
+      )
+      assert(committedOffsets(checkpointDir) === Map("alpha" -> kafkaOffset(topic1, 2)))
+
+      // Run 2: switch to topic2 under a new name. gamma has no committed offset, so it starts
+      // from its starting offsets, and alpha's topic1 offsets are dropped rather than carried over.
+      testStream(namedKafka(topic2, Some("gamma")), Update, sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 3, 4),
+        Execute { q => assert(sourceMetadataPathSuffixes(q) === Set("gamma")) },
+        WaitUntilCurrentBatchProcessed,
+        CheckAnswerWithTimeout(rtmTimeoutMs, 3, 4),
+        StopStream
+      )
+      assert(committedOffsets(checkpointDir) === Map("gamma" -> kafkaOffset(topic2, 2)))
+    }
+  }
+
+  testWithSourceEvolution("RTM fails a named Kafka source whose topic changed across a restart") {
+    withTempDir { checkpointDir =>
+      val checkpointPath = checkpointDir.getAbsolutePath
+      val topic1 = newTopic()
+      val topic2 = newTopic()
+      testUtils.createTopic(topic1, partitions = 1)
+      testUtils.createTopic(topic2, partitions = 1)
+      testUtils.sendMessages(topic1, Array("1"), Some(0))
+      testUtils.sendMessages(topic2, Array("2"), Some(0))
+
+      // Run 1: alpha reads topic1.
+      testStream(namedKafka(topic1, Some("alpha")), Update, sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 1),
+        WaitUntilCurrentBatchProcessed,
+        StopStream
+      )
+
+      // Run 2: alpha now reads topic2. The name still maps to alpha's checkpointed topic1 state:
+      // its committed offsets and the initial offsets the Kafka source recorded under
+      // `sources/alpha`. The source reports topic1's partition as deleted instead of silently
+      // reading topic2 from that state.
+      testStream(namedKafka(topic2, Some("alpha")), Update, sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        ExpectFailure[KafkaIllegalStateException] { e =>
+          checkError(
+            exception = e.asInstanceOf[KafkaIllegalStateException],
+            condition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+            parameters = Map("partitions" -> s"Set($topic1-0)"))
+        }
+      )
+    }
+  }
+
+  testWithSourceEvolution("RTM fails named Kafka sources whose topics were swapped") {
+    withTempDir { checkpointDir =>
+      val checkpointPath = checkpointDir.getAbsolutePath
+      val topic1 = newTopic()
+      val topic2 = newTopic()
+      testUtils.createTopic(topic1, partitions = 1)
+      testUtils.createTopic(topic2, partitions = 1)
+      testUtils.sendMessages(topic1, Array("1"), Some(0))
+      testUtils.sendMessages(topic2, Array("2"), Some(0))
+
+      // Run 1: alpha reads topic1 and beta reads topic2.
+      testStream(
+        namedKafka(topic1, Some("alpha")).union(namedKafka(topic2, Some("beta"))),
+        Update,
+        sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        CheckAnswerWithTimeout(rtmTimeoutMs, 1, 2),
+        WaitUntilCurrentBatchProcessed,
+        StopStream
+      )
+
+      // Run 2: the topics are swapped between the names. Each name keeps its own checkpointed
+      // state (committed offsets and the initial offsets under `sources/<name>`), which now
+      // belongs to the other name's topic, so the query fails instead of reading either topic
+      // from the other's offsets.
+      testStream(
+        namedKafka(topic2, Some("alpha")).union(namedKafka(topic1, Some("beta"))),
+        Update,
+        sink = new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointPath),
+        ExpectFailure[KafkaIllegalStateException] { e =>
+          checkError(
+            exception = e.asInstanceOf[KafkaIllegalStateException],
+            condition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+            parameters = Map("partitions" -> s"Set\\(($topic1|$topic2)-0\\)"),
+            matchPVals = true)
+        }
+      )
     }
   }
 
