@@ -176,6 +176,14 @@ private[spark] object History {
 
   val HISTORY_SERVER_UI_ACLS_ENABLE = ConfigBuilder("spark.history.ui.acls.enable")
     .version("1.0.1")
+    .doc("Specifies whether ACLs should be checked to authorize users viewing the applications " +
+      "in the history server. If enabled, access control checks are performed regardless of " +
+      "what the individual applications had set for spark.acls.enable. The application owner " +
+      "will always have authorization to view their own application and any users specified via " +
+      "spark.acls.enabled and groups specified via spark.ui.view.acls.groups when the " +
+      "application was run will also have authorization to view that application. If disabled, " +
+      "no access control checks are made for any application UIs available through the history " +
+      "server.")
     .booleanConf
     .createWithDefault(false)
 
