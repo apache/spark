@@ -2425,8 +2425,11 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(
       plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
-    // The new filters go ahead of the condition, so one over a column that can fail (see
-    // `failableOutput`) would compute that column on rows a conjunct of the condition drops.
+    // The new filters go ahead of the condition, or, with
+    // `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct at
+    // which the conjuncts so far imply it, see `withInferredPredicates`. Either way, one over a
+    // column that can fail (see `failableOutput`) would compute that column on rows that the
+    // conjuncts after it drop, so such a column gets none.
     case filter @ Filter(condition, child) =>
       val canAdd: Expression => Boolean =
         if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
@@ -2436,7 +2439,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
           canAdd(c) && !c.references.exists(failable.contains)
         }
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        Filter(withInferredPredicates(newFilters, condition, child), child)
       } else {
         filter
       }
@@ -2492,6 +2495,62 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       // Leaving the other input unfiltered too when both inputs are the same plan would keep it,
       // but the filter drops rows before the shuffle.
       j.copy(left = newLeft, right = newRight)
+  }
+
+  /**
+   * Adds the predicates inferred from the conjuncts of `condition` to it: at the front, or, with
+   * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct at
+   * which the conjuncts so far, with the constraints of `child`, imply it, so that evaluating the
+   * condition in its order does not evaluate it before the conjuncts that precede that one, whose
+   * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`. With
+   * whole-stage codegen, a check is still generated before the first conjunct that references its
+   * column, see `GeneratePredicateHelper.precedingNotNullChecks`, so for `coalesce(x, 1) + y > 0
+   * AND x > 0` only the order of the plan changes. The constraints are assumed to only grow with
+   * the prefix, so the first implying prefix of each predicate is found by a search that doubles
+   * the prefix until it implies the predicate, then halves the last range; the constraints of each
+   * prefix are computed once. If a longer prefix lost a constraint, a predicate would only be
+   * placed later. The prefixes and the condition are built as balanced trees, as the parser builds
+   * a long chain of `AND`.
+   */
+  private def withInferredPredicates(
+      inferred: Seq[Expression],
+      condition: Expression,
+      child: LogicalPlan): Expression = {
+    if (conf.evaluateNotNullChecksInOrder) {
+      val conjuncts = splitConjunctivePredicates(condition)
+      val implied = mutable.HashMap.empty[Int, ExpressionSet]
+      def impliedBy(k: Int): ExpressionSet = implied.getOrElseUpdate(k,
+        Filter(buildBalancedPredicate(conjuncts.take(k + 1), And), child).constraints)
+      val placed = Array.fill(conjuncts.length)(Seq.empty[Expression])
+      // Places `preds`, each implied by the first `hi + 1` conjuncts and not by the first `lo`.
+      def place(preds: Seq[Expression], lo: Int, hi: Int): Unit = if (preds.nonEmpty) {
+        if (lo == hi) {
+          placed(lo) = preds
+        } else {
+          val mid = (lo + hi) / 2
+          val (atOrBefore, after) = preds.partition(impliedBy(mid).contains)
+          place(atOrBefore, lo, mid)
+          place(after, mid + 1, hi)
+        }
+      }
+      // The whole condition implies every inferred predicate, since they come from the
+      // constraints of the filter, so the last range ends at the last conjunct.
+      val last = conjuncts.length - 1
+      var remaining = inferred
+      var lo = 0
+      var hi = 0
+      while (remaining.nonEmpty) {
+        val (now, later) =
+          if (hi == last) (remaining, Nil) else remaining.partition(impliedBy(hi).contains)
+        place(now, lo, hi)
+        remaining = later
+        lo = hi + 1
+        hi = math.min(2 * hi + 1, last)
+      }
+      buildBalancedPredicate(conjuncts.zip(placed).flatMap { case (c, ps) => ps :+ c }, And)
+    } else {
+      And(inferred.reduce(And), condition)
+    }
   }
 
   private def getAllConstraints(
