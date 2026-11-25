@@ -24400,6 +24400,7 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     -----
     Affected by these public SQL configurations:
 
+    * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.timestampType``
 
     Examples
