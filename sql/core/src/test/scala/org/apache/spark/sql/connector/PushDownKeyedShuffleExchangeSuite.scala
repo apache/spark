@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Explode, Expression, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Ascii, AttributeReference, Explode, Expression, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, KeyedPartitioning, ROUTING_LOST}
@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{FilterExec, GenerateExec, LocalTableScanExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{PushDownKeyedShuffleExchange, ShuffleQueryStageExec}
-import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, MergingSessionsExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.execution.window.{Final, Partial => WGLPartial, WindowExec, WindowGroupLimitExec}
@@ -37,7 +37,10 @@ import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions.{col, udaf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{FloatType, LongType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
+import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase {
 
   private val functions = Seq(
@@ -178,6 +181,37 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
     }
     assert(shuffles(nonAdaptivePlan("false")).size == 2)
     assert(shuffles(nonAdaptivePlan("true")).size == 1)
+  }
+
+  test("the non-adaptive subquery gate covers the subquery plans") {
+    loadData()
+    val query =
+      s"""SELECT i.id, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, sum(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id
+         |) p ON i.id = p.item_id
+         |WHERE p.total > (
+         |  SELECT avg(q.total) FROM testcat.ns.$items j
+         |  JOIN (
+         |    SELECT item_id, sum(price) AS total
+         |    FROM testcat.ns.$purchases GROUP BY item_id
+         |  ) q ON j.id = q.item_id)""".stripMargin
+    def plan(rule: String): SparkPlan = withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> rule,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      sql(query).queryExecution.executedPlan
+    }
+    def reused(plan: SparkPlan): Int =
+      plan.collectWithSubqueries { case _: ReusedExchangeExec => 1 }.sum
+    // The subquery's exchanges still match the main plan's, so the rule leaves both unchanged.
+    val off = plan("false")
+    val on = plan("true")
+    assert(reused(off) > 0, off)
+    assert(reused(on) == reused(off), on)
   }
 
   test("non-adaptive plans are rewritten too") {
@@ -352,6 +386,69 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true")
   }
 
+  test("a computed key over a collated group key keeps both shuffles") {
+    createTable("collated_items", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.collated_items VALUES (65), (97)")
+    createTable("collated_purchases",
+      Array(Column.create("s", StringType("UTF8_LCASE")), Column.create("price", FloatType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.collated_purchases VALUES ('a', 10.0), ('A', 20.0)")
+    // `'a'` and `'A'` are one group under UTF8_LCASE, but `ascii(s)` gives 97 and 65, so moving the
+    // shuffle below the aggregate would split the group across tasks. The plan-level check refuses
+    // the rewrite here, which the shuffle count pins.
+    withPushDownConf() {
+      val aggregate = sql(
+        s"""SELECT p.total FROM testcat.ns.collated_items i
+           |JOIN (
+           |  SELECT s, sum(price) AS total FROM testcat.ns.collated_purchases GROUP BY s
+           |) p ON i.id = ascii(p.s)""".stripMargin)
+      checkAnswer(aggregate, Seq(Row(30.0)))
+      assert(shuffles(aggregate.queryExecution.executedPlan).size == 2,
+        aggregate.queryExecution.executedPlan)
+      val window = sql(
+        s"""SELECT p.c FROM testcat.ns.collated_items i
+           |JOIN (
+           |  SELECT s, count(*) OVER (PARTITION BY s) AS c
+           |  FROM testcat.ns.collated_purchases
+           |) p ON i.id = ascii(p.s)""".stripMargin)
+      checkAnswer(window, Seq(Row(2L), Row(2L)))
+      assert(shuffles(window.queryExecution.executedPlan).size == 2,
+        window.queryExecution.executedPlan)
+    }
+  }
+
+  test("a function of a non-binary-stable cluster key is not admitted") {
+    val s = AttributeReference("s", StringType("UTF8_LCASE"))()
+    val ascii = Ascii(s)
+    val scan = new LocalTableScanExec(
+      Seq(s), Seq(InternalRow(UTF8String.fromString("a"))), None, false)
+    val hash = ShuffleExchangeExec(HashPartitioning(Seq(s), 2), scan, ENSURE_REQUIREMENTS)
+    val aggregate = HashAggregateExec(
+      requiredChildDistributionExpressions = Some(Seq(s)),
+      isStreaming = false,
+      numShufflePartitions = None,
+      groupingExpressions = Seq(s),
+      aggregateExpressions = Nil,
+      aggregateAttributes = Nil,
+      initialInputBufferOffset = 0,
+      resultExpressions = Seq(s),
+      child = hash)
+    def keyed(layoutExpr: Expression): SparkPlan = ShuffleExchangeExec(
+      KeyedPartitioning(Seq(layoutExpr), Seq(InternalRow(65), InternalRow(97))), aggregate,
+      ENSURE_REQUIREMENTS)
+    val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+      // `ascii(s)` tells 'a' and 'A' apart, which the collated key groups together.
+      val computed = keyed(ascii)
+      assert(rule.apply(computed) eq computed, computed)
+      // The key itself keeps the group co-located and is still admitted.
+      val identity = keyed(s)
+      assert(rule.apply(identity) ne identity, identity)
+    }
+  }
+
   test("a layout held by a later keyed member is admitted") {
     loadData()
     // The aggregate outputs `item_id` and an alias of it, so the layout is not the first keyed
@@ -375,7 +472,8 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
     sql("INSERT INTO testcat.ns.codes VALUES ('1', 40.0), ('3', 15.5), ('n/a', 1.0)")
     // The keyed shuffle evaluates `cast(code as bigint)` only on the groups `having` keeps, so the
     // rewrite must not move it below the filter, where the 'n/a' group would reach the cast.
-    withPushDownConf() {
+    // ANSI stays pinned: off, the cast is total and the layout would move below the filter.
+    withPushDownConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val df = sql(
         s"""SELECT k.id, p.total FROM testcat.ns.keyed_codes k
            |JOIN (
@@ -1049,8 +1147,6 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       assert(exchanges(pushed).size == 1, pushed)
 
       assertDeclined(
-        withKeyedLayout(_.withLayout(_.copy(isGrouped = false))), "isGrouped")
-      assertDeclined(
         withKeyedLayout(_.withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST)))),
         "unknownKeysRouted")
       // The reduced-keys clause keeps the guard one predicate with the producer, but a plan-level
@@ -1093,7 +1189,7 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
     def plan(layoutOn: Expression): SparkPlan = {
       val scan = new LocalTableScanExec(Seq(a), Seq(InternalRow(1L)), None, false)
       val hash = ShuffleExchangeExec(HashPartitioning(Seq(a), 2), scan, ENSURE_REQUIREMENTS)
-      val project = ProjectExec(Seq(a, Alias(Add(a, Literal(1L)), "b")()), hash)
+      val project = ProjectExec(Seq(a, Alias(Add(a, Literal(1L)), "b")(exprId = b.exprId)), hash)
       ShuffleExchangeExec(
         KeyedPartitioning(Seq(layoutOn), Seq(InternalRow(1L), InternalRow(2L))), project,
         ENSURE_REQUIREMENTS)
@@ -1107,6 +1203,13 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       assert(rule.apply(rejected) eq rejected, rejected)
       val accepted = plan(a)
       assert(rule.apply(accepted) ne accepted, accepted)
+      // An ungrouped layout is no template: the hash shuffle's partitioner needs the keys to be
+      // unique per partition. This shape has no clustered consumer to refuse it first.
+      val ungrouped = accepted.transformUp {
+        case exchange @ ShuffleExchangeExec(keyed: KeyedPartitioning, _, _, _, _) =>
+          exchange.copy(outputPartitioning = keyed.withLayout(_.copy(isGrouped = false)))
+      }
+      assert(rule.apply(ungrouped) eq ungrouped, ungrouped)
     }
   }
 

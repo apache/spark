@@ -854,8 +854,9 @@ object QueryExecution {
       new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
       // Must run after `EnsureRequirements`, whose exchanges it moves, and before the stamps,
-      // which must see the layout a node ends up with.
-      PushDownKeyedShuffleExchange(ensureRequirements, containsSubqueries),
+      // which must see the layout a node ends up with. A plan prepared as a subquery belongs to a
+      // query that has subqueries, so it takes the same gate.
+      PushDownKeyedShuffleExchange(ensureRequirements, containsSubqueries || subquery),
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),

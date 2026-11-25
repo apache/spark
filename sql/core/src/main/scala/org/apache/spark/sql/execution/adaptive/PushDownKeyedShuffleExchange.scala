@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Attrib
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, GenerateExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, PartitioningOrigin, ShuffleExchangeExec, ValidateRequirements}
@@ -222,7 +223,14 @@ case class PushDownKeyedShuffleExchange(
    * one partition, which a keyed layout does not give.
    */
   private def servesClustering(layout: KeyedPartitioning, keys: Seq[Expression]): Boolean =
-    keys.nonEmpty && layout.satisfies(ClusteredDistribution(keys))
+    keys.nonEmpty && layout.satisfies(ClusteredDistribution(keys)) && {
+      // A non-binary-stable key groups values a computed expression can tell apart: under
+      // UTF8_LCASE `'a'` and `'A'` share a group, but `ascii(s)` gives 97 and 65. Only a layout
+      // expression that is the key itself keeps such a group on one partition, since the keys'
+      // wrapper compares collation-aware.
+      keys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)) ||
+        layout.expressions.forall(expr => keys.exists(_.semanticEquals(expr)))
+    }
 
   /**
    * `layout` rewritten from `outputExprs`' output attributes into the child's, or `None` when one
