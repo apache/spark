@@ -982,6 +982,46 @@ class GitHub:
             print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
             return None
 
+    def pr_author(self, pr_num):
+        """The login of the user who opened PR `pr_num`, or None -- also for a bot or a failure.
+
+        >>> from contextlib import redirect_stdout
+        >>> from io import StringIO
+        >>> from unittest.mock import patch
+        >>> gh = GitHub()
+        >>> def author(user=None, error=None):
+        ...     with (
+        ...         patch.object(gh, "_api", return_value={"user": user}, side_effect=error),
+        ...         redirect_stdout(StringIO()),
+        ...     ):
+        ...         return gh.pr_author(7)
+        >>> author({"login": "alice", "type": "User"})
+        'alice'
+        >>> author({"login": "bot", "type": "Bot"}), author(), author(error=OSError("down"))
+        (None, None, None)
+        """
+        try:
+            user = self._api("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("user") or {}
+        except Exception as e:
+            print_error("Could not look up the author of PR #%s: %s" % (pr_num, e))
+            return None
+        return user.get("login") if user.get("type") == "User" else None
+
+    def request_review(self, pr_num, login):
+        """Request a review of PR `pr_num` from `login`; None on failure or no token.
+
+        GitHub refuses (HTTP 422) a login that is not a collaborator on the repository.
+        """
+        if not GITHUB_OAUTH_KEY:
+            print_error("GITHUB_OAUTH_KEY is not set; skipping the review request.")
+            return None
+        try:
+            url = "%s/pulls/%s/requested_reviewers" % (GITHUB_API_BASE, pr_num)
+            return self._api(url, "POST", {"reviewers": [login]})
+        except Exception as e:  # network, HTTP or JSON: the caller falls back to a comment
+            print_error("Could not request a review of PR #%s from %s: %s" % (pr_num, login, e))
+            return None
+
     def _api(self, url, method="GET", payload=None):
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         request = Request(url, data=data, method=method)
@@ -1065,7 +1105,7 @@ class GitHub:
 
 
 class DryRunGitHub(GitHub):
-    """Logs the intended PR close/comment/create instead of calling the GitHub API."""
+    """Logs the intended PR close/comment/create/review request instead of calling the API."""
 
     def close_pr(self, pr_num):
         print("DRY-RUN: would close PR #%s via the GitHub API." % pr_num)
@@ -1074,6 +1114,11 @@ class DryRunGitHub(GitHub):
     def comment(self, pr_num, body):
         print("DRY-RUN: would post the following comment on PR #%s:\n%s" % (pr_num, body))
         return None
+
+    def request_review(self, pr_num, login):
+        # A fake success, so a dry run logs the request rather than the fallback comment.
+        print("DRY-RUN: would request a review of PR #%s from %s." % (pr_num, login))
+        return {}
 
     def create_pr(self, base, head, title, body):
         # Return a fake PR so the 'p' path takes its success branch in a dry run (and the
@@ -2377,11 +2422,14 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     ...         patch.object(git, "run", return_value=body),
     ...         patch.object(github, "open_pr", return_value=found),
     ...         patch.object(github, "create_pr", return_value=created) as create,
+    ...         patch.multiple(sys.modules[__name__], _request_original_review=review),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         marker = _land_via_fork(pr, "branch-4.2", "PICK", "[SPARK-1][SQL] Fix")
     ...     return marker, push.call_args_list, create.call_args_list
-    >>> marker, pushes, creates = land("me", {"html_url": "https://github.com/apache/spark/pull/9"})
+    >>> review = Mock()
+    >>> new_pr = {"html_url": "https://github.com/apache/spark/pull/9", "number": 9}
+    >>> marker, pushes, creates = land("me", new_pr)
     >>> marker
     'https://github.com/apache/spark/pull/9'
     >>> pushes
@@ -2390,6 +2438,11 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     ('branch-4.2', 'me:backport-pr7-branch-4.2', '[SPARK-1][4.2][SQL] Fix')
     >>> creates[0].args[3].splitlines()[0]
     'Backport of #7 to `branch-4.2`.'
+
+    The author of the original PR is asked to review the new one:
+
+    >>> review.call_args.args[:2], review.call_args.args[2] is new_pr, review.call_args.args[3]
+    ((7, 'branch-4.2'), True, 'me')
     >>> land("me", None)[0]
     'fork:me:backport-pr7-branch-4.2'
     >>> land("me", None, push_error=OSError("rejected"))
@@ -2407,6 +2460,13 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     >>> marker, pushes, creates = land("me", found, pasted="y", found=found)
     >>> marker, len(pushes), len(creates)
     ('https://github.com/apache/spark/pull/8', 1, 1)
+
+    Refreshing that PR asks for no review: it was asked for when the PR was opened.
+
+    >>> review.reset_mock()
+    >>> _ = land("me", found, pasted="y", found=found)
+    >>> review.called
+    False
 
     From a run on #9, itself a merged backport of #7, the new PR still names #7:
 
@@ -2459,6 +2519,9 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     created = github.create_pr(pick_ref, head, pr_title, pr_body)
     if created and created.get("html_url"):
         print("Backport PR for #%s against %s: %s" % (pr_num, pick_ref, created["html_url"]))
+        if not existing:
+            # A refreshed PR already had its review asked for when it was opened.
+            _request_original_review(pr_num, pick_ref, created, owner)
         return created["html_url"]
     print_error("Backport PR was not opened (see above); the pick is on %s." % head)
     return _manual_backport_pr(pick_ref, pr_title, pr_body, head=head) or "fork:%s" % head
@@ -2475,8 +2538,20 @@ def _backport_pr_body(original, pick_ref, message):
     >>> body = _backport_pr_body(7, "branch-4.2", pick)
     >>> print(body.split("\\n\\n")[0])
     Backport of #7 to `branch-4.2`, cherry-picked from 0123abc.
-    >>> "keeps #7's message, footer and author" in body, "@" in body
-    (True, False)
+    >>> "keeps #7's message, footer and author" in body
+    True
+
+    Below that, the pick's message is reproduced so reviewers can read what the change does
+    without opening #7. Mentions are stripped, so it pings no one; e-mail addresses stay:
+
+    >>> print(_backport_pr_body(7, "branch-4.2", "Fix, thanks @bob\\n\\n" + footer)
+    ...       .split("\\n\\n---\\n\\n")[1])
+    Fix, thanks bob
+    <BLANKLINE>
+    Closes #7 from a/b.
+    <BLANKLINE>
+    Authored-by: A <a@e.org>
+    Signed-off-by: M <m@e.org>
 
     A pick of a merged backport PR names it, so reviewers see the whole chain:
 
@@ -2496,7 +2571,47 @@ def _backport_pr_body(original, pick_ref, message):
         "%s.\n\nOpened by `dev/merge_spark_pr.py`. Merging this PR with the script commits its "
         "first commit's message, which keeps #%s's message, footer and author, and adds "
         "`Backport-PR` with this PR's number and the merger's sign-off. Fixups go in as further "
-        "commits; their authors get `Co-authored-by`." % (", ".join(lead), original)
+        "commits; their authors get `Co-authored-by`. The picked commit's message follows."
+        "\n\n---\n\n%s" % (", ".join(lead), original, _pick_message(message))
+    )
+
+
+def _request_original_review(original, pick_ref, created, opener):
+    """Ask the author of `original` to review its new backport PR `created` (the API's JSON).
+
+    Skipped when that author is `opener`, as GitHub refuses a review request from a PR's own
+    author. GitHub only takes review requests for the repository's collaborators, so when the
+    request fails, a comment mentioning the author asks instead.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def ask(author, requested=True, opener="me"):
+    ...     with (
+    ...         redirect_stdout(StringIO()),
+    ...         patch.object(github, "pr_author", return_value=author),
+    ...         patch.object(github, "request_review",
+    ...                      return_value={} if requested else None) as request,
+    ...         patch.object(github, "comment") as comment,
+    ...     ):
+    ...         _request_original_review(7, "branch-4.2", {"number": 9}, opener)
+    ...     return request.call_args_list, comment.call_args_list
+    >>> ask("alice")
+    ([call(9, 'alice')], [])
+    >>> ask("alice", requested=False)[1][0].args
+    (9, '@alice, could you review this backport of your #7 to `branch-4.2`?')
+    >>> ask("Me"), ask(None)
+    (([], []), ([], []))
+    """
+    author = github.pr_author(original)
+    if not author or author.lower() == opener.lower() or "number" not in created:
+        return
+    if github.request_review(created["number"], author) is not None:
+        print("Requested a review from %s, the author of #%s." % (author, original))
+        return
+    github.comment(
+        created["number"],
+        "@%s, could you review this backport of your #%s to `%s`?" % (author, original, pick_ref),
     )
 
 
