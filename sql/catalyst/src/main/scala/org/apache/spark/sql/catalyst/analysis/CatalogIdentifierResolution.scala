@@ -60,20 +60,26 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     }
   }
 
-  /** Resolves the current catalog and namespace, e.g. the target of `SHOW TABLES`. */
-  def resolveCurrentNamespace(): ResolvedNamespace = {
-    ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
+  /** Resolves the current catalog and namespace using the caller's catalog lookup when supplied. */
+  def resolveCurrentNamespace(lookupCatalog: LookupCatalog = this): ResolvedNamespace = {
+    ResolvedNamespace(
+      lookupCatalog.currentCatalog,
+      catalogManager.currentNamespace.toImmutableArraySeq)
   }
 
   /**
    * Resolves a namespace name, preserving its origin and tags and loading metadata on request.
+   * Uses the caller's catalog extractor when supplied.
    */
-  def resolveUnresolvedNamespace(unresolvedNamespace: UnresolvedNamespace): ResolvedNamespace = {
+  def resolveUnresolvedNamespace(
+      unresolvedNamespace: UnresolvedNamespace,
+      lookupCatalog: LookupCatalog = this): ResolvedNamespace = {
     CurrentOrigin.withOrigin(unresolvedNamespace.origin) {
       val resolvedNamespace = unresolvedNamespace match {
         case UnresolvedNamespace(Seq(), fetchMetadata) =>
-          resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
-        case UnresolvedNamespace(CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
+          resolveNamespace(lookupCatalog.currentCatalog, Seq.empty[String], fetchMetadata)
+        case UnresolvedNamespace(
+            lookupCatalog.CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
           resolveNamespace(catalog, namespace, fetchMetadata)
       }
       resolvedNamespace.copyTagsFrom(unresolvedNamespace)
@@ -93,6 +99,7 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  /** Resolves namespace metadata only when requested and supported by the catalog. */
   private def resolveNamespace(
       catalog: CatalogPlugin,
       ns: Seq[String],

@@ -49,7 +49,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,i_current_price]
                               Project [ss_item_sk]
                                 Filter [ss_item_sk]
                                   Subquery #2
-                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 239, 6582, 0, 0),bloomFilter,buf]
+                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_skL, 42), 239, 6582, 0, 0),bloomFilter,buf]
                                       Exchange #6
                                         ObjectHashAggregate [i_item_sk] [buf,buf]
                                           WholeStageCodegen (1)

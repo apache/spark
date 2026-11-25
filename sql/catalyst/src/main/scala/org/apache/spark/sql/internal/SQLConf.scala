@@ -670,17 +670,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
-    buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
-    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-    .doc("When true, split a projection into several projections with the filters which " +
-      "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
-      "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
-      s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val REGEX_PATTERN_COST_ESTIMATE_VERSION =
     buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
     .internal()
@@ -1287,10 +1276,14 @@ object SQLConf {
     buildConf("spark.sql.join.sortMergeAsOfJoin.cursorScan.enabled")
       .internal()
       .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
-        "the join is backward or forward, has no residual join condition, and its as-of " +
-        "condition compares the two sort keys, left one first and of the same type. Other " +
-        "joins, and joins on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type " +
-        "keys, buffer each right-side group and scan the buffer again for every left row.")
+        "the join is backward or forward, and its as-of condition compares the two sort " +
+        "keys, left one first and of the same type. One tolerance bound can follow it or be " +
+        "the whole residual join condition, such as r >= l - 10 for a backward join. The " +
+        "bound has the right sort key first, which must be a column, then >= or > for a " +
+        "backward join or <= or < for a forward join, then the left sort key, alone or plus " +
+        "or minus a constant. Other joins, and joins on STRUCT, ARRAY, TIME, nanosecond " +
+        "timestamp or user-defined type keys, buffer each right-side group and scan the " +
+        "buffer again for every left row.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -5848,6 +5841,26 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
       .createWithDefault(100)
+
+  val PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingAggregation")
+      .doc("The level at which the sampling profiler aggregates the sampled call stacks: " +
+        "\"query\" merges samples from the same SQL query, or from all micro-batches of the " +
+        "same streaming query (samples outside a SQL query are merged under \"unknown\"), " +
+        "\"stage\" merges samples from the same stage, and " +
+        "\"task\" keeps one result per task, merging its attempts. At every level, threads " +
+        "with the same name are merged into one call tree, even threads of one task that " +
+        "run at the same time. A finer level uses more memory where the results are " +
+        "merged: on the driver in classic PySpark, and on the " +
+        "client in Spark Connect, where the server keeps every task's result until it sends " +
+        "them to the client, whatever the level. This takes effect only when " +
+        "spark.sql.pyspark.udf.profiler is set to \"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("query", "stage", "task"))
+      .createWithDefault("stage")
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -10886,6 +10899,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
 
+  def pythonUDFProfilerSamplingAggregation: String =
+    getConf(PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION)
+
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
@@ -11168,9 +11184,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
-
-  def splitProjectionForExpensiveFilters: Boolean =
-    getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 
