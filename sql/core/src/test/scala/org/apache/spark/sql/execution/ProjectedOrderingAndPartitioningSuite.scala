@@ -1122,6 +1122,133 @@ class ProjectedOrderingAndPartitioningSuite
         ordering.head.sameOrderExpressions)
     }
   }
+
+  test("SPARK-62263: a multi-key KeyedPartitioning is not crowded out by the alternatives") {
+    val a = (1 to 5).map(i => AttributeReference(s"a$i", IntegerType)())
+    val b = (1 to 5).map(i => AttributeReference(s"b$i", IntegerType)())
+    val one = Alias(Literal(1), "one")()
+    val keys = Seq(InternalRow(1, 1, 1, 1, 1), InternalRow(2, 2, 2, 2, 2))
+    val childPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(a.map(Add(_, Literal(1))), keys),
+      KeyedPartitioning(b, keys)))
+    val child = DummyLeafExecWithPartitioning(a ++ b, childPartitioning)
+    val plan = ProjectExec(a ++ b :+ one, child)
+
+    // Without separating the two spellings, 3^5 = 243 combinations would fill
+    // `EXPRESSION_PROJECTION_CANDIDATE_LIMIT` (100) and drop `[b1..b5]`. Separating them keeps all
+    // 32 master combinations first, followed by 31 constant-containing combinations (`2^5 - 1`).
+    val kps = plan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(kps.size == 63, kps.size)
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(b)))
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(a.map(Add(_, Literal(1))))))
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(a.map(Add(_, one.toAttribute)))))
+
+    // Outer aliases on expressions that also contain a foldable alias must not emit duplicate KPs.
+    val z = a.take(2).zipWithIndex.map { case (attr, i) =>
+      Alias(Add(attr, Literal(1)), s"z${i + 1}")()
+    }
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    val dedupChild = DummyLeafExecWithPartitioning(
+      a.take(2), KeyedPartitioning(a.take(2).map(Add(_, Literal(1))), keys2d))
+    val dedupPlan = ProjectExec(a.take(2) ++ z :+ one, dedupChild)
+    val dedupKps = dedupPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(dedupKps.size == 5, dedupKps.size)
+
+    // Non-leaf foldable aliases already keep their expression in the first pass.
+    val three = Alias(Add(Literal(1), Literal(2)), "three")()
+    val nonLeafChild = DummyLeafExecWithPartitioning(
+      Seq(a.head), KeyedPartitioning(Seq(Add(a.head, Add(Literal(1), Literal(2)))),
+        Seq(InternalRow(1), InternalRow(2))))
+    val nonLeafPlan = ProjectExec(Seq(a.head, three), nonLeafChild)
+    val nonLeafKps =
+      nonLeafPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(nonLeafKps.size == 2, nonLeafKps.size)
+
+    // Positions without a foldable alias fall back to `aliasSpelling` in the constant pass.
+    val partialChildPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(Add(a(0), Literal(1)), a(1)), keys2d),
+      KeyedPartitioning(b.take(2), keys2d)))
+    val partialPlan = ProjectExec(
+      a.take(2) ++ b.take(2) :+ one,
+      DummyLeafExecWithPartitioning(a.take(2) ++ b.take(2), partialChildPartitioning))
+    assert(partialPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), b(1)))))
+    assert(partialPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), a(1)))))
+  }
+
+  test("SPARK-62263: constant spellings do not crowd out later members or sameOrderExpressions") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // NB1: 64 alias combinations on member 0 (a_i / x_i) plus 64 constant combinations must not
+      // crowd out member 1 `HashPartitioning(b1..b6)` under candidate limit 100.
+      val l = spark.range(10).selectExpr((1 to 6).map(i => s"cast(id as int) as a$i"): _*)
+      val r = spark.range(10).selectExpr((1 to 6).map(i => s"cast(id as int) as b$i"): _*)
+      val projExprs = (1 to 6).flatMap(i => Seq(s"a$i", s"a$i as x$i")) ++
+        (1 to 6).map(i => s"b$i") :+ "1 as one"
+      val w = Window.partitionBy((1 to 6).map(i => col(s"b$i")): _*).orderBy("a1")
+      val dfPart = l.join(r, (1 to 6).map(i => l(s"a$i") + 1 === r(s"b$i")).reduce(_ && _))
+        .selectExpr(projExprs: _*)
+        .observe("m", count(lit(1)))
+        .withColumn("rn", row_number().over(w))
+      val partPlan = dfPart.queryExecution.executedPlan
+      val shuffles = collect(partPlan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}:\n$partPlan")
+
+      // NB2: 64 alias combinations on `SortOrder.child` plus 64 constant combinations must not
+      // crowd out `sameOrderExpressions` (`b1`) under candidate limit 100.
+      withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val rSingle = spark.range(10).selectExpr("cast(id as int) as b1")
+        val sumKey = (1 to 6).map(i => l(s"a$i")).reduce(_ + _) + 1
+        val ordExprs = (1 to 6).flatMap(i => Seq(s"a$i", s"a$i as x$i")) ++
+          Seq("b1", "1 as one")
+        val dfSort = l.join(rSingle, sumKey === rSingle("b1"))
+          .selectExpr(ordExprs: _*)
+          .observe("m", count(lit(1)))
+          .sortWithinPartitions($"b1")
+        val sortPlan = dfSort.queryExecution.executedPlan
+        val sorts = collect(sortPlan) { case s: SortExec => s }
+        assert(sorts.size == 2,
+          s"Expected 2 sorts but found ${sorts.size}:\n$sortPlan")
+      }
+    }
+
+    // KeyedPartitioning + HashPartitioning: `KP`'s constant spelling must come after `HP`'s alias
+    // spelling so a tight candidate limit does not drop `HP`.
+    val a = (1 to 2).map(i => AttributeReference(s"a$i", IntegerType)())
+    val b = (1 to 2).map(i => AttributeReference(s"b$i", IntegerType)())
+    val one = Alias(Literal(1), "one")()
+    val two = Alias(Literal(2), "two")()
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "2") {
+      val mixed = PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(Add(a(0), Literal(1))), Seq(InternalRow(1), InternalRow(2))),
+        HashPartitioning(Seq(b(0)), 2)))
+      val mixedPlan = ProjectExec(
+        Seq(a(0), b(0), one),
+        DummyLeafExecWithPartitioning(Seq(a(0), b(0)), mixed))
+      assert(mixedPlan.outputPartitioning.satisfies(ClusteredDistribution(Seq(b(0)))))
+    }
+
+    // NB3: When two KP members have foldable leaves at different positions, each member's own
+    // constant spelling as well as the cross-member constant spelling must be advertised.
+    val crossKp = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(Add(a(0), Literal(1)), a(1)), keys2d),
+      KeyedPartitioning(Seq(b(0), Add(b(1), Literal(2))), keys2d)))
+    val crossPlan = ProjectExec(
+      a ++ b ++ Seq(one, two),
+      DummyLeafExecWithPartitioning(a ++ b, crossKp))
+    val crossKps = crossPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(crossKps.size == 7, crossKps.size)
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), a(1)))))
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(b(0), Add(b(1), Literal(2))))))
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), Add(b(1), Literal(2))))))
+  }
 }
 
 private case class DummyLeafExecWithPartitioning(

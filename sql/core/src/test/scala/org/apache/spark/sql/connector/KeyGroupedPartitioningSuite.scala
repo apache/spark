@@ -60,7 +60,8 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHash
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
-import org.apache.spark.sql.functions.{col, max}
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{col, count, lit, max, row_number}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
@@ -11839,6 +11840,42 @@ class KeyGroupedPartitioningSuite
             case _ => false
           })),
         s"the aggregate's side is grouped over the join:\n$plan")
+    }
+  }
+
+  test("SPARK-62263: a foldable alias over a multi-key SPJ does not crowd out KeyedPartitioning") {
+    val cols = (1 to 5).map(i => Column.create(s"b$i", IntegerType)).toArray
+    val partitions = (1 to 5).map(i => identity(s"b$i")).toArray
+    createTable("spj_5k", cols, partitions)
+    sql("INSERT INTO testcat.ns.spj_5k VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)")
+
+    val l = spark.range(5).selectExpr((1 to 5).map(i => s"cast(id as int) as a$i"): _*)
+    val t = spark.table("testcat.ns.spj_5k")
+    val joined = l.join(t, (1 to 5).map(i => l(s"a$i") + 1 === t(s"b$i")).reduce(_ && _))
+      .selectExpr("*", "1 as one")
+      .observe("m", count(lit(1)))
+    val expected = Seq(Row(0, 1, 1), Row(1, 2, 1))
+
+    Seq(false, true).foreach { aqeEnabled =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        // Partition by scan keys (`b1..b5`, which 3^5 combinations would drop), constant-spelled
+        // join keys (`a_i + 1`), and alias-spelled join keys (`a_i + one` kept by `observe`).
+        Seq(
+          (1 to 5).map(i => col(s"b$i")),
+          (1 to 5).map(i => col(s"a$i") + 1),
+          (1 to 5).map(i => col(s"a$i") + col("one"))).foreach { partCols =>
+          val w = Window.partitionBy(partCols: _*).orderBy("a1")
+          val df = joined.withColumn("rn", row_number().over(w)).select("a1", "b1", "rn")
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          val shuffles = collectAllShuffles(plan)
+          assert(shuffles.size == 1, s"aqe=$aqeEnabled, cols=$partCols:\n$plan")
+        }
+      }
     }
   }
 }
