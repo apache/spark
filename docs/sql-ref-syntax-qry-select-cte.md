@@ -43,7 +43,10 @@ expression_name [ ( column_name [ , ... ] ) ] [ AS ] [ [ NOT ] MATERIALIZED ] ( 
 * **MATERIALIZED**, **NOT MATERIALIZED**
 
     Optionally specifies how the common table expression is evaluated. `MATERIALIZED` forces it
-    to be evaluated once and shared by all references. `NOT MATERIALIZED` forces it to be inlined,
+    to be evaluated once and shared by all references, except a reference in the scalar subquery
+    of the `TIMESTAMP AS OF` clause of a time travel: that subquery is evaluated on its own while
+    the query is analyzed, together with the common table expressions that it reads, so they are
+    evaluated for it apart from the other references. `NOT MATERIALIZED` forces it to be inlined,
     so that each reference is planned and evaluated independently, and non-deterministic
     expressions such as `rand()` may yield different values per reference. A `MATERIALIZED`
     common table expression cannot reference columns of an outer query. `MATERIALIZED` is not

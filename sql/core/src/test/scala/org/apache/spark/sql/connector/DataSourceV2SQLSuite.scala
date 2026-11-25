@@ -4609,7 +4609,9 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH cutoff AS (SELECT $ts1Literal AS ts) SELECT * FROM " +
           s"(WITH $cutoff SELECT * FROM t $asOfCutoff)"),
         rowsAsOfTs2)
-      // A CTE that the subquery does not read is not evaluated.
+      // The query also defines a CTE that the subquery does not read. Its error cannot show
+      // that the subquery is evaluated without it, as a CTE that nothing reads is dropped before
+      // it is planned. The case with such a CTE in a subquery expression, below, shows that.
       checkAnswer(
         sql(s"WITH unused AS (SELECT raise_error('unused') AS ts), $cutoff " +
           s"SELECT * FROM t $asOfCutoff"),
@@ -4632,6 +4634,10 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"WITH cutoff AS MATERIALIZED (SELECT $ts2Literal AS ts) " +
           s"SELECT * FROM t $asOfCutoff"),
         rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH cutoff AS MATERIALIZED (SELECT $ts2Literal AS ts, 42 AS n) " +
+          s"SELECT tt.id, cutoff.n FROM t $asOfCutoff AS tt, cutoff"),
+        Seq(Row(7, 42), Row(8, 42)))
       checkAnswer(
         sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) " +
           s"SELECT * FROM t TIMESTAMP AS OF (SELECT CASE WHEN max(n) = 3 THEN $ts2Literal " +
