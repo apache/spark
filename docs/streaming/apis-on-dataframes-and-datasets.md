@@ -1148,9 +1148,10 @@ supports batch reads uses an ordinary join.
   table on the left side, or a left side that is not a stream, fails.
 - **Join types.** Inner, left outer, left semi and left anti. Spark treats a cross join as an
   inner join. Other join types fail with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE`.
-- **Lookup conditions.** The join condition must compare a column of the lookup table with an
-  expression over the stream, using `=`, `<=>`, `<`, `<=`, `>` or `>=`. The lookup column must be
-  the bare column, with no cast or function applied to it. To compare values of different types,
+- **Lookup conditions.** Spark looks up rows by comparisons that use `=`, `<=>`, `<`, `<=`, `>` or
+  `>=`. Each compares a column of the lookup table with an expression over the stream, or with a
+  constant, such as a filter `c.tier = 2` on the lookup side. The lookup column must be the bare
+  column, with no cast or function applied to it. To compare values of different types,
   cast the stream-side expression to the type of the lookup column instead, but only if every
   stream-side value fits that type exactly. Otherwise, the cast can fail, or change which rows
   match, for example when it truncates a timestamp to a date. For an inner join, the comparison
@@ -1170,10 +1171,12 @@ supports batch reads uses an ordinary join.
     the two types.
 
   Other types, such as `FLOAT`, `DOUBLE`, `CHAR` and strings with other collations, are never used
-  to look up rows. A join with no condition, such as a cross join without a `WHERE` clause, fails
-  with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION`. A join whose condition has no
-  comparison that Spark can use fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE`. A join whose data source uses none of
-  the comparisons fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE`.
+  to look up rows. A join fails when neither its condition nor a comparison with a constant on the
+  lookup side gives Spark a comparison that it can use. It fails with
+  `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION` when it has no condition, as for a
+  cross join without a `WHERE` clause, and with
+  `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE` otherwise. A join whose data source uses
+  none of the comparisons fails with `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE`.
 - **The lookup side.** The lookup side can be the table itself, or reach it through aliases,
   temporary views, views, `WITH` clauses, and projections and filters. Spark pushes a filter on
   lookup columns, such as `c.tier >= 2`, to the data source, as for any other join. The lookup side
@@ -1316,9 +1319,9 @@ ends, even when its key is cached. The cache lives for one batch. As in a micro-
 
 ###### Data Sources that Serve Lookups
 
-A data source serves lookups when its table reports the `EXTERNAL_LOOKUP` capability, and its scan
-builder implements `SupportsExternalLookup`. A table that reports `EXTERNAL_LOOKUP` without
-`BATCH_READ` supports only lookups. The Javadoc of
+A data source serves lookups when its table reports the `EXTERNAL_LOOKUP` capability, its scan
+builder implements `SupportsExternalLookup`, and its scan implements `Scan.toExternalLookup()`.
+A table that reports `EXTERNAL_LOOKUP` without `BATCH_READ` supports only lookups. The Javadoc of
 [`SupportsExternalLookup`](../api/java/org/apache/spark/sql/connector/read/SupportsExternalLookup.html)
 and of the related interfaces in the same package describes the contract.
 
