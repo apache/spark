@@ -254,6 +254,8 @@ class LookupServer:
             return
         if isinstance(first, pa.RecordBatch):
             yield from self.arrow_batches(chain([first], results))
+        elif not isinstance(first, tuple) or isinstance(first, Row) or len(first) != 2:
+            raise self.invalid_return_type(first, "(ordinal, row) tuple, `pyarrow.RecordBatch`")
         else:
             yield from self.tuple_batches(chain([first], results))
 
@@ -318,7 +320,12 @@ class LookupServer:
             )
         if ordinals.null_count > 0:
             raise self.invalid_return_type(None, "int")
-        if ordinals.type != pa.int32():
+        if pa.types.is_unsigned_integer(ordinals.type):
+            # A Python int bound would cast a uint64 column to int64, which fails for 2**63 or
+            # more, so unsigned ordinals are clamped against an unsigned bound.
+            bound = pa.scalar(INT_MAX, pa.uint64())
+            ordinals = pc.min_element_wise(ordinals.cast(pa.uint64()), bound).cast(pa.int32())
+        elif ordinals.type != pa.int32():
             ordinals = pc.max_element_wise(pc.min_element_wise(ordinals, INT_MAX), INT_MIN).cast(
                 pa.int32()
             )

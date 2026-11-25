@@ -1524,7 +1524,9 @@ class DataSourceLookupReader(ABC):
         ...         for row in self.backend.get(user_id):
         ...             yield ordinal, row
 
-        Yields PyArrow RecordBatches, with the ordinal as the first column:
+        Yields PyArrow RecordBatches, with the ordinal as the first column, for the read schema
+        `user_id BIGINT, name STRING`. Each column has the Arrow type of its column in the read
+        schema, also in a batch without rows, so the types are given rather than inferred:
 
         >>> def lookup(self, parameters):
         ...     import pyarrow as pa
@@ -1534,8 +1536,13 @@ class DataSourceLookupReader(ABC):
         ...             ordinals.append(ordinal)
         ...             user_ids.append(row[0])
         ...             names.append(row[1])
-        ...     yield pa.RecordBatch.from_pydict(
-        ...         {"ordinal": ordinals, "user_id": user_ids, "name": names}
+        ...     yield pa.RecordBatch.from_arrays(
+        ...         [
+        ...             pa.array(ordinals, pa.int32()),
+        ...             pa.array(user_ids, pa.int64()),
+        ...             pa.array(names, pa.string()),
+        ...         ],
+        ...         names=["ordinal", "user_id", "name"],
         ...     )
         """
         ...
