@@ -2615,15 +2615,23 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
   private val timeRange = "rt BETWEEN lt - INTERVAL 5 SECONDS AND lt + INTERVAL 5 SECONDS"
 
   // As in a batch join, a row whose join key has a NULL never matches, so an outer join outputs
-  // it at once, padded with NULLs, and it is not stored.
-  Seq(("=", false), ("<=>", true)).foreach { case (operator, nullsMatch) =>
-    test(s"SPARK-61382: full outer join on nullable keys compared by $operator") {
+  // it at once, padded with NULLs, and it is not stored. Null-safe equality still matches NULLs,
+  // also on NULL-typed columns, whose rewritten keys are NULL on every row.
+  for {
+    (operator, nullsMatch) <- Seq(("=", false), ("<=>", true))
+    nullTyped <- Seq(false, true)
+  } {
+    val nullTypedKey = if (nullTyped) " next to a null-safe key on NULL-typed columns" else ""
+    test(s"SPARK-61382: full outer join on nullable keys compared by $operator$nullTypedKey") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
-      val joined = nullableKeyed(leftInput, "l").join(nullableKeyed(rightInput, "r"),
-          expr(s"lk $operator rk AND $timeRange"), "full_outer")
-        .select($"lk", $"lt".cast("long"), $"rk", $"rt".cast("long"))
-      // Null-safe equality compares keys that are never NULL.
+      val (left, right) = (nullableKeyed(leftInput, "l"), nullableKeyed(rightInput, "r"))
+      val joined = (if (nullTyped) {
+          left.withColumn("ln", lit(null)).join(right.withColumn("rn", lit(null)),
+            expr(s"lk $operator rk AND ln <=> rn AND $timeRange"), "full_outer")
+        } else {
+          left.join(right, expr(s"lk $operator rk AND $timeRange"), "full_outer")
+        }).select($"lk", $"lt".cast("long"), $"rk", $"rt".cast("long"))
       val nullRows = if (nullsMatch) {
         Seq(Row(null, 5L, null, 6L))
       } else {
@@ -2633,11 +2641,16 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
         testStream(joined)(
           MultiAddData(leftInput, (1, 5), (-1, 5))(rightInput, (1, 6), (-1, 6)),
           CheckNewAnswer(Row(1, 5L, 1, 6L) +: nullRows: _*),
-          // The watermark moves to 90 seconds, and the next batch evicts the rows at 5 and 6.
-          AddData(leftInput, (2, 100)),
+          // Both inputs have a watermark, so the watermark moves to 90 seconds only once both
+          // reach time 100, and the next batch evicts the rows at 5 and 6 without output.
+          MultiAddData(leftInput, (2, 100))(rightInput, (3, 100)),
           CheckNewAnswer(),
           AddData(leftInput),
-          CheckNewAnswer())
+          CheckNewAnswer(),
+          // Only the two rows at 100 remain in state.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          })
       }
     }
   }

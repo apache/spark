@@ -23,6 +23,14 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, a stream-stream join no longer matches rows whose equality key is NULL, as in
+  batch joins: an inner or left semi join drops such a row, and an outer join outputs it at once,
+  padded with NULLs. This also applies to queries restarted from existing checkpoints, so a query
+  whose earlier output contained such matches returns different rows after the upgrade. Null-safe
+  equality (`<=>`) still matches NULL keys.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join
