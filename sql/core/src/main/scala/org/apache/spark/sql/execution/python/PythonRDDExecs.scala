@@ -41,6 +41,14 @@ import org.apache.spark.util.Utils
 // partitions of the RDDs of Spark Classic: each partition of an operator's output is computed from
 // the partitions at the same index of its inputs, as the RDDs of PySpark compute it.
 
+/**
+ * A physical operator of the RDD API of PySpark on Spark Connect. As the RDDs of Spark Classic,
+ * these operators can read several partitions of an input in a task, a partition several times,
+ * or only some of the partitions, and run in barrier stages and with resource profiles: the plans
+ * that have one keep regular shuffles (see `PipelinedShuffleEligibility`).
+ */
+private[sql] trait PythonRDDExec extends SparkPlan
+
 /** The elements that PythonRDD writes to Python for the rows of an RDD. */
 private[python] object PythonRDDElementConverter {
 
@@ -81,7 +89,7 @@ case class PythonRDDMapPartitionsExec(
     outputPairs: Boolean,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -132,7 +140,8 @@ case class PythonRDDMapPartitionsExec(
 }
 
 /** Physical plan node of [[PythonRDDValues]]. */
-case class PythonRDDValuesExec(output: Seq[Attribute], child: SparkPlan) extends UnaryExecNode {
+case class PythonRDDValuesExec(output: Seq[Attribute], child: SparkPlan)
+  extends UnaryExecNode with PythonRDDExec {
 
   override def outputPartitioning: Partitioning =
     UnknownPartitioning(child.outputPartitioning.numPartitions)
@@ -150,7 +159,8 @@ case class PythonRDDValuesExec(output: Seq[Attribute], child: SparkPlan) extends
 }
 
 /** Physical plan node of [[PythonRDDUnion]]. */
-case class PythonRDDUnionExec(output: Seq[Attribute], children: Seq[SparkPlan]) extends SparkPlan {
+case class PythonRDDUnionExec(output: Seq[Attribute], children: Seq[SparkPlan])
+  extends PythonRDDExec {
 
   override def outputPartitioning: Partitioning =
     UnknownPartitioning(children.map(_.outputPartitioning.numPartitions).sum)
@@ -167,7 +177,7 @@ case class PythonRDDZipPartitionsExec(
     concatenate: Boolean,
     output: Seq[Attribute],
     children: Seq[SparkPlan])
-  extends SparkPlan {
+  extends PythonRDDExec {
 
   override def outputPartitioning: Partitioning =
     UnknownPartitioning(children.head.outputPartitioning.numPartitions)
@@ -205,7 +215,7 @@ case class PythonRDDZipPartitionsExec(
 
 /** Physical plan node of [[PythonRDDCartesian]], as CartesianProductExec computes it. */
 case class PythonRDDCartesianExec(output: Seq[Attribute], left: SparkPlan, right: SparkPlan)
-  extends BinaryExecNode {
+  extends BinaryExecNode with PythonRDDExec {
 
   override def outputPartitioning: Partitioning = UnknownPartitioning(
     left.outputPartitioning.numPartitions * right.outputPartitioning.numPartitions)
@@ -235,7 +245,8 @@ case class PythonRDDCartesianExec(output: Seq[Attribute], left: SparkPlan, right
  * `RDD.coalesce` without a shuffle groups them. Unlike `CoalesceExec`, it makes no partition of a
  * child without partitions, as `RDD.coalesce`.
  */
-case class PythonRDDCoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
+case class PythonRDDCoalesceExec(numPartitions: Int, child: SparkPlan)
+  extends UnaryExecNode with PythonRDDExec {
 
   override def output: Seq[Attribute] = child.output
 
@@ -250,7 +261,7 @@ case class PythonRDDCoalesceExec(numPartitions: Int, child: SparkPlan) extends U
 
 /** Physical plan node of [[PythonRDDParallelize]]. */
 case class PythonRDDParallelizeExec(numSlices: Int, output: Seq[Attribute], child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override def outputPartitioning: Partitioning = UnknownPartitioning(numSlices)
 
@@ -266,7 +277,7 @@ case class PythonRDDParallelizeExec(numSlices: Int, output: Seq[Attribute], chil
 
 /** Physical plan node of [[PythonRDDFromDataFrame]], as `Dataset.javaToPython` pickles rows. */
 case class PythonRDDFromDataFrameExec(output: Seq[Attribute], child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -294,7 +305,7 @@ case class PythonRDDFromDataFrameExec(output: Seq[Attribute], child: SparkPlan)
  * reads the rows that PySpark pickles.
  */
 case class PythonRDDToDataFrameExec(output: Seq[Attribute], child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -321,7 +332,7 @@ case class PythonRDDElementsExec(
     partitions: Option[Seq[Int]],
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -392,7 +403,7 @@ object PythonRDDElementsExec {
 
 /** Physical plan node of [[PythonRDDWithResources]]. */
 case class PythonRDDWithResourcesExec(profile: ResourceProfile, child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonRDDExec {
 
   override def output: Seq[Attribute] = child.output
 
