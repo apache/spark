@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.{IOException, OutputStream}
 import java.nio.ByteBuffer
 
 import scala.language.implicitConversions
@@ -28,10 +29,10 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
-import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
+import org.apache.spark.serializer.{KryoSerializer, SerializationStream, SerializerManager}
+import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator, RedirectableOutputStream}
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstimation
 
@@ -385,6 +386,87 @@ class MemoryStoreSuite
       "b1", new ByteBufferInputStream(bos.toByteBuffer))(ClassTag.Any).toSeq
     assertSameContents(
       bigList, deserializedValues, "PartiallySerializedBlock.finishWritingToStream()")
+  }
+
+  /**
+   * A stub for a compression-wrapped serialization stream, whose resources (such as a native
+   * compression context) are released only by close(). It writes one byte per value and an
+   * end-of-stream marker on close() to `out`, and counts how often it is closed.
+   */
+  private class CloseCountingSerializationStream(out: OutputStream, failOnClose: Boolean)
+    extends SerializationStream {
+    var closeCount = 0
+    override def writeObject[T: ClassTag](t: T): SerializationStream = {
+      out.write(1)
+      this
+    }
+    override def flush(): Unit = out.flush()
+    override def close(): Unit = {
+      closeCount += 1
+      out.write(2)
+      if (failOnClose) throw new IOException("close failed")
+    }
+  }
+
+  /**
+   * Returns a PartiallySerializedBlock that has unrolled three zero bytes and whose remaining
+   * values come from `rest`, together with its serialization stream.
+   */
+  private def partiallySerializedBlock(
+      memoryStore: MemoryStore,
+      rest: Iterator[Any],
+      failOnClose: Boolean = false)
+      : (PartiallySerializedBlock[Any], CloseCountingSerializationStream) = {
+    val bbos = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
+    bbos.write(Array[Byte](0, 0, 0))
+    val redirectableStream = new RedirectableOutputStream
+    redirectableStream.setOutputStream(bbos)
+    val serializationStream = new CloseCountingSerializationStream(redirectableStream, failOnClose)
+    val block = new PartiallySerializedBlock[Any](memoryStore, serializerManager, rdd(0, 0),
+      serializationStream, redirectableStream, 0L, MemoryMode.ON_HEAP, bbos, rest, ClassTag.Any)
+    (block, serializationStream)
+  }
+
+  test("SPARK-62364: PartiallySerializedBlock.finishWritingToStream closes the serialization " +
+      "stream when writing fails") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+
+    // The rest of the input iterator throws.
+    val iteratorError = new IllegalStateException("iterator failed")
+    val (block1, stream1) = partiallySerializedBlock(
+      memoryStore, Iterator[Any](1, 2).map(i => if (i == 2) throw iteratorError else i))
+    val bos = new ByteBufferOutputStream()
+    val e1 = intercept[IllegalStateException](block1.finishWritingToStream(bos))
+    assert(e1 eq iteratorError)
+    assert(e1.getSuppressed.isEmpty)
+    assert(stream1.closeCount === 1)
+    // The unrolled bytes and the first remaining value were written, but not the end-of-stream
+    // marker written by close().
+    assert(bos.toByteArray.toSeq === Seq[Byte](0, 0, 0, 1))
+
+    // Writing to the output stream throws.
+    val (block2, stream2) = partiallySerializedBlock(memoryStore, Iterator[Any](1))
+    val failingStream = new OutputStream {
+      override def write(b: Int): Unit = throw new IOException("write failed")
+    }
+    val e2 = intercept[IOException](block2.finishWritingToStream(failingStream))
+    assert(e2.getMessage === "write failed")
+    assert(e2.getSuppressed.isEmpty)
+    assert(stream2.closeCount === 1)
+  }
+
+  test("SPARK-62364: PartiallySerializedBlock.finishWritingToStream keeps the original error " +
+      "when closing the serialization stream fails") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+    val error = new IllegalStateException("iterator failed")
+    val (block, stream) = partiallySerializedBlock(
+      memoryStore, Iterator[Any](1).map(_ => throw error), failOnClose = true)
+    val e = intercept[IllegalStateException] {
+      block.finishWritingToStream(new ByteBufferOutputStream)
+    }
+    assert(e eq error)
+    assert(e.getSuppressed.map(_.getMessage).toSeq === Seq("close failed"))
+    assert(stream.closeCount === 1)
   }
 
   test("multiple unrolls by the same thread") {
