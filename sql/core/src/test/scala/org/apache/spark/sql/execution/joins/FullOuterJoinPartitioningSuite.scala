@@ -513,17 +513,23 @@ class FullOuterJoinPartitioningSuite
   }
 
   test("FULL OUTER keyed partitioning coalesces transform arguments, not transform results") {
-    val left = TransformExpression(BucketFunction, Seq(keyedLeft), Some(4))
-    val right = TransformExpression(BucketFunction, Seq(keyedRight), Some(4))
-    val ps = PartitioningCollection.flatten(keyedJoin(
-      KeyedPartitioning(Seq(left), Seq(InternalRow(1), InternalRow(2))),
-      KeyedPartitioning(Seq(right), Seq(InternalRow(1), InternalRow(2)))).outputPartitioning)
-      .map(_.asInstanceOf[KeyedPartitioning])
-    val nl = keyedLeft.withNullability(true)
-    val nr = keyedRight.withNullability(true)
-    assert(ps.map(_.expressions) == Seq(
-      Seq(left.copy(children = Seq(Coalesce(Seq(nl, nr))))),
-      Seq(left.copy(children = Seq(Coalesce(Seq(nr, nl)))))))
+    // Both arguments have the same type, so the merged key keeps the left transform's
+    // interpretation mode even when the right transform has a different storedKey flag.
+    Seq(false, true).foreach { storedKey =>
+      val left = TransformExpression(
+        BucketFunction, Seq(keyedLeft), Some(4), storedKey = storedKey)
+      val right = TransformExpression(
+        BucketFunction, Seq(keyedRight), Some(4), storedKey = !storedKey)
+      val ps = PartitioningCollection.flatten(keyedJoin(
+        KeyedPartitioning(Seq(left), Seq(InternalRow(1), InternalRow(2))),
+        KeyedPartitioning(Seq(right), Seq(InternalRow(1), InternalRow(2)))).outputPartitioning)
+        .map(_.asInstanceOf[KeyedPartitioning])
+      val nl = keyedLeft.withNullability(true)
+      val nr = keyedRight.withNullability(true)
+      assert(ps.map(_.expressions) == Seq(
+        Seq(left.copy(children = Seq(Coalesce(Seq(nl, nr))))),
+        Seq(left.copy(children = Seq(Coalesce(Seq(nr, nl)))))))
+    }
   }
 
   test("FULL OUTER keyed partitioning pairs every compatible collection member") {
@@ -554,11 +560,11 @@ class FullOuterJoinPartitioningSuite
   }
 
   test("FULL OUTER keyed partitioning rejects split and ungrouped layouts") {
-    val left = keyedLayout(keyedLeft)
-    val right = keyedLayout(keyedRight)
+    val keys = Seq(InternalRow(1L), InternalRow(1L))
+    val left = KeyedPartitioning(Seq(keyedLeft), keys)
+    val right = KeyedPartitioning(Seq(keyedRight), keys)
     Seq(
-      left.withLayout(_.copy(isGrouped = false)) ->
-        right.withLayout(_.copy(isGrouped = false)),
+      left -> right,
       left.withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN))) ->
         right.withLayout(_.copy(ungroupingOrigin = Some(REPLICATED_FOR_JOIN))))
       .foreach { case (l, r) =>
@@ -574,7 +580,6 @@ class FullOuterJoinPartitioningSuite
     val keys = Seq(InternalRow(1), InternalRow(2))
     Seq(
       left -> right.copy(numBucketsOpt = Some(8)),
-      left -> right.copy(storedKey = true),
       reducedLeft -> reducedRight,
       left.copy(children = Seq(Add(keyedLeft, Literal(1L)))) ->
         right.copy(children = Seq(Add(keyedRight, Literal(1L)))),

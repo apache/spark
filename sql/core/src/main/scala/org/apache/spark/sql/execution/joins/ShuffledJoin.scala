@@ -280,8 +280,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
       case _ => false
     }
     PartitioningCollection.flatten(partitioning).collect {
-      case k: KeyedPartitioning if k.isGrouped && k.ungroupingOrigin.isEmpty &&
-          k.expressionsDescribeKeys && k.expressions.forall {
+      case k: KeyedPartitioning if k.isGrouped && k.expressionsDescribeKeys &&
+          k.expressions.forall {
             case t: TransformExpression => t.children.size == 1 && isColumn(t.children.head)
             case e => isColumn(e)
           } => k
@@ -300,16 +300,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
       return Nil
     }
 
-    val pairs = leftPartitioning.expressions.zip(rightPartitioning.expressions)
-    // Function compatibility includes bucket counts, but not the argument's interpretation mode.
-    if (pairs.exists {
-        case (l: TransformExpression, r: TransformExpression) => l.storedKey != r.storedKey
-        case _ => false
-      }) {
-      return Nil
-    }
-
-    val keyPairs = pairs.map {
+    val keyPairs = leftPartitioning.expressions.zip(rightPartitioning.expressions).map {
       case (l: TransformExpression, r: TransformExpression) => (l.children.head, r.children.head)
       case pair => pair
     }
