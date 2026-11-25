@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
@@ -145,6 +145,23 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(!t(0.0, DoubleType).isSameFunction(t(-0.0, DoubleType)))
     assert(!t(1.5, DoubleType).isSameFunction(t(1.5, DoubleType)))
     assert(t(2, IntegerType).isSameFunction(t(2, IntegerType)), "other types keep their identity")
+    // Nor is it reduced, whichever entry point asks: the connector is never asked about it.
+    var asked = 0
+    val reducible = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DoubleType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "test.reducible_scale"
+      override def canonicalName(): String = name()
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunction: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = { asked += 1; null }
+    }
+    def r(p: Double): TransformExpression =
+      TransformExpression(reducible, Seq(a, Literal(p, DoubleType)))
+    assert(r(0.0).pairReducers(r(-0.0)) == ((None, None)) && r(0.0).reducers(r(-0.0)).isEmpty)
+    assert(asked == 0)
   }
 
   test("SPARK-50593: a transform is not rebuilt over a literal") {

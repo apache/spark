@@ -8897,8 +8897,8 @@ class KeyGroupedPartitioningSuite
     // sameArgumentLayout is arity-less, so a 0-vs-1-parameter pair (e.g. truncate(col) vs
     // truncate(col, w), whose column slots align) reaches the connector reducer with
     // mismatched-length param arrays. The bundled reducers model the documented contract by
-    // length-checking before indexing -- returning null rather than throwing ArrayIndexOutOfBounds
-    // (which probe's guard would swallow into a silent missed SPJ + a misleading warning).
+    // length-checking before indexing -- returning null rather than throwing
+    // ArrayIndexOutOfBounds, which would fail the query.
     val empty = Array.empty[org.apache.spark.sql.connector.expressions.Literal[_]]
     val one = Array[org.apache.spark.sql.connector.expressions.Literal[_]](literal(3))
     assert(BucketFunction.reducer(empty, BucketFunction, one) == null)
@@ -9074,8 +9074,8 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: a transform with no literal parameter does not ask the connector for its " +
       "input types") {
     // The literal-type check has nothing to compare for `days`-like transforms, so it must not call
-    // inputTypes(): a connector whose inputTypes() fails would otherwise lose the reduce master
-    // gave it, since the failure vetoes the pair.
+    // inputTypes(): a connector whose inputTypes() fails would otherwise fail a query that master
+    // reduced, as it never called inputTypes() here.
     val noInputTypes = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
       override def inputTypes(): Array[DataType] = throw new IllegalStateException("inputTypes")
       override def resultType(): DataType = IntegerType
@@ -9120,17 +9120,10 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
     // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
-    // deprecated one throws; SPJ must succeed via the generalized path with NO "reducer threw"
-    // warning (which an eager probe of the deprecated overload would spuriously log). Captured at
-    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
+    // deprecated one throws, so a probe of the deprecated overload would fail the call.
     val l = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 4, attr("id"))
     val r = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 2, attr("store_id"))
-    val logs = transformExpressionLogs {
-      assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
-    }
-    assert(!logs.map(_.getMessage.getFormattedMessage)
-      .exists(_.contains("reducer threw an exception")),
-      "the deprecated overload must not be probed (and throw) once the generalized one reduced")
+    assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
   }
 
   test("SPARK-50593: a throwing generalized overload is surfaced, not masked by the deprecated " +

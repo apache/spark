@@ -170,12 +170,12 @@ case class TransformExpression(
    * in a field of their own, any path that rewrites a transform's children has to skip them. A
    * parameter is not an aliasable value: substituting it changes what the transform computes, and
    * gives the transform a second reference, so `KeyedShuffleSpec.keyPositions` maps it to no
-   * cluster key and SPJ is silently lost. Use it for any retargeting of a partition transform.
+   * cluster key and SPJ is silently lost.
    *
-   * Callers: `KeyedShuffleSpec.rebuiltOver`, which rebuilds a transform over the other side's key,
-   * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument. It
-   * goes through `withNewChildren`, so a reduced transform's partner follows the new argument's
-   * shape, as for any other rewrite.
+   * Use it for any retargeting of a transform over another argument, e.g. a transform rebuilt over
+   * the other side's key, a reduced expression rebuilt over each member's argument, or a scan's
+   * transform rebuilt over a join key for a runtime filter. It goes through `withNewChildren`, so a
+   * reduced transform's partner follows the new argument's shape, as for any other rewrite.
    */
   def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
     withNewChildren(children.map {
@@ -352,8 +352,8 @@ case class TransformExpression(
    * differ, says nothing about whether the other is one-sided, so the pair is `(None, None)`.
    *
    * Also `(None, None)` when either side has no identity, since a reduce could be neither recorded
-   * (`reducedTogetherWith`) nor reported for it. `sameArgumentLayout` already refuses every such
-   * pair; deciding it here keeps `isCompatible` and `reducersBothWays` from disagreeing on one.
+   * (`reducedTogetherWith`) nor reported for it; [[reducerOutcome]] refuses such a pair before
+   * asking the connector, so `isCompatible`, `reducersBothWays` and [[reducers]] agree on it.
    *
    * The planner asks for a pair more than once, so a connector must answer it the same way each
    * time. An exception other than `UnsupportedOperationException` fails the query.
@@ -361,7 +361,6 @@ case class TransformExpression(
   def pairReducers(other: TransformExpression)
       : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
     import TransformExpression._
-    if (functionId.isEmpty || other.functionId.isEmpty) return (None, None)
     (reducerOutcome(other), other.reducerOutcome(this)) match {
       case (Reducible(_), Unimplemented | LiteralTypesDiffer) |
            (Unimplemented | LiteralTypesDiffer, Reducible(_)) => (None, None)
@@ -380,7 +379,10 @@ case class TransformExpression(
       case o: ReducibleFunction[_, _] => o
       case _ => return NotReducible
     }
-    if (!sameArgumentLayout(other) || !literalParamsPassable || !other.literalParamsPassable) {
+    // A side with no identity, e.g. a transform with a floating point parameter, is told apart
+    // from no other, so it is never reduced.
+    if (functionId.isEmpty || other.functionId.isEmpty || !sameArgumentLayout(other) ||
+        !literalParamsPassable || !other.literalParamsPassable) {
       return NotReducible
     }
 

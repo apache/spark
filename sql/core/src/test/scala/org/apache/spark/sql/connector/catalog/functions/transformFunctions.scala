@@ -917,7 +917,8 @@ object TypeTolerantTruncateFunction
 /**
  * A bucket-like function implementing BOTH reducer overloads: the deprecated int overload succeeds
  * (returns a reducer), while the generalized Literal[] overload throws. Used to verify that a
- * throwing generalized overload is final: it is logged, and the deprecated overload is not tried.
+ * throwing generalized overload is final: it fails the query, and the deprecated overload is not
+ * tried.
  */
 object DeprecatedOkGeneralizedThrowsFunction
     extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
@@ -945,7 +946,7 @@ object DeprecatedOkGeneralizedThrowsFunction
 /**
  * The mirror of [[DeprecatedOkGeneralizedThrowsFunction]]: the generalized overload returns a
  * reducer, the deprecated overload throws. Used to verify that under generalized-first dispatch the
- * deprecated overload is NOT probed once the generalized one reduced (no "reducer threw" warning).
+ * deprecated overload is NOT probed once the generalized one reduced (a probe would throw).
  */
 object GeneralizedOkDeprecatedThrowsFunction
     extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
@@ -972,9 +973,9 @@ object GeneralizedOkDeprecatedThrowsFunction
 
 /**
  * A legacy connector: implements ONLY the deprecated int reducer (returns a reducer for any int)
- * and not the generalized overload. Used to verify the isSingleInt null-guard under generalized-
- * first dispatch: a typed-null int param must not reach the deprecated fallback, where
- * null.asInstanceOf[Int] would fabricate a 0 this reducer would accept.
+ * and not the generalized overload. Used to verify that a typed-null int param does not reach the
+ * deprecated fallback, where null.asInstanceOf[Int] would fabricate a 0 this reducer would accept:
+ * the fallback reads `numBucketsOpt`, which is None for a null count.
  */
 object LegacyIntReducerFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
