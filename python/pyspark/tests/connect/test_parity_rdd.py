@@ -275,13 +275,17 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         ]
         commands = []
 
+        from google.protobuf.message import Message
+
         def collect(message):
             if message.DESCRIPTOR.name == "MapPartitions":
                 commands.append(message.command)
             for field, value in message.ListFields():
                 if field.message_type is not None:
-                    for child in value if field.label == field.LABEL_REPEATED else [value]:
-                        collect(child)
+                    # A message, or the messages of a repeated field (the keys of a map field).
+                    for child in [value] if isinstance(value, Message) else value:
+                        if isinstance(child, Message):
+                            collect(child)
 
         for rdd in rdds:
             collect(rdd._df._plan.plan(self.spark.client))
