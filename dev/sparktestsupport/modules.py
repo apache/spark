@@ -969,6 +969,8 @@ pyspark_structured_streaming = Module(
         "python/pyspark/sql/streaming",
         "python/pyspark/sql/pandas",
         "python/pyspark/sql/worker",
+        # Tested by pyspark.sql.tests.test_python_datasource_lookup.
+        "examples/src/main/python/sql/streaming/structured_python_lookup_join.py",
     ],
     python_test_goals=[
         # doctests

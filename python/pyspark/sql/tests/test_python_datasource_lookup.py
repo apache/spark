@@ -1022,7 +1022,13 @@ class BasePythonDataSourceLookupTestsMixin:
                         requests = f.read().split()
                 return [(r.sid, r.name) for r in rows], requests
 
-        with self.sql_conf({"spark.sql.python.externalLookup.enabled": "true"}):
+        # The plain hint takes the session's cache configuration, so it is pinned too.
+        with self.sql_conf(
+            {
+                "spark.sql.python.externalLookup.enabled": "true",
+                "spark.sql.join.externalLookup.cache.enabled": "true",
+            }
+        ):
             expected = [(1, "lookup"), (1, "lookup"), (2, "lookup")]
             # A source with a batch reader is read by lookups only with the hint.
             self.assertEqual(run(), ([(1, "read"), (1, "read"), (2, "read")], []))
