@@ -111,16 +111,6 @@ def run_java_style_checks(build_profiles):
     run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
-def run_sparkr_style_checks():
-    if which("R"):
-        # R style check should be executed after `install-dev.sh`.
-        # Since warnings about `no visible global function definition` appear
-        # without the installation. SEE ALSO: SPARK-9121.
-        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
-    else:
-        print("Ignoring SparkR style check as R was not found in PATH")
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -479,8 +469,7 @@ def main():
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
 
     if not should_only_test_modules or modules.sparkr in test_modules:
-        # If tests modules are specified, we will not run R linter.
-        # SparkR needs the manual SparkR installation.
+        # SparkR tests load the package from R/lib.
         if which("R"):
             with titled_block("Installing SparkR"):
                 run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
@@ -596,11 +585,6 @@ def main():
         ):
             # Run SBT Checkstyle after the build to prevent a side-effect to the build.
             should_run_java_style_checks = True
-        if not changed_files or any(
-            f.endswith(".R") or f.endswith("lint-r") or f.endswith(".lintr") for f in changed_files
-        ):
-            with titled_block("Running R style checks"):
-                run_sparkr_style_checks()
 
     run_shell_script_tests(
         test_modules,

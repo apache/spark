@@ -966,10 +966,11 @@ jobs:
         SKIP_SCALA_BUILD: true
         SKIP_MIMA: true
       run: ./dev/run-tests --modules lint-js
-    - name: Install R linter dependencies and SparkR
-      run: ./R/install-dev.sh
     - name: R linter
-      run: ./dev/lint-r
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-r
 
   java25:
     needs: [precondition]
