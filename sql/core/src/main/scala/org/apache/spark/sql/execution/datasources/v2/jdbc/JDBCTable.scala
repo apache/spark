@@ -73,7 +73,10 @@ case class JDBCTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(mergeOptions(options))
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics, databaseMetadata)
+    val scanDatabaseMetadata =
+      databaseMetadata.filter(_ => jdbcOptions.opensSameConnection(mergedOptions))
+    JDBCScanBuilder(
+      SparkSession.active, schema, mergedOptions, additionalMetrics, scanDatabaseMetadata)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

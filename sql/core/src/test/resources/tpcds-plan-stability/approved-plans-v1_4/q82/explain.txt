@@ -31,7 +31,7 @@ Output [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manuf
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,62.00), LessThanOrEqual(i_current_price,92.00), In(i_manufact_id, [129,270,423,821]), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_manufact_id:int>
+ReadSchema: struct<i_item_sk:bigint,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_manufact_id:int>
 
 (2) ColumnarToRow [codegen id : 3]
 Input [5]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, i_manufact_id#5]
@@ -50,7 +50,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(inv_date_sk#8), dynamicpruningexpression(inv_date_sk#8 IN dynamicpruning#9)]
 PushedFilters: [IsNotNull(inv_quantity_on_hand), GreaterThanOrEqual(inv_quantity_on_hand,100), LessThanOrEqual(inv_quantity_on_hand,500), IsNotNull(inv_item_sk)]
-ReadSchema: struct<inv_item_sk:int,inv_quantity_on_hand:int>
+ReadSchema: struct<inv_item_sk:bigint,inv_quantity_on_hand:int>
 
 (6) ColumnarToRow [codegen id : 1]
 Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
@@ -65,7 +65,7 @@ Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
 
 (9) BroadcastExchange
 Input [2]: [inv_item_sk#6, inv_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_item_sk#1]
@@ -92,14 +92,14 @@ Input [6]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4, inv_date
 
 (15) BroadcastExchange
 Input [4]: [i_item_sk#1, i_item_id#2, i_item_desc#3, i_current_price#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (16) Scan parquet spark_catalog.default.store_sales
 Output [2]: [ss_item_sk#11, ss_sold_date_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk)]
-ReadSchema: struct<ss_item_sk:int>
+ReadSchema: struct<ss_item_sk:bigint>
 
 (17) ColumnarToRow
 Input [2]: [ss_item_sk#11, ss_sold_date_sk#12]
@@ -159,7 +159,7 @@ Output [2]: [d_date_sk#10, d_date#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-05-25), LessThanOrEqual(d_date,2000-07-24), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_date:date>
+ReadSchema: struct<d_date_sk:bigint,d_date:date>
 
 (27) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#10, d_date#13]
@@ -174,6 +174,6 @@ Input [2]: [d_date_sk#10, d_date#13]
 
 (30) BroadcastExchange
 Input [1]: [d_date_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=4]
 
 

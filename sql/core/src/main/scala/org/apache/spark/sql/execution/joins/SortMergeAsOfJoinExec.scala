@@ -25,8 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode,
-  FalseLiteral, GeneratePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, EmptyBlock,
+  ExprCode, FalseLiteral, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -231,8 +231,9 @@ case class SortMergeAsOfJoinExec(
   /**
    * Generates the cursor scan, which reads the right side once and never steps back. The left
    * rows of a group come in ascending as-of key order, so backward keeps its best row for the
-   * next left row, and forward drops each failing row. Returns the function that finds the best
-   * right row for a left row, and the code that starts the scan.
+   * next left row, and forward drops each failing row. A tolerance bound is checked only on the
+   * closest row. Returns the function that finds the best right row for a left row, and the code
+   * that starts the scan.
    */
   private def genCursorScan(
       ctx: CodegenContext,
@@ -260,7 +261,18 @@ case class SortMergeAsOfJoinExec(
       genEquiKeys(ctx, leftRow, rightPeek)
     val leftAsOfKey = createJoinKey(ctx, leftRow, leftSortExprs.take(1), left.output).head
     val rightAsOfKey = createJoinKey(ctx, rightPeek, rightSortExprs.take(1), right.output).head
-    val asOfHolds = genConditionFunction(ctx, asOfCondition, "asOfHolds")
+    // The bound can follow the comparison or be the whole residual condition.
+    val strategy = AsOfScanStrategy(direction)
+    val (keysCondition, toleranceBound) = strategy.cursorConditions(asOfCondition, condition)
+    // The cursor moves on the comparison of the as-of keys alone, on the key values that its
+    // NULL checks read, so the comparison evaluates no key again.
+    val keyComparison = SortMergeAsOfJoinScanner.comparisonOnKeyValues(keysCondition)
+    def keysHold(rightKey: ExprCode): ExprCode = {
+      ctx.currentVars = Seq(leftAsOfKey.copy(code = EmptyBlock), rightKey.copy(code = EmptyBlock))
+      val holds = keyComparison.genCode(ctx)
+      ctx.currentVars = null
+      holds
+    }
     // A new group skips the right rows of earlier groups without evaluating either as-of key,
     // then records whether the group has a right row. Without equi-keys, the only group starts
     // with the scan.
@@ -279,19 +291,22 @@ case class SortMergeAsOfJoinExec(
          """.stripMargin
       (start, "")
     }
-    // The same decisions as the interpreted `SortMergeAsOfJoinScanner.findWithCursor`.
-    val strategy = AsOfScanStrategy(direction)
     // A kept row that a later left row can fail is checked again first.
     val checkKeptRow = if (strategy.matchOutlivesLeftRow) {
       ""
     } else {
+      val keptKey = createJoinKey(ctx, cursorBest, rightSortExprs.take(1), right.output).head
+      val keptHolds = keysHold(keptKey)
       s"""
          |if ($cursorBest != null) {
-         |  if ($asOfHolds($leftRow, $cursorBest)) return $cursorBest;
+         |  ${keptKey.code}
+         |  ${keptHolds.code}
+         |  if (${keptHolds.value}) return $cursorBest;
          |  $cursorBest = null;
          |}
        """.stripMargin
     }
+    val peekHolds = keysHold(rightAsOfKey)
     val onPass = if (strategy.firstMatchWins) s"return $cursorBest;" else ""
     // A failing row either waits for a later left row, or can match none and is dropped.
     val onFail =
@@ -320,7 +335,8 @@ case class SortMergeAsOfJoinExec(
          |      $rightPeek = $nextRight();
          |      continue;
          |    }
-         |    if ($asOfHolds($leftRow, $rightPeek)) {
+         |    ${peekHolds.code}
+         |    if (${peekHolds.value}) {
          |      // The next right row can overwrite `rightPeek`, so keep a copy.
          |      $cursorBest = $copyToBest($rightPeek);
          |      $rightPeek = $nextRight();
@@ -332,7 +348,23 @@ case class SortMergeAsOfJoinExec(
          |  return $cursorBest;
          |}
        """.stripMargin, inlineToOuterClass = true)
-    (func, s"""
+    val findMatch = toleranceBound match {
+      case Some(bound) =>
+        val boundHolds = genConditionFunction(ctx, bound, "toleranceHolds")
+        val closest = ctx.freshName("closest")
+        val findName = ctx.freshName("findInTolerance")
+        ctx.addNewFunction(findName,
+          s"""
+             |private UnsafeRow $findName(InternalRow $leftRow) {
+             |  UnsafeRow $closest = $func($leftRow);
+             |  // Other rows that pass the key comparison are at least as far from the left key,
+             |  // so they fail the bound whenever the closest row does.
+             |  return $closest != null && $boundHolds($leftRow, $closest) ? $closest : null;
+             |}
+           """.stripMargin, inlineToOuterClass = true)
+      case None => func
+    }
+    (findMatch, s"""
        |${metricTerm(ctx, "numAsOfCursorTasks")}.add(1);
        |$startOnlyGroup
      """.stripMargin)
@@ -633,6 +665,18 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val cursorKeys: (Expression, Expression) =
     (bindReference(leftSortExprs.head, leftOutput), bindReference(rightSortExprs.head, rightOutput))
 
+  // Lazy, since only the cursor scan reads them. The cursor moves on the comparison of the as-of
+  // keys alone, and checks the tolerance bound, if any, only on the closest right row.
+  private lazy val (cursorKeysCond, boundToleranceCond): (BasePredicate, Option[BasePredicate]) = {
+    val (keysCondition, toleranceBound) =
+      orderedScanStrategy.get.cursorConditions(asOfCondition, residualCondition)
+    (ShortCircuitPredicate.create(
+      SortMergeAsOfJoinScanner.comparisonOnKeyValues(keysCondition), Nil),
+      toleranceBound.map(ShortCircuitPredicate.create(_, joinedOutput)))
+  }
+  // The left and the right as-of key values that `cursorKeysCond` compares.
+  private val cursorKeyValues = new GenericInternalRow(2)
+
   // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
   // passed through identity UnsafeProjection when right columns are NOT NULL.
   private val nullRightRow: InternalRow = {
@@ -882,7 +926,25 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Finds the best right row for `leftRow` by moving a cursor over the right input, or null.
+   * Finds the best right row for `leftRow` with the cursor scan, or null. The tolerance limit
+   * has one value per left row, so the bound passes the right rows at one end of the group. The
+   * other rows that pass the comparison of the as-of keys are at least as far from that end as
+   * the closest one, so they fail the bound whenever it does.
+   */
+  private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
+    val closest = moveCursor(leftRow, leftKey)
+    if (closest == null) return null
+    boundToleranceCond match {
+      case Some(bound) =>
+        joinedRow(leftRow, closest)
+        if (holds(bound)) closest else null
+      case None => closest
+    }
+  }
+
+  /**
+   * Moves the cursor over the right input for `leftRow`, and returns the closest right row that
+   * passes the comparison of the as-of keys, or null.
    *
    * Left rows of a group come in ascending as-of key order. So a right row that passes for one
    * left row also passes for the next (backward), and a row that fails stays failed (forward).
@@ -890,7 +952,7 @@ private[joins] class SortMergeAsOfJoinScanner(
    * next left row, and forward drops each failing row, since no later left row can match it.
    * The [[AsOfScanStrategy]] of the direction makes these choices, as in the generated scan.
    */
-  private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
+  private def moveCursor(leftRow: InternalRow, leftKey: UnsafeRow): UnsafeRow = {
     // Without equi-keys, all rows form one group, so only the first left row starts it.
     if (cursorGroupKey == null || equiKeyOrdering.exists(_.compare(leftKey, cursorGroupKey) != 0)) {
       startCursorGroup(leftKey)
@@ -902,40 +964,44 @@ private[joins] class SortMergeAsOfJoinScanner(
     val (leftAsOfKey, rightAsOfKey) = cursorKeys
     // A NULL left as-of key matches nothing. It must not move the cursor, or forward would drop
     // right rows that later left rows need.
-    if (leftAsOfKey.eval(leftRow) == null) return null
+    val leftValue = leftAsOfKey.eval(leftRow)
+    if (leftValue == null) return null
+    cursorKeyValues.update(0, leftValue)
 
     // The scanner checked that the direction has a strategy when it was built.
     val strategy = orderedScanStrategy.get
-    joinedRow.withLeft(leftRow)
     if (!strategy.matchOutlivesLeftRow && cursorBest != null) {
       // The cursor is already past the best row, and every row before it failed.
-      joinedRow.withRight(cursorBest)
-      if (holds(boundAsOfCond)) return cursorBest
+      if (keysHold(rightAsOfKey.eval(cursorBest))) return cursorBest
       cursorBest = null
     }
 
     // The group's right rows end at the first row of a later group.
     while (rightPeek != null && compareToRightPeek(leftKey) == 0) {
-      if (rightAsOfKey.eval(rightPeek) == null) {
+      val rightValue = rightAsOfKey.eval(rightPeek)
+      if (rightValue == null) {
         // A NULL right as-of key: no left row can match it.
         advanceRightPeek()
+      } else if (keysHold(rightValue)) {
+        // The next right row overwrites `rightPeek`, so keep a copy.
+        cursorBest = copyToCursorBestBuffer(rightPeek)
+        advanceRightPeek()
+        if (strategy.firstMatchWins) return cursorBest
+      } else if (strategy.matchOutlivesLeftRow) {
+        // The row waits for a later left row.
+        return cursorBest
       } else {
-        joinedRow.withRight(rightPeek)
-        if (holds(boundAsOfCond)) {
-          // The next right row overwrites `rightPeek`, so keep a copy.
-          cursorBest = copyToCursorBestBuffer(rightPeek)
-          advanceRightPeek()
-          if (strategy.firstMatchWins) return cursorBest
-        } else if (strategy.matchOutlivesLeftRow) {
-          // The row waits for a later left row.
-          return cursorBest
-        } else {
-          // No later left row can match the row.
-          advanceRightPeek()
-        }
+        // No later left row can match the row.
+        advanceRightPeek()
       }
     }
     cursorBest
+  }
+
+  /** Whether the comparison of the as-of keys holds for this left key value and `rightValue`. */
+  private def keysHold(rightValue: Any): Boolean = {
+    cursorKeyValues.update(1, rightValue)
+    cursorKeysCond.eval(cursorKeyValues)
   }
 
   /**
@@ -1066,14 +1132,16 @@ private[execution] object SortMergeAsOfJoinScanner {
    * Whether the scan can read the right side once with a cursor, instead of buffering each
    * right-side group and scanning it again for every left row.
    *
-   * This needs a backward or forward join with no residual condition, whose as-of condition
-   * only compares the two sort keys. Both sides are sorted on exactly those keys, so the right
-   * rows that pass the condition move forward as the left key grows. Anything else, such as a
-   * tolerance, a tuple, or an operand cast that the sort key does not have, keeps the buffer.
+   * This needs a backward or forward join whose as-of condition compares the two sort keys. One
+   * tolerance bound (see [[isToleranceBound]]) can follow the comparison, or be the whole
+   * residual condition. Both sides are sorted on exactly those keys, so the right rows that pass
+   * the comparison move forward as the left key grows. Anything else, such as another residual
+   * condition, a tuple, or an operand cast that the sort key does not have, keeps the buffer.
    *
-   * The condition must name the left side first, since the cursor evaluates the left key first.
-   * With the right side first, a NULL right key ends the condition before the left key, which
-   * can fail under ANSI. Only a DataFrame join with reversed keys builds such a condition.
+   * The comparison must name the left key first. The cursor reads the left key of each left
+   * row, for its NULL check, before any right key. With the right key first, the buffered scan
+   * stops at a NULL right key without reading the left key, which can fail under ANSI. Only a
+   * DataFrame join with reversed keys builds such a condition.
    */
   def supportsCursorScan(
       direction: AsOfJoinDirection,
@@ -1081,17 +1149,68 @@ private[execution] object SortMergeAsOfJoinScanner {
       residualCondition: Option[Expression],
       leftSortExprs: Seq[Expression],
       rightSortExprs: Seq[Expression]): Boolean = {
-    // The operands as (left, right). A direction without an ordered scan has no cursor scan.
-    val operands = AsOfScanStrategy.of(direction).flatMap(_.cursorOperands(asOfCondition))
-    (leftSortExprs, rightSortExprs, operands) match {
-      case (Seq(leftKey), Seq(rightKey), Some((leftOperand, rightOperand))) =>
-        residualCondition.isEmpty &&
-          leftOperand.semanticEquals(leftKey) &&
-          rightOperand.semanticEquals(rightKey) &&
+    // A direction without an ordered scan has no cursor scan.
+    (AsOfScanStrategy.of(direction), leftSortExprs, rightSortExprs) match {
+      case (Some(strategy), Seq(leftKey), Seq(rightKey)) =>
+        val (comparison, bound) = strategy.cursorConditions(asOfCondition, residualCondition)
+        // The operands as (left, right).
+        strategy.cursorOperands(comparison).exists { case (leftOperand, rightOperand) =>
+          leftOperand.semanticEquals(leftKey) && rightOperand.semanticEquals(rightKey)
+        } &&
+          bound.forall(isToleranceBound(strategy, _, leftKey, rightKey)) &&
           leftKey.dataType == rightKey.dataType &&
           supportsCursorKey(leftKey.dataType)
       case _ => false
     }
+  }
+
+  /**
+   * The comparison of the as-of keys of a cursor scan, rebound onto the two key values: input 0
+   * is the left key and input 1 the right key, neither NULL. It keeps the class and the operand
+   * types of `comparison`, so collations, NaN and -0.0 compare the same way.
+   */
+  def comparisonOnKeyValues(comparison: Expression): Expression = comparison match {
+    case c: BinaryComparison => c.withNewChildren(Seq(
+      BoundReference(0, c.left.dataType, nullable = false),
+      BoundReference(1, c.right.dataType, nullable = false)))
+    case other => throw SparkException.internalError(s"Unexpected as-of key comparison: $other")
+  }
+
+  /**
+   * Whether `bound` compares the right key, first, with a limit that a DataFrame tolerance or a
+   * SQL ON bound builds: the left key plus or minus a constant (`r >= l - 10`), or the left key
+   * alone, which a tolerance of 0 can fold to. The cursor scan evaluates the limit only on the
+   * closest right row, and the buffered scan on each right row that passes the comparison of
+   * the keys, though a forward scan stops at the first one that also passes the bound. The
+   * limit reads only the left row, so both scans get the same value or the same
+   * error. The right key comes first, so a NULL right key skips the limit in the buffered scan.
+   * A NULL left key, which the cursor scan skips, makes each of these limits NULL without
+   * evaluating the constant.
+   *
+   * The right key must be a column. In the as-of condition, the comparison is NULL, not FALSE,
+   * for a NULL left key, so the buffered scan goes on to the bound and reads the right key, which
+   * can fail when it is computed, such as `r.v * 1000` under ANSI. The cursor scan reads no right
+   * key then.
+   */
+  private def isToleranceBound(
+      strategy: AsOfScanStrategy,
+      bound: Expression,
+      leftKey: Expression,
+      rightKey: Expression): Boolean = strategy.cursorOperands(bound).exists {
+    case (rightOperand, limit) =>
+      rightKey.isInstanceOf[Attribute] && rightOperand.semanticEquals(rightKey) && (limit match {
+        case _ if limit.semanticEquals(leftKey) => true
+        case add: BinaryExpression if isToleranceAdd(add) =>
+          add.left.semanticEquals(leftKey) && add.right.foldable
+        case _ => false
+      })
+  }
+
+  /** The expressions that add a tolerance to the left key: `+`, `-`, and DATE or TIMESTAMP adds. */
+  private def isToleranceAdd(add: BinaryExpression): Boolean = add match {
+    case _: Add | _: Subtract | _: DateAdd | _: DateSub | _: DateAddYMInterval |
+         _: TimestampAddInterval | _: TimestampAddYMInterval => true
+    case _ => false
   }
 
   /**
@@ -1126,12 +1245,32 @@ private[joins] sealed abstract class AsOfScanStrategy {
   def firstMatchWins: Boolean
 
   /**
-   * The operands of an as-of condition that the cursor scan of this direction takes, as
-   * (left, right), or None for any other condition. The cursor scan only takes a comparison
-   * that the right rows at one end of a group pass: the start when the last match wins, and the
-   * end when the first match wins.
+   * The operands of a comparison that the cursor scan of this direction takes, as
+   * (first, second), or None for any other expression. With the left as-of key first, the right
+   * rows at one end of a group pass: the start when the last match wins, and the end when the
+   * first match wins. A tolerance bound puts the right key first, so the rows at the other end
+   * pass it.
    */
-  def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)]
+  def cursorOperands(comparison: Expression): Option[(Expression, Expression)]
+
+  /**
+   * Splits the conditions of a join for the cursor scan into the comparison of the as-of keys,
+   * which moves the cursor, and the tolerance bound, if any. A backward DataFrame join with a
+   * tolerance puts the bound after the comparison: `l >= r AND r >= l - 10`. It splits only when
+   * both parts are comparisons of this direction and there is no residual condition. Otherwise
+   * the whole as-of condition is the comparison, and the residual condition, if any, is the
+   * bound, as a SQL `ON r >= l - 10` gives. `supportsCursorScan` checks the operands of both, so
+   * it rejects, for example, a bound in both conditions.
+   */
+  final def cursorConditions(
+      asOfCondition: Expression,
+      residualCondition: Option[Expression]): (Expression, Option[Expression]) =
+    (asOfCondition, residualCondition) match {
+      case (And(comparison, bound), None)
+          if cursorOperands(comparison).isDefined && cursorOperands(bound).isDefined =>
+        (comparison, Some(bound))
+      case _ => (asOfCondition, residualCondition)
+    }
 
   /**
    * For the cursor scan: whether a right row that passes for one left row also passes for every
@@ -1155,10 +1294,10 @@ private[joins] object AsOfScanStrategy {
   /** Backward (left.t >= right.t): the passing rows come first, and the last one is closest. */
   case object LastMatch extends AsOfScanStrategy {
     override def firstMatchWins: Boolean = false
-    override def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)] =
-      asOfCondition match {
-        case GreaterThanOrEqual(left, right) => Some((left, right))
-        case GreaterThan(left, right) => Some((left, right))
+    override def cursorOperands(comparison: Expression): Option[(Expression, Expression)] =
+      comparison match {
+        case GreaterThanOrEqual(first, second) => Some((first, second))
+        case GreaterThan(first, second) => Some((first, second))
         case _ => None
       }
   }
@@ -1166,10 +1305,10 @@ private[joins] object AsOfScanStrategy {
   /** Forward (left.t <= right.t): the passing rows come last, and the first one is closest. */
   case object FirstMatch extends AsOfScanStrategy {
     override def firstMatchWins: Boolean = true
-    override def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)] =
-      asOfCondition match {
-        case LessThanOrEqual(left, right) => Some((left, right))
-        case LessThan(left, right) => Some((left, right))
+    override def cursorOperands(comparison: Expression): Option[(Expression, Expression)] =
+      comparison match {
+        case LessThanOrEqual(first, second) => Some((first, second))
+        case LessThan(first, second) => Some((first, second))
         case _ => None
       }
   }
