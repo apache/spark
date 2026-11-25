@@ -1367,17 +1367,16 @@ message Zip {
 message RDDRelation {
   oneof relation_type {
     MapPartitions map_partitions = 1;
-    Shuffle shuffle = 2;
-    Values values = 3;
-    Union union = 4;
-    ZipPartitions zip_partitions = 5;
-    Cartesian cartesian = 6;
-    Coalesce coalesce = 7;
-    Parallelize parallelize = 8;
-    FromDataFrame from_data_frame = 9;
-    ToDataFrame to_data_frame = 10;
-    Elements elements = 11;
-    WithResources with_resources = 12;
+    Values values = 2;
+    Union union = 3;
+    ZipPartitions zip_partitions = 4;
+    Cartesian cartesian = 5;
+    Coalesce coalesce = 6;
+    Parallelize parallelize = 7;
+    FromDataFrame from_data_frame = 8;
+    ToDataFrame to_data_frame = 9;
+    Elements elements = 10;
+    WithResources with_resources = 11;
   }
 
   // A Python function of the index and of the elements of each partition of `input`, run as the
@@ -1408,18 +1407,10 @@ message RDDRelation {
     bool output_pairs = 6;
   }
 
-  // A shuffle of the rows of `input`, whose columns are `key` (int) and `value` (binary), to the
-  // partitions given by `key`, as `RDD.partitionBy` shuffles the batches of its pairs. The output
-  // has the columns of `input`, in `num_partitions` partitions.
-  message Shuffle {
-    // (Required) The input RDD, with the columns `key` (int) and `value` (binary).
-    Relation input = 1;
-
-    // (Required) The number of partitions.
-    int32 num_partitions = 2;
-  }
-
-  // The `value` column of the rows of `input`, whose columns are `key` and `value`.
+  // The `value` column of the rows of `input`, whose columns are `key` and `value`: for instance,
+  // the pairs that a `MapPartitions` with `output_pairs` writes, moved to the partitions of their
+  // keys by a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy`
+  // shuffles the batches of its pairs.
   message Values {
     // (Required) The input RDD.
     Relation input = 1;

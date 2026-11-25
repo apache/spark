@@ -30,8 +30,8 @@ import org.apache.spark.resource.{ResourceProfile, ResourceProfileBuilder, TaskR
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageSubmitted}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DirectShufflePartitionID}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RepartitionByExpression}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -58,8 +58,16 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
   private def parallelize(numSlices: Int, vs: String*): LogicalPlan =
     PythonRDDParallelize(numSlices, values(vs: _*))
 
+  /**
+   * The values of the rows of `input`, whose columns are `key` and `value`, shuffled to the
+   * partitions of their keys, as the RDD API shuffles them.
+   */
+  private def shuffled(numPartitions: Int, input: LogicalPlan): LogicalPlan = PythonRDDValues(
+    RepartitionByExpression(Seq(DirectShufflePartitionID(input.output.head)), input, numPartitions))
+
+  /** A shuffle of pairs, which an operator of the RDD API computes as in the plans of RDDs. */
   private def shuffle(numPartitions: Int, kvs: (Int, String)*): LogicalPlan =
-    PythonRDDValues(PythonRDDShuffle(numPartitions, pairs(kvs: _*)))
+    shuffled(numPartitions, PythonRDDParallelize(1, pairs(kvs: _*)))
 
   /** The rows of each partition of a plan, with the binary columns as strings. */
   private def partitions(plan: LogicalPlan): Seq[Seq[Seq[String]]] = {
@@ -100,8 +108,8 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
 
   test("union of the same shuffle twice keeps the partitions of both") {
     withAndWithoutAQE {
-      val shuffled = shuffle(2, 0 -> "a", 1 -> "b")
-      val union = PythonRDDUnion(PythonRDDOperators.valueOutput(), Seq(shuffled, shuffled))
+      val rows = shuffle(2, 0 -> "a", 1 -> "b")
+      val union = PythonRDDUnion(PythonRDDOperators.valueOutput(), Seq(rows, rows))
       assert(valuesOf(union) === Seq(Seq("a"), Seq("b"), Seq("a"), Seq("b")))
     }
   }
@@ -112,17 +120,17 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
 
   test("shuffle moves the rows to the partitions of their keys and keeps empty partitions") {
     withAndWithoutAQE {
-      val shuffled = shuffle(4, 0 -> "a", 2 -> "b", 0 -> "c")
-      assert(valuesOf(shuffled).map(_.sorted) === Seq(Seq("a", "c"), Seq(), Seq("b"), Seq()))
+      val rows = shuffle(4, 0 -> "a", 2 -> "b", 0 -> "c")
+      assert(valuesOf(rows).map(_.sorted) === Seq(Seq("a", "c"), Seq(), Seq("b"), Seq()))
       assert(valuesOf(shuffle(3)) === Seq(Seq(), Seq(), Seq()))
+      assert(valuesOf(shuffle(1, 0 -> "a", 0 -> "b")) === Seq(Seq("a", "b")))
     }
   }
 
   test("a shuffle keeps the order of the rows of one input partition") {
     withAndWithoutAQE {
       val input = PythonRDDParallelize(1, pairs((0 until 100).map(i => (i % 2) -> i.toString): _*))
-      val shuffled = valuesOf(PythonRDDValues(PythonRDDShuffle(2, input)))
-      assert(shuffled === Seq(
+      assert(valuesOf(shuffled(2, input)) === Seq(
         (0 until 100 by 2).map(_.toString),
         (1 until 100 by 2).map(_.toString)))
     }
@@ -246,7 +254,7 @@ class PythonRDDOperatorsSuite extends QueryTest with SharedSparkSession {
     try {
       // The stage before the shuffle has the profile, and the stage after it does not.
       val input = PythonRDDWithResources(profile, pairs(0 -> "a", 1 -> "b"))
-      assert(valuesOf(PythonRDDValues(PythonRDDShuffle(2, input))) === Seq(Seq("a"), Seq("b")))
+      assert(valuesOf(shuffled(2, input)) === Seq(Seq("a"), Seq("b")))
       spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(stageProfiles.asScala.toSeq.sorted ===
         Seq(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, profile.id).sorted)

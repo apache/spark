@@ -5044,39 +5044,12 @@ class RDDRelation(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_python_hash_seed", b"_python_hash_seed"]
         ) -> typing_extensions.Literal["python_hash_seed"] | None: ...
 
-    class Shuffle(google.protobuf.message.Message):
-        """A shuffle of the rows of `input`, whose columns are `key` (int) and `value` (binary), to the
-        partitions given by `key`, as `RDD.partitionBy` shuffles the batches of its pairs. The output
-        has the columns of `input`, in `num_partitions` partitions.
-        """
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        INPUT_FIELD_NUMBER: builtins.int
-        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
-        @property
-        def input(self) -> global___Relation:
-            """(Required) The input RDD, with the columns `key` (int) and `value` (binary)."""
-        num_partitions: builtins.int
-        """(Required) The number of partitions."""
-        def __init__(
-            self,
-            *,
-            input: global___Relation | None = ...,
-            num_partitions: builtins.int = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["input", b"input"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "input", b"input", "num_partitions", b"num_partitions"
-            ],
-        ) -> None: ...
-
     class Values(google.protobuf.message.Message):
-        """The `value` column of the rows of `input`, whose columns are `key` and `value`."""
+        """The `value` column of the rows of `input`, whose columns are `key` and `value`: for instance,
+        the pairs that a `MapPartitions` with `output_pairs` writes, moved to the partitions of their
+        keys by a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy`
+        shuffles the batches of its pairs.
+        """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -5356,7 +5329,6 @@ class RDDRelation(google.protobuf.message.Message):
         ) -> None: ...
 
     MAP_PARTITIONS_FIELD_NUMBER: builtins.int
-    SHUFFLE_FIELD_NUMBER: builtins.int
     VALUES_FIELD_NUMBER: builtins.int
     UNION_FIELD_NUMBER: builtins.int
     ZIP_PARTITIONS_FIELD_NUMBER: builtins.int
@@ -5369,8 +5341,6 @@ class RDDRelation(google.protobuf.message.Message):
     WITH_RESOURCES_FIELD_NUMBER: builtins.int
     @property
     def map_partitions(self) -> global___RDDRelation.MapPartitions: ...
-    @property
-    def shuffle(self) -> global___RDDRelation.Shuffle: ...
     @property
     def values(self) -> global___RDDRelation.Values: ...
     @property
@@ -5395,7 +5365,6 @@ class RDDRelation(google.protobuf.message.Message):
         self,
         *,
         map_partitions: global___RDDRelation.MapPartitions | None = ...,
-        shuffle: global___RDDRelation.Shuffle | None = ...,
         values: global___RDDRelation.Values | None = ...,
         union: global___RDDRelation.Union | None = ...,
         zip_partitions: global___RDDRelation.ZipPartitions | None = ...,
@@ -5424,8 +5393,6 @@ class RDDRelation(google.protobuf.message.Message):
             b"parallelize",
             "relation_type",
             b"relation_type",
-            "shuffle",
-            b"shuffle",
             "to_data_frame",
             b"to_data_frame",
             "union",
@@ -5455,8 +5422,6 @@ class RDDRelation(google.protobuf.message.Message):
             b"parallelize",
             "relation_type",
             b"relation_type",
-            "shuffle",
-            b"shuffle",
             "to_data_frame",
             b"to_data_frame",
             "union",
@@ -5474,7 +5439,6 @@ class RDDRelation(google.protobuf.message.Message):
     ) -> (
         typing_extensions.Literal[
             "map_partitions",
-            "shuffle",
             "values",
             "union",
             "zip_partitions",

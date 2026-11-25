@@ -53,6 +53,29 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
     r.getParallelizeBuilder.setData(binaryData(values: _*)).setNumSlices(numSlices)
   }
 
+  /** Local data of the pairs of keys and values of a shuffle. */
+  private def pairs(kvs: (Int, String)*): proto.Relation = createLocalRelationProto(
+    StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
+    kvs.map { case (k, v) => InternalRow(k, v.getBytes(UTF_8)) })
+
+  /**
+   * The values of the pairs of `input` shuffled to the partitions of their keys, as the RDD API
+   * shuffles them: a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, which
+   * `DataFrame.repartitionById` also makes.
+   */
+  private def shuffled(input: proto.Relation, numPartitions: Int): proto.Relation = {
+    val key = proto.Expression.newBuilder()
+    key.getUnresolvedAttributeBuilder.setUnparsedIdentifier("key")
+    val partitionId = proto.Expression.newBuilder()
+    partitionId.getDirectShufflePartitionIdBuilder.setChild(key)
+    val shuffle = proto.Relation.newBuilder()
+    shuffle.getRepartitionByExpressionBuilder
+      .setInput(input)
+      .setNumPartitions(numPartitions)
+      .addPartitionExprs(partitionId)
+    relation(_.getValuesBuilder.setInput(shuffle))
+  }
+
   private def values(rel: proto.Relation): Seq[Seq[String]] = {
     val plan = transform(rel)
     Dataset
@@ -139,17 +162,14 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
     assert(!plan.func.envVars.containsKey("PYSPARK_CONNECT_RDD_PROFILER"))
   }
 
-  test("shuffle, values and elements") {
-    val pairs = createLocalRelationProto(
-      StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
-      Seq(InternalRow(1, "a".getBytes(UTF_8)), InternalRow(0, "b".getBytes(UTF_8))))
-    val shuffle = relation(_.getShuffleBuilder.setInput(pairs).setNumPartitions(3))
-    val shuffled = relation(_.getValuesBuilder.setInput(shuffle))
-    assert(values(shuffled) === Seq(Seq("b"), Seq("a"), Seq()))
+  test("values of a shuffle, and elements") {
+    val rdd = shuffled(pairs(1 -> "a", 0 -> "b"), 3)
+    assert(values(rdd) === Seq(Seq("b"), Seq("a"), Seq()))
+    assert(PythonRDDOperators.numPartitions(transform(rdd)) === Some(3))
 
     val elements = relation { r =>
       r.getElementsBuilder
-        .setInput(shuffled)
+        .setInput(rdd)
         .setPartitions(proto.Ints.newBuilder().addValues(1))
     }
     val plan = transform(elements).asInstanceOf[PythonRDDElements]
@@ -199,12 +219,8 @@ class RDDPlannerSuite extends SparkConnectPlanTest {
   test("pin plans an RDD once, so that the jobs on it share its shuffles") {
     val holder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val handler = new RDDCommandHandler(new SparkConnectPlanner(holder))
-    val pairs = createLocalRelationProto(
-      StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
-      Seq(InternalRow(1, "a".getBytes(UTF_8)), InternalRow(0, "b".getBytes(UTF_8))))
-    val shuffle = relation(_.getShuffleBuilder.setInput(pairs).setNumPartitions(3))
     val command = proto.RDDCommand.newBuilder()
-    command.getPinBuilder.setRdd(relation(_.getValuesBuilder.setInput(shuffle)))
+    command.getPinBuilder.setRdd(shuffled(pairs(1 -> "a", 0 -> "b"), 3))
 
     val mapStages = new AtomicInteger()
     val listener = new SparkListener {

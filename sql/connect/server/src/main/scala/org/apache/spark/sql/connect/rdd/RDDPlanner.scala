@@ -66,10 +66,6 @@ private[connect] class RDDPlanner(planner: SparkConnectPlanner) {
           mapPartitions.getOutputPairs,
           input)
 
-      case proto.RDDRelation.RelationTypeCase.SHUFFLE =>
-        val shuffle = rel.getShuffle
-        PythonRDDShuffle(shuffle.getNumPartitions, planner.transformRelation(shuffle.getInput))
-
       case proto.RDDRelation.RelationTypeCase.VALUES =>
         PythonRDDValues(planner.transformRelation(rel.getValues.getInput))
 

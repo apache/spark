@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
-import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, LogicalPlan, RepartitionByExpression, UnaryNode}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StructType}
 
@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StructType
 // relations.proto). An RDD is a plan whose rows hold its elements, and whose partitions are the
 // partitions of the RDD: these operators keep the partitions of their inputs as the RDDs of
 // Spark Classic do, the empty partitions included, which the optimizer leaves alone since it does
-// not know them. They read the columns of their inputs by position.
+// not know them. They read the columns of their inputs by position. The shuffles of RDDs are
+// `RepartitionByExpression`s of `DirectShufflePartitionID`, below a `PythonRDDValues`.
 
 /**
  * A Python function of the index and of the elements of each partition of `child`, which
@@ -74,21 +75,13 @@ object PythonRDDMapPartitions {
 }
 
 /**
- * A shuffle of the rows of `child`, whose columns are `key` (int) and `value`, to the partitions
- * of index `key`, as `RDD.partitionBy` of PySpark shuffles its batches. The output has the
- * columns of `child`, in `numPartitions` partitions.
+ * The second column of the rows of `child`: the values of its keys and values. For instance, the
+ * values of the pairs of a [[PythonRDDMapPartitions]] with `outputPairs`, which a
+ * [[RepartitionByExpression]] of `DirectShufflePartitionID(key)` moves to the partitions of
+ * their keys, as `RDD.partitionBy` of PySpark shuffles its batches. It keeps the partitions of a
+ * shuffle that writes no rows, which adaptive query execution would replace below a `Project` by
+ * an empty relation.
  */
-case class PythonRDDShuffle(numPartitions: Int, child: LogicalPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output
-
-  override lazy val references: AttributeSet = child.outputSet
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): PythonRDDShuffle =
-    copy(child = newChild)
-}
-
-/** The second column of the rows of `child`: the values of its keys and values. */
 case class PythonRDDValues(child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.drop(1)
@@ -298,7 +291,8 @@ private[sql] object PythonRDDOperators {
    */
   def numPartitions(plan: LogicalPlan): Option[Int] = plan match {
     case p: PythonRDDParallelize => Some(p.numSlices)
-    case p: PythonRDDShuffle => Some(p.numPartitions)
+    // A repartition into a number of partitions, which adaptive query execution keeps.
+    case p: RepartitionByExpression => p.optNumPartitions
     case p: PythonRDDMapPartitions => numPartitions(p.child)
     case p: PythonRDDValues => numPartitions(p.child)
     case p: PythonRDDElements => numPartitions(p.child)
@@ -315,8 +309,8 @@ private[sql] object PythonRDDOperators {
       // CoalescedRDD makes as many groups as asked, but never more than its input has
       // partitions; locality can leave fewer for inputs that have preferred locations.
       p.child match {
-        case _: PythonRDDParallelize | _: PythonRDDShuffle | _: PythonRDDUnion |
-            _: PythonRDDZipPartitions | _: PythonRDDCartesian | _: PythonRDDCoalesce =>
+        case _: PythonRDDParallelize | _: PythonRDDUnion | _: PythonRDDZipPartitions |
+            _: PythonRDDCartesian | _: PythonRDDCoalesce =>
           numPartitions(p.child).map(math.min(_, p.numPartitions))
         case _ => None
       }

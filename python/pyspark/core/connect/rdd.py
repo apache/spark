@@ -813,24 +813,35 @@ class RDD(RDDFacade, Generic[T_co]):
         Shuffle the batches that ``keyed`` writes after their partition index, as the PairwiseRDD
         of Spark Classic reads them, into ``num_partitions`` partitions.
         """
+        from pyspark.sql.connect.column import Column
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.expressions import ColumnReference, DirectShufflePartitionID
+        from pyspark.sql.connect.plan import RepartitionByExpression
+
+        server_partitioner = None if partitioner_id is None else (num_partitions, partitioner_id)
+        deserializer = BatchedSerializer(self.ctx._unbatched_serializer)
+        if num_partitions <= 0:
+            # A ShuffledRDD of Spark Classic without partitions: no job computes its input.
+            empty_df = self._cctx.emptyRDD()._df
+            return RDD(empty_df, self._cctx, deserializer, 0, server_partitioner)
+
         keyed._bypass_serializer = True  # type: ignore[attr-defined]
         keyed._output_pairs = True  # type: ignore[attr-defined]
         keyed_df = keyed._df
-
-        def shuffle(relation: pb2.RDDRelation, session: Any) -> None:
-            relation.shuffle.input.CopyFrom(_relation(keyed_df, session))
-            relation.shuffle.num_partitions = num_partitions
-
-        shuffled_df = _RDDRelationPlan.dataframe(self._cctx, shuffle, keyed_df)
+        # The pairs move to the partitions of their keys as `DataFrame.repartitionById` moves rows.
+        partition_id = Column(DirectShufflePartitionID(ColumnReference("key")))
+        shuffled_df = DataFrame(
+            RepartitionByExpression(keyed_df._plan, num_partitions, [partition_id]),
+            self._cctx._session,
+        )
 
         def values(relation: pb2.RDDRelation, session: Any) -> None:
             relation.values.input.CopyFrom(_relation(shuffled_df, session))
 
-        server_partitioner = None if partitioner_id is None else (num_partitions, partitioner_id)
         return RDD(
             _RDDRelationPlan.dataframe(self._cctx, values, shuffled_df),
             self._cctx,
-            BatchedSerializer(self.ctx._unbatched_serializer),
+            deserializer,
             num_partitions,
             server_partitioner,
             has_shuffle=True,

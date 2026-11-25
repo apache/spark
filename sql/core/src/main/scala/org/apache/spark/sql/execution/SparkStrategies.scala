@@ -1186,10 +1186,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case p: execution.python.PythonRDDMapPartitions =>
         execution.python.PythonRDDMapPartitionsExec(
           p.func, p.isBarrier, p.outputPairs, p.output, planLater(p.child)) :: Nil
-      case p: execution.python.PythonRDDShuffle =>
-        val partitioning = physical.ShufflePartitionIdPassThrough(
-          DirectShufflePartitionID(p.child.output.head), p.numPartitions)
-        exchange.ShuffleExchangeExec(partitioning, planLater(p.child), REPARTITION_BY_NUM) :: Nil
       case p: execution.python.PythonRDDValues =>
         execution.python.PythonRDDValuesExec(p.output, planLater(p.child)) :: Nil
       case p: execution.python.PythonRDDUnion =>

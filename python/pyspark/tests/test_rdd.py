@@ -140,6 +140,16 @@ class RDDTestsMixin:
         self.assertEqual(rdd.getNumPartitions(), 0)
         self.assertEqual(rdd.glom().collect(), [])
 
+    def test_shuffle_to_no_partitions(self):
+        # An RDD without partitions shuffles to as many partitions as it has by default.
+        rdd = self.sc.emptyRDD().reduceByKey(lambda a, b: a + b)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.collect(), [])
+        # No job computes the input of a shuffle without partitions.
+        rdd = self.sc.parallelize([(1, 1)], 2).partitionBy(0)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.glom().collect(), [])
+
     def test_persist_with_another_storage_level(self):
         rdd = self.sc.parallelize(range(4), 2).map(lambda x: x)
         rdd.persist(StorageLevel.MEMORY_ONLY)
