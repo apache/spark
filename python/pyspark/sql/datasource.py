@@ -1104,7 +1104,7 @@ class SortOrder:
     Parameters
     ----------
     column : tuple of str
-        The column to sort by, as a :class:`ColumnPath`.
+        The column to sort by, as a non-empty :class:`ColumnPath`.
     direction : :class:`SortDirection`, optional
         Sort direction, ascending by default.
     nullOrdering : :class:`NullOrdering`, optional
@@ -1165,7 +1165,8 @@ class ClusteredDistribution(Distribution):
     Parameters
     ----------
     clustering : tuple of :class:`ColumnPath`\\s
-        The columns to cluster by. Must not be empty.
+        The columns to cluster by, each a non-empty :class:`ColumnPath`. Must not
+        be empty.
 
     Examples
     --------
