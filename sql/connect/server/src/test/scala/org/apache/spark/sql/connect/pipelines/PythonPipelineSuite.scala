@@ -1197,7 +1197,7 @@ class PythonPipelineSuite
       cond = flowProgressEvent =>
         flowProgressEvent.origin.sourceCodeLocation == Option(
           QueryOrigin(
-            language = Option(Python()),
+            language = Option(Python),
             filePath = Option("<string>"),
             line = Option(36),
             objectName = Option("spark_catalog.default.table1"),
