@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{DataType, FileRef, FileRefInternals, FileType
  *
  * @param ft
  *   The FileType with its mode
- * @since 4.4.0
+ * @since 4.5.0
  */
 class FileTypeApiOps(val ft: FileType) extends TypeApiOps {
 

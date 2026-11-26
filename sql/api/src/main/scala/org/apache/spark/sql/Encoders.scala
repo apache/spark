@@ -182,7 +182,7 @@ object Encoders {
    * existing table, for example with `Dataset.writeTo(table).append()` or `INSERT INTO`. A table
    * created from the Dataset, such as by `saveAsTable`, needs a FILE EXTERNAL column instead.
    *
-   * @since 4.4.0
+   * @since 4.5.0
    */
   def FILE: Encoder[FileRef] = FileRefEncoder()
 
