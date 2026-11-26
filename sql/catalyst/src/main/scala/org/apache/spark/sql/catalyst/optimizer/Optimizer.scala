@@ -685,25 +685,29 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           name == attr.name =>
 
       val metadata = a.metadata
-      var attrMetadata = attr.metadata
+      val attrMetadata = attr.metadata
       if (metadata == attrMetadata) {
         // The alias is truly redundant, remove it.
         attr
-      } else if (attr.metadata.contains(AUTO_GENERATED_ALIAS)) {
-        attrMetadata = attr.metadata.withKeyRemoved(AUTO_GENERATED_ALIAS)
-        if (metadata == attrMetadata) {
-          // The AUTO_GENERATED_ALIAS is not propagating to a view, so it is ok to remove it.
-          // With that key removed, the alias is now redundant, remove it.
-          attr.withMetadata(metadata)
-        } else {
-          a
-        }
+      } else if (attrMetadata.contains(AUTO_GENERATED_ALIAS) &&
+          metadata == attrMetadata.withKeyRemoved(AUTO_GENERATED_ALIAS)) {
+        // The AUTO_GENERATED_ALIAS is not propagating to a view, so it is ok to remove it.
+        // With that key removed, the alias is now redundant, remove it.
+        attr.withMetadata(metadata)
       } else {
         a
       }
 
     case a => a
   }
+
+  /**
+   * The most times that a non-first [[Union]] branch is re-processed to keep its output free of
+   * duplicate `ExprId`s. A round resolves every collision visible in its output comparison and
+   * only a `Join` can make a later round uncover new ones, so real plans settle in one or two
+   * rounds; this cap only bounds a pathological case.
+   */
+  private val MAX_UNION_BRANCH_RETRIES = 3
 
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree.
@@ -738,27 +742,63 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         Join(newLeft, newRight, joinType, newCondition, hint)
 
       case u: Union =>
-        var first = true
-        plan.mapChildren { child =>
-          if (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || shouldRemoveAliasesUnderUnion(
+        u.withNewChildren(u.children.zipWithIndex.map { case (child, index) =>
+          if (!child.containsPattern(ALIAS)) {
             child
-          )) {
-            if (first) {
-              first = false
-              // `Union` inherits its first child's outputs. We don't remove those aliases from the
-              // first child's tree that prevent aliased attributes to appear multiple times in the
-              // `Union`'s output. A parent projection node on the top of an `Union` with
-              // non-unique output attributes could return incorrect result.
-              removeRedundantAliases(child, excluded ++ child.outputSet)
-            } else {
-              // We don't need to exclude those attributes that `Union` inherits from its first
-              // child.
-              removeRedundantAliases(child, excluded -- u.children.head.outputSet)
-            }
+          } else if (index == 0) {
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with
+            // non-unique output attributes could return incorrect result.
+            removeRedundantAliases(child, excluded ++ child.outputSet)
           } else {
-            child
+            // We don't need to exclude those attributes that `Union` inherits from its first
+            // child.
+            var branchExcluded = excluded -- u.children.head.outputSet
+            var newChild = removeRedundantAliases(child, branchExcluded)
+            if (conf.unionIsResolvedWhenDuplicatesPerChildResolved &&
+                child.outputSet.size == child.output.size) {
+              var retries = 0
+              var continue = newChild.outputSet.size < newChild.output.size
+              while (continue && retries < MAX_UNION_BRANCH_RETRIES) {
+                // Removing aliases inside `child` introduced duplicate ExprIds in its output,
+                // which would make `Union` unresolved. Exclude k - 1 colliding stripped output
+                // attributes (keeping one unchanged or the first stripped one) and re-run.
+                val (unchanged, changed) = child.output.zip(newChild.output).partition {
+                  case (oldAttr, newAttr) => oldAttr.exprId == newAttr.exprId
+                }
+                var seen = AttributeSet(unchanged.map(_._2))
+                val collidingAttrs = AttributeSet(changed.flatMap { case (oldAttr, newAttr) =>
+                  if (seen.contains(newAttr)) {
+                    Some(oldAttr)
+                  } else {
+                    seen = seen + newAttr
+                    None
+                  }
+                })
+                if (collidingAttrs.subsetOf(branchExcluded)) {
+                  // No progress is possible. Unreachable on valid plans: the size check above
+                  // guarantees distinct input ExprIds, and `removeRedundantAliases` preserves any
+                  // output attribute already in `branchExcluded`, so every collision yields at
+                  // least one new `oldAttr`. Stop retrying and take the fallback below.
+                  retries = MAX_UNION_BRANCH_RETRIES
+                } else {
+                  retries += 1
+                  branchExcluded = branchExcluded ++ collidingAttrs
+                  newChild = removeRedundantAliases(child, branchExcluded)
+                  continue = newChild.outputSet.size < newChild.output.size
+                }
+              }
+              if (continue) {
+                // More rounds were needed than the cap allows. Protect the whole branch output
+                // the way the first child is protected; aliases below the output are still
+                // stripped, so no ObjectType projection or inner redundant alias survives.
+                newChild = removeRedundantAliases(child, branchExcluded ++ child.outputSet)
+              }
+            }
+            newChild
           }
-        }
+        })
 
       case _ =>
         val subQueryAttributes = if (conf.getConf(SQLConf
@@ -798,44 +838,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
             case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
-    }
-  }
-
-  /**
-   * In case a [[Project]], [[Aggregate]] or [[Window]] is a child of [[Union]], we don't remove an
-   * [[Alias]] in case it is on top of an [[Attribute]] which exists in the output set of the
-   * operator. This is needed because otherwise, we end up having an operator with duplicates in
-   * its output. When that happens, [[Union]] is not resolved, and we fail (but we shouldn't).
-   * In this example:
-   *
-   * {{{ SELECT col1 FROM values(1) WHERE 100 IN (SELECT col1 UNION SELECT col1); }}}
-   *
-   * Without `shouldRemoveAliasesUnderUnion` check, we would remove the [[Alias]] introduced in
-   * [[DeduplicateRelations]] rule (in a [[Project]] tagged as
-   * `PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION`), the result is unresolved [[Union]] which causes the
-   * failure. With the check, [[Alias]] stays, and we resolve the plan properly.
-   */
-  private def shouldRemoveAliasesUnderUnion(operator: LogicalPlan): Boolean = {
-    operator match {
-      case project: Project =>
-        project.projectList.forall {
-          case Alias(attribute: Attribute, _) =>
-            !project.outputSet.contains(attribute)
-          case _ => true
-        }
-      case aggregate: Aggregate =>
-        aggregate.aggregateExpressions.forall {
-          case Alias(attribute: Attribute, _) =>
-            !aggregate.outputSet.contains(attribute)
-          case _ => true
-        }
-      case window: Window =>
-        window.windowExpressions.forall {
-          case Alias(attribute: Attribute, _) =>
-            !window.outputSet.contains(attribute)
-          case _ => true
-        }
-      case other => true
     }
   }
 

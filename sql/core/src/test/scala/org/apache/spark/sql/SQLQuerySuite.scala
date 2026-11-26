@@ -5068,6 +5068,9 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   test("SPARK-52956: Preserve alias metadata when collapsing projects") {
     withTable("t1") {
       sql("CREATE TABLE t1(col1 TIMESTAMP);")
+      sql("INSERT INTO t1 VALUES (TIMESTAMP '2025-01-01 00:00:00');")
+      val ts = Timestamp.valueOf("2025-01-01 00:00:00")
+      val expected = Seq(Row(ts, ts), Row(ts, ts))
 
       val query = """WITH cte AS (
                     |      SELECT col1, col1 FROM t1
@@ -5084,27 +5087,32 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         val finalPlan =
           basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
         finalPlan.queryExecution.assertOptimized()
+        assert(
+          finalPlan.queryExecution.optimizedPlan.exists {
+            case p: Project => p.projectList.exists(_.metadata.contains("__is_duplicate"))
+            case _ => false
+          }
+        )
+        checkAnswer(finalPlan, expected)
       }
 
       withSQLConf(
         SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
         SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "false"
       ) {
-        // With the flag set to false, __is_duplicate metadata will not be preserved in Project
-        // nodes under Union. This will cause RemoveRedundantAliases to remove aliases of duplicate
-        // columns and leave Union unresolved.
-        val e = intercept[SparkException] {
-          val basePlan = sql(query)
-          val finalPlan =
-            basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
-          finalPlan.queryExecution.assertOptimized()
-        }
-        assert(e.getCondition.contains("PLAN_VALIDATION_FAILED_RULE_IN_BATCH"))
+        // With the flag set to false, __is_duplicate metadata is dropped when collapsing projects
+        // under Union, while RemoveRedundantAliases still keeps the Union branches resolved.
+        val basePlan = sql(query)
+        val finalPlan =
+          basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+        finalPlan.queryExecution.assertOptimized()
         assert(
-          e.getMessage.contains(
-            "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases"
-          )
+          !finalPlan.queryExecution.optimizedPlan.exists {
+            case p: Project => p.projectList.exists(_.metadata.contains("__is_duplicate"))
+            case _ => false
+          }
         )
+        checkAnswer(finalPlan, expected)
       }
     }
   }
@@ -5184,6 +5192,39 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val df = sql("SELECT col1 FROM values(1) WHERE 1 IN (SELECT col1 UNION SELECT col1);")
 
     checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases keeps Union valid with barriers and double aliases") {
+    checkAnswer(
+      sql(
+        """SELECT 1L AS x, 2L AS id, 3L AS id
+          |UNION ALL
+          |(SELECT /*+ REPARTITION(2) */ 0L AS x, id, id AS id FROM range(10, 12))
+          |""".stripMargin),
+      Seq(Row(1L, 2L, 3L), Row(0L, 10L, 10L), Row(0L, 11L, 11L)))
+    checkAnswer(
+      sql(
+        """SELECT 1L AS x, 2L AS id, 3L AS id
+          |UNION ALL
+          |(SELECT 0L AS x, id, id AS id FROM range(10, 12) ORDER BY id)
+          |""".stripMargin),
+      Seq(Row(1L, 2L, 3L), Row(0L, 10L, 10L), Row(0L, 11L, 11L)))
+    checkAnswer(
+      sql(
+        """SELECT 1L AS id, 2L AS id
+          |UNION ALL
+          |SELECT id AS id, id AS id FROM range(10, 12)
+          |""".stripMargin),
+      Seq(Row(1L, 2L), Row(10L, 10L), Row(11L, 11L)))
+    checkAnswer(
+      sql(
+        """SELECT *, x + 1L AS x1 FROM (
+          |  (SELECT /*+ REPARTITION(2) */ 1L AS x, id, id AS id FROM range(1, 2))
+          |  UNION ALL
+          |  (SELECT 0L AS x, id, id AS id FROM range(10, 12) ORDER BY id)
+          |)
+          |""".stripMargin),
+      Seq(Row(1L, 1L, 1L, 2L), Row(0L, 10L, 10L, 1L), Row(0L, 11L, 11L, 1L)))
   }
 
   test("SPARK-53734: Prefer table column over LCA when resolving array index") {
