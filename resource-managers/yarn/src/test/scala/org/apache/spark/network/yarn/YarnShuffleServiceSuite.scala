@@ -1284,6 +1284,14 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2.stopApplication(new ApplicationTerminationContext(app1Id))
     s2.stop()
   }
+
+  test("SPARK-62392: NM local dirs given as file URIs") {
+    yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, nmLocalDir.toURI.toString)
+    s1 = createYarnShuffleService()
+    val appId = ApplicationId.newInstance(0, 1).toString
+    // Must not throw: the local dir is under the NM local dir, which is given as a file: URI.
+    s1.blockHandler.validateLocalDirs(Array(appLocalDir(appId, "blockmgr-x")), appId)
+  }
 }
 
 @ExtendedLevelDBTest
