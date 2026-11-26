@@ -646,6 +646,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
       val actualGroupExprs = agg.groupingExpressions.map(replaceAlias(_, aliasMap))
+      if (hasEqualNondeterministicAggregates(actualResultExprs)) {
+        return agg
+      }
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
@@ -763,7 +766,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val projectExpressions = finalResultExprs.map { expr =>
           expr.transformDown {
             case agg: AggregateExpression =>
-              val ordinal = aggExprToOutputOrdinal(aggKey(agg))
+              val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
               Alias(aggOutput(ordinal), agg.resultAttribute.name)(agg.resultAttribute.exprId)
             case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
               val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
@@ -795,7 +798,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // scalastyle:on
         val aggExprs = finalResultExprs.map(_.transform {
           case agg: AggregateExpression =>
-            val ordinal = aggExprToOutputOrdinal(aggKey(agg))
+            val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
             val aggAttribute = aggOutput(ordinal)
             val aggFunction: aggregate.AggregateFunction =
               agg.aggregateFunction match {
@@ -840,19 +843,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Do not push down duplicated aggregate expressions. For example,
         // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
         // `max(a)` to the data source.
-        case agg: AggregateExpression if !aggExprToOutputOrdinal.contains(aggKey(agg)) =>
-          aggExprToOutputOrdinal(aggKey(agg)) = ordinal
+        case agg: AggregateExpression
+          if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+          aggExprToOutputOrdinal(agg.canonicalized) = ordinal
           ordinal += 1
           agg
       }
     }
   }
 
-  // The key of `agg` among the pushed aggregate expressions. Equal deterministic ones share a key,
-  // as `PhysicalAggregation` evaluates them once. A non-deterministic one has its own key, so each
-  // of two equal calls is pushed down.
-  private def aggKey(agg: AggregateExpression): Expression =
-    if (agg.deterministic) agg.canonicalized else agg
+  // Whether two of the aggregate expressions are equal and not deterministic. Spark evaluates each
+  // of them, while only one of them would be pushed down.
+  private def hasEqualNondeterministicAggregates(resultExpressions: Seq[Expression]): Boolean = {
+    val nondeterministic = resultExpressions.flatMap(_.collect {
+      case agg: AggregateExpression if !agg.deterministic => agg.canonicalized
+    })
+    nondeterministic.distinct.length < nondeterministic.length
+  }
 
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We can only partially push down min/max/sum/count without DISTINCT.
@@ -1176,7 +1183,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       val normalizedOrders = normalizeExpressions(newOrder, sHolder).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
-      if (orders.length == order.length) {
+      // A top-N is not pushed down when a sort key is on a pushed aggregate that is not
+      // deterministic, because the data source may evaluate the aggregate again rather than sort
+      // by its output column.
+      if (orders.length == order.length && newOrder.forall(_.deterministic)) {
         val (isPushed, isPartiallyPushed) =
           PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
         if (isPushed) {

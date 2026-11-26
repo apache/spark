@@ -774,6 +774,20 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
           fragment = fragment,
           start = lateral.length - fragment.length,
           stop = lateral.length - 1)))
+      // Nor can a join condition have a scalar subquery that calls it.
+      val join = "SELECT * FROM VALUES (1), (2) AS a(x) JOIN VALUES (1) AS b(y) ON a.x <"
+      checkAnswer(sql(s"$join (SELECT testcat.ns.avg(i) FROM $t)"), Seq(Row(1, 1), Row(2, 1)))
+      val ndJoin = s"$join (SELECT testcat.ns.nd_avg(i) FROM $t)"
+      val joinFragment = ndJoin.substring(ndJoin.indexOf("JOIN VALUES"))
+      checkError(
+        exception = intercept[AnalysisException](sql(ndJoin)),
+        condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+        parameters = Map("sqlExprs" -> "(?s).*"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = joinFragment,
+          start = ndJoin.length - joinFragment.length,
+          stop = ndJoin.length - 1)))
     }
   }
 

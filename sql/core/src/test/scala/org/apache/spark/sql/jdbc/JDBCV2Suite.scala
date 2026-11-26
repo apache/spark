@@ -1064,17 +1064,24 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
-  test("SPARK-62133: equal calls of a pushed aggregate function that is not deterministic are " +
-    "pushed down separately") {
+  test("SPARK-62133: neither equal calls of an aggregate function that is not deterministic nor " +
+    "a top-N on it is pushed down") {
     JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
-      // `name`, and one column for each pushed aggregate.
-      Seq("my_avg" -> 2, "my_nondeterministic_avg" -> 3).foreach { case (f, numColumns) =>
-        val df = sql(s"SELECT name, h2.$f(id), h2.$f(id) FROM h2.test.people GROUP BY name")
-        checkAggregateRemoved(df)
-        assert(scanOf(df).output.length == numColumns, f)
-        checkAnswer(df, Seq(Row("fred", 1, 1), Row("mary", 2, 2)))
+      Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach { case (f, pushed) =>
+        // Spark evaluates each of two equal calls that are not deterministic, while the data
+        // source would get only one of them.
+        val twice = sql(s"SELECT name, h2.$f(id), h2.$f(id) FROM h2.test.people GROUP BY name")
+        checkAggregateRemoved(twice, pushed)
+        checkAnswer(twice, Seq(Row("fred", 1, 1), Row("mary", 2, 2)))
+        // A single call is pushed down, but a sort key on it is not.
+        val topN = sql(
+          s"SELECT name, h2.$f(id) AS v FROM h2.test.people GROUP BY name ORDER BY v LIMIT 1")
+        checkAggregateRemoved(topN)
+        checkSortRemoved(topN, pushed)
+        checkLimitRemoved(topN, pushed)
+        checkAnswer(topN, Seq(Row("fred", 1)))
       }
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
