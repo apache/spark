@@ -269,12 +269,13 @@ NOCACHEARG=
 BUILD_PARAMS=
 SPARK_UID=
 CROSS_BUILD="false"
-while getopts f:p:mr:t:Xnb:u: option
+while getopts f:p:R:mr:t:Xnb:u: option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=$(resolve_file ${OPTARG});;
  p) PYDOCKERFILE=$(resolve_file ${OPTARG});;
+ R) error "-R is no longer supported: SparkR was removed in Apache Spark 5.0.0.";;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;

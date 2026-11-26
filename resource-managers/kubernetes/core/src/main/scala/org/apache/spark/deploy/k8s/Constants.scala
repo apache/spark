@@ -137,4 +137,6 @@ object Constants {
   // Application resource types.
   val APP_RESOURCE_TYPE_JAVA = "java"
   val APP_RESOURCE_TYPE_PYTHON = "python"
+  @deprecated("SparkR was removed in Apache Spark 5.0.0", "5.0.0")
+  val APP_RESOURCE_TYPE_R = "r"
 }

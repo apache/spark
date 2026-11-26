@@ -27,7 +27,6 @@ JAVA_IMAGE_TAG="N/A"
 SPARK_TGZ="N/A"
 MVN="$TEST_ROOT_DIR/build/mvn"
 DOCKER_FILE="N/A"
-EXCLUDE_TAGS=""
 
 # Parse arguments
 while (( "$#" )); do
@@ -62,10 +61,6 @@ while (( "$#" )); do
       ;;
     --docker-file)
       DOCKER_FILE="$2"
-      shift
-      ;;
-    --test-exclude-tags)
-      EXCLUDE_TAGS="$2"
       shift
       ;;
     *)

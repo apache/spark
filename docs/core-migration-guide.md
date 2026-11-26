@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 4.5 to 5.0
 
-- Since Spark 5.0, SparkR, which was deprecated in Spark 4.0, has been removed. `bin/sparkR` no longer exists, `spark-submit` rejects R applications, and the `spark.r.*` configurations and `spark.sql.execution.arrow.sparkr.enabled` no longer have any effect. Use [sparklyr](https://spark.posit.co/) to work with Spark from R. The Kubernetes developer API `org.apache.spark.deploy.k8s.submit.RMainAppResource` is deprecated and kept only so that code referring to it still compiles; building a driver pod for it fails.
+- Since Spark 5.0, SparkR, which was deprecated in Spark 4.0, has been removed. `bin/sparkR` no longer exists, `spark-submit` rejects R applications, and `bin/docker-image-tool.sh` no longer accepts `-R`. The `spark.r.*` and `spark.sparkr.*` configurations, `spark.sql.execution.arrow.sparkr.enabled`, and the `SPARKR_DRIVER_R` environment variable no longer have any effect. Use [sparklyr](https://spark.posit.co/) to work with Spark from R. The Kubernetes developer APIs `org.apache.spark.deploy.k8s.submit.RMainAppResource` and `org.apache.spark.deploy.k8s.Constants.APP_RESOURCE_TYPE_R` are deprecated and kept only so that code referring to them still compiles; building a driver pod for an `RMainAppResource` fails.
 
 ## Upgrading from Core 4.3 to 4.4
 

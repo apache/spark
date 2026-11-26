@@ -47,7 +47,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
         configureForPython(pod, res)
 
       case RMainAppResource(res) =>
-        throw rApplicationNotSupported(res)
+        throw DriverCommandFeatureStep.rApplicationNotSupported(res)
     }
   }
 
@@ -61,7 +61,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
         APP_RESOURCE_TYPE_PYTHON
 
       case RMainAppResource(res) =>
-        throw rApplicationNotSupported(res)
+        throw DriverCommandFeatureStep.rApplicationNotSupported(res)
     }
 
     Map(APP_RESOURCE_TYPE.key -> appType)
@@ -103,11 +103,6 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     SparkPod(pod.pod, pythonContainer)
   }
 
-  private def rApplicationNotSupported(res: String): SparkException = {
-    new SparkException("R applications are not supported: SparkR was removed in Apache Spark " +
-      s"5.0.0. Use sparklyr to work with Spark from R. Primary resource: '$res'.")
-  }
-
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
     var proxyUserArgs = Seq[String]()
     if (!conf.proxyUser.isEmpty) {
@@ -121,5 +116,13 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
       .addToArgs("--class", conf.mainClass)
       .addToArgs(resource)
       .addToArgs(conf.appArgs: _*)
+  }
+}
+
+private[spark] object DriverCommandFeatureStep {
+
+  def rApplicationNotSupported(res: String): SparkException = {
+    new SparkException("R applications are not supported: SparkR was removed in Apache Spark " +
+      s"5.0.0. Use sparklyr to work with Spark from R. Primary resource: '$res'.")
   }
 }

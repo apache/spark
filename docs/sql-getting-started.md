@@ -89,7 +89,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html), [Scala](api/scala/org/apache/spark/sql/Dataset.html), and [Java](api/java/index.html?org/apache/spark/sql/Dataset.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html), [Scala](api/scala/org/apache/spark/sql/Dataset.html) and [Java](api/java/index.html?org/apache/spark/sql/Dataset.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 

@@ -25,10 +25,9 @@ import org.apache.spark.TaskContext
 
 /**
  * Tells which tasks have a thread that reads the input of the task on its own, and that the task
- * does not wait for when it completes: the stdin writer thread of `PipedRDD`, the writer thread
- * of script transformation, and the writer thread of the R runner. Such a thread may still read
- * the batch that a reader of the task returned last while the completion listeners of the task
- * close that reader.
+ * does not wait for when it completes: the stdin writer thread of `PipedRDD` and the writer
+ * thread of script transformation. Such a thread may still read the batch that a reader of the
+ * task returned last while the completion listeners of the task close that reader.
  *
  * So a reader whose batches are read at the addresses of their buffers, as the one of native
  * data sources, frees the buffers of that batch when it is closed only in a task without such a

@@ -16,13 +16,18 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.io.File
+import java.nio.file.Files
+
+import scala.annotation.nowarn
+
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesFeatureConfigStep}
+import org.apache.spark.deploy.k8s.features.{DriverCommandFeatureStep, KubernetesDriverCustomFeatureConfigStep, KubernetesFeatureConfigStep}
 import org.apache.spark.internal.config.ConfigEntry
 
 class KubernetesDriverBuilderSuite extends PodBuilderSuite {
@@ -84,6 +89,29 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     val spec = new KubernetesDriverBuilder().buildFromFeatures(conf, client)
     assert(spec.driverPreKubernetesResources.size === 1)
     assert(spec.driverPreKubernetesResources === ADDITION_PRE_RESOURCES)
+  }
+
+  test("SPARK-62387: reject R applications before any feature step uploads files") {
+    withTempDir { dir =>
+      val localFile = new File(dir, "data.csv")
+      Files.writeString(localFile.toPath, "a,b")
+      val uploadDir = new File(dir, "upload")
+      Seq(None, Some(classOf[DriverCommandFeatureStep].getName)).foreach { excluded =>
+        val sparkConf = new SparkConf(false)
+          .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
+          .set("spark.files", localFile.getAbsolutePath)
+          .set(Config.KUBERNETES_FILE_UPLOAD_PATH, uploadDir.toURI.toString)
+        excluded.foreach(sparkConf.set(Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS.key, _))
+        val conf = KubernetesTestConf.createDriverConf(
+          sparkConf = sparkConf,
+          mainAppResource = RMainAppResource("local:///app.R"): @nowarn("cat=deprecation"))
+        val e = intercept[SparkException] {
+          new KubernetesDriverBuilder().buildFromFeatures(conf, mockKubernetesClient())
+        }
+        assert(e.getMessage.contains("SparkR was removed in Apache Spark 5.0.0"), excluded)
+        assert(!uploadDir.exists(), excluded)
+      }
+    }
   }
 }
 

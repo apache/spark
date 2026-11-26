@@ -153,9 +153,6 @@
 
                 <argument>--docker-file</argument>
                 <argument>${spark.kubernetes.test.dockerFile}</argument>
-
-                <argument>--test-exclude-tags</argument>
-                <argument>"${test.exclude.tags},${test.default.exclude.tags}"</argument>
               </arguments>
             </configuration>
           </execution>
