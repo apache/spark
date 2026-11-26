@@ -33,6 +33,7 @@ from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
     DataSourceArrowWriter,
+    DataSourceLookupReader,
     DataSourceReader,
     DataSourceWriter,
     EqualNullSafe,
@@ -163,6 +164,564 @@ class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
 
         self.assertEqual(pe.exception.getCondition(), "UNSUPPORTED_FILTER")
         self.assertEqual(pe.exception.getMessageParameters(), {"name": "UnknownFilter"})
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PythonDataSourceLookupPlanningTests(unittest.TestCase):
+    """
+    Tests of the driver-side lookup planning workers, run without a Spark session: the lookup
+    support of a class, from `data_source_lookup_support`, and the lookup planning of
+    `plan_data_source_lookup`.
+    """
+
+    @staticmethod
+    def _write_utf8(value, infile):
+        from pyspark.serializers import write_with_length
+
+        write_with_length(value.encode("utf-8"), infile)
+
+    def _lookup_support(self, data_source_cls):
+        """Runs `data_source_lookup_support` and returns its (lookupReader, reader) flags."""
+        from pyspark.serializers import CloudPickleSerializer, read_int
+
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker import data_source_lookup_support
+
+        infile = io.BytesIO()
+        CloudPickleSerializer()._write_with_length(data_source_cls, infile)
+        infile.seek(0)
+        outfile = io.BytesIO()
+        data_source_lookup_support._main(infile, outfile)
+
+        outfile.seek(0)
+        return read_int(outfile), read_int(outfile)
+
+    def _run_planner(self, reader, candidates, filters=(), filter_pushdown=True, outfile=None):
+        """
+        Runs `plan_data_source_lookup` with a data source whose `lookupReader()` returns `reader`,
+        and returns its reply, from the start, in `outfile` if given.
+        """
+        from pyspark.serializers import CloudPickleSerializer
+
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker import plan_data_source_lookup
+
+        class LookupDataSource(DataSource):
+            def lookupReader(self, schema):
+                return reader
+
+        schema = StructType().add("id", "long").add("tier", "integer")
+        infile = io.BytesIO()
+        CloudPickleSerializer()._write_with_length(LookupDataSource(options={}), infile)
+        self._write_utf8(schema.json(), infile)
+        self._write_utf8(json.dumps(list(filters)), infile)
+        self._write_utf8(json.dumps(candidates), infile)
+        infile.write(b"\x01" if filter_pushdown else b"\x00")
+        infile.seek(0)
+        outfile = outfile if outfile is not None else io.BytesIO()
+        plan_data_source_lookup._main(infile, outfile)
+        outfile.seek(0)
+        return outfile
+
+    def _plan_lookup(self, reader, candidates, filters=(), filter_pushdown=True):
+        """
+        Runs `plan_data_source_lookup` with a data source whose `lookupReader()` returns `reader`,
+        and returns the planned reader, the pushed filter indices, the selected candidate
+        indices and the maximum number of parameter rows per request.
+        """
+        from pyspark.serializers import CloudPickleSerializer, read_int
+
+        outfile = self._run_planner(reader, candidates, filters, filter_pushdown)
+        # No planned reader for a selection that Spark rejects.
+        length = read_int(outfile)
+        planned = CloudPickleSerializer().loads(outfile.read(length)) if length else None
+        pushed = [read_int(outfile) for _ in range(read_int(outfile))]
+        selected = [read_int(outfile) for _ in range(read_int(outfile))]
+        max_rows = read_int(outfile)
+        self.assertEqual(outfile.read(), b"")
+        return planned, pushed, selected, max_rows
+
+    def _contract_violation(self, reader, candidates):
+        """
+        Runs `plan_data_source_lookup` with a reader that breaks the contract of the lookup API,
+        and returns the subclass and the parameters of the JVM error that it reports.
+        """
+        from pyspark.serializers import read_int
+
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker import plan_data_source_lookup
+
+        outfile = self._run_planner(reader, candidates)
+
+        def read_utf8():
+            return outfile.read(read_int(outfile)).decode("utf-8")
+
+        self.assertEqual(read_int(outfile), plan_data_source_lookup.LOOKUP_CONTRACT_VIOLATION)
+        subclass = read_utf8()
+        parameters = dict((read_utf8(), read_utf8()) for _ in range(read_int(outfile)))
+        self.assertEqual(outfile.read(), b"")
+        return subclass, parameters
+
+    @staticmethod
+    def _candidate(op, column, data_type='"long"'):
+        return {"op": op, "columnPath": [column], "dataType": data_type}
+
+    class _SelectingReader(DataSourceLookupReader):
+        """Records the candidates and selects them with `select`, a function of the candidates."""
+
+        def __init__(self, select):
+            self.select = select
+            self.candidates = None
+
+        def selectLookupPredicates(self, candidates):
+            self.candidates = candidates
+            return self.select(candidates)
+
+        def lookup(self, parameters):
+            return iter([])
+
+    def test_lookup_support_is_found_on_the_class(self):
+        class PlainDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "plain"
+
+            def schema(self):
+                return "id INT"
+
+            def reader(self, schema): ...
+
+        class HintModeDataSource(PlainDataSource):
+            @classmethod
+            def name(cls):
+                return "hint_mode"
+
+            def lookupReader(self, schema): ...
+
+        class LookupOnlyDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "lookup_only"
+
+            def schema(self):
+                return "id INT"
+
+            def lookupReader(self, schema): ...
+
+        class WriteOnlyDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_only"
+
+            def schema(self):
+                return "id INT"
+
+            def writer(self, schema, overwrite): ...
+
+        # A subclass inherits the methods that its parent overrides.
+        class InheritedHintModeDataSource(HintModeDataSource):
+            @classmethod
+            def name(cls):
+                return "inherited_hint_mode"
+
+        # No data source is created, so none of its code runs.
+        class FailingDataSource(LookupOnlyDataSource):
+            def __init__(self, options):
+                raise AssertionError("a data source was created")
+
+            @classmethod
+            def name(cls):
+                raise AssertionError("name() was called")
+
+        for data_source_cls, flags in [
+            (PlainDataSource, (0, 1)),
+            (HintModeDataSource, (1, 1)),
+            (LookupOnlyDataSource, (1, 0)),
+            (WriteOnlyDataSource, (0, 0)),
+            (InheritedHintModeDataSource, (1, 1)),
+            (FailingDataSource, (1, 0)),
+        ]:
+            with self.subTest(data_source=data_source_cls.__name__):
+                self.assertEqual(self._lookup_support(data_source_cls), flags)
+
+    def test_plan_lookup_decodes_every_candidate_shape(self):
+        from pyspark.sql.datasource import LookupParameter
+        from pyspark.sql.types import DateType, DecimalType, LongType, StringType
+
+        ops = [
+            ("=", EqualTo, '"long"', LongType()),
+            ("<=>", EqualNullSafe, '"string"', StringType()),
+            ("<", LessThan, '"date"', DateType()),
+            ("<=", LessThanOrEqual, '"decimal(10,2)"', DecimalType(10, 2)),
+            (">", GreaterThan, '"long"', LongType()),
+            (">=", GreaterThanOrEqual, '"long"', LongType()),
+        ]
+        reader = self._SelectingReader(lambda candidates: list(range(len(candidates)))[::-1])
+        planned, _, selected, _ = self._plan_lookup(
+            reader, [self._candidate(op, "id", json_type) for op, _, json_type, _ in ops]
+        )
+        # The selection keeps the reader's order.
+        self.assertEqual(selected, [5, 4, 3, 2, 1, 0])
+        self.assertEqual(len(planned.candidates), len(ops))
+        for candidate, (op, filter_cls, _, data_type) in zip(planned.candidates, ops):
+            with self.subTest(op=op):
+                self.assertIs(type(candidate), filter_cls)
+                self.assertEqual(candidate.attribute, ("id",))
+                self.assertIsInstance(candidate.value, LookupParameter)
+                self.assertEqual(candidate.value.dataType, data_type)
+
+    def test_plan_lookup_passes_the_selected_positions(self):
+        # Two candidates of the same shape, as from `t.id = s.a AND t.id = s.b`, are told apart
+        # by position.
+        candidates = [self._candidate("=", "id"), self._candidate("=", "id")]
+        for selection, expected in [
+            ([1], [1]),
+            ((1, 0), [1, 0]),
+            (range(2), [0, 1]),
+            # A duplicate selection is passed on for the JVM to reject.
+            ([0, 0], [0, 0]),
+            # An empty selection too.
+            ([], []),
+        ]:
+            with self.subTest(selection=selection):
+                _, _, selected, _ = self._plan_lookup(
+                    self._SelectingReader(lambda _: selection), candidates
+                )
+                self.assertEqual(selected, expected)
+
+        # A candidate's LookupParameter equals only itself, so `index` finds its position.
+        reader = self._SelectingReader(lambda candidates: [candidates.index(candidates[1])])
+        _, _, selected, _ = self._plan_lookup(reader, candidates)
+        self.assertEqual(selected, [1])
+
+        # A position that is not one of a candidate is rejected, with the JVM's error for a
+        # Scala connector, also one that a Java int cannot hold.
+        for position in [2, -1, 2**40]:
+            with self.subTest(position=position):
+                self.assertEqual(
+                    self._contract_violation(
+                        self._SelectingReader(lambda _: [0, position]), candidates
+                    ),
+                    (
+                        "INVALID_SELECTED_PREDICATE_POSITION",
+                        {"position": str(position), "maxPosition": "1"},
+                    ),
+                )
+
+    def test_plan_lookup_rejects_a_changed_list_of_candidates(self):
+        from pyspark.sql.datasource import LookupParameter
+        from pyspark.sql.types import LongType
+
+        candidates = [
+            self._candidate("=", "id"),
+            self._candidate("=", "id"),
+            self._candidate("=", "tier"),
+        ]
+
+        def changing(change, selection):
+            def select(candidates):
+                change(candidates)
+                return selection
+
+            return self._SelectingReader(select)
+
+        # The positions refer to the offered order, so a reader that changes the list fails, with
+        # the JVM's error for a Scala connector.
+        for name, change, position in [
+            ("reversed", lambda c: c.reverse(), "0"),
+            ("removed", lambda c: c.pop(), "2"),
+            ("cleared", lambda c: c.clear(), "0"),
+            (
+                "replaced",
+                lambda c: c.__setitem__(1, EqualTo(("id",), LookupParameter(LongType()))),
+                "1",
+            ),
+        ]:
+            with self.subTest(change=name):
+                self.assertEqual(
+                    self._contract_violation(changing(change, [0]), candidates),
+                    ("MODIFIED_CANDIDATES", {"position": position}),
+                )
+
+        # An equal rebuilt candidate and an appended one change no offered position, and the
+        # JVM rejects an empty selection first.
+        for name, change, selection in [
+            ("rebuilt", lambda c: c.__setitem__(1, EqualTo(c[1].attribute, c[1].value)), [1]),
+            ("appended", lambda c: c.append(EqualTo(("id",), 1)), [2]),
+            ("cleared with no selection", lambda c: c.clear(), []),
+        ]:
+            with self.subTest(change=name):
+                _, _, selected, _ = self._plan_lookup(changing(change, selection), candidates)
+                self.assertEqual(selected, selection)
+
+        # A position of an appended candidate is not one of an offered candidate.
+        self.assertEqual(
+            self._contract_violation(
+                changing(lambda c: c.append(EqualTo(("id",), 1)), [3]), candidates
+            ),
+            ("INVALID_SELECTED_PREDICATE_POSITION", {"position": "3", "maxPosition": "2"}),
+        )
+
+    def test_plan_lookup_pushes_filters_before_selecting_predicates(self):
+        class FilteringReader(DataSourceLookupReader):
+            def __init__(self):
+                # The planning calls, in order. The planned reader is a copy that carries them.
+                self.calls = []
+                self.pushed = None
+
+            def pushFilters(self, filters):
+                self.calls.append("pushFilters")
+                self.pushed = [f for f in filters if isinstance(f, IsNotNull)]
+                return [f for f in filters if not isinstance(f, IsNotNull)]
+
+            def selectLookupPredicates(self, candidates):
+                self.calls.append("selectLookupPredicates")
+                return [0]
+
+            def maxParameterRowsPerRequest(self):
+                self.calls.append("maxParameterRowsPerRequest")
+                return 10
+
+            def lookup(self, parameters):
+                return iter([])
+
+        filters = [
+            {"name": "IsNull", "columnPath": ["tier"], "isNegated": False},
+            {"name": "IsNotNull", "columnPath": ["tier"], "isNegated": False},
+        ]
+        planned, pushed, selected, max_rows = self._plan_lookup(
+            FilteringReader(), [self._candidate("=", "id")], filters=filters
+        )
+        self.assertEqual(
+            planned.calls, ["pushFilters", "selectLookupPredicates", "maxParameterRowsPerRequest"]
+        )
+        self.assertEqual(pushed, [1])
+        self.assertEqual(selected, [0])
+        self.assertEqual(max_rows, 10)
+        # The planned reader carries the state that the planning methods set.
+        self.assertEqual(planned.pushed, [IsNotNull(("tier",))])
+
+        # pushFilters is not called when there are no filters.
+        planned, pushed, _, _ = self._plan_lookup(FilteringReader(), [self._candidate("=", "id")])
+        self.assertEqual(planned.calls, ["selectLookupPredicates", "maxParameterRowsPerRequest"])
+        self.assertEqual(pushed, [])
+
+    def test_plan_lookup_rejects_push_filters_when_pushdown_is_disabled(self):
+        from pyspark.errors import PySparkAssertionError
+
+        class FilteringReader(self._SelectingReader):
+            def pushFilters(self, filters):
+                return filters
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            self._plan_lookup(
+                FilteringReader(lambda candidates: [0]),
+                [self._candidate("=", "id")],
+                filter_pushdown=False,
+            )
+        self.assertEqual(pe.exception.getCondition(), "DATA_SOURCE_PUSHDOWN_DISABLED")
+        self.assertEqual(
+            pe.exception.getMessageParameters(),
+            {
+                "type": "FilteringReader",
+                "method": "pushFilters",
+                "conf": "spark.sql.python.filterPushdown.enabled",
+            },
+        )
+
+        # A reader that does not override pushFilters plans with pushdown disabled. A method
+        # named pushLimit is not a pushdown method of a lookup reader.
+        class LimitReader(self._SelectingReader):
+            def pushLimit(self, limit):
+                return True
+
+        _, pushed, selected, _ = self._plan_lookup(
+            LimitReader(lambda candidates: [0]),
+            [self._candidate("=", "id")],
+            filter_pushdown=False,
+        )
+        self.assertEqual((pushed, selected), ([], [0]))
+
+    def test_plan_lookup_leaves_a_rejected_selection_to_the_jvm(self):
+        import threading
+
+        from pyspark.serializers import read_int
+
+        # A selection that Spark rejects, empty or with a repeated position, is passed on with
+        # no planned reader: the reader is neither asked for its request size, which it may
+        # derive from its selection, nor pickled, so Spark reports the selection's error.
+        class UnsizedReader(self._SelectingReader):
+            def selectLookupPredicates(self, candidates):
+                self.lock = threading.Lock()
+                return super().selectLookupPredicates(candidates)
+
+            def maxParameterRowsPerRequest(self):
+                raise AssertionError("maxParameterRowsPerRequest() was called")
+
+        candidates = [self._candidate("=", "id"), self._candidate("=", "id")]
+        for selection in ([], [1, 1]):
+            with self.subTest(selection=selection):
+                outfile = self._run_planner(UnsizedReader(lambda _: selection), candidates)
+                self.assertEqual(read_int(outfile), 0)  # no planned reader
+                self.assertEqual([read_int(outfile) for _ in range(read_int(outfile))], [])
+                selected = [read_int(outfile) for _ in range(read_int(outfile))]
+                self.assertEqual(selected, selection)
+                self.assertEqual(read_int(outfile), 0)  # no request size
+                self.assertEqual(outfile.read(), b"")
+
+    def test_plan_lookup_fails_for_a_reader_that_cannot_be_pickled(self):
+        import threading
+
+        class LockingReader(self._SelectingReader):
+            def selectLookupPredicates(self, candidates):
+                self.lock = threading.Lock()
+                return super().selectLookupPredicates(candidates)
+
+        # The planned reader is pickled before anything else is written, so the reply holds
+        # nothing that the JVM could misread as a plan.
+        outfile = io.BytesIO()
+        with self.assertRaisesRegex(Exception, "cannot pickle"):
+            self._run_planner(
+                LockingReader(lambda _: [0]), [self._candidate("=", "id")], outfile=outfile
+            )
+        self.assertEqual(outfile.getvalue(), b"")
+
+    def test_pushdown_check_of_a_reader_class_with_both_bases(self):
+        from pyspark.errors import PySparkAssertionError
+        from pyspark.sql.worker.utils import check_pushdown_not_disabled, is_method_overridden
+
+        # One reader class may serve batch reads and lookups, with its bases in either order.
+        class BatchFirstReader(DataSourceReader, DataSourceLookupReader):
+            def read(self, partition):
+                return iter([])
+
+            def selectLookupPredicates(self, candidates):
+                return [0]
+
+            def lookup(self, parameters):
+                return iter([])
+
+        class LookupFirstReader(DataSourceLookupReader, DataSourceReader):
+            read = BatchFirstReader.read
+            selectLookupPredicates = BatchFirstReader.selectLookupPredicates
+            lookup = BatchFirstReader.lookup
+
+        for reader_cls in (BatchFirstReader, LookupFirstReader):
+            with self.subTest(reader=reader_cls.__name__):
+                # It implements no pushdown method, so it passes the checks of both paths.
+                check_pushdown_not_disabled(
+                    reader_cls(), enable_filter_pushdown=False, enable_limit_pushdown=False
+                )
+                check_pushdown_not_disabled(reader_cls(), enable_filter_pushdown=False)
+                self.assertFalse(is_method_overridden(reader_cls(), "pushFilters"))
+                self.assertFalse(is_method_overridden(reader_cls(), "pushLimit"))
+
+                class LimitingReader(reader_cls):
+                    def pushLimit(self, limit):
+                        return True
+
+                # Its pushLimit is a batch read's method: the batch path finds it, and lookup
+                # planning, which checks only pushFilters, does not.
+                self.assertTrue(is_method_overridden(LimitingReader(), "pushLimit"))
+                with self.assertRaises(PySparkAssertionError) as pe:
+                    check_pushdown_not_disabled(
+                        LimitingReader(), enable_filter_pushdown=True, enable_limit_pushdown=False
+                    )
+                self.assertEqual(pe.exception.getMessageParameters()["method"], "pushLimit")
+                check_pushdown_not_disabled(LimitingReader(), enable_filter_pushdown=False)
+
+    def test_plan_lookup_reports_the_request_size(self):
+        class SizedReader(self._SelectingReader):
+            def __init__(self, max_rows):
+                super().__init__(lambda candidates: [0])
+                self.max_rows = max_rows
+
+            def maxParameterRowsPerRequest(self):
+                return self.max_rows
+
+        candidates = [self._candidate("=", "id")]
+        # The default is 1000, Spark's own cap.
+        _, _, _, max_rows = self._plan_lookup(
+            self._SelectingReader(lambda candidates: [0]), candidates
+        )
+        self.assertEqual(max_rows, 1000)
+        # The JVM rejects a value that is not positive; a value out of the range of a Java int
+        # keeps its sign.
+        for value, expected in [(0, 0), (-1, -1), (2**40, 2**31 - 1), (-(2**40), -(2**31))]:
+            with self.subTest(value=value):
+                _, _, _, max_rows = self._plan_lookup(SizedReader(value), candidates)
+                self.assertEqual(max_rows, expected)
+
+    def test_plan_lookup_validates_what_the_reader_returns(self):
+        # Each violation is reported with the subclass and the parameters of the JVM's error
+        # DATA_SOURCE_INVALID_EXTERNAL_LOOKUP, which it raises for a Scala connector.
+        candidates = [self._candidate("=", "id")]
+
+        self.assertEqual(
+            self._contract_violation(object(), candidates),
+            (
+                "INVALID_RESULT_TYPE",
+                {
+                    "method": "DataSource.lookupReader()",
+                    "type": "object",
+                    "expected": "a DataSourceLookupReader",
+                },
+            ),
+        )
+        self.assertEqual(
+            self._contract_violation(None, candidates),
+            ("NULL_RESULT", {"method": "DataSource.lookupReader()"}),
+        )
+
+        method = "DataSourceLookupReader.selectLookupPredicates()"
+        for selection, expected in [
+            (None, ("NULL_RESULT", {"method": method})),
+            (iter([]), "list_iterator"),
+            ({0}, "set"),
+            (0, "int"),
+            # A string is a sequence, of strings.
+            ("0", "str holding str"),
+            # A bool is an int in Python, but not a position.
+            ([True], "list holding bool"),
+            ([0, None], "list holding NoneType"),
+            ((0.0,), "tuple holding float"),
+            ([EqualTo(("id",), 1)], "list holding EqualTo"),
+        ]:
+            if isinstance(expected, str):
+                expected = (
+                    "INVALID_RESULT_TYPE",
+                    {"method": method, "type": expected, "expected": "a sequence of ints"},
+                )
+            with self.subTest(selection=selection):
+                self.assertEqual(
+                    self._contract_violation(
+                        self._SelectingReader(lambda _: selection), candidates
+                    ),
+                    expected,
+                )
+
+        class SizedReader(self._SelectingReader):
+            def __init__(self, max_rows):
+                super().__init__(lambda candidates: [0])
+                self.max_rows = max_rows
+
+            def maxParameterRowsPerRequest(self):
+                return self.max_rows
+
+        method = "DataSourceLookupReader.maxParameterRowsPerRequest()"
+        for value in [True, "5", 5.0]:
+            with self.subTest(value=value):
+                self.assertEqual(
+                    self._contract_violation(SizedReader(value), candidates),
+                    (
+                        "INVALID_RESULT_TYPE",
+                        {"method": method, "type": type(value).__name__, "expected": "an int"},
+                    ),
+                )
+        self.assertEqual(
+            self._contract_violation(SizedReader(None), candidates),
+            ("NULL_RESULT", {"method": method}),
+        )
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
