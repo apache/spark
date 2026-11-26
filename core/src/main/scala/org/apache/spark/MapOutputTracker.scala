@@ -59,11 +59,14 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *   arrives before this map id's output is registered is buffered and replayed on registration
  *   instead of being dropped. See [[pendingMigratedOutputs]]. Read once at construction time so
  *   the behavior is stable for the lifetime of this shuffle.
+ * @param partitionIdAsMapId whether every map task uses its partition id as its map id, as with
+ *   `spark.shuffle.useOldFetchProtocol=true`. See [[invalidatedDeletedMapIds]].
  */
 private class ShuffleStatus(
     numPartitions: Int,
     numReducers: Int = -1,
-    bufferRacingMigrations: Boolean = false) extends Logging {
+    bufferRacingMigrations: Boolean = false,
+    partitionIdAsMapId: Boolean = false) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -104,6 +107,30 @@ private class ShuffleStatus(
    * Keep the previous deleted MapStatus for recovery.
    */
   val mapStatusesDeleted = new Array[MapStatus](numPartitions)
+
+  /**
+   * For each map index, the map id [[invalidateAllMapOutputs]] recorded there when it last ran,
+   * or `Long.MinValue`. A migration report ([[updateMapOutput]]) for a recorded map id must not
+   * move a registered output or restore a deleted one, because the whole shuffle is being
+   * recomputed. Allocated on the first invalidation.
+   *
+   * With the default fetch protocol a map id is the task attempt id. The record holds the map id
+   * of the [[mapStatusesDeleted]] entry found at the index: the output the invalidation removed,
+   * or one deleted earlier (e.g. with a lost executor). An output registered at the index
+   * afterwards has another map id, so it can still be migrated, and recovered after it is lost.
+   *
+   * With `spark.shuffle.useOldFetchProtocol=true` ([[partitionIdAsMapId]]) a map id is the
+   * partition id, so every attempt at an index has the same map id and writes blocks with the
+   * same name, and a report for the invalidated attempt cannot be told apart from one for the
+   * retry. Every index is then recorded, including one where a task of the invalidated attempt
+   * finished without registering (e.g. a late completion of a failed barrier attempt, which the
+   * scheduler ignores), and every later report for the shuffle is refused: it is not applied
+   * while the retry is registered, not used to restore the retry after its output is lost, and
+   * not buffered in [[pendingMigratedOutputs]]. A partition whose retry output is lost is
+   * recomputed instead. Clearing the record, e.g. when the retry registers, would let a late
+   * report for the invalidated attempt move the retry to, or restore, the invalidated data.
+   */
+  private[this] var invalidatedDeletedMapIds: Array[Long] = null
 
   /**
    * Keep the indices of the Map tasks whose checksums are different across retries.
@@ -275,12 +302,22 @@ private class ShuffleStatus(
    * task-completion event in the DAG scheduler, the relocation is buffered in
    * [[pendingMigratedOutputs]] keyed by mapId and replayed by [[addMapOutput]] once registration
    * happens, so the migrated location is not lost. See [[pendingMigratedOutputs]].
+   *
+   * A report for a map id recorded by [[invalidateAllMapOutputs]] is refused, so it neither
+   * restores an output removed for a full recomputation of the shuffle nor moves an output
+   * registered afterwards. See [[invalidatedDeletedMapIds]].
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
       val mapIndex = mapIdToMapIndex.get(mapId)
       val mapStatusOpt = mapIndex.map(mapStatuses(_)).flatMap(Option(_))
       mapStatusOpt match {
+        // Only under spark.shuffle.useOldFetchProtocol=true, where a retry reuses the invalidated
+        // map id. With the default protocol a registered output never has the recorded map id.
+        case Some(_) if mapIndex.exists(isInvalidatedMapId(_, mapId)) =>
+          logInfo(log"Not moving map output ${MDC(MAP_ID, mapId)} to " +
+            log"${MDC(BLOCK_MANAGER_ID, bmAddress)}: its map id was invalidated for a full " +
+            log"recomputation of the shuffle, so the report may be for the invalidated attempt.")
         case Some(mapStatus) =>
           logInfo(log"Updating map output for ${MDC(MAP_ID, mapId)}" +
             log" to ${MDC(BLOCK_MANAGER_ID, bmAddress)}")
@@ -288,7 +325,11 @@ private class ShuffleStatus(
           invalidateSerializedMapOutputStatusCache()
         case None =>
           val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
-          if (index >= 0 && mapStatuses(index) == null) {
+          if (index >= 0 && mapStatuses(index) == null && isInvalidatedMapId(index, mapId)) {
+            logInfo(log"Not recovering map output ${MDC(MAP_ID, mapId)} at " +
+              log"${MDC(BLOCK_MANAGER_ID, bmAddress)}: it was removed for a full recomputation " +
+              log"of the shuffle.")
+          } else if (index >= 0 && mapStatuses(index) == null) {
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
             mapStatuses(index) = mapStatus
@@ -297,6 +338,11 @@ private class ShuffleStatus(
             mapStatusesDeleted(index) = null
             logInfo(log"Recover ${MDC(MAP_ID, mapStatus.mapId)}" +
               log" ${MDC(BLOCK_MANAGER_ID, mapStatus.location)}")
+          } else if (isInvalidatedPartitionMapId(mapId)) {
+            // Only under spark.shuffle.useOldFetchProtocol=true (see invalidatedDeletedMapIds).
+            logInfo(log"Not buffering the migrated location ${MDC(BLOCK_MANAGER_ID, bmAddress)} " +
+              log"of map output ${MDC(MAP_ID, mapId)}: its map id was invalidated for a full " +
+              log"recomputation of the shuffle, so the report may be for the invalidated attempt.")
           } else if (bufferRacingMigrations) {
             // This map id's output is not committed/registered yet (e.g. the task-completion
             // event has not landed on the driver). Buffer the relocation so it is applied once
@@ -405,6 +451,49 @@ private class ShuffleStatus(
       }
     }
   }
+
+  /**
+   * Removes all map outputs, like `removeOutputsByFilter(_ => true)`, because the whole shuffle is
+   * going to be recomputed (an indeterminate stage rollback or a barrier stage retry). Also keeps
+   * every deleted map output of this shuffle, including ones removed earlier (e.g. with a lost
+   * executor), from being recovered by a later migration report (see
+   * [[invalidatedDeletedMapIds]] for what is recorded), and drops the relocations buffered in
+   * [[pendingMigratedOutputs]].
+   */
+  def invalidateAllMapOutputs(): Unit = withWriteLock {
+    removeOutputsByFilter(_ => true)
+    if (invalidatedDeletedMapIds == null) {
+      // Long.MinValue is never a map id (a task attempt id or a partition id).
+      invalidatedDeletedMapIds = Array.fill(numPartitions)(Long.MinValue)
+    }
+    for (mapIndex <- invalidatedDeletedMapIds.indices) {
+      if (partitionIdAsMapId) {
+        // Every attempt at the index has this map id, including a task that never registered.
+        invalidatedDeletedMapIds(mapIndex) = mapIndex
+      } else if (mapStatusesDeleted(mapIndex) != null) {
+        invalidatedDeletedMapIds(mapIndex) = mapStatusesDeleted(mapIndex).mapId
+      }
+    }
+    // Each buffered relocation is for a task that ran before this call, so its data is replaced by
+    // the recomputation. Drop them so none is replayed onto a later output with the same map id.
+    pendingMigratedOutputs.clear()
+  }
+
+  /**
+   * Whether `mapId` is the map id [[invalidateAllMapOutputs]] recorded at `mapIndex` (see
+   * [[invalidatedDeletedMapIds]]). Must be called within the write lock.
+   */
+  private def isInvalidatedMapId(mapIndex: Int, mapId: Long): Boolean =
+    invalidatedDeletedMapIds != null && invalidatedDeletedMapIds(mapIndex) == mapId
+
+  /**
+   * Whether `mapId` is recorded under [[partitionIdAsMapId]], where a map id is its map index, so
+   * a report for it is refused without looking up an output. Must be called within the write
+   * lock.
+   */
+  private def isInvalidatedPartitionMapId(mapId: Long): Boolean =
+    partitionIdAsMapId && mapId >= 0 && mapId < numPartitions &&
+      isInvalidatedMapId(mapId.toInt, mapId)
 
   /**
    * Removes all shuffle merge result which satisfies the filter.
@@ -819,6 +908,10 @@ private[spark] class MapOutputTrackerMaster(
   private val bufferRacingMigrations =
     conf.get(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS)
 
+  // Whether every map task uses its partition id as its map id (see ShuffleMapTask), which
+  // changes what ShuffleStatus.invalidateAllMapOutputs records.
+  private val partitionIdAsMapId = conf.get(SHUFFLE_USE_OLD_FETCH_PROTOCOL)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -959,12 +1052,14 @@ private[spark] class MapOutputTrackerMaster(
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations,
+          partitionIdAsMapId)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     } else {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations,
+          partitionIdAsMapId = partitionIdAsMapId)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     }
@@ -1003,10 +1098,14 @@ private[spark] class MapOutputTrackerMaster(
     incrementEpoch()
   }
 
-  /** Unregister all map and merge output information of the given shuffle. */
+  /**
+   * Unregister all map and merge output information of the given shuffle, because the whole
+   * shuffle is going to be recomputed. A later shuffle migration report does not recover the
+   * removed map outputs (see [[ShuffleStatus.invalidateAllMapOutputs]]).
+   */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
     val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterAllMapAndMergeOutput")
-    shuffleStatus.removeOutputsByFilter(x => true)
+    shuffleStatus.invalidateAllMapOutputs()
     shuffleStatus.removeMergeResultsByFilter(x => true)
     shuffleStatus.removeShuffleMergerLocations()
     incrementEpoch()

@@ -1340,6 +1340,110 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-62353: migration does not recover map outputs removed by " +
+      "unregisterAllMapAndMergeOutput") {
+    val tracker = newTrackerMaster()
+    try {
+      tracker.registerShuffle(10, 3, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val hostA = BlockManagerId("exec-1", "hostA", 1000)
+      val hostB = BlockManagerId("exec-2", "hostB", 1000)
+      val peer = BlockManagerId("exec-3", "hostC", 1000)
+      val nextPeer = BlockManagerId("exec-4", "hostD", 1000)
+      def location(mapIndex: Int): Option[BlockManagerId] =
+        Option(tracker.shuffleStatuses(10).mapStatuses(mapIndex)).map(_.location)
+      tracker.registerMapOutput(10, 0, MapStatus(hostA, Array(2L), 100))
+      tracker.registerMapOutput(10, 1, MapStatus(hostA, Array(2L), 101))
+      tracker.registerMapOutput(10, 2, MapStatus(hostB, Array(2L), 102))
+      // Map output 2 is already deleted (executor loss) when the whole shuffle is invalidated.
+      tracker.removeOutputsOnExecutor(hostB.executorId)
+      tracker.unregisterAllMapAndMergeOutput(10)
+
+      Seq(100L, 101L, 102L).foreach(tracker.updateMapOutput(10, _, peer))
+      assert(tracker.getNumAvailableOutputs(10) == 0)
+      assert(tracker.findMissingPartitions(10) === Some(Seq(0, 1, 2)))
+
+      // The recomputed output has a new map id: it migrates while registered, and is recovered
+      // by its migration report once its host is lost.
+      tracker.registerMapOutput(10, 0, MapStatus(hostA, Array(2L), 200))
+      tracker.updateMapOutput(10, 200, peer)
+      assert(location(0) === Some(peer))
+      tracker.removeOutputsOnExecutor(peer.executorId)
+      assert(tracker.getNumAvailableOutputs(10) == 0)
+      tracker.updateMapOutput(10, 200, nextPeer)
+      assert(location(0) === Some(nextPeer))
+
+      // The other invalidated outputs stay unrecoverable.
+      Seq(101L, 102L).foreach(tracker.updateMapOutput(10, _, peer))
+      assert(tracker.findMissingPartitions(10) === Some(Seq(1, 2)))
+
+      // A later invalidation protects the recomputed output as well.
+      tracker.unregisterAllMapAndMergeOutput(10)
+      tracker.updateMapOutput(10, 200, peer)
+      assert(tracker.getNumAvailableOutputs(10) == 0)
+      assert(tracker.findMissingPartitions(10) === Some(Seq(0, 1, 2)))
+    } finally {
+      tracker.stop()
+    }
+  }
+
+  test("SPARK-62353: a relocation buffered before unregisterAllMapAndMergeOutput is not " +
+      "replayed onto a later output with the same map id") {
+    val newConf = new SparkConf()
+      .set(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS, true)
+      .set(SHUFFLE_USE_OLD_FETCH_PROTOCOL, true)
+    val tracker = newTrackerMaster(newConf)
+    try {
+      tracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val hostB = BlockManagerId("exec-2", "hostB", 1000)
+      val peer = BlockManagerId("exec-3", "hostC", 1000)
+      // The invalidated attempt's output migrates before its completion registers, and the
+      // scheduler then ignores that completion. With the old fetch protocol the retry has the
+      // same map id (the partition id).
+      tracker.updateMapOutput(10, 0, peer)
+      tracker.unregisterAllMapAndMergeOutput(10)
+      tracker.registerMapOutput(10, 0, MapStatus(hostB, Array(2L), 0))
+      assert(tracker.shuffleStatuses(10).mapStatuses(0).location === hostB)
+    } finally {
+      tracker.stop()
+    }
+  }
+
+  gridTest("SPARK-62353: with the old fetch protocol, migration reports for an invalidated " +
+      "shuffle are refused at an index that never had an output")(
+      for (oldProtocol <- Seq(false, true); reportBeforeRegistration <- Seq(false, true))
+        yield (oldProtocol, reportBeforeRegistration)) {
+    case (oldProtocol, reportBeforeRegistration) =>
+      val newConf = new SparkConf()
+        .set(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS, true)
+        .set(SHUFFLE_USE_OLD_FETCH_PROTOCOL, oldProtocol)
+      val tracker = newTrackerMaster(newConf)
+      try {
+        tracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+        val hostB = BlockManagerId("exec-2", "hostB", 1000)
+        val peer = BlockManagerId("exec-3", "hostC", 1000)
+        val nextPeer = BlockManagerId("exec-4", "hostD", 1000)
+        def location: Option[BlockManagerId] =
+          Option(tracker.shuffleStatuses(10).mapStatuses(0)).map(_.location)
+        // Index 0 has no output when the shuffle is invalidated, as when a task of a failed
+        // barrier attempt finishes afterwards and the scheduler ignores its completion. Under the
+        // old protocol that task and the retry both have map id 0, so a report for map id 0 may
+        // be for the invalidated task's blocks. Under the default protocol map id 0 can only be
+        // the retry's output.
+        tracker.unregisterAllMapAndMergeOutput(10)
+        if (reportBeforeRegistration) tracker.updateMapOutput(10, 0, peer)
+        tracker.registerMapOutput(10, 0, MapStatus(hostB, Array(2L), 0))
+        if (!reportBeforeRegistration) tracker.updateMapOutput(10, 0, peer)
+        assert(location === Some(if (oldProtocol) hostB else peer))
+
+        // Under the old protocol the retry's output is not recovered once it is lost either.
+        tracker.removeOutputsOnExecutor(location.get.executorId)
+        tracker.updateMapOutput(10, 0, nextPeer)
+        assert(location === (if (oldProtocol) None else Some(nextPeer)))
+      } finally {
+        tracker.stop()
+      }
+  }
+
   test("SPARK-57491: staleMapIndexes propagated from driver to worker via getStatuses") {
     val rpcEnv = createRpcEnv("test")
     val masterTracker = newTrackerMaster()
