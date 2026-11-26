@@ -355,6 +355,16 @@ select a1, ( select count(*) filter (where s is null)
   from (select percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
+-- with a function between the aggregates that is not computed over the row of the lower one,
+-- which COUNT(*) does not need, and SUM does, which keeps the result of before
+select a1, ( select count(*)
+  from (select percentile(m, 0.5) p from (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1;
+
+select a1, ( select sum(p)
+  from (select percentile(m, 0.5) p from (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1;
+
 -- with outer values that compare equal but differ, -0.0 and 0.0, correlated through a string
 select cast(o.d as string) d, ( select count(*) filter (where m is null)
   from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c

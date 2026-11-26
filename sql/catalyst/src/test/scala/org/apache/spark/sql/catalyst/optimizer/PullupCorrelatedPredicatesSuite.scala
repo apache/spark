@@ -395,6 +395,17 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugResult(lower, Seq(isNullCount)).isEmpty, f)
       assert(countBugResult(lower) == Some("1"), f)
     }
+    // Nor over the one row of a lower aggregate in an aggregate between: a function that cannot be
+    // computed over that row, here PERCENTILE or a user-defined one, gives a value that is not
+    // known, so a top that needs it keeps the handling of before, and COUNT(*) gets its result.
+    val isNullCountP = count(Literal(1), Some($"p".isNull))
+    Seq(new Percentile($"s", Literal(0.5)), UserDefinedSumAggregate($"s"),
+        UserDefinedSumFunction($"s")).foreach { f =>
+      val between = correlated(max($"d")).groupBy()(f.toAggregateExpression().as("p"))
+      assert(countBugResult(between) == Some("1"), f)
+      assert(countBugResult(between, Seq(sum($"p"))).isEmpty, f)
+      assert(countBugResult(between, Seq(isNullCountP)).isEmpty, f)
+    }
     // Nor with the legacy conf, or where the count bug is not handled at all.
     asBefore {
       assert(countBugResult(correlated(max($"d"))).isEmpty)

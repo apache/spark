@@ -1043,9 +1043,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * does not hold. COLLECT_LIST and COLLECT_SET are computed directly where their arguments over
    * the row are literals, e.g. `m + 1` or `struct(m)` for a value `m` of the row. DISTINCT
    * does not change the result over a single row. Returns None for other functions, including
-   * user-defined ones, and if the result does not keep the data type and nullability of `ae`. A
-   * result that depends on a non-deterministic argument or FILTER is not a literal, and is not
-   * taken by the caller.
+   * user-defined ones, and if the result does not keep the data type and nullability of `ae`; the
+   * caller then takes its value as unknown. A result that depends on a non-deterministic argument
+   * or FILTER is not a literal, and is not taken by the caller.
    */
   private def evalAggregateOnOneRow(
       ae: AggregateExpression,
@@ -1109,13 +1109,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * result of every outer row, see rewriteSubQueries). So for such an outer row the correlated
    * input is taken as empty, and the chain is evaluated over it as before decorrelation: an
    * Aggregate without grouping expressions returns one row on empty input, of the results of its
-   * aggregate functions over no rows (see evalAggregateFunctionOnEmptyInput; one that cannot be
-   * computed is a NonLiteralValue). An outer reference in the chain does not change which rows it
-   * returns; a value or grouping key that depends on one is not a literal, and is not taken (see
-   * below), and a value that is not a literal is passed to the level above as a
-   * NonLiteralValue, so that the work stays linear in the size of the chain. A NULL
-   * result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that the
-   * result cannot be computed. Only a literal is taken, so this needs `tryEvalExpr` to keep a
+   * aggregate functions over no rows (see evalAggregateFunctionOnEmptyInput), and an Aggregate
+   * over that one row returns one row of its functions over it (see evalAggregateOnOneRow); a
+   * function that cannot be computed gives a NonLiteralValue. An outer reference in the chain
+   * does not change which rows it returns; a value or grouping key that depends on one is not a
+   * literal, and is not taken (see below), and a value that is not a literal is passed to the
+   * level above as a NonLiteralValue, so that the work stays linear in the size of the chain. A
+   * NULL result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that
+   * the result cannot be computed. Only a literal is taken, so this needs `tryEvalExpr` to keep a
    * value that fails as an expression instead of failing the query (SPARK-61444).
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
@@ -1140,22 +1141,23 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           case Some(row) if !a.groupingExpressions.forall(g =>
               bindingExpr(g, row).isInstanceOf[Literal]) => None
           case Some(row) =>
+            // The Aggregate returns one row over the row, so a function that cannot be computed
+            // over it, e.g. PERCENTILE or a user-defined one, gives a NonLiteralValue, as over no
+            // rows: a result above that needs its value is not taken, and one that does not, such
+            // as COUNT(*), still is.
             val results = a.aggregateExpressions.map { ne =>
-              val aggs = ne.collect { case ae: AggregateExpression => ae }
-                .map(ae => ae -> evalAggregateOnOneRow(ae, row))
-              if (aggs.exists(_._2.isEmpty)) {
-                None
-              } else {
-                val values = aggs.map { case (ae, r) => (ae: Expression) -> r.get }.toMap
-                val bound = ne.transformDown {
-                  case ae: AggregateExpression => values(ae)
-                  case a: AttributeReference if row.contains(a.exprId) => row(a.exprId)
-                }
-                Some((ne.exprId, tryEvalExpr(bound)))
+              val values: Map[Expression, Expression] =
+                ne.collect { case ae: AggregateExpression => ae }.map { ae =>
+                  (ae: Expression) -> evalAggregateOnOneRow(ae, row)
+                    .getOrElse(NonLiteralValue(ae.dataType, ae.nullable))
+                }.toMap
+              val bound = ne.transformDown {
+                case ae: AggregateExpression => values(ae)
+                case a: AttributeReference if row.contains(a.exprId) => row(a.exprId)
               }
+              (ne.exprId, tryEvalExpr(bound))
             }
-            if (results.forall(_.isDefined)) Some(Some(placeholders(results.map(_.get).toMap)))
-            else None
+            Some(Some(placeholders(results.toMap)))
         }
       case input if input.exists {
           case a: Aggregate => PullupCorrelatedPredicates.correlatedUngroupedAggregate(a)

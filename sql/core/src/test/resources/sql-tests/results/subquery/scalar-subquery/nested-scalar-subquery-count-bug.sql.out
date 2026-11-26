@@ -896,6 +896,28 @@ struct<a1:int,a:bigint>
 
 
 -- !query
+select a1, ( select count(*)
+  from (select percentile(m, 0.5) p from (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select sum(p)
+  from (select percentile(m, 0.5) p from (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:double>
+-- !query output
+0	3.0
+1	NULL
+
+
+-- !query
 select cast(o.d as string) d, ( select count(*) filter (where m is null)
   from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
 from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1
