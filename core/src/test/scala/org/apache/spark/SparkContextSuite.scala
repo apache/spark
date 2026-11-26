@@ -1598,7 +1598,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
   }
 
-  test("Driver reports its off-heap storage memory to the status store in local mode") {
+  test("SPARK-62374: Driver reports its off-heap storage memory in local mode") {
     val conf = new SparkConf()
       .setAppName("test")
       .setMaster("local")
@@ -1616,7 +1616,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(metrics.usedOffHeapStorageMemory <= metrics.totalOffHeapStorageMemory)
   }
 
-  test("Driver reports no off-heap storage memory to the status store in non-local mode") {
+  test("SPARK-62374: Driver reports no off-heap storage memory in non-local mode") {
     val conf = new SparkConf()
       .setAppName("test")
       .setMaster("local-cluster[1,1,1024]")
