@@ -399,12 +399,24 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // computed over that row, here PERCENTILE or a user-defined one, gives a value that is not
     // known, so a top that needs it keeps the handling of before, and COUNT(*) gets its result.
     val isNullCountP = count(Literal(1), Some($"p".isNull))
-    Seq(new Percentile($"s", Literal(0.5)), UserDefinedSumAggregate($"s"),
-        UserDefinedSumFunction($"s")).foreach { f =>
+    Seq(new Percentile($"s", Literal(0.5)) -> Literal(0.0),
+        UserDefinedSumAggregate($"s") -> Literal(0L),
+        UserDefinedSumFunction($"s") -> Literal(0L)).foreach { case (f, zero) =>
       val between = correlated(max($"d")).groupBy()(f.toAggregateExpression().as("p"))
       assert(countBugResult(between) == Some("1"), f)
       assert(countBugResult(between, Seq(sum($"p"))).isEmpty, f)
       assert(countBugResult(between, Seq(isNullCountP)).isEmpty, f)
+      assert(countBugHandling(between, Seq(sum($"p"))) ==
+        asBefore(countBugHandling(between, Seq(sum($"p")))), f)
+      // The other values of that row are still taken.
+      val twoValues = correlated(max($"d")).groupBy()(f.toAggregateExpression().as("p"),
+        coalesce(max($"s"), Literal(7.0)).as("q"))
+      assert(countBugResult(twoValues, Seq(sum($"q"))) == Some("7.0"), f)
+      // A Project above passes on that the value is not known, and whether it can be NULL.
+      val isNullP = between.select($"p".isNull.as("q"))
+      assert(countBugResult(isNullP, Seq(count(Literal(1), Some($"q")))).isEmpty, f)
+      val coalescedP = between.select(coalesce($"p", zero).as("q"))
+      assert(countBugResult(coalescedP, Seq(count($"q"))) == Some("1"), f)
     }
     // Nor with the legacy conf, or where the count bug is not handled at all.
     asBefore {

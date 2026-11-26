@@ -951,7 +951,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   /**
    * Stands for a value of the row that `evalSubqueryOnEmptyCorrelatedInput` computes that is not
    * a literal, e.g. one that fails or has an outer reference, when it is passed to the level
-   * above. An expression that needs its value is not foldable, so a result that needs the value
+   * above, and for the result of an aggregate function that cannot be computed (see
+   * evalAggregateFunctionOnEmptyInput and evalAggregateOnOneRow). An expression that needs its value is not foldable, so a result that needs the value
    * is not a literal and is not taken, as for the value itself, while the value is not copied
    * into each use, which would make the work double with each level that uses it twice, e.g.
    * `d + d`. Unlike the value, it does not let evaluation skip a value that fails, e.g. in
@@ -1043,9 +1044,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * does not hold. COLLECT_LIST and COLLECT_SET are computed directly where their arguments over
    * the row are literals, e.g. `m + 1` or `struct(m)` for a value `m` of the row. DISTINCT
    * does not change the result over a single row. Returns None for other functions, including
-   * user-defined ones, and if the result does not keep the data type and nullability of `ae`; the
-   * caller then takes its value as unknown. A result that depends on a non-deterministic argument
-   * or FILTER is not a literal, and is not taken by the caller.
+   * user-defined ones, and where the result does not keep the data type and nullability of `ae`;
+   * in each case the caller takes the value as unknown (a NonLiteralValue). A result that depends
+   * on a non-deterministic argument or FILTER condition is not a literal either, and the caller
+   * passes it to the level above as a NonLiteralValue.
    */
   private def evalAggregateOnOneRow(
       ae: AggregateExpression,

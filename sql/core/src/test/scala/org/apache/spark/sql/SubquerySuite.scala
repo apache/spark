@@ -4078,8 +4078,8 @@ class SubquerySuite extends SharedSparkSession
       "the query is optimized") {
     // A Scala Aggregator with a zero of 0 returns 0, not NULL, on empty input. k = 2 has no
     // matching rows. A top aggregate that needs its value keeps the count bug handling of before,
-    // and COUNT(*), which does not, gets the fix. The Aggregator is called only in tasks, not on
-    // the driver while the query is optimized.
+    // and COUNT(*), which does not, gets the fix, also over an aggregate with it between. The
+    // Aggregator is called only in tasks, not on the driver while the query is optimized.
     Spark60501DriverCalls.count.set(0)
     withTempView("a", "b") {
       withUserDefinedFunction("spark60501_sum0" -> true) {
@@ -4098,6 +4098,10 @@ class SubquerySuite extends SharedSparkSession
           Seq(Row(1, 0), Row(2, 0)))
         checkAnswer(sql("SELECT a.k, (SELECT COUNT(*) FROM " +
           "(SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k)) FROM a"),
+          Seq(Row(1, 1), Row(2, 1)))
+        // Nor in an aggregate between, over the row of the lower one.
+        checkAnswer(sql("SELECT a.k, (SELECT COUNT(*) FROM (SELECT spark60501_sum0(m) p FROM " +
+          "(SELECT MAX(b.v) m FROM b WHERE b.k = a.k))) FROM a"),
           Seq(Row(1, 1), Row(2, 1)))
         assert(Spark60501DriverCalls.count.get == 0)
       }
