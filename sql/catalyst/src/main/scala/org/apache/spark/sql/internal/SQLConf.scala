@@ -7961,6 +7961,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_SESSION_ZONE_TIMESTAMP_LITERAL =
+    buildConf("spark.sql.legacy.jdbc.sessionZoneTimestampLiteral.enabled")
+      .internal()
+      .doc("When true, a TIMESTAMP literal pushed down to a JDBC source with " +
+        s"${DATETIME_JAVA8API_ENABLED.key}=true is written as wall-clock time in the session " +
+        "time zone (the legacy behavior), and the Oracle dialect leaves it unformatted. When " +
+        "false, it is written in the JVM default time zone, the same as with " +
+        s"${DATETIME_JAVA8API_ENABLED.key}=false. The SQL Server dialect writes such a " +
+        "literal in the session time zone either way.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.python.filterPushdown.enabled")
     .internal()
     .doc("When true, enable filter pushdown to Python datasource, at the cost of running " +
@@ -10595,6 +10609,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyJdbcTimeMappingEnabled: Boolean =
     getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
+
+  def legacyJdbcSessionZoneTimestampLiteral: Boolean =
+    getConf(LEGACY_JDBC_SESSION_ZONE_TIMESTAMP_LITERAL)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)

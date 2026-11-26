@@ -82,6 +82,11 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
          |)
                    """.stripMargin
     ).executeUpdate()
+    connection.prepareStatement("CREATE TABLE ts_filter (id INTEGER, ts TIMESTAMP)")
+      .executeUpdate()
+    timestampFilterRows.foreach { case (id, ts) =>
+      connection.prepareStatement(s"INSERT INTO ts_filter VALUES ($id, '$ts')").executeUpdate()
+    }
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -122,4 +127,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  override def timestampFilterColumns: Seq[String] = Seq("TS")
 }
