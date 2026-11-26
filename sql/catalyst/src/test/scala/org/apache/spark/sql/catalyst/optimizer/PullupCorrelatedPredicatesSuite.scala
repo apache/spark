@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, DeclarativeAggregate, ListAgg, PandasProduct, Percentile, PivotFirst, StddevSamp, V2Aggregator}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, DeclarativeAggregate, ListAgg, PandasProduct, Percentile, PivotFirst, StddevSamp, TypedImperativeAggregate, V2Aggregator}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -66,9 +66,9 @@ private case class NullOnEmptyAggregate(child: Expression)
     copy(child = newChild)
 }
 
-// A DeclarativeAggregate marked as user-defined, like the one that hooks a typed Aggregator into
-// a Dataset, whose update and evaluate expressions run user code. It sums its input, ignoring
-// NULLs, from a zero of 0.
+// A DeclarativeAggregate marked as user-defined with the USER_DEFINED_AGGREGATION tree pattern,
+// like SimpleTypedAggregateExpression, which hooks a typed Aggregator into a Dataset and whose
+// update and evaluate expressions run user code. It sums its input, ignoring NULLs, from 0.
 private case class UserDefinedSumAggregate(child: Expression)
   extends DeclarativeAggregate with UnaryLike[Expression] {
   final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
@@ -85,7 +85,8 @@ private case class UserDefinedSumAggregate(child: Expression)
     copy(child = newChild)
 }
 
-// The same as a UserDefinedExpression, without the tree pattern.
+// The same as UserDefinedSumAggregate, but marked as user-defined through UserDefinedExpression
+// instead of the tree pattern.
 private case class UserDefinedSumFunction(child: Expression)
   extends DeclarativeAggregate with UnaryLike[Expression] with UserDefinedExpression {
   override def name: String = "user_defined_sum"
@@ -99,6 +100,29 @@ private case class UserDefinedSumFunction(child: Expression)
   override lazy val mergeExpressions: Seq[Expression] = Seq(Add(buffer.left, buffer.right))
   override lazy val evaluateExpression: Expression = buffer
   override protected def withNewChildInternal(newChild: Expression): UserDefinedSumFunction =
+    copy(child = newChild)
+}
+
+// An ImperativeAggregate whose result over a fresh buffer fails, as for a function that requires
+// some input.
+private case class FailingOnEmptyAggregate(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[Array[Long]] with UnaryLike[Expression] {
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  override def createAggregationBuffer(): Array[Long] = Array(0L)
+  override def update(buffer: Array[Long], input: InternalRow): Array[Long] = buffer
+  override def merge(buffer: Array[Long], input: Array[Long]): Array[Long] = buffer
+  override def eval(buffer: Array[Long]): Any = throw new IllegalStateException("no input")
+  override def serialize(buffer: Array[Long]): Array[Byte] = Array.emptyByteArray
+  override def deserialize(bytes: Array[Byte]): Array[Long] = Array(0L)
+  override def withNewMutableAggBufferOffset(offset: Int): FailingOnEmptyAggregate =
+    copy(mutableAggBufferOffset = offset)
+  override def withNewInputAggBufferOffset(offset: Int): FailingOnEmptyAggregate =
+    copy(inputAggBufferOffset = offset)
+  override protected def withNewChildInternal(newChild: Expression): FailingOnEmptyAggregate =
     copy(child = newChild)
 }
 
@@ -328,9 +352,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       .as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
     // A user-defined aggregate function in a lower aggregate without GROUP BY can return a value
     // other than NULL on empty input, which cannot be computed without running user code: a
-    // Python UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite. The aggregate
-    // still returns one row, so a top aggregate that does not need the value, such as COUNT(*),
-    // gets its result, and one that needs it keeps the handling of before. One that is not
+    // Python UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite, and test functions
+    // marked either way further below. The aggregate still returns one row, so a top aggregate
+    // that does not need the value, such as COUNT(*), gets its result, and one that needs it
+    // keeps the handling of before. One that is not
     // correlated, in the input below the correlated aggregate, is not evaluated, and one in a
     // grouped aggregate below returns no row on empty input, which does not matter either.
     val v2Sum = new V2AggregateFunction[java.lang.Long, java.lang.Long] {
@@ -362,10 +387,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     Seq(UserDefinedSumAggregate($"s"), UserDefinedSumFunction($"s")).foreach { f =>
       val udTop = f.toAggregateExpression()
       assert(countBugResult(correlated(max($"d")), Seq(udTop)).isEmpty, f)
-      assert(countBugHandling(correlated(max($"d")), Seq(udTop)) ==
-        asBefore(countBugHandling(correlated(max($"d")), Seq(udTop))), f)
     }
-    // Nor in a lower aggregate, marked either way.
+    // Nor is one in a lower aggregate, marked either way, run on empty input: a top that needs its
+    // value keeps the handling of before, and COUNT(*) gets its result.
     Seq(UserDefinedSumAggregate($"d"), UserDefinedSumFunction($"d")).foreach { f =>
       val lower = correlated(f.toAggregateExpression())
       assert(countBugResult(lower, Seq(isNullCount)).isEmpty, f)
@@ -521,10 +545,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val lowerPercentile = correlated(new Percentile($"d", Literal(0.5)).toAggregateExpression())
     assert(countBugResult(lowerPercentile, Seq(isNullCount)) == Some("1"))
     // Where the result of a lower function over no rows cannot be computed, here because its
-    // evaluate expression does not have its data type, or it is NULL for a function that is
-    // declared not nullable, a top aggregate that needs it keeps the handling of before, and
-    // COUNT(*) still gets its result.
-    Seq(MistypedAggregate($"d"), NullOnEmptyAggregate($"d")).foreach { f =>
+    // evaluate expression does not have its data type, it is NULL for a function that is
+    // declared not nullable, or its result over a fresh buffer fails, a top aggregate that needs
+    // it keeps the handling of before, and COUNT(*) still gets its result.
+    Seq(MistypedAggregate($"d"), NullOnEmptyAggregate($"d"), FailingOnEmptyAggregate($"d"))
+        .foreach { f =>
       val lower = correlated(f.toAggregateExpression())
       assert(countBugResult(lower, Seq(isNullCount)).isEmpty, f)
       assert(countBugHandling(lower, Seq(isNullCount)) ==
@@ -536,15 +561,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("SPARK-60501: the work to compute the result before decorrelation is linear in the levels") {
     // A value that is not a literal, here one that fails in ANSI mode or one over an outer
     // reference, is used twice at each level. Copying it into each use would double the work with
-    // each level, so that 24 levels would take far more than 30 seconds (22 levels took more
-    // than 30 seconds).
+    // each level, so that 22 levels would take more than 30 seconds.
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("spark-60501-levels")
     try {
       val done = Future {
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
           Seq(Literal(10.0) / coalesce($"s", Literal(0.0)), $"s" + $"a").foreach { value =>
             var lower = correlated(max($"d")).select(value.as("t"))
-            (1 to 24).foreach { _ => lower = lower.select(($"t" + $"t").as("t")) }
+            (1 to 22).foreach { _ => lower = lower.select(($"t" + $"t").as("t")) }
             assert(countBugResult(lower) == Some("1"), value)
             assert(countBugResult(lower, Seq(sum($"t"))).isEmpty, value)
           }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -44,7 +46,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 // Counts the calls of the Aggregator of the SPARK-60501 test of a user-defined aggregate function
 // that are made outside of tasks.
 private object Spark60501DriverCalls {
-  val count = new java.util.concurrent.atomic.AtomicInteger(0)
+  val count = new AtomicInteger(0)
   def note(): Unit = if (TaskContext.get() == null) count.incrementAndGet()
 }
 
@@ -3860,9 +3862,9 @@ class SubquerySuite extends SharedSparkSession
       // t1.a1 = 1 has no matching rows. Its value over no rows fails, so the result for it is
       // not computed before decorrelation, and the subquery keeps the handling and the results of
       // before, also with a grouping key over that value, unlike the uncorrelated forms of these
-      // queries, which fail. A COUNT(*) does not use that value, so
-      // its result is computed and correct. A regular session also runs ConvertToLocalRelation,
-      // which the test session excludes, over the views.
+      // queries, which fail. A COUNT(*) does not use that value, so its result is computed and
+      // correct. A regular session also runs ConvertToLocalRelation, which the test session
+      // excludes, over the views.
       val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
       Seq(Nil, Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "")).foreach { sessionConfs =>
         withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: sessionConfs: _*) {
@@ -3965,7 +3967,7 @@ class SubquerySuite extends SharedSparkSession
         // the result over no rows, 0, and would get 1, the result for a row without matching rows.
         val isNullCount = "(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
           "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))"
-        // A COUNT(*) over the MAX is 1 for every outer row, with matching rows or not (kk below
+        // A COUNT(*) over the MAX is 1 for every outer row, with matching rows or not (kk up to
         // 500 has none here), so that result is used for the rows that the domain join misses too.
         val count = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b WHERE b.k < o.kk - 500))"
         checkAnswer(

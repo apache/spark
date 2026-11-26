@@ -690,9 +690,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // The computed result is the result of every outer row when the output of the top
         // Aggregate reads nothing of the one row below it. That holds for a grouped top Aggregate
         // too, which reads its grouping keys only to form its group: the result is computed only
-        // over a chain of Projects and Aggregates above a correlated lower Aggregate without
-        // grouping expressions, which returns one row for every outer row, as does each node of
-        // the chain over it, so the top sees one group, e.g. COUNT(*) is 1.
+        // over a chain of Projects, SubqueryAliases and Aggregates above a correlated lower
+        // Aggregate without grouping expressions, which returns one row for every outer row, as
+        // does each node of the chain over it, so the top sees one group, e.g. COUNT(*) is 1.
         lazy val countBugResultForEveryRow = sub match {
           case agg: Aggregate => agg.aggregateExpressions.forall(_.references.isEmpty)
           case _ => false
