@@ -701,6 +701,23 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     simple.unionByName(right, allowMissingColumns = true)
   }
 
+  test("unionByName nested arrays of structs") {
+    // The fields of the innermost struct are in a different order on the right side, so the
+    // analyzer rewrites `arr` with two nested `transform` calls.
+    createLocalRelation("struct<id:bigint,arr:array<struct<s:array<struct<a:int,b:string>>>>>")
+      .unionByName(
+        createLocalRelation(
+          "struct<arr:array<struct<s:array<struct<b:string,a:int>>>>,id:bigint>"))
+  }
+
+  test("unionByName nested arrays of structs allowMissingColumns") {
+    // Each side misses a struct field of the other, so the analyzer rewrites `arr` on both sides.
+    createLocalRelation("struct<id:bigint,arr:array<struct<a:int,b:string>>>")
+      .unionByName(
+        createLocalRelation("struct<arr:array<struct<c:int,a:int>>,id:bigint>"),
+        allowMissingColumns = true)
+  }
+
   test("intersect") {
     simple.intersect(simple)
   }
