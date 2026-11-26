@@ -34,6 +34,8 @@ Data Types
     TimeType
     DecimalType
     DoubleType
+    FileType
+    FileTypeMode
     FloatType
     GeographyType
     GeometryType
@@ -50,6 +52,8 @@ Data Types
     VariantType
     TimestampType
     TimestampNTZType
+    TimestampNTZNanosType
+    TimestampLTZNanosType
     DayTimeIntervalType
     YearMonthIntervalType
     CalendarIntervalType

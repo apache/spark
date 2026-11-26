@@ -160,4 +160,17 @@ class ConstraintSuite extends SparkFunSuite {
       "NOT ENFORCED NORELY")
     assert(fk2.validationStatus() == ValidationStatus.INVALID)
   }
+
+  test("SPARK-60344: toDDL quotes the constraint name if needed") {
+    val columns = Array[NamedReference](FieldReference(Seq("a")))
+    val check = Constraint.check("c 1").predicateSql("a > 0").build()
+    assert(check.toDDL == "CONSTRAINT `c 1` CHECK (a > 0) ENFORCED NORELY")
+    val unique = Constraint.unique("uk-1", columns).build()
+    assert(unique.toDDL == "CONSTRAINT `uk-1` UNIQUE (a) ENFORCED NORELY")
+    val pk = Constraint.primaryKey("pk`1", columns).build()
+    assert(pk.toDDL == "CONSTRAINT `pk``1` PRIMARY KEY (a) ENFORCED NORELY")
+    val fk = Constraint.foreignKey(
+      "fk.1", columns, Identifier.of(Array("ns"), "t"), columns).build()
+    assert(fk.toDDL == "CONSTRAINT `fk.1` FOREIGN KEY (a) REFERENCES ns.t (a) ENFORCED NORELY")
+  }
 }

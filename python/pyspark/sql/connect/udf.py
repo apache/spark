@@ -18,12 +18,13 @@
 User-defined function related classes and functions
 """
 
-import warnings
-import sys
 import functools
-from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
+import sys
+import warnings
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast
 
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     CommonInlineUserDefinedFunction,
@@ -31,14 +32,21 @@ from pyspark.sql.connect.expressions import (
     NamedArgumentExpression,
     PythonUDF,
 )
-from pyspark.sql.connect.column import Column
-from pyspark.sql.types import DataType, StringType, StructType, _parse_datatype_string
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark.sql.types import (
+    DataType,
+    StringType,
+    StructType,
+    _check_no_char_varchar,
+    _parse_datatype_string,
+)
 from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
+)
+from pyspark.sql.udf import (
     UserDefinedFunction as PySparkUserDefinedFunction,
 )
-from pyspark.sql.pandas.utils import require_minimum_pyarrow_version, require_minimum_pandas_version
-from pyspark.errors import PySparkTypeError, PySparkRuntimeError
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -189,6 +197,12 @@ class UserDefinedFunction:
         # (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. A first-class field
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
         self.bufferSchema = bufferSchema
+        if isinstance(returnType, DataType):
+            # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
+            # conversion stays on ``returnType`` so unrelated types fail only when consumed.
+            _check_no_char_varchar(returnType, "Python UDF return types")
+        if bufferSchema is not None:
+            _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
 
     @property
     def returnType(self) -> DataType:

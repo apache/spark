@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -47,10 +48,11 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue,
-    override val id: String = UUID.randomUUID().toString)
+    override val id: String = UUID.randomUUID().toString,
+    override val schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    numRowsPerSplit, schemaAlignmentConfig) with SupportsDelete {
 
   def this(
       name: String,
@@ -65,7 +67,8 @@ class InMemoryTable(
   }
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
-    InMemoryTable.supportsFilters(filters)
+    val acceptIn = properties.getOrDefault(InMemoryTable.ACCEPT_IN_FILTER, "false").toBoolean
+    InMemoryTable.supportsFilters(filters, acceptIn)
   }
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
@@ -143,7 +146,8 @@ class InMemoryTable(
       advisoryPartitionSize,
       isDistributionStrictlyRequired,
       numRowsPerSplit,
-      id)
+      id,
+      schemaAlignmentConfig = schemaAlignmentConfig)
 
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
@@ -158,7 +162,7 @@ class InMemoryTable(
 
     copiedTable.commits ++= commits.map(_.copy())
 
-    copiedTable.setVersionAndValidatedVersionFrom(this)
+    copiedTable.copyTableStateFrom(this)
 
     copiedTable
   }
@@ -214,6 +218,10 @@ class InMemoryTable(
 
 object InMemoryTable {
 
+  // Test table property that makes a delete accept an `In` filter. It is not accepted by default,
+  // so that the row-level operation tests on this table do not become metadata-only deletes.
+  val ACCEPT_IN_FILTER = "accept-in-filter"
+
   // Convert UTF8String to string to make sure equality checks between filters and partitions
   // work correctly.
   private def valuesEqual(filterValue: Any, partitionValue: Any): Boolean =
@@ -244,6 +252,9 @@ object InMemoryTable {
           null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+        case In(attr, values) =>
+          val attrVal = InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+          attrVal != null && values.exists(valuesEqual(_, attrVal))
         case AlwaysTrue() => true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
@@ -251,12 +262,13 @@ object InMemoryTable {
     }
   }
 
-  def supportsFilters(filters: Array[Filter]): Boolean = {
+  def supportsFilters(filters: Array[Filter], acceptIn: Boolean = false): Boolean = {
     filters.flatMap(splitAnd).forall {
       case _: EqualTo => true
       case _: EqualNullSafe => true
       case _: IsNull => true
       case _: IsNotNull => true
+      case _: In => acceptIn
       case _: AlwaysTrue => true
       case _ => false
     }

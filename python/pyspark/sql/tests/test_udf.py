@@ -15,47 +15,64 @@
 # limitations under the License.
 #
 
+import datetime
 import functools
+import io
+import logging
 import pydoc
 import shutil
-import tempfile
-import unittest
-import datetime
-import io
-import time
-from contextlib import redirect_stdout
-import logging
 import sys
+import tempfile
+import time
+import unittest
+from contextlib import redirect_stdout
 
-from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import col, udf, assert_true, lit, rand
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.errors import (
+    AnalysisException,
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PythonException,
+)
+from pyspark.logger import PySparkLogger
+from pyspark.sql import Column, Row, SparkSession
+from pyspark.sql.functions import assert_true, col, lit, rand, udf
 from pyspark.sql.types import (
-    StringType,
-    IntegerType,
+    ArrayType,
     BinaryType,
     BooleanType,
-    DoubleType,
-    LongType,
-    ArrayType,
-    MapType,
-    StructType,
-    StructField,
-    TimestampNTZType,
+    CharType,
     DayTimeIntervalType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
+    _parse_datatype_string,
 )
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.logger import PySparkLogger
+from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.utils import is_remote
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
-from pyspark.util import is_remote_only
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    eventually,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    timeout,
+)
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDFTestsMixin:
@@ -190,8 +207,9 @@ class BaseUDFTestsMixin:
             self.check_nondeterministic_udf_in_aggregate()
 
     def check_nondeterministic_udf_in_aggregate(self):
-        from pyspark.sql.functions import sum
         import random
+
+        from pyspark.sql.functions import sum
 
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
@@ -836,7 +854,7 @@ class BaseUDFTestsMixin:
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -889,11 +907,28 @@ class BaseUDFTestsMixin:
 
         try:
             with self.sql_conf({"spark.sql.sources.useV1SourceList": ""}):
-                self.spark.range(1).write.mode("overwrite").format("parquet").save(path)
-                df = self.spark.read.parquet(path).toDF("i")
+                (
+                    self.spark.range(6)
+                    .selectExpr("id AS i", "id % 3 AS p")
+                    .write.mode("overwrite")
+                    .partitionBy("p")
+                    .parquet(path)
+                )
+                df = self.spark.read.parquet(path)
                 f = udf(lambda x: False, "boolean")(lit(1))
                 result = df.filter(f)
                 self.assertEqual(0, result.count())
+
+                # SPARK-60486: partition predicates that cannot be pushed must still be evaluated.
+                matches_partition = udf(lambda x: x == 1, "boolean")(col("p"))
+                expected = [Row(i=1, p=1), Row(i=4, p=1)]
+                assertDataFrameEqual(df.filter(col("p") == 1), expected)
+                assertDataFrameEqual(df.filter(matches_partition), expected)
+                assertDataFrameEqual(df.filter(matches_partition & (col("p") > 0)), expected)
+                assertDataFrameEqual(
+                    df.filter(matches_partition | (col("p") == 0)),
+                    [Row(i=0, p=0), Row(i=1, p=1), Row(i=3, p=0), Row(i=4, p=1)],
+                )
 
         finally:
             shutil.rmtree(path)
@@ -1467,6 +1502,7 @@ class BaseUDFTestsMixin:
             (array_with_char_type, array_with_char_type_value),
             (array_with_varchar_type, array_with_varchar_value),
             (map_type, map_value),
+            (f"map<string, {varchar_type}>", {"a": "b"}),
             (struct_type, struct_value),
             (
                 f"struct<f1: {array_with_char_type}, f2: {array_with_varchar_type}, "
@@ -1482,17 +1518,102 @@ class BaseUDFTestsMixin:
         ]
 
         for return_type, return_value in pairs:
-            with self.assertRaisesRegex(
-                Exception,
-                "(Please use a different output data type for your UDF or DataFrame|"
-                "Invalid return type with Arrow-optimized Python UDF)",
-            ):
+            with self.subTest(return_type=return_type):
+                with self.assertRaises(PySparkNotImplementedError) as pe:
 
-                @udf(return_type)
-                def my_udf():
-                    return return_value
+                    @udf(return_type)
+                    def my_udf():
+                        return return_value
 
-                self.spark.range(1).select(my_udf().alias("result")).show()
+                    self.spark.range(1).select(my_udf().alias("result"))
+
+                parsed = _parse_datatype_string(return_type)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                    messageParameters={
+                        "feature": "Python UDF return types",
+                        "data_type": parsed.simpleString(),
+                    },
+                )
+
+    def test_char_varchar_rejected_at_udf_construction(self):
+        if is_remote():
+            from pyspark.sql.connect.udf import UserDefinedFunction as UDF
+        else:
+            from pyspark.sql.udf import UserDefinedFunction as UDF
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            UDF(lambda x: x, CharType(3))
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": "char(3)",
+            },
+        )
+
+    def test_eval_type_return_check_is_lazy(self):
+        if is_remote():
+            from pyspark.sql.connect.udf import UserDefinedFunction as UDF
+        else:
+            from pyspark.sql.udf import UserDefinedFunction as UDF
+
+        # Grouped-map Pandas UDFs require a StructType. Construction must succeed for STRING;
+        # the eval-type check runs only when returnType is consumed.
+        udf_obj = UDF(
+            lambda x: x,
+            StringType(),
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+        with self.assertRaises(PySparkTypeError) as pe:
+            _ = udf_obj.returnType
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+            messageParameters={
+                "eval_type": (
+                    "SQL_GROUPED_MAP_PANDAS_UDF or SQL_GROUPED_MAP_PANDAS_ITER_UDF or "
+                    "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+                ),
+                "return_type": str(StringType()),
+            },
+        )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_invalid_return_type_for_arrow_and_pandas_apis(self):
+        df = self.spark.range(1)
+        grouped = df.groupBy("id")
+        cogrouped = grouped.cogroup(grouped)
+        # PySpark's to_arrow_type cannot convert YearMonthIntervalType.
+        unsupported = StructType([StructField("a", YearMonthIntervalType())])
+
+        def identity(x):
+            return x
+
+        def left(x, y):
+            return x
+
+        with self.assertRaisesRegex(PySparkNotImplementedError, "Arrow-optimized Python UDF"):
+            df.select(udf(identity, YearMonthIntervalType(), useArrow=True)("id"))
+        with self.assertRaisesRegex(PySparkNotImplementedError, "in mapInPandas"):
+            df.mapInArrow(identity, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_PANDAS_UDF"):
+            df.mapInPandas(identity, "long")
+        with self.assertRaisesRegex(PySparkNotImplementedError, "groupby.applyInArrow"):
+            grouped.applyInArrow(identity, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_ARROW_UDF"):
+            grouped.applyInArrow(identity, "long")
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_PANDAS_UDF"):
+            cogrouped.applyInPandas(left, "long")
+        with self.assertRaisesRegex(PySparkNotImplementedError, "cogroup.applyInArrow"):
+            cogrouped.applyInArrow(left, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_ARROW_UDF"):
+            cogrouped.applyInArrow(left, "long")
 
     def test_udf_binary_type(self):
         def get_binary_type(x):

@@ -55,7 +55,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
-  private val logicalPlan = df.queryExecution.logical
+  // Use the analyzed plan like `DataFrameWriter`. Re-analyzing an unanalyzed plan resolves the
+  // write output before `UpdateAttributeNullability` updates the stale nullability of the query.
+  private val logicalPlan = df.logicalPlan
 
   private var provider: Option[String] = None
 
@@ -267,7 +269,7 @@ private object PartitionTransform {
     private val NAMES = Seq(name)
 
     def unapply(e: Expression): Option[Seq[Expression]] = e match {
-      case UnresolvedFunction(NAMES, children, false, None, None, Nil, true) => Option(children)
+      case UnresolvedFunction(NAMES, children, false, None, None, Nil, true, _) => Option(children)
       case _ => None
     }
   }

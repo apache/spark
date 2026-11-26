@@ -27,12 +27,12 @@ r"""
  and then run the example
     `$ bin/spark-submit examples/src/main/python/streaming/sql_network_wordcount.py localhost 9999`
 """
-import sys
 import datetime
+import sys
 
-from pyspark import SparkConf, SparkContext, RDD
-from pyspark.streaming import StreamingContext
+from pyspark import RDD, SparkConf, SparkContext
 from pyspark.sql import Row, SparkSession
+from pyspark.streaming import StreamingContext
 
 
 def getSparkSessionInstance(sparkConf: SparkConf) -> SparkSession:

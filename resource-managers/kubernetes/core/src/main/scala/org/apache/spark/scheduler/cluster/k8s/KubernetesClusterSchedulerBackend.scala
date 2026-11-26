@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
+import org.apache.spark.internal.LogKeys.{COST, COUNT, EXECUTOR_IDS, TOTAL}
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
@@ -203,6 +203,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) == "direct"
   }
 
+  // A hold drains every executor, including the recovery-mode ones that replaced an
+  // OOM-terminated executor, so a resumed application starts over with normal executors
+  // instead of staying in the recovery mode the OOM turned on.
+  private[spark] override def setExecutorsHeld(held: Boolean): Unit = {
+    super.setExecutorsHeld(held)
+    podAllocator match {
+      case allocator: ExecutorPodsAllocator if !held => allocator.unsetRecoveryMode()
+      case _ => // no-op
+    }
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= minRegisteredExecutors
   }
@@ -215,7 +226,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   // order of the value of this annotation, ascending.
   private def annotateExecutorDeletionCost(execIds: Seq[String]): Unit = {
     conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).foreach { cost =>
-      logInfo(s"Annotating executor pod(s) ${execIds.mkString(",")} with deletion cost $cost")
+      logInfo(log"Annotating executor pod(s) ${MDC(EXECUTOR_IDS, execIds.mkString(","))} " +
+        log"with deletion cost ${MDC(COST, cost)}")
       val annotateTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
           kubernetesClient

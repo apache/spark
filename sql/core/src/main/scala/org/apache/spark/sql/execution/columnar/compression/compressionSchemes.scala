@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 import scala.collection.mutable
 
@@ -108,8 +107,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
         capacity: Int,
         unitSize: Int,
         putFunction: (WritableColumnVector, Int, Int, Int) => Unit): Unit = {
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else capacity
       var pos = 0
@@ -307,8 +305,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
         capacity: Int,
         getFunction: (ByteBuffer) => Long,
         putFunction: (WritableColumnVector, Int, Long) => Unit): Unit = {
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -486,8 +483,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     override def hasNext: Boolean = buffer.hasRemaining
 
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -619,8 +615,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       var currentWordLocal: Long = 0
       var visitedLocal: Int = 0
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -730,8 +725,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
 
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       var prevLocal: Int = 0
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -837,8 +831,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
 
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       var prevLocal: Long = 0
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
+      val nullsBuffer = CompressionScheme.createNullsBuffer(buffer)
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0

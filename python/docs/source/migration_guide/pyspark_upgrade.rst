@@ -19,6 +19,10 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.2 to 4.3
+---------------------------------
+* In Spark 4.3, Python 3.10 support was dropped in PySpark.
+
 Upgrading from PySpark 4.1 to 4.2
 ---------------------------------
 * In Spark 4.2, the minimum supported version for PyArrow has been raised from 15.0.0 to 18.0.0 in PySpark.

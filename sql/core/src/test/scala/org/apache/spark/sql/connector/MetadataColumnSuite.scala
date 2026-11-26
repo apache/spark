@@ -24,7 +24,9 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class MetadataColumnSuite extends DatasourceV2SQLBase {
   import testImplicits._
 

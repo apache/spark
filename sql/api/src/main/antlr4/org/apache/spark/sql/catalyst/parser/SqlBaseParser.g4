@@ -61,6 +61,19 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean single_character_pipe_operator_enabled = true;
 
   /**
+   * When true, the FILE data type is recognized and supported.
+   */
+  public boolean file_type_enabled = false;
+
+  /**
+   * When true, optional references (`x?`) are enabled. A statement that is not valid with every
+   * `?` as a positional parameter marker is parsed again with QUESTION_WITH_OPTIONAL_REFERENCES
+   * tokens in place of its QUESTION tokens, and a `?` after a named parameter marker is not a
+   * positional parameter marker.
+   */
+  public boolean optional_references_enabled = false;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
@@ -78,7 +91,276 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY) ||
+           (la == EVAL && isOperatorPipeEvalAssignment());
+  }
+
+  /**
+   * Checks if `| EVAL` is followed by an assignment: a column name and then `=`, or `.` for a
+   * multi-part key, which the parser captures to report a dedicated error. Otherwise `eval` is a
+   * column in a bitwise OR, as in `a | eval`, `(a | eval) = 1` or `CASE ... THEN a | eval END = 1`.
+   * So a token that ends an expression can't start the name, and a column named end needs
+   * backquotes after `|`.
+   */
+  private boolean isOperatorPipeEvalAssignment() {
+    int nameStart = _input.LA(3); // LA(1) is the pipe and LA(2) is EVAL.
+    if (nameStart == RIGHT_PAREN || nameStart == RIGHT_BRACKET || nameStart == END) {
+      return false;
+    }
+    int afterName = 4;
+    if (nameStart == IDENTIFIER_KW && _input.LA(4) == LEFT_PAREN) {
+      // IDENTIFIER('name'): its argument has no parentheses, so the name ends at the next one.
+      afterName = 5;
+      while (_input.LA(afterName) != RIGHT_PAREN && _input.LA(afterName) != Token.EOF) {
+        afterName++;
+      }
+      afterName++;
+    }
+    return _input.LA(afterName) == EQ || _input.LA(afterName) == DOT;
+  }
+
+  /**
+   * Checks if the IN predicate at the next token has a subquery that starts with SELECT or VALUES
+   * and a positional parameter marker, such as `c IN (SELECT ?)`, in a statement that is parsed
+   * with optional references. SELECT and VALUES are non-reserved, so the subquery would otherwise
+   * also be a list of expressions that starts with an optional reference to a column named
+   * `select` or `values`.
+   */
+  public boolean isInSubqueryWithLeadingParameterMarker() {
+    int offset = 1;
+    if (_input.LA(offset) == NOT || _input.LA(offset) == BANG) {
+      offset++;
+    }
+    if (_input.LA(offset) != IN || _input.LA(offset + 1) != LEFT_PAREN) {
+      return false;
+    }
+    int queryStart = _input.LA(offset + 2);
+    return (queryStart == SELECT || queryStart == VALUES) &&
+        _input.LA(offset + 3) == QUESTION_WITH_OPTIONAL_REFERENCES;
+  }
+
+  /**
+   * Checks if the next token is a `?` that follows a named parameter marker while optional
+   * references are enabled. Such a `?` makes the marker optional (`:name?`), so it is not a
+   * positional parameter marker that continues a string literal. Without optional references,
+   * such a string literal is an error because it mixes named and positional parameter markers.
+   */
+  public boolean isOptionalMarkerOfNamedParameterMarker() {
+    if (!optional_references_enabled) {
+      return false;
+    }
+    int next = _input.LA(1);
+    if (next != QUESTION && next != QUESTION_WITH_OPTIONAL_REFERENCES) {
+      return false;
+    }
+    // The part of the string literal before the `?` is a string, a `?`, or a named parameter
+    // marker, which ends with the name of the parameter. A double-quoted name is an identifier.
+    int previous = _input.LA(-1);
+    return previous != STRING_LITERAL &&
+        (previous != DOUBLEQUOTED_STRING || double_quoted_identifiers) &&
+        previous != QUESTION && previous != QUESTION_WITH_OPTIONAL_REFERENCES;
+  }
+
+  /**
+   * Checks if the next token is a top-level COLON inside a `jsonObjectColonKey`, i.e. the
+   * JSON_OBJECT member separator, so the key does not absorb it as `k:v` or `'k' :v`.
+   *
+   * Scans the token stream, not the parse tree, because it runs during ANTLR prediction before the
+   * rule-context stack above `_ctx` is materialized. The COLON separates only at the key's top
+   * level: not inside parens/brackets and not inside a CASE branch. CASE and END are non-reserved,
+   * so each is counted as CASE nesting only when a neighbouring token shows it is the keyword, not
+   * a column (see the helpers below).
+   */
+  public boolean isJsonObjectColonSeparator() {
+    Token next = _input.LT(1);
+    if (next.getType() != COLON) {
+      return false;
+    }
+    for (ParserRuleContext ctx = _ctx; ctx != null; ctx = ctx.getParent()) {
+      if (ctx instanceof JsonObjectColonKeyContext) {
+        int stop = next.getTokenIndex();
+        int start = ctx.getStart().getTokenIndex();
+        int depth = 0;
+        int caseDepth = 0;
+        int prevType = -1;
+        for (int i = start; i < stop; i++) {
+          Token tok = _input.get(i);
+          // Skip hidden-channel whitespace/comments so neighbour-token checks see real tokens.
+          if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+            continue;
+          }
+          int type = tok.getType();
+          switch (type) {
+            case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+            case RIGHT_PAREN: case RIGHT_BRACKET: depth--; break;
+            case CASE:
+              // Only count a top-level CASE: one inside parens/brackets has its colons balanced by
+              // `depth` already, so counting it would misread a parenthesized `case` column (e.g.
+              // `CAST(case AS ...)`) as keyword nesting no `END` clears. A `case` column, not the
+              // keyword, when an operator/terminator follows -- except a following COLON, which is
+              // ambiguous: `CASE :p WHEN ... END` (a simple CASE over a named-parameter operand)
+              // and `case : value` (a `case` column before the member separator) both read as
+              // `CASE COLON identifier`, so the one-token peek cannot tell them apart. Only a
+              // complete CASE body ahead -- a top-level WHEN closed by its END -- proves the
+              // keyword, so look ahead for that.
+              if (depth == 0) {
+                int follow = nextDefaultChannelType(i, stop);
+                boolean caseKeyword = (follow == COLON)
+                    ? caseKeywordBeforeColon(i)
+                    : !jsonKeyTokenFollowsOperand(follow);
+                if (caseKeyword) caseDepth++;
+              }
+              break;
+            case END:
+              // Matched to the top-level CASE above; an `end` column in an operand position.
+              if (depth == 0 && caseDepth > 0 &&
+                  !jsonKeyOperandExpectedAfter(prevType)) caseDepth--;
+              break;
+            default: break;
+          }
+          prevType = type;
+        }
+        return depth == 0 && caseDepth == 0 && stop > start;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Type of the first default-channel token after index {@code i}, up to and including
+   * {@code stop}, or -1 if there is none.
+   */
+  private int nextDefaultChannelType(int i, int stop) {
+    for (int j = i + 1; j <= stop; j++) {
+      Token tok = _input.get(j);
+      if (tok.getChannel() == Token.DEFAULT_CHANNEL) {
+        return tok.getType();
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * True when the `CASE` at {@code caseIdx} (sitting right before a COLON) opens a complete simple
+   * CASE (`CASE operand WHEN ... END`), proving it is the keyword, not a `case` column before the
+   * member separator. Requires the matching top-level END, not just a WHEN: a bare `when` value
+   * column (non-reserved outside ANSI) would otherwise masquerade as the WHEN, e.g.
+   * `JSON_OBJECT(case : when)`. Tracks paren/bracket depth and nested CASE...END; stops at depth-0
+   * terminator (COMMA/SEMICOLON), an unmatched closer, or EOF. Reads ahead of the current token, so
+   * it fetches via {@code tokenAt}.
+   */
+  private boolean caseKeywordBeforeColon(int caseIdx) {
+    int depth = 0;        // paren/bracket depth
+    int caseNesting = 0;  // nested CASE...END below this CASE
+    boolean seenWhen = false;
+    for (int i = caseIdx + 1; ; i++) {
+      Token tok = tokenAt(i);
+      if (tok == null || tok.getType() == Token.EOF) {
+        return false;
+      }
+      if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+        continue;
+      }
+      switch (tok.getType()) {
+        case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+        case RIGHT_PAREN: case RIGHT_BRACKET:
+          if (depth == 0) return false;
+          depth--;
+          break;
+        case CASE:
+          if (depth == 0) caseNesting++;
+          break;
+        case WHEN:
+          if (depth == 0 && caseNesting == 0) seenWhen = true;
+          break;
+        case END:
+          if (depth == 0) {
+            if (caseNesting == 0) return seenWhen;
+            caseNesting--;
+          }
+          break;
+        case COMMA: case SEMICOLON:
+          if (depth == 0 && caseNesting == 0) return false;
+          break;
+        default: break;
+      }
+    }
+  }
+
+  /**
+   * Returns the token at absolute index {@code i}, forcing a lazy fetch (via {@code LT}, which does
+   * not consume) when {@code i} is at or ahead of the current position, or null past EOF. Needed
+   * because {@code caseKeywordBeforeColon} scans ahead of the current token, which may not be
+   * buffered.
+   */
+  private Token tokenAt(int i) {
+    int cur = _input.index();
+    if (i >= cur) {
+      _input.LT(i - cur + 1);
+    }
+    return i < _input.size() ? _input.get(i) : null;
+  }
+
+  /**
+   * True when an operand is expected after this token type, so a following `CASE`/`END` is a column
+   * rather than the keyword. Lists only tokens that never complete an expression; any other
+   * predecessor falls back to treating `CASE`/`END` as the keyword.
+   */
+  private boolean jsonKeyOperandExpectedAfter(int type) {
+    switch (type) {
+      case LEFT_PAREN: case LEFT_BRACKET: case COMMA:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case PLUS: case MINUS: case ASTERISK: case SLASH: case PERCENT: case DIV:
+      case TILDE: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR: case NOT:
+      case WHEN: case THEN: case ELSE: case CASE:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * True when this token type can only follow a completed operand, so a preceding `CASE` is a
+   * column rather than the keyword. Covers the postfix operators (`.`, `::`, `COLLATE`, `[`/`]`
+   * subscript -- Spark has no `[...]` array literal, so `[` only ever subscripts an operand)
+   * alongside the closers and binary/comparison operators. Any other follower falls back to
+   * treating `CASE` as the keyword -- including `+`/`-`/`~`/`*`, which can also start a CASE value
+   * and so do not prove `CASE` is a column.
+   */
+  private boolean jsonKeyTokenFollowsOperand(int type) {
+    switch (type) {
+      case COLON: case COMMA: case RIGHT_PAREN: case LEFT_BRACKET: case RIGHT_BRACKET:
+      case DOUBLE_COLON: case DOT: case COLLATE: case SEMICOLON:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case SLASH: case PERCENT: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * True when the token after a leading `KEY` continues it as an operand, so the `KEY` is a column
+   * (`JSON_OBJECT(key + 1 VALUE v)` is key expression `key + 1`, not the `KEY` keyword with key
+   * `+ 1`). Delegates to the shared operand-follower set and adds `+`/`-` -- the only operators
+   * that both continue `key` as an operand and open a key expression as a unary prefix. Without
+   * this, `KEY +1 VALUE ...` also matches the optional-`KEY` alternative and swallows the `key`
+   * column.
+   * The shared set holds the purely infix/postfix operators, which cannot open a key expression and
+   * so already fail that alternative. Used only to disable the optional-`KEY` alternative, never to
+   * enable it.
+   */
+  private boolean jsonOptionalKeyFollowsOperand(int type) {
+    switch (type) {
+      case PLUS: case MINUS:
+        return true;
+      default:
+        return jsonKeyTokenFollowsOperand(type);
+    }
   }
 }
 
@@ -443,18 +725,6 @@ createPipelineDatasetHeader
       identifierReference
     ;
 
-streamRelationPrimary
-    : STREAM multipartIdentifier streamChangesClause?
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
-    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
-      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
-    ;
-
 setResetStatement
     : SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
@@ -658,7 +928,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? (NOT? MATERIALIZED)? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -671,6 +941,8 @@ createTableClauses
      skewSpec |
      clusterBySpec |
      bucketSpec |
+     writeDistributionSpec |
+     writeOrderingSpec |
      rowFormat |
      createFileFormat |
      locationSpec |
@@ -775,7 +1047,8 @@ autoCdcParameters
         | autoCdcSequenceByClause
         | autoCdcColumnsClause
         | autoCdcStoredAsClause
-        | autoCdcTrackHistoryClause)*
+        | autoCdcTrackHistoryClause
+        | autoCdcIgnoreNullClause)*
     ;
 
 autoCdcDeleteClause
@@ -800,6 +1073,12 @@ autoCdcTrackHistoryClause
     : TRACK HISTORY ON (
         LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcIgnoreNullClause
+    : IGNORE NULL UPDATES (ON (
+        LEFT_PAREN ignoreNullCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN ignoreNullExceptCols=identifierSeq RIGHT_PAREN))?
     ;
 
 identifierReference
@@ -1020,6 +1299,8 @@ groupingSet
     | expression
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 pivotClause
     : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
@@ -1033,6 +1314,8 @@ pivotValue
     : expression (AS? errorCapturingIdentifier)?
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
@@ -1092,7 +1375,41 @@ binByClause
         (BIN_START AS binStartAlias=errorCapturingIdentifier)?
         (BIN_END AS binEndAlias=errorCapturingIdentifier)?
         (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
-      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillClause
+    : GAP FILL LEFT_PAREN
+        (PARTITION BY partitionCol+=multipartIdentifier
+          (COMMA partitionCol+=multipartIdentifier)*)?
+        ORDER BY timeCol=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression
+          | RANGE BETWEEN rangeStart=valueExpression AND rangeEnd=valueExpression
+          | gapFillFillClause
+          | MAX GAP maxGap=expression
+          | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
+          | IS_GENERATED (AS isGeneratedAlias=errorCapturingIdentifier)?
+        )*
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillFillClause
+    : FILL LEFT_PAREN fillColumns+=gapFillColumn (COMMA fillColumns+=gapFillColumn)* RIGHT_PAREN
+    ;
+
+gapFillColumn
+    : multipartIdentifier gapFillMethod
+    ;
+
+gapFillMethod
+    : LINEAR
+    | FFILL
+    | FORWARD FILL
+    | BFILL
+    | BACKWARD FILL
+    | CONSTANT fillValue=expression
+    | NULL
     ;
 
 lateralView
@@ -1117,6 +1434,7 @@ relationExtension
     | pivotClause
     | unpivotClause
     | binByClause
+    | gapFillClause
     ;
 
 joinRelation
@@ -1198,7 +1516,11 @@ identifierComment
     ;
 
 relationPrimary
-    : streamRelationPrimary                                 #streamRelation
+    : STREAM (multipartIdentifier | LEFT_PAREN multipartIdentifier RIGHT_PAREN)
+      streamChangesClause? optionsClause?
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
+    | STREAM (tableFunctionCall | LEFT_PAREN tableFunctionCall RIGHT_PAREN)
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
     | temporalTableIdentifierReference temporalClause?
@@ -1296,10 +1618,9 @@ tableFunctionCall
       RIGHT_PAREN
     ;
 
-// A table function call with optional trailing clauses for streaming and aliasing.
-// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
-// the AST builder will reject it with an error. The clause must come before watermarkClause
-// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+// A table function call with optional trailing clauses. The identifiedByClause is parsed here so
+// that the AST builder can reject it with a tailored error for non-streaming TVFs. It must come
+// before watermarkClause and tableAlias to avoid ambiguity (since IDENTIFIED is non-reserved).
 tableFunctionCallWithTrailingClauses
     : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
@@ -1382,6 +1703,24 @@ transformArgument
     | constant
     ;
 
+writeDistributionSpec
+    : DISTRIBUTED BY PARTITION
+    ;
+
+writeOrderingSpec
+    : LOCALLY? ORDERED BY writeOrder
+    | UNORDERED
+    ;
+
+writeOrder
+    : fields+=writeOrderField (COMMA fields+=writeOrderField)*
+    | LEFT_PAREN fields+=writeOrderField (COMMA fields+=writeOrderField)* RIGHT_PAREN
+    ;
+
+writeOrderField
+    : transform direction=(ASC | DESC)? (NULLS nullOrder=(FIRST | LAST))?
+    ;
+
 expression
     : booleanExpression
     ;
@@ -1409,7 +1748,8 @@ booleanExpression
 
 predicate
     : errorCapturingNot? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
+    | {!isInSubqueryWithLeadingParameterMarker()}?
+      errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
     | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
@@ -1445,7 +1785,7 @@ shiftOperator
 datetimeUnit
     : YEAR | QUARTER | MONTH
     | WEEK | DAY | DAYOFYEAR
-    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND | NANOSECOND
     ;
 
 primaryExpression
@@ -1474,10 +1814,17 @@ primaryExpression
       quotes=jsonQueryQuotes?
       (emptyBehavior=jsonQueryBehavior ON EMPTY)?
       (errorBehavior=jsonQueryBehavior ON ERROR)? RIGHT_PAREN                                  #jsonQuery
+    | JSON_ARRAY LEFT_PAREN
+      (values+=jsonArrayValue (COMMA values+=jsonArrayValue)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)?
+      RIGHT_PAREN                                  #jsonArray
+    | jsonObjectConstructor                                                                    #jsonObject
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
-    | col=primaryExpression COLON path=semiStructuredExtractionPath                            #semiStructuredExtract
+    | col=primaryExpression {!isJsonObjectColonSeparator()}?
+      COLON path=semiStructuredExtractionPath                                                  #semiStructuredExtract
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
@@ -1488,16 +1835,33 @@ primaryExpression
     | identifier ARROW expression                                                              #lambda
     | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
     | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
-    | identifier                                                                               #columnReference
-    | base=primaryExpression DOT fieldName=identifier                                          #dereference
+    | identifier optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                            #columnReference
+    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN QUESTION_WITH_OPTIONAL_REFERENCES         #optionalIdentifierClause
+    | base=primaryExpression DOT fieldName=identifier
+      optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                                        #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
     | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
-    | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
-      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    | overlayExpression                                                                        #overlay
+    ;
+
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit: the
+// optional `?` after a column reference and a dereferenced field (`#columnReference`,
+// `#dereference`) and the `#optionalIdentifierClause` alternative, an IDENTIFIER clause with any
+// expression as the name of a column that is a `#functionCall` without the `?`, are inlined there
+// instead of being rules of their own, because a rule of their own would cost every column
+// reference a rule invocation. The marker alternatives themselves still cost a lookahead check,
+// which every parse pays, with optional references enabled or not: from about 2% of the parse
+// time of the TPC-DS queries to about 9% for a statement with 1,000 nested field references.
+// Keeping them out of parses without optional references would take a second generated parser
+// for the parse with them, whose contexts `AstBuilder` cannot visit and whose grammar would have
+// to accept every statement without `?` exactly as this one does.
+overlayExpression
+    : OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN
     ;
 
 // The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
@@ -1540,6 +1904,68 @@ jsonQueryBehavior
     | EMPTY OBJECT                                                                             #jsonQueryBehaviorEmptyObject
     ;
 
+// The behavior selected by JSON_ARRAY/JSON_OBJECT `... ON NULL` clause: NULL keeps nulls, ABSENT
+// drops null elements/pairs.
+jsonConstructorNullBehavior
+    : NULL                                                                                     #jsonConstructorNullBehaviorNull
+    | ABSENT                                                                                   #jsonConstructorNullBehaviorAbsent
+    ;
+
+// A JSON_ARRAY element. The optional `FORMAT JSON` clause marks a string argument as already-JSON
+// text, so it is spliced into the array verbatim instead of being quoted as a JSON string. A
+// lexically-nested JSON constructor (e.g. JSON_ARRAY(JSON_ARRAY(1))) carries this implicitly.
+jsonArrayValue
+    : value=expression (FORMAT JSON)?
+    ;
+
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit.
+jsonObjectConstructor
+    : JSON_OBJECT LEFT_PAREN (
+        jsonObjectMember (COMMA jsonObjectMember)*
+        | jsonObjectCommaMember (COMMA jsonObjectCommaMember)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)? RIGHT_PAREN
+    ;
+
+// A key-value pair in JSON_OBJECT: `key VALUE value`, `KEY key VALUE value`, or `key : value`.
+// Both sides accept a full `expression` (not just `valueExpression`) so that ordinary predicates --
+// e.g. `JSON_OBJECT('present' VALUE x IS NOT NULL)` -- work without parentheses, matching normal
+// function-argument syntax. The optional `FORMAT JSON` clause marks a string value as already-JSON
+// text to splice in raw instead of quoting; a lexically-nested JSON constructor carries it
+// implicitly (see `jsonArrayValue`). The KEY form precedes the plain VALUE form (which would read
+// `KEY 'k'` as a typed literal), except before a `value` identifier, so that
+// `JSON_OBJECT(key VALUE value + 1)` reads `key` as the member name; the last alternative still
+// accepts `KEY value VALUE ...`. The leading `KEY` is also skipped when the next token continues it
+// as an operand (e.g. `key + 1 VALUE v`), so a `key` column is read as the key, not the keyword.
+jsonObjectMember
+    : {_input.LA(2) != VALUE && !jsonOptionalKeyFollowsOperand(_input.LA(2))}?
+      KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | colonKey=jsonObjectColonKey COLON valueExpr=expression (FORMAT JSON)?
+    | KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    ;
+
+// The key of a `key : value` member. A top-level `:` after the key's first token ends the key, so
+// `JSON_OBJECT(k: v:x)` is key `k` with value `v:x`. A key that is itself an extraction, or that
+// coalesces a trailing named parameter marker (`'k' :p`), needs parentheses -- `(v:x) : 1`,
+// `('k' :p) : 1` -- or the VALUE form, else the key's own `:` reads as the member separator.
+jsonObjectColonKey
+    : keyExpr=expression
+    ;
+
+// Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.
+// Kept as a separate alternative from `jsonObjectMember` because COMMA is both the key/value
+// separator inside a member and the separator between members.
+//
+// The `jsonObjectMember` (colon/VALUE) list is listed first in `#jsonObject`, so when a token
+// stream matches both forms the colon-member reading wins. This only overlaps when a comma-form
+// argument itself contains a `:` extraction, e.g. `JSON_OBJECT(v:k, v:x)`: this parses as the two
+// colon members `v:k` and `v:x` (the natural reading), not as one comma-form pair. To force the
+// comma form on colon-bearing arguments, parenthesize them: `JSON_OBJECT((v:k), (v:x))`.
+jsonObjectCommaMember
+    : keyExpr=expression COMMA valueExpr=expression
+    ;
+
 semiStructuredExtractionPath
     : jsonPathFirstPart (jsonPathParts)*
     ;
@@ -1577,8 +2003,8 @@ literalType
 
 constant
     : NULL                                                                                     #nullLiteral
-    | QUESTION                                                                                 #posParameterLiteral
-    | namedParameterMarker                                                                     #namedParameterLiteral
+    | (QUESTION | QUESTION_WITH_OPTIONAL_REFERENCES)                                           #posParameterLiteral
+    | namedParameterMarker optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                   #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
     | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral
@@ -1668,6 +2094,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | {file_type_enabled}? FILE (fileTypeMode=EXTERNAL)?
     ;
 
 trivialPrimitiveType
@@ -2059,12 +2486,12 @@ singleStringLit
     ;
 
 parameterMarker
-    : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
-    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
+    : {parameter_substitution_enabled && !isJsonObjectColonSeparator()}? namedParameterMarker #namedParameterMarkerRule
+    | {parameter_substitution_enabled}? (QUESTION | QUESTION_WITH_OPTIONAL_REFERENCES)         #positionalParameterMarkerRule
     ;
 
 stringLit
-    : singleStringLit+
+    : singleStringLit ({!isOptionalMarkerOfNamedParameterMarker()}? singleStringLit)*
     ;
 
 comment
@@ -2081,6 +2508,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | EVAL operatorPipeSetAssignmentSeq
     | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
@@ -2093,6 +2521,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | binByClause
+    | gapFillClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -2121,7 +2550,8 @@ operatorPipeSetAssignmentSeq
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
 //--ANSI-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2140,9 +2570,11 @@ ansiNonReserved
     | AT
     | ATOMIC
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2182,6 +2614,7 @@ ansiNonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONTAINS
     | CONTINUE
     | COST
@@ -2219,6 +2652,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTANCE
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2228,6 +2662,7 @@ ansiNonReserved
     | ENFORCED
     | ERROR
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -2241,17 +2676,22 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FFILL
     | FIELDS
+    | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -2282,10 +2722,13 @@ ansiNonReserved
     | INTEGER
     | INTERVAL
     | INVOKER
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
@@ -2300,10 +2743,12 @@ ansiNonReserved
     | LIKE
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCATION
     | LOCK
     | LOCKS
@@ -2347,6 +2792,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTPUTFORMAT
@@ -2472,10 +2918,12 @@ ansiNonReserved
     | UNIFORM
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | VALUE
     | VALUES
@@ -2531,7 +2979,8 @@ strictNonReserved
 
 nonReserved
 //--DEFAULT-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2554,9 +3003,11 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2605,6 +3056,7 @@ nonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2651,6 +3103,7 @@ nonReserved
     | DISTANCE
     | DISTINCT
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2663,6 +3116,7 @@ nonReserved
     | ERROR
     | ESCAPE
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -2679,9 +3133,12 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FFILL
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
@@ -2690,10 +3147,12 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FROM
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -2730,10 +3189,13 @@ nonReserved
     | INTO
     | INVOKER
     | IS
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
@@ -2750,10 +3212,12 @@ nonReserved
     | LONG
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCALTIME
     | LOCATION
     | LOCK
@@ -2804,6 +3268,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTER
@@ -2943,10 +3408,12 @@ nonReserved
     | UNKNOWN
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | USER
     | VALUE

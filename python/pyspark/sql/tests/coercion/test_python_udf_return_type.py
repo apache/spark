@@ -18,12 +18,13 @@
 import array
 import concurrent.futures
 import datetime
-from decimal import Decimal
 import itertools
 import os
 import re
 import unittest
+from decimal import Decimal
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.types import (
@@ -44,17 +45,16 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-    numpy_requirement_message,
-)
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+    numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_numpy:
     import numpy as np

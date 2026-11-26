@@ -4,6 +4,7 @@ SELECT * from SQL_KEYWORDS()
 -- !query schema
 struct<keyword:string,reserved:boolean>
 -- !query output
+ABSENT	false
 ADD	false
 AFTER	false
 AGGREGATE	false
@@ -28,9 +29,11 @@ AT	false
 ATOMIC	false
 AUTHORIZATION	true
 AUTO	false
+BACKWARD	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
+BFILL	false
 BIGINT	false
 BIN	false
 BINARY	false
@@ -78,6 +81,7 @@ COMPUTE	false
 CONCATENATE	false
 CONDITION	false
 CONDITIONAL	false
+CONSTANT	false
 CONSTRAINT	true
 CONTAINS	false
 CONTINUE	false
@@ -125,6 +129,7 @@ DIRECTORY	false
 DISTANCE	false
 DISTINCT	true
 DISTRIBUTE	false
+DISTRIBUTED	false
 DIV	false
 DO	false
 DOUBLE	false
@@ -137,6 +142,7 @@ ENFORCED	false
 ERROR	false
 ESCAPE	true
 ESCAPED	false
+EVAL	false
 EVOLUTION	false
 EXACT	false
 EXCEPT	true
@@ -154,8 +160,11 @@ EXTERNAL	false
 EXTRACT	false
 FALSE	true
 FETCH	true
+FFILL	false
 FIELDS	false
+FILE	false
 FILEFORMAT	false
+FILL	false
 FILTER	true
 FIRST	false
 FLOAT	false
@@ -165,11 +174,13 @@ FOR	true
 FOREIGN	true
 FORMAT	false
 FORMATTED	false
+FORWARD	false
 FOUND	false
 FROM	true
 FULL	true
 FUNCTION	false
 FUNCTIONS	false
+GAP	false
 GENERATED	false
 GEOGRAPHY	false
 GEOMETRY	false
@@ -209,11 +220,14 @@ INTERVAL	false
 INTO	true
 INVOKER	false
 IS	true
+IS_GENERATED	false
 ITEMS	false
 ITERATE	false
 JOIN	true
 JSON	false
+JSON_ARRAY	false
 JSON_EXISTS	false
+JSON_OBJECT	false
 JSON_QUERY	false
 JSON_TABLE	false
 JSON_VALUE	false
@@ -230,10 +244,12 @@ LEFT	true
 LEVEL	false
 LIKE	false
 LIMIT	false
+LINEAR	false
 LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALLY	false
 LOCALTIME	true
 LOCATION	false
 LOCK	false
@@ -287,6 +303,7 @@ OPTION	false
 OPTIONS	false
 OR	true
 ORDER	true
+ORDERED	false
 ORDINALITY	false
 OUT	false
 OUTER	true
@@ -427,10 +444,12 @@ UNIQUE	true
 UNKNOWN	true
 UNLOCK	false
 UNNEST	false
+UNORDERED	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false
 UPDATE	false
+UPDATES	false
 USE	false
 USER	true
 USING	true

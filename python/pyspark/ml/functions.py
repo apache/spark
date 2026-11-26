@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import inspect
 import uuid
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 
@@ -27,8 +27,9 @@ try:
 except ImportError:
     pass  # Let it throw a better error message later when the API is invoked.
 
-from pyspark.sql.functions import pandas_udf
+from pyspark.ml.util import try_remote_functions
 from pyspark.sql.column import Column
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -41,7 +42,6 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
-from pyspark.ml.util import try_remote_functions
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -833,10 +833,10 @@ def predict_batch_udf(
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
-    import pyspark.ml.functions
     import sys
 
+    import pyspark.ml.functions
+    from pyspark.sql import SparkSession
     from pyspark.sql.pandas.utils import (
         require_minimum_pandas_version,
         require_minimum_pyarrow_version,

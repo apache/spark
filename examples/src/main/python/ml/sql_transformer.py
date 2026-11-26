@@ -17,6 +17,7 @@
 
 # $example on$
 from pyspark.ml.feature import SQLTransformer
+
 # $example off$
 from pyspark.sql import SparkSession
 

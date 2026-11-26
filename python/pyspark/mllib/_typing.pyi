@@ -16,16 +16,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import List, Tuple, TYPE_CHECKING, TypeVar, Union
+from typing import TYPE_CHECKING, List, Tuple, TypeVar, Union
 
-from typing_extensions import Literal
 from numpy import ndarray
 from py4j.java_gateway import JavaObject
+from typing_extensions import Literal
 
 from pyspark.mllib.linalg import Vector
 
 if TYPE_CHECKING:
-    from scipy.sparse import spmatrix, sparray
+    from scipy.sparse import sparray, spmatrix
 
 C = TypeVar("C", bound=type)
 JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]

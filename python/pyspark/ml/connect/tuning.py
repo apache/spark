@@ -17,6 +17,7 @@
 
 from multiprocessing.pool import ThreadPool
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -26,24 +27,22 @@ from typing import (
     Tuple,
     Union,
     cast,
-    TYPE_CHECKING,
 )
 
 import numpy as np
 import pandas as pd
 
-from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml.connect import Estimator, Model
-from pyspark.ml.connect.base import Evaluator
+from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.ml.connect.base import Estimator, Evaluator, Model
 from pyspark.ml.connect.io_utils import (
     MetaAlgorithmReadWrite,
     ParamsReadWrite,
 )
-from pyspark.ml.param import Params, Param, TypeConverters
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
-from pyspark.sql.functions import col, lit, rand
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
@@ -174,7 +173,7 @@ def _parallelFitTasks(
             "An active SparkSession is required for running cross validator fit tasks."
         )
 
-    def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
+    def get_single_task(index: int, param_map: "ParamMap") -> Callable[[], Tuple[int, float]]:
         def single_task() -> Tuple[int, float]:
             if not is_remote():
                 # Active session is thread-local variable, in background thread the active session
@@ -184,9 +183,7 @@ def _parallelFitTasks(
                 )
 
             model = estimator.fit(train, param_map)
-            metric = evaluator.evaluate(
-                model.transform(validation, param_map)  # type: ignore[union-attr]
-            )
+            metric = evaluator.evaluate(model.transform(validation, param_map))
             return index, metric
 
         return single_task
@@ -194,7 +191,7 @@ def _parallelFitTasks(
     return [get_single_task(index, param_map) for index, param_map in enumerate(epm)]
 
 
-class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
+class _CrossValidatorReadWrite(_ValidatorParams, MetaAlgorithmReadWrite):
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
@@ -214,7 +211,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 {"parent": param.parent, "name": param.name, "value": value}
                 for param, value in param_map.items()
             ]
-            for param_map in self.getEstimatorParamMaps()  # type: ignore[attr-defined]
+            for param_map in self.getEstimatorParamMaps()
         ]
 
         if isinstance(self, CrossValidatorModel):
@@ -230,12 +227,12 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
         estimator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["estimator"], root_path
         )
-        self.set(self.estimator, estimator)  # type: ignore[attr-defined]
+        self.set(self.estimator, estimator)
 
         evaluator = ParamsReadWrite._load_instance_from_metadata(
             node_metadata["evaluator"], root_path
         )
-        self.set(self.evaluator, evaluator)  # type: ignore[attr-defined]
+        self.set(self.evaluator, evaluator)
 
         json_epm = node_metadata["estimator_param_maps"]
 
@@ -251,7 +248,7 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
                 param_map[param] = value
             epm.append(param_map)
 
-        self.set(self.estimatorParamMaps, epm)  # type: ignore[attr-defined]
+        self.set(self.estimatorParamMaps, epm)
 
         if isinstance(self, CrossValidatorModel):
             self.avgMetrics = node_metadata["avg_metrics"]

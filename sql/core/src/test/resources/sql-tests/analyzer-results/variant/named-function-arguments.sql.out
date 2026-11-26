@@ -3,7 +3,7 @@
 SELECT * FROM variant_explode(input => parse_json('["hello", "world"]'))
 -- !query analysis
 Project [pos#x, key#x, value#x]
-+- Generate variant_explode(parse_json(["hello", "world"], true)), false, [pos#x, key#x, value#x]
++- Generate variant_explode(parse_json(["hello", "world"], true), false), false, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
@@ -11,7 +11,23 @@ Project [pos#x, key#x, value#x]
 SELECT * FROM variant_explode_outer(input => parse_json('{"a": true, "b": 3.14}'))
 -- !query analysis
 Project [pos#x, key#x, value#x]
-+- Generate variant_explode(parse_json({"a": true, "b": 3.14}, true)), true, [pos#x, key#x, value#x]
++- Generate variant_explode(parse_json({"a": true, "b": 3.14}, true), false), true, [pos#x, key#x, value#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode(input => parse_json('{"a": [1, 2]}'), recursive => true)
+-- !query analysis
+Project [path#x, pos#x, key#x, value#x]
++- Generate variant_explode(parse_json({"a": [1, 2]}, true), true), false, [path#x, pos#x, key#x, value#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode_outer(recursive => true, input => parse_json('{"a": [1, 2]}'))
+-- !query analysis
+Project [path#x, pos#x, key#x, value#x]
++- Generate variant_explode(parse_json({"a": [1, 2]}, true), true), true, [path#x, pos#x, key#x, value#x]
    +- OneRowRelation
 
 
@@ -20,9 +36,9 @@ SELECT * FROM variant_explode(parse_json('["hello", "world"]')), variant_explode
 -- !query analysis
 Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
 +- Join Inner
-   :- Generate variant_explode(parse_json(["hello", "world"], true)), false, [pos#x, key#x, value#x]
+   :- Generate variant_explode(parse_json(["hello", "world"], true), false), false, [pos#x, key#x, value#x]
    :  +- OneRowRelation
-   +- Generate variant_explode(parse_json({"a": true, "b": 3.14}, true)), false, [pos#x, key#x, value#x]
+   +- Generate variant_explode(parse_json({"a": true, "b": 3.14}, true), false), false, [pos#x, key#x, value#x]
       +- OneRowRelation
 
 
@@ -31,10 +47,10 @@ SELECT * FROM variant_explode(parse_json('{"a": ["hello", "world"], "b": {"x": t
 -- !query analysis
 Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
-   :  +- Generate variant_explode(outer(value#x)), false, [pos#x, key#x, value#x]
+   :  +- Generate variant_explode(outer(value#x), false), false, [pos#x, key#x, value#x]
    :     +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": ["hello", "world"], "b": {"x": true, "y": 3.14}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": ["hello", "world"], "b": {"x": true, "y": 3.14}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -44,5 +60,5 @@ SELECT num, key, val, 'Spark' FROM variant_explode(parse_json('["hello", "world"
 Project [num#x, key#x, val#x, Spark AS Spark#x]
 +- SubqueryAlias t
    +- Project [pos#x AS num#x, key#x AS key#x, value#x AS val#x]
-      +- Generate variant_explode(parse_json(["hello", "world"], true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json(["hello", "world"], true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation

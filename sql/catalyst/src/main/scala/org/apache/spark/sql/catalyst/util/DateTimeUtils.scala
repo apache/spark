@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -285,13 +285,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds a year-month interval expressed in months to a nanosecond-precision timestamp value while
-   * preserving the `nanosWithinMicro` remainder.
+   * preserving the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not
+   * fit in the epoch-microseconds range; `startType` and `intervalType` render the operands in it.
    */
   def timestampNanosAddMonths(
       start: TimestampNanosVal,
       months: Int,
-      zoneId: ZoneId): TimestampNanosVal = {
-    val epochMicros = timestampAddMonths(start.epochMicros, months, zoneId)
+      zoneId: ZoneId,
+      startType: DataType,
+      intervalType: DataType): TimestampNanosVal = {
+    val epochMicros = try {
+      timestampAddMonths(start.epochMicros, months, zoneId)
+    } catch {
+      case _: ArithmeticException | _: DateTimeException =>
+        throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
+          start, startType, months, intervalType)
+    }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
@@ -319,13 +328,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
-   * the `nanosWithinMicro` remainder.
+   * the `nanosWithinMicro` remainder. Throws `DATETIME_OVERFLOW` if the result does not fit in the
+   * epoch-microseconds range; `startType` and `intervalType` render the operands in it.
    */
   def timestampNanosAddDayTime(
       start: TimestampNanosVal,
       dayTime: Long,
-      zoneId: ZoneId): TimestampNanosVal = {
-    val epochMicros = timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+      zoneId: ZoneId,
+      startType: DataType,
+      intervalType: DataType): TimestampNanosVal = {
+    val epochMicros = try {
+      timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    } catch {
+      case _: ArithmeticException | _: DateTimeException =>
+        throw QueryExecutionErrors.timestampNanosAddIntervalOverflowError(
+          start, startType, dayTime, intervalType)
+    }
     TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
@@ -338,9 +356,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * [[org.apache.spark.sql.errors.QueryExecutionErrors.timestampNanosEpochNanosOverflowError]]).
    */
   def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
-    Math.addExact(
-      Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
-      value.nanosWithinMicro.toLong)
+    if (value.epochMicros < 0) {
+      // Pack from `epochMicros + 1`: `epochMicros * 1000` alone overflows at the int64 minimum.
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros + 1, NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong - NANOS_PER_MICROS)
+    } else {
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong)
+    }
   }
 
   /**
@@ -511,18 +536,34 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  // Long arithmetic: `dayOfWeek - 1 - startDay` and the sum overflow Int near the DATE bounds.
+  private def nextDateForDayOfWeek(startDay: Long, dayOfWeek: Int): Long = {
+    startDay + 1 + Math.floorMod(dayOfWeek - 1 - startDay, 7L)
+  }
+
   /**
    * Returns the first date which is later than startDate and is of the given dayOfWeek.
    * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
    */
   def getNextDateForDayOfWeek(startDay: Int, dayOfWeek: Int): Int = {
-    startDay + 1 + ((dayOfWeek - 1 - startDay) % 7 + 7) % 7
+    val result = nextDateForDayOfWeek(startDay, dayOfWeek)
+    if (result > Int.MaxValue) {
+      val dayName = DayOfWeek.THURSDAY.plus(dayOfWeek).toString
+      throw QueryExecutionErrors.nextDayOverflowError(startDay, dayName)
+    }
+    result.toInt
   }
 
-  /** Returns last day of the month for the given number of days since 1970-01-01. */
+  /**
+   * Returns last day of the month for the given number of days since 1970-01-01.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
+   */
   def getLastDayOfMonth(days: Int): Int = {
     val localDate = daysToLocalDate(days)
-    (days - localDate.getDayOfMonth) + localDate.lengthOfMonth()
+    val result = days - localDate.getDayOfMonth.toLong + localDate.lengthOfMonth()
+    if (result > Int.MaxValue) throw QueryExecutionErrors.lastDayOverflowError(days)
+    result.toInt
   }
 
   // The constants are visible for testing purpose only.
@@ -547,20 +588,29 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
+   * @throws org.apache.spark.SparkArithmeticException if the result is earlier than the minimum
+   *                                                   DATE.
    */
   def truncDate(days: Int, level: Int): Int = {
     level match {
-      case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
-      case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
+      case TRUNC_TO_WEEK => checkTruncDate(days, nextDateForDayOfWeek(days - 7L, MONDAY), "WEEK")
+      case TRUNC_TO_MONTH => checkTruncDate(days, days - getDayOfMonth(days).toLong + 1, "MONTH")
       case TRUNC_TO_QUARTER =>
         val ld = daysToLocalDate(days)
         val firstMonthOfQuarter = ((ld.getMonthValue - 1) / 3) * 3 + 1
-        localDateToDays(ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1))
-      case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
+        val result = ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1).toEpochDay
+        checkTruncDate(days, result, "QUARTER")
+      case TRUNC_TO_YEAR => checkTruncDate(days, days - getDayInYear(days).toLong + 1, "YEAR")
       case _ =>
         // caller make sure that this should never be reached
         throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
+  }
+
+  // Truncation never moves a date later, so only the minimum DATE can be crossed.
+  private def checkTruncDate(days: Int, result: Long, unit: String): Int = {
+    if (result < Int.MinValue) throw QueryExecutionErrors.truncDateOverflowError(days, unit)
+    result.toInt
   }
 
   private def truncToUnit(micros: Long, zoneId: ZoneId, unit: ChronoUnit): Long = {
@@ -802,16 +852,30 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
+    specialTimestampInstant(input, zoneId).map(instantToMicros)
+  }
+
+  /**
+   * Nanosecond variant of [[convertSpecialTimestamp]] for `TIMESTAMP_LTZ(precision)`, with
+   * `precision` in [7, 9]. `now` is floored to `precision`.
+   */
+  def convertSpecialTimestampLTZNanos(
+      input: String,
+      zoneId: ZoneId,
+      precision: Int): Option[TimestampNanosVal] = {
+    specialTimestampInstant(input, zoneId).map(instantToTimestampNanos(_, precision))
+  }
+
+  private def specialTimestampInstant(input: String, zoneId: ZoneId): Option[Instant] = {
     extractSpecialValue(input.trim).flatMap {
-      case "epoch" => Some(0)
-      case "now" => Some(instantToMicros(Instant.now()))
-      case "today" => Some(instantToMicros(today(zoneId).toInstant))
-      case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
-      case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case "epoch" => Some(Instant.EPOCH)
+      case "now" => Some(Instant.now())
+      case "today" => Some(today(zoneId).toInstant)
+      case "tomorrow" => Some(today(zoneId).plusDays(1).toInstant)
+      case "yesterday" => Some(today(zoneId).minusDays(1).toInstant)
       case _ => None
     }
   }
-
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
@@ -822,7 +886,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
-    val localDateTime = extractSpecialValue(input.trim).flatMap {
+    specialLocalDateTime(input, zoneId).map(localDateTimeToMicros)
+  }
+
+  /**
+   * Nanosecond variant of [[convertSpecialTimestampNTZ]] for `TIMESTAMP_NTZ(precision)`, with
+   * `precision` in [7, 9]. `now` is floored to `precision`.
+   */
+  def convertSpecialTimestampNTZNanos(
+      input: String,
+      zoneId: ZoneId,
+      precision: Int): Option[TimestampNanosVal] = {
+    specialLocalDateTime(input, zoneId).map(localDateTimeToTimestampNanos(_, precision))
+  }
+
+  private def specialLocalDateTime(input: String, zoneId: ZoneId): Option[LocalDateTime] = {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
       case "now" => Some(LocalDateTime.now(zoneId))
       case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
@@ -832,7 +911,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
         Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
-    localDateTime.map(localDateTimeToMicros)
   }
 
   /**
@@ -849,6 +927,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
       case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
+    }
+  }
+
+  /**
+   * Whether `input` is the special value 'epoch', the only one that the `convertSpecial*`
+   * functions convert without reading the current date or time.
+   *
+   * @param input A string to check. It can contain trailing or leading whitespaces.
+   */
+  private[sql] def isEpochSpecialValue(input: String): Boolean =
+    extractSpecialValue(input.trim).contains("epoch")
+
+  /**
+   * Whether `input` is a valid timestamp string with only a time part, which a cast to a timestamp
+   * with local time zone completes with the current date.
+   */
+  private[sql] def isTimeOnlyTimestamp(input: UTF8String): Boolean = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(input)
+      segments.nonEmpty && justTime && {
+        // Validates the time fields as `stringToTimestamp` does when it builds the time.
+        LocalTime.of(segments(3), segments(4), segments(5),
+          (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt)
+        true
+      }
+    } catch {
+      case NonFatal(_) => false
     }
   }
 
@@ -991,6 +1096,61 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  /**
+   * Adds the specified number of units to a nanosecond-precision timestamp of precision `p` (in
+   * [7, 9]), returning a value floored to that precision.
+   *
+   * For units of MICROSECOND or coarser the addition runs on the microsecond grid (reusing
+   * [[timestampAdd]] for all the calendar, DST and overflow handling) and the input's already
+   * `p`-aligned fraction is carried through unchanged. For the NANOSECOND unit the fraction absorbs
+   * `quantity` nanoseconds and any whole microseconds carry into `epochMicros`; the resulting
+   * fraction is then floored to `p` (via [[truncateTimestampNanosToPrecision]]) so a NANOSECOND
+   * quantity finer than the type's step never produces an off-grid value that would compare, hash
+   * or sort unequal to its displayed (aligned) form. NANOSECOND is only valid here: adding
+   * nanoseconds to a microsecond timestamp is unrepresentable, so that combination is rejected as
+   * an invalid unit through the microsecond [[timestampAdd]] path.
+   *
+   * @param unit A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity The amount of `unit`s to add. It can be positive or negative.
+   * @param ts The input nanosecond-precision timestamp.
+   * @param precision The declared fractional-second precision `p` in [7, 9] of the input/output.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A nanosecond-precision timestamp value floored to `precision`.
+   */
+  def timestampAddNanos(
+      unit: String,
+      quantity: Long,
+      ts: TimestampNanosVal,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    if (unit.toUpperCase(Locale.ROOT) == "NANOSECOND") {
+      try {
+        // Split the added nanoseconds into whole microseconds and a [0, 999] remainder first, so
+        // the fraction sum stays within [0, 1998] and only the true microsecond total can overflow
+        // a Long (adding the remainder to `nanosWithinMicro` before the split would spuriously
+        // reject a large-but-representable quantity).
+        val quotientMicros = Math.floorDiv(quantity, NANOS_PER_MICROS)
+        val remainderNanos = Math.floorMod(quantity, NANOS_PER_MICROS)
+        val fractionSum = ts.nanosWithinMicro.toLong + remainderNanos
+        val carryMicros =
+          Math.addExact(quotientMicros, Math.floorDiv(fractionSum, NANOS_PER_MICROS))
+        val newFraction = Math.floorMod(fractionSum, NANOS_PER_MICROS).toShort
+        val newMicros = Math.addExact(ts.epochMicros, carryMicros)
+        truncateTimestampNanosToPrecision(
+          TimestampNanosVal.fromParts(newMicros, newFraction), precision)
+      } catch {
+        case _: ArithmeticException | _: DateTimeException =>
+          throw QueryExecutionErrors.timestampAddOverflowError(ts.epochMicros, quantity, unit)
+      }
+    } else {
+      // Units of MICROSECOND or coarser do not touch the sub-microsecond fraction; add on the
+      // microsecond grid and re-attach the input's fraction, which is already `p`-aligned. An
+      // unknown unit is rejected by timestampAdd, and NANOSECOND is handled above.
+      TimestampNanosVal.fromParts(
+        timestampAdd(unit, quantity, ts.epochMicros, zoneId), ts.nanosWithinMicro)
+    }
+  }
+
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,
@@ -1026,6 +1186,41 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Splits the seconds of a minute with a fraction of 6 digits (microseconds) into the whole
+   * seconds and the nanos of the second, as `LocalTime.of` and `LocalDateTime.of` take them,
+   * packed into a long, the seconds in the high 32 bits and the nanos in the low 32 bits, so
+   * that nothing is allocated per row: `(packed >> 32).toInt` and `packed.toInt`.
+   *
+   * The whole seconds are checked to be in the int range and not negative before they are
+   * narrowed. A value outside of the int range would overflow when converted from long to int,
+   * and could produce an int in the valid seconds range and return a wrong value, or a misleading
+   * error message. A negative value is rejected here for a better error message: `Math.floorDiv`
+   * gets the next lower integer for it, so the full seconds would not match the value given.
+   * The message is the one that `LocalTime.of` and `LocalDateTime.of` throw for invalid seconds,
+   * with the seconds given, truncated towards zero, or in full for a value between -1 and 0,
+   * which the truncation would show as the valid 0. Any other value, such as 61 seconds, is
+   * left to them, which check their fields in order, so an invalid date or hour is reported
+   * before such seconds, while a negative value, or one whose whole seconds exceed
+   * `Int.MaxValue` (2147483648 or more; 2147483647.5 passes), is reported first.
+   */
+  def splitSecsAndMicros(secsAndMicros: Decimal): Long = {
+    assert(secsAndMicros.scale == 6)
+    val unscaledSecFrac = secsAndMicros.toUnscaledLong
+    val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
+    if (fullSecs > Int.MaxValue || fullSecs < 0) {
+      val shown = if (fullSecs == -1 && secsAndMicros.toLong == 0) {
+        secsAndMicros.toJavaBigDecimal.stripTrailingZeros.toPlainString
+      } else {
+        secsAndMicros.toLong.toString
+      }
+      throw new DateTimeException(
+        s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown")
+    }
+    val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+    (fullSecs << 32) | nanos
+  }
+
+  /**
    * Converts separate time fields in a long that represents nanoseconds since the start of
    * the day
    * @param hours the hour, from 0 to 23
@@ -1035,25 +1230,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
-      val unscaledSecFrac = secsAndMicros.toUnscaledLong
-      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
-      // The greater than Int.MaxValue check is needed for the case where the full seconds is
-      // outside of the int range. This will overflow when full seconds is converted from
-      // long to int. The overflow could produce an int in the valid seconds range and return a
-      // wrong value. For overflow values outside of the valid seconds range, it would result in a
-      // misleading error message.
-      // The negative check is needed to throw a better error message. In the negative case,
-      // Math.floorDiv gets the next lower negative integer so the full second value in the
-      // original decimal will not match what is in the error message.
-      if (fullSecs > Int.MaxValue || fullSecs < 0) {
-        // Make this error message consistent with what is thrown by LocalTime.of when the
-        // seconds are invalid
-        throw new DateTimeException(
-          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
-      }
-
-      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
-      val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
+      val secs = splitSecsAndMicros(secsAndMicros)
+      val lt = LocalTime.of(hours, minutes, (secs >> 32).toInt, secs.toInt)
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
@@ -1391,5 +1569,47 @@ object DateTimeUtils extends SparkDateTimeUtils {
       c = candidate(k)
     }
     c
+  }
+
+  /**
+   * Nanosecond-precision DayTimeInterval bucketing. `bucketMicros` is an integer number of
+   * microseconds, so every bucket boundary `origin + k * bucketSize` carries the same
+   * `nanosWithinMicro` remainder as `origin` -- only the choice of `k` needs nanosecond
+   * resolution, and only when the micro-level boundary lands on the same microsecond as `ts`:
+   * if `origin`'s remainder is larger than `ts`'s there, the true boundary is one bucket earlier.
+   */
+  def timeBucketDTIntervalNanos(
+      bucketMicros: Long,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketDTInterval(bucketMicros, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketDTInterval(bucketMicros, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
+  }
+
+  /**
+   * Nanosecond-precision YearMonthInterval bucketing. See
+   * [[timeBucketDTIntervalNanos]] for why the result's `nanosWithinMicro` always equals
+   * `origin`'s, and why only the choice of `k` needs sub-microsecond resolution.
+   */
+  def timeBucketYMIntervalNanos(
+      bucketMonths: Int,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketYMInterval(bucketMonths, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketYMInterval(bucketMonths, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
   }
 }

@@ -20,17 +20,17 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, UnresolvedInsert, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
+import org.apache.spark.sql.functions.{array, call_function, expr, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, TimeType, VarcharType}
 
 class ParametersSuite extends SharedSparkSession {
 
@@ -523,6 +523,38 @@ class ParametersSuite extends SharedSparkSession {
         Row(LocalDateTime.of(1970, 1, 1, 1, 2, 3)
           .atZone(ZoneId.of("Europe/Amsterdam"))
           .toInstant) :: Nil)
+    }
+  }
+
+  test("SPARK-60314: TIME(7)-TIME(9) literal argument keeps its precision") {
+    // Arguments are substituted as `Literal.sql` text. A TIME(9) argument rendered without its
+    // trailing zeros is parsed as TIME(6), which truncates the strings compared with it.
+    val time = expr("TIME '12:00:00.100000000'")
+    assert(spark.sql("SELECT :t", args = Map("t" -> time)).schema.head.dataType === TimeType(9))
+    checkAnswer(
+      spark.sql("SELECT :t = '12:00:00.100000001'", args = Map("t" -> time)),
+      Row(false))
+    checkAnswer(
+      spark.sql("SELECT ? < '12:00:00.100000001'", args = Array(time)),
+      Row(true))
+    checkAnswer(
+      spark.sql(
+        "SELECT s FROM VALUES ('12:00:00.100000001'), ('12:00:00.1') AS t(s) WHERE s = :t",
+        args = Map("t" -> time)),
+      Row("12:00:00.1") :: Nil)
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT ? = \'12:00:00.100000001\''
+          |USING TIME '12:00:00.100000000'""".stripMargin),
+      Row(false))
+    // Nested values are rendered element by element, so they keep the precision as well.
+    Seq(
+      "array(TIME '12:00:00.100000000')" -> "array<time(9)>",
+      "named_struct('f', TIME '12:00:00.100000000')" -> "struct<f:time(9)>",
+      "map(1, TIME '12:00:00.100000000')" -> "map<int,time(9)>"
+    ).foreach { case (arg, expected) =>
+      val df = spark.sql("SELECT :c", args = Map("c" -> expr(arg)))
+      assert(df.schema.head.dataType.simpleString === expected)
     }
   }
 
@@ -1350,6 +1382,225 @@ class ParametersSuite extends SharedSparkSession {
 
       val result2 = spark.sql("SELECT :test", Map("test" -> "value")).collect()
       assert(result2(0).getString(0) == "value")
+    }
+  }
+
+  test("optional named parameter markers") {
+    val optionalFilterQuery = "SELECT id FROM range(3) WHERE :low? IS NULL OR id >= :low?"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A marker with a value is bound, and a marker without a value is NULL.
+        checkAnswer(spark.sql("SELECT :x?, :y?", Map("x" -> 1)), Row(1, null))
+        checkAnswer(spark.sql("SELECT :x ?, :x? + 1", Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql(optionalFilterQuery, Map("low" -> 2L)), Row(2))
+        checkAnswer(
+          spark.sql(optionalFilterQuery, Map("unused" -> 1)),
+          Row(0) :: Row(1) :: Row(2) :: Nil)
+
+        // A marker in a subquery is bound like a marker in the query around it.
+        checkAnswer(spark.sql("SELECT (SELECT :x?) AS a, (SELECT :y?) AS b", Map("x" -> 1)),
+          Row(1, null))
+        checkAnswer(
+          spark.sql("SELECT id FROM range(3) WHERE id IN (SELECT :low? AS low)", Map("low" -> 2L)),
+          Row(2))
+        checkAnswer(
+          spark.sql(
+            "SELECT id FROM range(3) t WHERE EXISTS (SELECT 1 WHERE t.id >= :low?)",
+            Map("low" -> 1L)),
+          Row(1) :: Row(2) :: Nil)
+
+        // Each occurrence is independent: the occurrence without `?` still requires a value.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT :y?, :y", Map("x" -> 1))
+          },
+          condition = "UNBOUND_SQL_PARAMETER",
+          parameters = Map("name" -> "y"),
+          context = ExpectedContext(fragment = ":y", start = 12, stop = 13))
+      }
+    }
+  }
+
+  test("a statement that the parameter substitution parsed with optional references is parsed " +
+    "with them after the substitution") {
+    // `:x?` selects optional references, so `DISTINCT ?` is an optional reference to the column
+    // `distinct` rather than a positional parameter marker. The substitution of `:x?` removes the
+    // `?` that selected them.
+    val query = "SELECT :x? AS a, first(DISTINCT ?) AS f FROM VALUES (2) AS t(`distinct`)"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        checkAnswer(spark.sql(query, Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql(query, Map("y" -> 1)), Row(null, 2))
+        checkAnswer(
+          spark.sql(s"EXECUTE IMMEDIATE '${query.replace("'", "''")}' USING 1 AS x"),
+          Row(1, 2))
+      }
+    }
+  }
+
+  test("an unbound optional named parameter marker is the NULL of a missing reference, also " +
+    "when other parameters have values") {
+    // A VARIANT path of a missing reference is NULL, but one of a NULL value is an error.
+    val query = "SELECT CAST(:p?:a AS STRING) AS a, :q AS q"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        checkAnswer(spark.sql(query, Map("q" -> 1)), Row(null, 1))
+        checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 1 AS q"), Row(null, 1))
+      }
+    }
+  }
+
+  test("a parameter marker of a DECLARE CURSOR query does not select optional references") {
+    // The marker of the cursor query is bound when the cursor is opened, so the substitution of
+    // `:x` does not substitute it. The script has no optional reference, so `DISTINCT ?` is a
+    // parameter marker, not a reference to the column `distinct`. See also
+    // `OptionalReferencesParserSuite`, which checks the parse mode that the substitution reports.
+    val script =
+      """BEGIN
+        |  DECLARE r INT;
+        |  DECLARE c CURSOR FOR SELECT first(DISTINCT ?) AS f FROM VALUES (2) AS t(`distinct`);
+        |  OPEN c USING 1;
+        |  FETCH c INTO r;
+        |  CLOSE c;
+        |  SELECT r, :x AS x;
+        |END""".stripMargin
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true"
+    ) {
+      checkAnswer(spark.sql(script, Map("x" -> 3)), Row(1, 3))
+    }
+  }
+
+  test("positional parameter values that a statement with optional references does not use") {
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A statement that is valid without optional references keeps its markers.
+        checkAnswer(spark.sql("SELECT first(DISTINCT ?) AS f, ? AS g", Array(5, 6)), Row(5, 6))
+        // In a statement with optional references, a `?` after a non-reserved keyword where the
+        // syntax allows a reference is an optional reference, so the remaining markers would
+        // take the values of the preceding ones silently.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing? FROM range(1)", Array(5))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "0", "numValues" -> "1"))
+        checkAnswer(spark.sql("SELECT missing?, ? AS g", Array(6)), Row(null, 6))
+      }
+    }
+  }
+
+  test("positional parameter values that a statement with optional references that resolve " +
+    "does not use, in the legacy binding mode") {
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true"
+    ) {
+      withTempView("v") {
+        sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, 2 AS `distinct`")
+        // The parameters are bound after the references resolved, so the check must go by the
+        // statement as written.
+        val query = "SELECT id?, first(DISTINCT ?) AS f, ? AS g FROM v GROUP BY id"
+        checkError(
+          exception = intercept[AnalysisException](spark.sql(query, Array(5, 6))),
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(s"EXECUTE IMMEDIATE '$query' USING 5, 6")
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkAnswer(spark.sql(query, Array(6)), Row(1, 2, 6))
+        checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 6"), Row(1, 2, 6))
+        // The common table expressions of the statement and of its subqueries, which are not
+        // children of the operator that defines them, are searched too.
+        val cte = "WITH c AS (SELECT first(DISTINCT ?) AS f, missing? AS m FROM v)"
+        Seq(
+          s"$cte SELECT f, ? AS g FROM c",
+          s"SELECT ($cte SELECT f FROM c) AS f, ? AS g"
+        ).foreach { cteQuery =>
+          checkError(
+            exception = intercept[AnalysisException](spark.sql(cteQuery, Array(5, 6))),
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.sql(s"EXECUTE IMMEDIATE '$cteQuery' USING 5, 6")
+            },
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+          checkAnswer(spark.sql(cteQuery, Array(6)), Row(2, 6))
+        }
+        // So are the query of EXPLAIN and DESCRIBE QUERY and the specifications of a WINDOW
+        // clause. EXPLAIN reports the error of the query that it explains.
+        val explained = spark.sql(s"EXPLAIN $query", Array(5, 6)).collect().map(_.getString(0))
+        assert(explained.exists(_.contains("UNUSED_SQL_PARAMETER_VALUES")), explained.mkString)
+        Seq(
+          s"DESCRIBE QUERY $query",
+          "SELECT sum(id) OVER w AS s, ? AS g FROM v WINDOW w AS (PARTITION BY region?)"
+        ).foreach { statement =>
+          checkError(
+            exception = intercept[AnalysisException](spark.sql(statement, Array(5, 6))),
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        }
+        // A statement without optional references ignores the extra values, as before.
+        checkAnswer(spark.sql("SELECT ? AS a FROM v", Array(1, 2)), Row(1))
+        checkAnswer(spark.sql("EXECUTE IMMEDIATE 'SELECT ? AS a FROM v' USING 1, 2"), Row(1))
+        Seq(
+          "EXPLAIN SELECT ? AS a FROM v",
+          "DESCRIBE QUERY SELECT ? AS a FROM v",
+          "SELECT sum(id) OVER w AS s, ? AS a FROM v WINDOW w AS (PARTITION BY id)"
+        ).foreach { statement =>
+          assert(!spark.sql(statement, Array(1, 2)).collect().map(_.toString)
+            .exists(_.contains("UNUSED_SQL_PARAMETER_VALUES")))
+        }
+      }
+    }
+  }
+
+  test("the plan string of a parameterized query does not show the optional references flag") {
+    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
+      Seq(
+        spark.sql("SELECT ? AS a", Array(1)).queryExecution.logical ->
+          "'PosParameterizedQuery [1]",
+        spark.parseParameterizedPlan("SELECT :a AS a", Array(1), Array("a")) ->
+          "'GeneralParameterizedQuery [1], [a]"
+      ).foreach { case (plan, expected) =>
+        assert(plan.simpleString(maxFields = 10) === expected)
+      }
+    }
+  }
+
+  test("optional named parameter marker after a supplementary character") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      // A code point of two UTF-16 units before the marker: the lookahead that decides whether
+      // the substituted NULL needs a space before the next token must count code points, or NULL
+      // and the keyword after it would form one identifier.
+      val smiley = new String(Character.toChars(0x1F600))
+      checkAnswer(spark.sql(s"SELECT '$smiley' AS e, :p?FROM range(1)"), Row(smiley, null))
+      checkAnswer(spark.sql(s"SELECT '$smiley' AS e, :p?FROM range(1)", Map("q" -> 1)),
+        Row(smiley, null))
     }
   }
 
@@ -2474,9 +2725,8 @@ class ParametersSuite extends SharedSparkSession {
   }
 
   // SPARK-46625: WITH ... <write-with-IDENTIFIER> SELECT ... FROM cte
-  // The placeholder is pushed into the command's identifier slot at parse time, so
-  // `CTESubstitution` sees the `CTEInChildren` directly and never produces the invalid
-  // `WithCTE(InsertIntoStatement, ...)` / `WithCTE(CreateTableAsSelect, ...)` shape.
+  // The placeholder stays inside a CTEInChildren command at parse time, so CTESubstitution never
+  // produces a WithCTE around the command itself.
   private def assertNoWithCTEAroundCTEInChildren(df: DataFrame): Unit = {
     df.queryExecution.analyzed.foreach {
       case WithCTE(_: CTEInChildren, _) =>
@@ -2512,6 +2762,17 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("INSERT target is not substituted by a same-named CTE") {
+    withTable("t_cte_target") {
+      sql("CREATE TABLE t_cte_target (a INT) USING PARQUET")
+      sql(
+        """WITH t_cte_target AS (SELECT 99 AS a)
+          |INSERT INTO IDENTIFIER(lower('T_CTE_TARGET'))
+          |SELECT 1 AS a""".stripMargin)
+      checkAnswer(spark.table("t_cte_target"), Row(1))
+    }
+  }
+
   test("SPARK-46625: CREATE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... FROM cte") {
     withTable("t_cte_ctas") {
       val df = spark.sql(
@@ -2524,44 +2785,27 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: legacy parameter-substitution mode triggers the parameters.scala traversal
-  // path. The placeholder lives in `InsertIntoStatement.table`, which is *not* a child, so this
-  // exercises the `InsertIntoStatement` special-case in `BindParameters.bind` that recurses into
-  // the `table` slot, and the `getDefaultTreePatternBits` override on `InsertIntoStatement` that
-  // exposes `table`'s tree-pattern bits for pruning.
-  test("SPARK-46625: INSERT IDENTIFIER(:p) under legacy parameter substitution") {
-    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
-      withTable("t_legacy_param") {
-        sql("CREATE TABLE t_legacy_param (a INT) USING PARQUET")
-        spark.sql(
-          """WITH transformation AS (SELECT 11 AS a)
-            |INSERT INTO IDENTIFIER(:tname)
-            |SELECT * FROM transformation""".stripMargin,
-          Map("tname" -> "t_legacy_param"))
-        checkAnswer(spark.table("t_legacy_param"), Row(11))
-      }
-    }
-  }
-
-  // SPARK-46625: INSERT INTO REPLACE WHERE parses into `InsertIntoStatement`, whose `table`
-  // slot is a non-child `LogicalPlan`. `PlanWithUnresolvedIdentifier` sits in the slot directly.
-  // Verify on the parsed plan that the placeholder lives in `InsertIntoStatement.table` rather
-  // than wrapping the whole command -- running the analyzer fully would require a v2 catalog.
+  // The temporary binary node exposes only a dynamic target to analyzer traversal and keeps CTE
+  // definitions on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
-    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to a static target.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
         |SELECT * FROM transformation""".stripMargin)
-    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
     assert(insert.table.isInstanceOf[PlanWithUnresolvedIdentifier],
-      s"Expected InsertIntoStatement.table to be PlanWithUnresolvedIdentifier, " +
+      s"Expected UnresolvedInsert.table to be PlanWithUnresolvedIdentifier, " +
         s"got ${insert.table.getClass.getSimpleName}:\n$parsedPlan")
-    // After CTESubstitution runs, the CTE defs should land on the command's children (because
-    // InsertIntoStatement is a CTEInChildren) -- never as `WithCTE(InsertIntoStatement, _)`.
+    assert(insert.children === Seq(insert.table, insert.query))
+
     val substituted = CTESubstitution.apply(parsedPlan)
+    val substitutedInsert = substituted.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert after CTE substitution:\n$substituted"))
+    assert(!substitutedInsert.table.exists(_.isInstanceOf[WithCTE]),
+      s"CTE definitions must not wrap the target table:\n$substituted")
     substituted.foreach {
       case WithCTE(_: CTEInChildren, _) =>
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
@@ -2569,30 +2813,45 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: Parameter inside `IDENTIFIER(:p)` on REPLACE WHERE lives in
-  // `InsertIntoStatement.table`, which is a non-child slot. Verify that
-  // `BindParameters.bind` reaches into the slot via the explicit `InsertIntoStatement`
-  // recursion (parameters.scala) and that the `getDefaultTreePatternBits` override on
-  // `InsertIntoStatement` exposes the PARAMETER bit for pruning. Done at the rule level
-  // because driving REPLACE WHERE through full analysis would require a v2 catalog.
-  test("SPARK-46625: BindParameters recurses into InsertIntoStatement.table") {
+  test("dynamic INSERT targets use a temporary binary plan") {
+    val regularInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO target_table SELECT 1")
+    assert(regularInsert.isInstanceOf[InsertIntoStatement])
+
+    // A literal IDENTIFIER is a static target, so it parses to the same plan as a bare name.
+    val literalIdentifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER('target_table') SELECT 1")
+    assert(literalIdentifierInsert === regularInsert)
+
+    val identifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")
+      .asInstanceOf[UnresolvedInsert]
+    assert(identifierInsert.table.isInstanceOf[PlanWithUnresolvedIdentifier])
+    assert(identifierInsert.children === Seq(identifierInsert.table, identifierInsert.query))
+
+    val lowered = spark.sessionState.analyzer.resolveUnresolvedInsert(identifierInsert)
+      .asInstanceOf[InsertIntoStatement]
+    assert(lowered.table.asInstanceOf[UnresolvedRelation].multipartIdentifier ===
+      Seq("testcat", "ns", "target_table"))
+    assert(lowered.children === Seq(lowered.query))
+  }
+
+  // BindParameters reaches a dynamic target through normal child traversal.
+  test("SPARK-46625: BindParameters visits UnresolvedInsert.table") {
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """INSERT INTO IDENTIFIER(:tname) REPLACE WHERE a = 10
         |SELECT 1 AS a""".stripMargin)
-    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
-    // Pruning prerequisite: the PARAMETER bit must be visible at the InsertIntoStatement
-    // level (it lives inside `table`, which is not a child); this exercises the
-    // `getDefaultTreePatternBits` override.
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
     assert(insert.containsPattern(PARAMETER),
-      "InsertIntoStatement.getDefaultTreePatternBits must propagate `table`'s PARAMETER bit")
+      "UnresolvedInsert must propagate the table child's PARAMETER bit")
 
     val bound = BindParameters.apply(
       NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
-    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
     assert(!boundInsert.table.containsPattern(PARAMETER),
-      s"Expected :tname inside InsertIntoStatement.table to be bound, got:\n$boundInsert")
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
   }
 
   test("BindParameters binds IDENTIFIER(:p) in the table slot for REPLACE WHERE with a column " +
@@ -2600,31 +2859,37 @@ class ParametersSuite extends SharedSparkSession {
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """INSERT INTO IDENTIFIER(:tname) (id, name) REPLACE WHERE id = 1
         |SELECT 1 AS id, 'x' AS name""".stripMargin)
-    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
     assert(insert.containsPattern(PARAMETER),
-      "InsertIntoStatement must expose the table slot's PARAMETER bit for pruning")
+      "UnresolvedInsert must expose the table child's PARAMETER bit for pruning")
 
     val bound = BindParameters.apply(
       NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
 
-    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
     assert(!boundInsert.table.containsPattern(PARAMETER),
-      s"Expected :tname inside InsertIntoStatement.table to be bound, got:\n$boundInsert")
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
     assert(boundInsert.userSpecifiedCols === Seq("id", "name"),
       s"Expected the column list to survive table-slot binding, got: " +
         s"${boundInsert.userSpecifiedCols}")
   }
 
-  // SPARK-46625 followup: `INSERT INTO IDENTIFIER(<sql-variable>) ...` places a
-  // `PlanWithUnresolvedIdentifier` in `InsertIntoStatement.table`, whose `identifierExpr`
-  // holds an `UnresolvedAttribute` for the variable name. That slot is a non-child
-  // `LogicalPlan`, so the default `ResolveReferences` traversal never resolves the
-  // attribute, `ResolveIdentifierClause` cannot fire (it waits on `identifierExpr.resolved`),
-  // and analysis fails. Verify that the explicit `InsertIntoStatement` case added to
-  // `ResolveReferences` rewrites the attribute to a `VariableReference` and the insert
-  // completes end-to-end.
+  test("ResolveFunctions resolves expressions in an UnresolvedInsert target") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(lower(regexp_replace(
+        |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) REPLACE WHERE id = 1
+        |SELECT 1 AS id""".stripMargin)
+    val insert = parsedPlan.asInstanceOf[UnresolvedInsert]
+
+    val resolvedInsert = spark.sessionState.analyzer.ResolveFunctions(insert)
+      .asInstanceOf[UnresolvedInsert]
+    assert(resolvedInsert.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+      .identifierExpr.resolved)
+  }
+
+  // Normal child traversal resolves a SQL variable in the target IDENTIFIER expression.
   test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) resolves variable in table slot") {
     withTable("t_var_insert") {
       sql("CREATE TABLE t_var_insert (a INT) USING PARQUET")
@@ -2639,13 +2904,8 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625 followup: when the SQL variable name in `IDENTIFIER(<name>)` collides
-  // with a query output column, the IDENTIFIER expression must still bind to the
-  // variable, not to the column. The `ResolveReferences` case for `InsertIntoStatement`
-  // resolves `identifierExpr` against the `PlanWithUnresolvedIdentifier` itself (whose
-  // `children` are `Nil` on this path), not against the surrounding `InsertIntoStatement`
-  // (whose child is `query`), so query output columns are out of scope and only the
-  // last-resort variable resolution path fires.
+  // The identifier leaf has no children, so a colliding query output column is out of scope and
+  // variable resolution remains the last resort.
   test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) ignores colliding query columns") {
     withTable("t_shadow") {
       sql("CREATE TABLE t_shadow (a INT) USING PARQUET")

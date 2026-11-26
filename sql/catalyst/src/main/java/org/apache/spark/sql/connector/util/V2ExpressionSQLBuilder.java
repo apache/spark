@@ -125,7 +125,9 @@ public class V2ExpressionSQLBuilder {
         case "IN" -> {
           Expression[] expressions = e.children();
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
-          yield visitIn(build(expressions[0]), children);
+          // IN needs the same operand grouping as IS NULL: without it, NOT a IN (...)
+          // means NOT (a IN (...)) rather than (NOT a) IN (...).
+          yield visitIn(visitIsNullOperand(expressions[0]), children);
         }
         case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
         case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
@@ -286,7 +288,10 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String inputToSQL(Expression input) {
-    if (input.children().length > 1) {
+    // NOT is unary, so the arity check alone misses it. Its lower precedence requires
+    // parentheses in comparisons and the IS NULL checks synthesized for null-safe equality.
+    if (input.children().length > 1 ||
+        (input instanceof GeneralScalarExpression e && e.name().equals("NOT"))) {
       return "(" + build(input) + ")";
     } else {
       return build(input);

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
@@ -491,6 +491,29 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("rint") {
     testUnary(Rint, math.rint)
     checkConsistencyBetweenInterpretedAndCodegen(Rint, DoubleType)
+  }
+
+  test("SPARK-61175: rint returns the canonical NaN") {
+    val expr = Rint(BoundReference(0, DoubleType, nullable = true))
+    val canonical = java.lang.Double.doubleToRawLongBits(Double.NaN)
+    // A NaN with a payload, a signalling one, and the two with the sign bit set. Every JIT tier
+    // keeps the payload of the first two, so they fail without the fix wherever the test runs.
+    // The sign is cleared by the interpreter and C1 but kept by C2, so the last two check the
+    // sign only when the code under test has been compiled by C2.
+    val nans = Seq(0x7ff8000000000001L, 0x7ff0000000000001L, 0xfff8000000000000L,
+      0xfff0000000000001L).map(java.lang.Double.longBitsToDouble)
+    for (nan <- nans) {
+      val row = InternalRow(nan)
+      // checkEvaluation compares the UnsafeRow bytes in both factory modes, which sees the bits.
+      checkEvaluation(expr, Double.NaN, row)
+      val interpreted = evaluateWithoutCodegen(expr, row).asInstanceOf[Double]
+      assert(java.lang.Double.doubleToRawLongBits(interpreted) === canonical)
+    }
+    // Every other result keeps its bits, the signed zeros and the infinities included.
+    for (d <- Seq(-0.0, 0.0, -0.4, 0.5, 1.5, -2.5, 1e300, Double.MinPositiveValue,
+        Double.PositiveInfinity, Double.NegativeInfinity)) {
+      checkEvaluation(expr, math.rint(d), InternalRow(d))
+    }
   }
 
   test("exp") {
@@ -1042,6 +1065,38 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
+  }
+
+  test("width_bucket with the TIME type") {
+    def time(t: LocalTime, precision: Int = TimeType.MICROS_PRECISION): Literal =
+      Literal.create(t.toNanoOfDay, TimeType(precision))
+    val t08 = time(LocalTime.of(8, 0, 0))
+    val t09 = time(LocalTime.of(9, 0, 0))
+    val t12 = time(LocalTime.of(12, 0, 0))
+    val t17 = time(LocalTime.of(17, 0, 0))
+    val n8 = Literal(8L)
+
+    // 09:00:00..17:00:00 split into 8 one-hour buckets.
+    checkEvaluation(WidthBucket(t12, t09, t17, n8), 4L)
+    checkEvaluation(WidthBucket(t09, t09, t17, n8), 1L)   // lower edge
+    checkEvaluation(WidthBucket(t17, t09, t17, n8), 9L)   // >= max -> numBucket + 1
+    checkEvaluation(WidthBucket(t08, t09, t17, n8), 0L)   // < min -> 0
+    // Reversed range (min > max).
+    checkEvaluation(WidthBucket(t12, t17, t09, n8), 6L)
+
+    // Mixed precisions are allowed; comparison uses the shared nanos-of-day value.
+    checkEvaluation(
+      WidthBucket(
+        time(LocalTime.of(12, 0, 0), 0),
+        time(LocalTime.of(9, 0, 0), 3),
+        time(LocalTime.of(17, 0, 0), 9),
+        n8),
+      4L)
+
+    // Null and degenerate inputs.
+    checkEvaluation(WidthBucket(Literal.create(null, TimeType()), t09, t17, n8), null)
+    checkEvaluation(WidthBucket(t12, t09, t17, Literal.create(null, LongType)), null)
+    checkEvaluation(WidthBucket(t12, t09, t09, n8), null) // min == max
   }
 
   test("context independent foldable math expressions") {

@@ -18,19 +18,19 @@
 import unittest
 
 from pyspark.loose_version import LooseVersion
+from pyspark.sql import functions as SF
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
+    DoubleType,
     IntegerType,
     LongType,
-    DoubleType,
     Row,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.sql.utils import is_remote
-from pyspark.sql import functions as SF
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.utils import (
     have_pandas,

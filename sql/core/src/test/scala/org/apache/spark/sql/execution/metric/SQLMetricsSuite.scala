@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -446,6 +446,65 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SortMergeAsOfJoin metrics") {
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite. Each check runs
+    // with the ASOF join codegen off and on, on a new DataFrame each time, since a DataFrame
+    // keeps the plan it got first.
+    def checkNumOutputRows(df: => DataFrame, expected: Long): Unit = {
+      // Whether the join runs in a codegen stage, and not only in a stage below it.
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case _: SortMergeAsOfJoinExec => true
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      Seq(false, true).foreach { codegen =>
+        withClue(s"ASOF join codegen $codegen: ") {
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+            val query = df
+            query.collect()
+            val plan = query.queryExecution.executedPlan
+            val op = plan.collectFirst { case s: SortMergeAsOfJoinExec => s }
+            assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
+            val generated = plan.collect {
+              case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+            }.nonEmpty
+            assert(generated == codegen, s"Unexpected ASOF join codegen in:\n$plan")
+            testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+          }
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      // No equi-key. Left key 0 has no match: INNER drops it (2), LEFT OUTER null-pads (3).
+      val left = Seq((0, 0), (5, 5), (10, 10)).toDF("a", "left_val")
+      val right = Seq((1, 1), (3, 3), (7, 7)).toDF("a", "right_val")
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        2L)
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
+
+      // NULL left equi-key never matches, so LEFT OUTER null-pads it (a separate path).
+      val nullLeft = Seq((Some(1), 5), (None, 5), (None, 10)).toDF("grp", "ts")
+      val nullRight = Seq((Some(1), 4), (None, 3), (None, 8)).toDF("grp", "ts")
+      checkNumOutputRows(
+        nullLeft.joinAsOf(
+          nullRight, nullLeft.col("ts"), nullRight.col("ts"),
+          usingColumns = Seq("grp"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
+    }
+  }
+
   test("BroadcastHashJoin metrics") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
@@ -553,6 +612,32 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-61668: ShuffledHashJoin build metrics with and without whole-stage codegen") {
+    val leftDf = (1 to 20).map(i => (i % 7, i)).toDF("key", "value")
+    val rightDf = (1 to 10).map(i => (i % 5, i)).toDF("key2", "value2")
+    // An inner join, so that the build data size is only the size of the hashed relation, which
+    // both paths build from the same rows.
+    val buildMetrics = Seq(true, false).map { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val df = leftDf.join(rightDf.hint("shuffle_hash"), $"key" === $"key2")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+        assert(plan.exists {
+          case WholeStageCodegenExec(_: ShuffledHashJoinExec) => true
+          case _ => false
+        } == codegen, plan)
+        val join = plan.collectFirst { case j: ShuffledHashJoinExec => j }.get
+        val buildTime = join.metrics("buildTime")
+        val buildDataSize = join.metrics("buildDataSize")
+        // A timing metric starts at -1, and a fast build can record 0 ms.
+        assert(!buildTime.isZero, s"codegen=$codegen")
+        assert(buildDataSize.value > 0, s"codegen=$codegen")
+        buildDataSize.value
+      }
+    }
+    assert(buildMetrics.distinct.length == 1, buildMetrics)
+  }
+
   test("BroadcastHashJoin(outer) metrics") {
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
@@ -586,6 +671,76 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
               "number of output rows" -> 12L)))),
             enableWholeStage
           )
+        }
+      }
+    }
+  }
+
+  test("BroadcastRangeJoin metrics") {
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      withTempView("rangeProbe", "rangeBuild") {
+        sql("CREATE OR REPLACE TEMP VIEW rangeProbe(p) AS VALUES (5), (15), (25)")
+        sql("CREATE OR REPLACE TEMP VIEW rangeBuild(lo, hi) AS VALUES (0, 10), (10, 20), (20, 30)")
+        // ... -> BroadcastRangeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val query = "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe p " +
+          "JOIN rangeBuild b ON p.p >= b.lo AND p.p <= b.hi"
+        Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
+          val df = spark.sql(query)
+          testSparkPlanMetrics(df, 2, Map(
+            nodeId -> ("BroadcastRangeJoin", Map(
+              "number of output rows" -> 3L))),
+            enableWholeStage
+          )
+        }
+      }
+    }
+  }
+
+  test("BroadcastRangeJoin metrics count only accepted, non-duplicated output rows") {
+    // The query above only covers an inner join whose surfaced candidates all pass the
+    // condition, so numOutputRows would read the same whether it counts every candidate
+    // the index surfaces or only the ones the join actually emits. rangeBuild3's
+    // overlapping (5, 25) row gives p=5, 15, and 25 more than one surfaced candidate, and
+    // the residual accepts only some of them, so a bug that increments on every surfaced
+    // candidate -- or on every loop iteration, including a rejected or padding one, not
+    // just an accepted one -- reports more than the actual output; p=100 also covers an
+    // unmatched streamed row, which an outer join must pad with nulls exactly once. The
+    // residual must reference both sides, or predicate pushdown moves it into a Filter
+    // below the join and the join's own condition never rejects a surfaced candidate.
+    // Expected counts come from the nested-loop join (range join off), not a hand count,
+    // so a wrong fixture can't quietly make this pass.
+    withTempView("rangeProbe3", "rangeBuild3") {
+      sql("CREATE OR REPLACE TEMP VIEW rangeProbe3(p) AS VALUES (5), (15), (25), (100)")
+      sql(
+        "CREATE OR REPLACE TEMP VIEW rangeBuild3(lo, hi) AS VALUES " +
+          "(0, 10), (10, 20), (20, 30), (5, 25)")
+      val cond = "p.p >= b.lo AND p.p <= b.hi AND p.p + b.lo <> 25"
+      val queries = Seq(
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe3 p JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe3 p LEFT JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeBuild3 b RIGHT JOIN rangeProbe3 p " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p FROM rangeProbe3 p LEFT SEMI JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p FROM rangeProbe3 p LEFT ANTI JOIN rangeBuild3 b " +
+          s"ON $cond")
+      queries.foreach { query =>
+        val expected = sql(query).collect()
+        Seq(false, true).foreach { enableWholeStage =>
+          withSQLConf(
+            SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+            val df = spark.sql(query)
+            val label = s"$query (wholeStage=$enableWholeStage)"
+            checkAnswer(df, expected)
+            val joins = df.queryExecution.executedPlan.collect {
+              case j: BroadcastRangeJoinExec => j
+            }
+            assert(joins.size == 1, label)
+            assert(joins.head.metrics("numOutputRows").value == expected.length, label)
+          }
         }
       }
     }

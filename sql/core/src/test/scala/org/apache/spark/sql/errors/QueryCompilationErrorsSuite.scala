@@ -23,7 +23,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTablePartition, CatalogTableType, FunctionResourceType, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
@@ -281,6 +281,14 @@ class QueryCompilationErrorsSuite
       condition = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       parameters = Map("num" -> "24"),
       sqlState = "0A000")
+  }
+
+  test("SPARK-58945: invalid UDF class error reports clazz") {
+    checkError(
+      exception = QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")
+        .asInstanceOf[InvalidUDFClassException],
+      condition = "_LEGACY_ERROR_TEMP_2450",
+      parameters = Map("clazz" -> "example.InvalidFunction"))
   }
 
   test("GROUPING_COLUMN_MISMATCH: not found the grouping column") {
@@ -1149,6 +1157,29 @@ class QueryCompilationErrorsSuite
       },
       condition = "TABLE_LOCATION_URI_NOT_SPECIFIED",
       parameters = Map("identifier" -> identifier.toString)
+    )
+  }
+
+  test("SPARK-61686: PARTITION_LOCATION_URI_NOT_SPECIFIED: partition without locationUri") {
+    val partition = CatalogTablePartition(
+      spec = Map("a" -> "1", "b" -> "2"),
+      storage = CatalogStorageFormat.empty)
+    checkError(
+      exception = intercept[AnalysisException] {
+        partition.location
+      },
+      condition = "PARTITION_LOCATION_URI_NOT_SPECIFIED",
+      parameters = Map("specString" -> "a=1, b=2")
+    )
+  }
+
+  test("UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION: unknown function resource type") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        FunctionResourceType.fromString("unknown")
+      },
+      condition = "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION",
+      parameters = Map("resourceType" -> "unknown")
     )
   }
 }

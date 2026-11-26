@@ -16,15 +16,15 @@
 #
 
 from itertools import chain
-from typing import cast, Any, Sequence, Union
+from typing import Any, Sequence, Union, cast
 
-import pandas as pd
 import numpy as np
-from pandas.api.types import is_list_like, CategoricalDtype
+import pandas as pd
+from pandas.api.types import CategoricalDtype, is_list_like
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import _sanitize_list_like, DataTypeOps
+from pyspark.pandas.data_type_ops.base import DataTypeOps, _sanitize_list_like
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.utils import pyspark_column_op

@@ -80,6 +80,10 @@ class StreamingShuffleReaderIteratorFactory {
 class StreamingShuffleReader[K, C](
     handle: ShuffleHandle,
     val context: TaskContext,
+    // The reduce partition this reader reads, which writers use to route data to it. It differs
+    // from the task's partition when the reduce stage computes other partitions before this
+    // shuffle's, e.g. a Union whose shuffled child is not its first child.
+    private[streaming] val reducePartitionId: Int,
     clientHandler: Option[StreamingShuffleClientHandler] = None,
     private[streaming] val errorNotifier: ErrorNotifier = new ErrorNotifier())
     extends ShuffleReader[K, C] with TaskContextAwareLogging {
@@ -101,14 +105,14 @@ class StreamingShuffleReader[K, C](
 
   private val clientConf = SparkTransportConf.fromSparkConf(
     conf,
-    s"streaming-shuffle-reader-${streamingShuffleHandle.shuffleId}-${context.partitionId()}",
+    s"streaming-shuffle-reader-${streamingShuffleHandle.shuffleId}-$reducePartitionId",
     1, // a client should only need to use 1 thread
     role)
 
   private[spark] val taskDiscoveryExecutor =
     ThreadUtils.newDaemonSingleThreadExecutor(
       s"streaming-shuffle-task-discovery-thread-" +
-        s"${streamingShuffleHandle.shuffleId}-${context.partitionId()}")
+        s"${streamingShuffleHandle.shuffleId}-$reducePartitionId")
 
   private val totalNumShuffleWriters: AtomicInteger = new AtomicInteger(-1)
   private var perWriterByteLimit: Long = 1
@@ -140,7 +144,7 @@ class StreamingShuffleReader[K, C](
   // thread pool used to perform client creation in parallel
   private[spark] val clientCreationExecutor = ThreadUtils.newDaemonFixedThreadPool(
     Runtime.getRuntime.availableProcessors,
-    s"streaming-shuffle-async-client-creation-${context.partitionId()}")
+    s"streaming-shuffle-async-client-creation-$reducePartitionId")
 
   // Signals to other threads that task discovery should stop. For example, we may receive all
   // the termination messages before we actually put the clients in the client map. In that
@@ -381,7 +385,7 @@ class StreamingShuffleReader[K, C](
   protected def createClient(mapId: Int, remoteHost: String, remotePort: Int): TransportClient = {
     val handler = clientHandler.getOrElse(new StreamingShuffleClientHandler(
       mapId,
-      context.partitionId(),
+      reducePartitionId,
       messageQueue,
       streamingShuffleHandle.shuffleId,
       perWriterByteLimit,
@@ -400,8 +404,8 @@ class StreamingShuffleReader[K, C](
   private def checkTaskFailure(): Unit = {
     context.getTaskFailure.foreach(throw _)
     // Surface any background error on the task thread so that markTaskFailed and
-    // markTaskCompleted are called from this thread, ensuring completion listeners
-    // (including cleanupResources) run without contention.
+    // markTaskCompleted are called from this thread, so that the failure and completion
+    // listeners (including cleanupResources) run here without waiting for another thread.
     errorNotifier.throwErrorIfExists()
     if (context.isInterrupted()) {
       throw new InterruptedException("Task interrupted. Exiting read loop.")

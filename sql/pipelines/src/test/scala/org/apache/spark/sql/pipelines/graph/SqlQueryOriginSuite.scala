@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.pipelines.Language
+import org.apache.spark.sql.pipelines.Language.Sql
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -34,20 +34,20 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option(
+        sqlText = Some(
           """CREATE MATERIALIZED VIEW a.b.c AS SELECT 1""".stripMargin),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
-        startPosition = Option(13),
-        line = Option(2)
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        startPosition = Some(13),
+        line = Some(2)
       ),
       QueryOrigin(
-        sqlText = Option(
+        sqlText = Some(
           """USE DATABASE d """.stripMargin),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
-        startPosition = Option(58),
-        line = Option(4)
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        startPosition = Some(58),
+        line = Some(4)
       )
     ))
   }
@@ -63,18 +63,18 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option("CREATE STREAMING TABLE `a.\\n` AS SELECT \"\\n\""),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
-        startPosition = Option(0),
-        line = Option(1)
+        sqlText = Some("CREATE STREAMING TABLE `a.\\n` AS SELECT \"\\n\""),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        startPosition = Some(0),
+        line = Some(1)
       ),
       QueryOrigin(
-        sqlText = Option("CREATE VIEW my_view AS SELECT * FROM `a.\\n`"),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
-        startPosition = Option(46),
-        line = Option(2)
+        sqlText = Some("CREATE VIEW my_view AS SELECT * FROM `a.\\n`"),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        startPosition = Some(46),
+        line = Some(2)
       )
     ))
   }
@@ -90,12 +90,12 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option("CREATE FLOW f AS INSERT INTO t BY NAME SELECT 1"),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
+        sqlText = Some("CREATE FLOW f AS INSERT INTO t BY NAME SELECT 1"),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
         // 1 new line, 5 spaces, 1 tab
-        startPosition = Option(7),
-        line = Option(2)
+        startPosition = Some(7),
+        line = Some(2)
       )
     ))
   }
@@ -114,22 +114,45 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option(
+        sqlText = Some(
           s"""CREATE
              |MATERIALIZED VIEW mv
              |AS
              |SELECT 1""".stripMargin
         ),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
         // 1 new line
-        startPosition = Option(1),
-        line = Option(2)
+        startPosition = Some(1),
+        line = Some(2)
       )
     ))
   }
 
-  test("Preceeding comment is ommitted from sql text") {
+  test("Preceding comment with a supplementary character is omitted from sql text") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
+      spark,
+      sqlFilePath = "file.sql",
+      sqlFileText =
+        s"""
+           |-- $emoji
+           |CREATE MATERIALIZED VIEW mv AS SELECT 1;
+           |""".stripMargin
+    ).map(_.queryOrigin)
+    assert(sqlQueryOrigins == Seq(
+      QueryOrigin(
+        sqlText = Some("CREATE MATERIALIZED VIEW mv AS SELECT 1"),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        // 1 newline, "-- " (3), emoji (2 UTF-16 units), 1 newline
+        startPosition = Some(7),
+        line = Some(3)
+      )
+    ))
+  }
+
+  test("Preceding comment is omitted from sql text") {
     val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
       spark,
       sqlFilePath = "file.sql",
@@ -142,15 +165,15 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option(
+        sqlText = Some(
           s"""CREATE MATERIALIZED VIEW mv -- another comment
              |AS SELECT 1""".stripMargin
         ),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
         // 1 new line, 10 chars for preceding comment, another new line
-        startPosition = Option(12),
-        line = Option(3)
+        startPosition = Some(12),
+        line = Some(3)
       )
     ))
   }
@@ -163,11 +186,11 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option("CREATE TEMPORARY VIEW v AS SELECT 'my ; string'"),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
-        startPosition = Option(0),
-        line = Option(1)
+        sqlText = Some("CREATE TEMPORARY VIEW v AS SELECT 'my ; string'"),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
+        startPosition = Some(0),
+        line = Some(1)
       )
     ))
   }

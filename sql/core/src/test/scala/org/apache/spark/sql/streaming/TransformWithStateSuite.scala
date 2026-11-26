@@ -1344,13 +1344,13 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("a", -1), ("b", 31)), // State for "a" should timeout and emit -1
       Execute { q =>
         // Filter for idle progress events and then verify the custom metrics for stateful operator
-        val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+        val progData = q.recentProgress.filter(prog => prog.stateOperators.nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).nonEmpty)
       }
     )
   }

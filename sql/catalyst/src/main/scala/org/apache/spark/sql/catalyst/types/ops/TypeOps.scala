@@ -24,9 +24,9 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalFloatType, PhysicalIntegerType, PhysicalMapType, PhysicalShortType, PhysicalStructType}
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
-import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
+import org.apache.spark.sql.types.{ArrayType, DataType, FileType, MapType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
@@ -53,11 +53,28 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *   }
  * }}}
  *
+ * PHYSICAL TYPE CONTRACT: getPhysicalType must return the raw physical storage type (e.g.,
+ * PhysicalLongType for Long-backed types, PhysicalStructType for struct-backed types). The
+ * row infrastructure reaches a framework type through one of two routes:
+ *   - Sites that dispatch on the physical type (SpecializedGettersReader,
+ *     InternalRow.getAccessor, CodeGenerator.getValue and javaType, the field writers of
+ *     InterpretedUnsafeProjection, ColumnarRow and ColumnarBatchRow) handle the raw type
+ *     through getPhysicalType.
+ *   - Sites that dispatch on the logical type (code generation for equality, comparison,
+ *     copies, safe and unsafe projections, InternalRow.getWriter and InterpretedSafeProjection)
+ *     handle a struct-, array- or map-backed type only through rowRepresentationType.
+ * Logical conversion (raw value <-> external type) happens at boundaries via toScala/toCatalyst.
+ *
  * IMPLEMENTATION - to add a new type to the framework:
  *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
  *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
- *   2. Register it in TypeOps.apply() below - single registration point
- *   3. No other file modifications needed - all integration points automatically work
+ *   2. Implement getPhysicalType. getElementSize and rowRepresentationType are derived from
+ *      it, so a struct-, array- or map-backed type reaches the logical-type sites without
+ *      declaring its layout again.
+ *   3. Register it in TypeOps.apply() below - single registration point
+ *
+ * Column vectors (WritableColumnVector, ConstantColumnVector) build one child vector per field
+ * for a struct-backed framework type, but not yet child vectors for an array- or map-backed one.
  *
  * @see
  *   TimeTypeOps for a reference implementation
@@ -70,10 +87,19 @@ trait TypeOps extends TypeApiOps {
   /**
    * Returns the physical data type representation.
    *
-   * Determines how values are stored in memory and accessed from InternalRow.
+   * Determines how values are stored in memory and accessed from InternalRow. Must return the
+   * raw physical type (e.g., PhysicalLongType, PhysicalStructType) - not a wrapper. Sites that
+   * dispatch on PhysicalDataType handle these types through it, on both the interpreted and
+   * the code generation paths; see the trait documentation for the sites that use
+   * [[rowRepresentationType]] instead.
+   *
+   * For struct-backed types, return PhysicalStructType(fields) where fields describes the
+   * physical struct layout. The internal representation will be InternalRow, and
+   * [[rowRepresentationType]] is StructType(fields).
    *
    * @return
-   *   PhysicalDataType (e.g., PhysicalLongType for TimeType)
+   *   PhysicalDataType (e.g., PhysicalLongType for TimeType, PhysicalStructType for a
+   *   struct-backed type)
    */
   def getPhysicalType: PhysicalDataType
 
@@ -108,12 +134,70 @@ trait TypeOps extends TypeApiOps {
   /**
    * Returns a writer function for setting values in an InternalRow.
    *
+   * Not used by InternalRow.getWriter for a type with a [[rowRepresentationType]], which is
+   * written as that representation.
+   *
    * @param ordinal
    *   the column index to write to
    * @return
    *   writer function (InternalRow, Any) => Unit
    */
   def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
+
+  /**
+   * Returns the number of bytes this type occupies in the fixed-size region of an
+   * [[org.apache.spark.sql.catalyst.expressions.UnsafeArrayData UnsafeArrayData]].
+   *
+   * Variable-length types (struct, array, map, binary, string) use 8 bytes because
+   * the fixed region stores an offset+size pointer into the variable-length region.
+   * Fixed-size primitive types use their natural size (1 for byte/boolean, 2 for short,
+   * 4 for int/float, 8 for long/double).
+   *
+   * Consumed by [[org.apache.spark.sql.catalyst.expressions.InterpretedUnsafeProjection]]
+   * when writing arrays or maps that contain framework type elements. Derived from
+   * [[getPhysicalType]], matching the slot size that code generation uses.
+   *
+   * @return
+   *   element size in bytes
+   */
+  def getElementSize: Int = getPhysicalType match {
+    case PhysicalBooleanType | PhysicalByteType => 1
+    case PhysicalShortType => 2
+    case PhysicalIntegerType | PhysicalFloatType => 4
+    case _ => 8
+  }
+
+  /**
+   * Returns an equivalent built-in DataType for infrastructure dispatch.
+   *
+   * Framework types backed by complex physical storage (struct, array, map) return
+   * the corresponding built-in DataType so that row infrastructure code (codegen,
+   * projection, comparison, etc.) can handle them through existing code paths via
+   * self-recursion - no per-physical-type matching needed at call sites.
+   *
+   * Every other type returns None, and the logical-type sites then see the type itself: a
+   * primitive-backed type such as TimeType goes through their existing primitive handling, and
+   * a type that is neither primitive- nor complex-backed, such as the nanosecond timestamp
+   * types, needs handling of its own there, as those types have.
+   *
+   * This is NOT a type alias - the framework type retains its identity in schemas,
+   * expressions, proto serialization, and error messages. This is solely a dispatch
+   * hint for row infrastructure internals.
+   *
+   * Derived from [[getPhysicalType]]: PhysicalStructType(fields) is StructType(fields), and
+   * PhysicalArrayType and PhysicalMapType are the matching ArrayType and MapType. The result is
+   * always a built-in DataType, never another framework type, as some sites look the
+   * representation up only once.
+   *
+   * @return Some(DataType) for struct-, array- and map-backed types, None for every other type
+   */
+  def rowRepresentationType: Option[DataType] = getPhysicalType match {
+    case PhysicalStructType(fields) => Some(StructType(fields))
+    case PhysicalArrayType(elementType, containsNull) => Some(ArrayType(elementType, containsNull))
+    case PhysicalMapType(keyType, valueType, valueContainsNull) =>
+      Some(MapType(keyType, valueType, valueContainsNull))
+    case _ => None
+  }
 
   // ==================== Literal Creation ====================
 
@@ -245,7 +329,40 @@ object TypeOps {
     case tt: TimeType => Some(TimeTypeOps(tt))
     case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
     case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
+    case ft: FileType => Some(FileTypeOps(ft))
     // Add new types here - single registration point
+    case ft: TestableFrameworkType => Some(ft.createTypeOps())
     case _ => None
   }
+
+  /**
+   * Returns the row representation of `dt` (see [[TypeOps.rowRepresentationType]]), or None
+   * when `dt` is not a framework type or has none.
+   */
+  def rowRepresentation(dt: DataType): Option[DataType] =
+    apply(dt).flatMap(_.rowRepresentationType)
+
+  /**
+   * Returns the row representation of `dt` (see [[TypeOps.rowRepresentationType]]), or `dt`
+   * itself when it has none. For callers in Java, such as the column vectors.
+   */
+  def rowRepresentationOrSelf(dt: DataType): DataType = rowRepresentation(dt).getOrElse(dt)
+}
+
+/**
+ * Base class for test-only DataTypes that participate in the Types Framework.
+ *
+ * Test DataTypes extend this class to register themselves with TypeOps.apply()
+ * without requiring mutable global state. Each test type carries its own TypeOps
+ * factory, making this safe for concurrent test execution (SBT parallel tests).
+ *
+ * This is a class rather than a trait so that its arm in TypeOps.apply() is a class check
+ * like the others: TypeOps.apply() runs per value on some interpreted paths, and a failing
+ * interface check can cost more than a failing class check.
+ *
+ * Production types (TimeType, the nanosecond timestamp types, etc.) do NOT use this class -
+ * they are registered directly in the TypeOps.apply() match.
+ */
+private[ops] abstract class TestableFrameworkType extends DataType {
+  def createTypeOps(): TypeOps
 }

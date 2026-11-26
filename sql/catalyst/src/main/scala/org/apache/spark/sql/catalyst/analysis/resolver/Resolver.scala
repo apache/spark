@@ -78,6 +78,11 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
  *   relation operators in [[MetadataResolver]].
  * @param externalRelationResolution An optional [[RelationResolution]] with to override the default
  *   one. The default is constructed using [[Resolver.createRelationResolution]].
+ * @param hintResolutionRules Single-pass hint resolution rules, applied before relation metadata
+ *   is resolved. This constructor defaults the list to an empty sequence. [[HybridAnalyzer]]
+ *   passes [[Analyzer.singlePassHintResolutionRules]], which defaults to the fixed-point
+ *   Analyzer's `injectHintResolutionRule` sequence and may be overridden with a different list.
+ *   See [[HintResolutionRunner]].
  */
 class Resolver(
     catalogManager: CatalogManager,
@@ -86,7 +91,8 @@ class Resolver(
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
     externalRelationResolution: Option[RelationResolution] = None,
     extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty,
-    tracker: Option[QueryPlanningTracker] = None)
+    tracker: Option[QueryPlanningTracker] = None,
+    hintResolutionRules: Seq[Rule[LogicalPlan]] = Seq.empty)
     extends LogicalPlanResolver
     with ResolverMetricTracker
     with DelegatesResolutionToExtensions
@@ -101,6 +107,7 @@ class Resolver(
   )
   private val cteRegistry = new CteRegistry
   private val identifierAndCteSubstitutor = new IdentifierAndCteSubstitutor
+  private val hintResolutionRunner = new HintResolutionRunner(hintResolutionRules)
   private val operatorResolutionContextStack = new OperatorResolutionContextStack
   private val relationResolution = externalRelationResolution.getOrElse {
     Resolver.createRelationResolution(catalogManager, sharedRelationCache)
@@ -184,12 +191,17 @@ class Resolver(
    * This method is a top-level analysis entry point:
    * 1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
    *    [[IdentifierAndCteSubstitutor]];
-   * 2. Resolve the metadata for the plan using [[MetadataResolver]]. When
+   * 2. Apply the injected hint resolution rules using [[HintResolutionRunner]]. Those rules run
+   *    before the metadata lookup, because the fixed-point analyzer completes its "Hints" batch
+   *    before resolving relations, and because they have to be able to rewrite an
+   *    [[UnresolvedRelation]] before its metadata (and, for path-based relations, its file
+   *    listing) is resolved;
+   * 3. Resolve the metadata for the plan using [[MetadataResolver]]. When
    *    [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
    *    re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might have
    *    changed in the meantime;
-   * 3. Resolve the plan using [[resolve]].
-   * 4. Rewrites the plan using rules configured in the [[planRewriter]]. The plan rewrite is
+   * 4. Resolve the plan using [[resolve]].
+   * 5. Rewrites the plan using rules configured in the [[planRewriter]]. The plan rewrite is
    *    necessary in order to either fully resolve the plan or stay compatible with the fixed-point
    *    analyzer.
    *    Rewriting is done in `lookupMetadataAndResolve` so rules are applied after the main
@@ -209,7 +221,12 @@ class Resolver(
 
       val planAfterSubstitution = identifierAndCteSubstitutor.substitutePlan(unresolvedPlan)
 
-      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Metadata lookup")
+      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Hint resolution")
+
+      val planAfterHintResolution =
+        hintResolutionRunner.resolveWithSubqueries(planAfterSubstitution)
+
+      planLogger.logPlanResolutionEvent(planAfterHintResolution, "Metadata lookup")
 
       relationMetadataProvider = analyzerBridgeState match {
         case Some(analyzerBridgeState) =>
@@ -223,15 +240,15 @@ class Resolver(
           relationMetadataProvider
       }
 
-      relationMetadataProvider.resolve(planAfterSubstitution)
+      relationMetadataProvider.resolve(planAfterHintResolution)
 
-      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
+      planLogger.logPlanResolutionEvent(planAfterHintResolution, "Main resolution")
 
-      planAfterSubstitution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
+      planAfterHintResolution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
 
       val resolvedPlan =
         recordProfile("resolve") {
-          resolve(planAfterSubstitution)
+          resolve(planAfterHintResolution)
         }
 
       recordProfile("rewrite") {
@@ -362,21 +379,21 @@ class Resolver(
    */
   private def resolveWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     for (cteRelation <- unresolvedWith.cteRelations) {
-      val (cteName, ctePlan, _) = cteRelation
-
       expressionIdAssigner.pushMapping()
       scopes.pushScope()
       cteRegistry.pushScope()
 
       val resolvedCtePlan = try {
-        resolve(ctePlan)
+        resolve(cteRelation.plan)
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
         expressionIdAssigner.popMapping()
       }
 
-      cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
+      cteRegistry.currentScope.registerCte(
+        cteRelation.name,
+        CTERelationDef(resolvedCtePlan, materialized = cteRelation.materialized))
     }
 
     cteRegistry.pushScope()
@@ -549,7 +566,7 @@ class Resolver(
   /**
    * [[Distinct]] operator doesn't require any special resolution.
    * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
-   * ([[MapType]] and [[VariantType]] are not supported under [[Distinct]] operator).
+   * ([[MapType]], [[VariantType]] and [[FileType]] are not supported under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.
@@ -639,6 +656,9 @@ class Resolver(
    * Note: By default if all the inline table expressions can be evaluated eagerly, the parser
    * would produce a [[LocalRelation]] and the analysis would just skip this step and go straight
    * to `resolveLocalRelation` (SPARK-48967, SPARK-49269).
+   *
+   * Inline tables with expressions that are evaluated when the query runs, such as `rand()`,
+   * become an [[Expand]], which only the fixed-point Analyzer supports.
    */
   private def resolveInlineTable(unresolvedInlineTable: UnresolvedInlineTable): LogicalPlan = {
     val withResolvedExpressions = UnresolvedInlineTable(
@@ -653,6 +673,13 @@ class Resolver(
 
     val resolvedRelation = EvaluateUnresolvedInlineTable
       .evaluateUnresolvedInlineTable(withResolvedExpressions)
+
+    resolvedRelation match {
+      case _: Expand =>
+        throw new ExplicitlyUnsupportedResolverFeature(
+          "VALUES lists with expressions that are evaluated when the query runs")
+      case _ =>
+    }
 
     resolve(resolvedRelation)
   }
@@ -823,9 +850,16 @@ class Resolver(
     val subqueryExpressions =
       operatorResolutionContextStack.current.subqueryExpressionsToValidate.asScala.toSeq
     for (subqueryExpression <- subqueryExpressions) {
+      // The fixed-point analyzer validates a subquery after inlining its CTEs, while here they are
+      // not inlined yet, so validation looks through the references to them.
+      // TODO: The fixed-point analyzer keeps an unreferenced CTE with its original body, so it
+      // validates a subquery inside that body without looking through. Here it is not known yet
+      // whether the CTE whose body is being resolved is referenced, so for such subqueries the
+      // two analyzers can disagree.
       ValidateSubqueryExpression(
         plan = operator,
-        expr = subqueryExpression
+        expr = subqueryExpression,
+        lookThroughCteReferences = true
       )
     }
   }

@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode}
+import org.apache.spark.sql.catalyst.plans.logical.BinBy
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, MathUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -48,7 +51,7 @@ case class BinByExec(
     appendedAttributes: Seq[Attribute],
     timeZoneId: Option[String],
     child: SparkPlan)
-  extends UnaryExecNode with PartitioningPreservingUnaryExecNode {
+  extends UnaryExecNode with CodegenSupport with PartitioningPreservingUnaryExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -66,6 +69,18 @@ case class BinByExec(
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
+
   // The trait keeps a child partitioning only when its keys are in the output: a partitioning keyed
   // on a pass-through column survives; one keyed on a scaled DISTRIBUTE column (fresh ExprId) does
   // not, because that column is absent from the output.
@@ -73,6 +88,126 @@ case class BinByExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): BinByExec =
     copy(child = newChild)
+
+  override def supportCodegen: Boolean = conf.getConf(SQLConf.ENABLE_BIN_BY_CODEGEN)
+
+  // BIN BY starts its generated stage and reads the child rows through an iterator.
+  override def inputRDDs(): Seq[RDD[InternalRow]] = child.execute() :: Nil
+
+  // The loop returns after each output row that reaches the stage output, so the row needs no copy.
+  override def needCopyResult: Boolean = false
+
+  // The bin loop reads the stage's input, so it stops at a LIMIT fused above it.
+  override protected def canCheckLimitNotReached: Boolean = true
+
+  /**
+   * Generates the bin loop. The current input row and the state of its next bin are fields, so the
+   * loop can return after any bin and continue with the next bin on the next call.
+   */
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val input = ctx.addMutableState(
+      javaType = "scala.collection.Iterator",
+      variableName = "input",
+      initFunc = v => s"$v = inputs[0];",
+      forceInline = true
+    )
+    val row = ctx.addMutableState("InternalRow", "binByRow", forceInline = true)
+    val hasMoreBins =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "hasMoreBins", forceInline = true)
+    val nullRange = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "nullRange", forceInline = true)
+    val start = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeStart", forceInline = true)
+    val end = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeEnd", forceInline = true)
+    val total = ctx.addMutableState(CodeGenerator.JAVA_LONG, "total", forceInline = true)
+    val index = ctx.addMutableState(CodeGenerator.JAVA_LONG, "binIndex", forceInline = true)
+    val nextStart = ctx.addMutableState(CodeGenerator.JAVA_LONG, "nextStart", forceInline = true)
+    val binsSinceKillCheck =
+      ctx.addMutableState(CodeGenerator.JAVA_INT, "binsSinceKillCheck", forceInline = true)
+    val rsIdx = bindOrdinal(rangeStart)
+    val reIdx = bindOrdinal(rangeEnd)
+    val zone = timeZoneId.map(DateTimeUtils.getZoneId).getOrElse(ZoneOffset.UTC)
+    val zoneRef = ctx.addReferenceObj(
+      objName = "zoneId", obj = zone, className = classOf[ZoneId].getName)
+    val formatter = ctx.addReferenceObj(
+      objName = "formatter",
+      obj = TimestampFormatter.getFractionFormatter(zone),
+      className = classOf[TimestampFormatter].getName
+    )
+    val taskContext = ctx.addMutableState(
+      javaType = "TaskContext",
+      variableName = "taskContext",
+      initFunc = v => s"$v = TaskContext.get();",
+      forceInline = true
+    )
+    // The loop checks for a task kill every this many bins, across input rows.
+    val killCheckInterval = 1024
+    val dateTimeUtils = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+    val bucket = ctx.freshName("bucket")
+    val binStart = ctx.freshName("binStart")
+    val binEnd = ctx.freshName("binEnd")
+    val ratio = ctx.freshName("ratio")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    val appended = Seq(binStart, binEnd, ratio).zip(appendedAttributes).map {
+      case (value, attr) =>
+        ExprCode(JavaCode.isNullGlobal(nullRange), JavaCode.variable(value, attr.dataType))
+    }
+    ctx.INPUT_ROW = row
+    ctx.currentVars = Seq.fill(child.output.length)(null) ++ appended
+    val outputVars = buildOutputExpressions(childLen = child.output.length, ratioNullable = true)
+      .map(_.genCode(ctx))
+
+    // Set the next bin before `consume`, because the stop check after it can return.
+    s"""
+       |while ($limitNotReachedCond ($hasMoreBins || $input.hasNext())) {
+       |  if (!$hasMoreBins) {
+       |    $row = (InternalRow) $input.next();
+       |    $nullRange = $row.isNullAt($rsIdx) || $row.isNullAt($reIdx);
+       |    if (!$nullRange) {
+       |      $start = $row.getLong($rsIdx);
+       |      $end = $row.getLong($reIdx);
+       |      if ($start > $end) {
+       |        throw (RuntimeException) $errors.binByInvalidRangeError(
+       |          $formatter.format($start), $formatter.format($end));
+       |      }
+       |      try {
+       |        $total = java.lang.Math.subtractExact($end, $start);
+       |        scala.Tuple2 $bucket = $dateTimeUtils.timeBucketFromTimestampDTInterval(
+       |          ${binWidthMicros}L, $start, ${originMicros}L, $zoneRef);
+       |        $index = $bucket._1$$mcJ$$sp();
+       |        $nextStart = $bucket._2$$mcJ$$sp();
+       |      } catch (java.lang.ArithmeticException e) {
+       |        throw $errors.binByOverflowError();
+       |      }
+       |    }
+       |  }
+       |  if (++$binsSinceKillCheck == $killCheckInterval) {
+       |    $binsSinceKillCheck = 0;
+       |    $taskContext.killTaskIfInterrupted();
+       |  }
+       |  long $binStart = $nextStart;
+       |  long $binEnd = 0L;
+       |  double $ratio = 0.0D;
+       |  if (!$nullRange) {
+       |    try {
+       |      $index = java.lang.Math.addExact($index, 1L);
+       |      $binEnd = $dateTimeUtils.timeBucketFromIndexDTInterval(
+       |        ${binWidthMicros}L, $index, ${originMicros}L, $zoneRef);
+       |    } catch (java.lang.ArithmeticException e) {
+       |      throw $errors.binByOverflowError();
+       |    }
+       |    $ratio = $total == 0L ? 1.0D :
+       |      (double) (java.lang.Math.min($end, $binEnd) -
+       |        java.lang.Math.max($start, $binStart)) / (double) $total;
+       |    $nextStart = $binEnd;
+       |  }
+       |  $hasMoreBins = !$nullRange && $total != 0L && $nextStart < $end;
+       |  $numOutput.add(1);
+       |  ${consume(ctx, outputVars)}
+       |  $shouldStopCheckCode
+       |}
+     """.stripMargin
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val width = binWidthMicros
@@ -96,6 +231,15 @@ case class BinByExec(
       val joined = new JoinedRow
       val fmt = TimestampFormatter.getFractionFormatter(zone)
 
+      def withBinByOverflow[T](f: => T): T = {
+        try {
+          f
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.binByOverflowError()
+        }
+      }
+
       rows.flatMap { row =>
         joined.withLeft(row)
         val rowIter: Iterator[InternalRow] =
@@ -107,31 +251,40 @@ case class BinByExec(
             if (rs > re) {
               throw QueryExecutionErrors.binByInvalidRangeError(fmt.format(rs), fmt.format(re))
             } else if (rs == re) {
-              val (k, binStart) = DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin,
-                zone)
-              val binEnd = DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
+              val (k, binStart) = withBinByOverflow {
+                DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin, zone)
+              }
+              val binEnd = withBinByOverflow {
+                val nextK = MathUtils.addExact(k, 1L)
+                DateTimeUtils.timeBucketFromIndexDTInterval(width, nextK, origin, zone)
+              }
               appended.update(0, binStart)
               appended.update(1, binEnd)
               appended.update(2, 1.0d)
               Iterator.single(proj(joined.withRight(appended)))
             } else {
-              val total = Math.subtractExact(re, rs)
+              val total = withBinByOverflow(MathUtils.subtractExact(re, rs))
               new Iterator[InternalRow] {
                 // Advance the bucket index and read each boundary off the grid, rather than
                 // walking one bin end to the next start.
-                private var (k, curStart) =
+                private var (k, curStart) = withBinByOverflow {
                   DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin, zone)
+                }
 
                 override def hasNext: Boolean = curStart < re
 
                 override def next(): InternalRow = {
-                  val curEnd =
-                    DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
+                  val (nextK, curEnd) = withBinByOverflow {
+                    val index = MathUtils.addExact(k, 1L)
+                    val end =
+                      DateTimeUtils.timeBucketFromIndexDTInterval(width, index, origin, zone)
+                    (index, end)
+                  }
                   val overlap = math.min(re, curEnd) - math.max(rs, curStart)
                   appended.update(0, curStart)
                   appended.update(1, curEnd)
                   appended.update(2, overlap.toDouble / total.toDouble)
-                  k += 1
+                  k = nextK
                   curStart = curEnd
                   proj(joined.withRight(appended))
                 }
@@ -157,16 +310,19 @@ case class BinByExec(
 
   /**
    * Output projection over `JoinedRow(childRow, appendedRow)`: DISTRIBUTE columns scaled by the
-   * ratio, other columns passed through.
+   * ratio, other columns passed through. Codegen sets `ratioNullable`, because a NULL range there
+   * goes through this projection with a NULL ratio.
    */
-  private def buildOutputExpressions(childLen: Int): Seq[Expression] = {
-    val distSet = distributeColumns.map(bindOrdinal).toSet
+  private def buildOutputExpressions(
+      childLen: Int,
+      ratioNullable: Boolean = false): Seq[Expression] = {
     // bin_distribute_ratio is the last appended column.
-    val ratioRef = BoundReference(childLen + numAppended - 1, DoubleType, nullable = false)
+    val ratioRef = BoundReference(childLen + numAppended - 1, DoubleType, ratioNullable)
 
     val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
       val ref = BoundReference(ordinal, attr.dataType, attr.nullable)
-      if (distSet.contains(ordinal)) {
+      // Match by attribute, as `output` does, so every copy of a DISTRIBUTE column is scaled.
+      if (distributeReplacements.contains(attr)) {
         // Cast to double, multiply, narrow back. These expressions bind at execution time, so the
         // analyzer's operand coercion never runs; a bare Multiply(FloatType, DoubleType) fails.
         Cast(Multiply(Cast(ref, DoubleType), ratioRef), attr.dataType)
@@ -187,9 +343,8 @@ case class BinByExec(
    * bin), other columns passed through.
    */
   private def buildNullRangeExpressions(): Seq[Expression] = {
-    val distSet = distributeColumns.map(bindOrdinal).toSet
     val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
-      if (distSet.contains(ordinal)) {
+      if (distributeReplacements.contains(attr)) {
         Literal.create(null, attr.dataType)
       } else {
         BoundReference(ordinal, attr.dataType, attr.nullable)

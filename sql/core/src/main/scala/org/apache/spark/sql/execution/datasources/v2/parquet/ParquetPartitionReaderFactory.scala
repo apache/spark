@@ -139,7 +139,7 @@ case class ParquetPartitionReaderFactory(
           val openedFooter = openFileAndReadFooter(file)
           assert(openedFooter.inputStreamOpt.isEmpty)
 
-          if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
+          if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
               file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
@@ -185,7 +185,7 @@ case class ParquetPartitionReaderFactory(
           val openedFooter = openFileAndReadFooter(file)
           assert(openedFooter.inputStreamOpt.isEmpty)
 
-          if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
+          if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             val row = ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
               file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
@@ -245,7 +245,8 @@ case class ParquetPartitionReaderFactory(
           pushDownStringPredicate,
           pushDownInFilterThreshold,
           isCaseSensitive,
-          datetimeRebaseSpec)
+          datetimeRebaseSpec,
+          readSchema = Some(readDataSchema))
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`

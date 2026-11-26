@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Random
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
@@ -64,7 +65,14 @@ class HybridAnalyzer(
   private val sampleRateGenerator = new Random()
 
   def apply(plan: LogicalPlan): LogicalPlan = {
+    // Restricted execution mode is enforced by `CheckAnalysis.checkRestrictedMode`, which runs
+    // only in the fixed-point analyzer. When it is enabled, always use the fixed-point analyzer so
+    // the gate cannot be bypassed by enabling the (internal, in-development) single-pass resolver,
+    // which does not run `checkAnalysis`. This routes to the same `resolveInFixedPoint` branch that
+    // runs by default when the single-pass resolver is disabled.
+    val restrictedMode = conf.restrictedModeEnabled
     val dualRun =
+      !restrictedMode &&
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED) &&
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY) &&
@@ -72,9 +80,10 @@ class HybridAnalyzer(
       checkDualRunSampleRate()
 
     withTrackedAnalyzerBridgeState(dualRun) {
-      if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
+      if (!restrictedMode && conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
         resolveInSinglePass(plan)
-      } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY)) {
+      } else if (!restrictedMode &&
+          conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY)) {
         resolveInSinglePassTentatively(plan)
       } else if (dualRun) {
         resolveInDualRun(plan)
@@ -230,15 +239,15 @@ class HybridAnalyzer(
     } catch {
       case ex: ExplicitlyUnsupportedResolverFeature =>
         logInfo(
-          "single-pass analyzer is falling back to the fixed-point analyzer because " +
-          s"of an ExplicitlyUnsupportedResolverFeature: $ex"
+          log"single-pass analyzer is falling back to the fixed-point analyzer because " +
+          log"of an ExplicitlyUnsupportedResolverFeature: ${MDC(ERROR, ex)}"
         )
 
         None
       case ex: Throwable =>
         logInfo(
-          "single-pass analyzer is falling back to the fixed-point analyzer because " +
-          s"of an exception: $ex"
+          log"single-pass analyzer is falling back to the fixed-point analyzer because " +
+          log"of an exception: ${MDC(ERROR, ex)}"
         )
 
         None
@@ -380,7 +389,8 @@ object HybridAnalyzer {
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
         externalRelationResolution = Some(relationResolution),
         extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules,
-        tracker = Some(tracker)
+        tracker = Some(tracker),
+        hintResolutionRules = legacyAnalyzer.singlePassHintResolutionRules
       ),
       tracker = tracker,
       extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks

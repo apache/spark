@@ -15,35 +15,36 @@
 # limitations under the License.
 #
 
+import sys
 import tempfile
 import unittest
-import sys
 
 import numpy as np
 
-from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
 from pyspark.sql.functions import rand
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_sklearn,
-    sklearn_requirement_message,
     have_torch,
-    torch_requirement_message,
     have_torcheval,
+    sklearn_requirement_message,
+    torch_requirement_message,
     torcheval_requirement_message,
 )
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     import pandas as pd
-    from pyspark.ml.connect import Model, Estimator
-    from pyspark.ml.connect.feature import StandardScaler
+
+    from pyspark.ml.connect import Estimator, Model
     from pyspark.ml.connect.classification import LogisticRegression as LORV2
+    from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+    from pyspark.ml.connect.feature import StandardScaler
     from pyspark.ml.connect.pipeline import Pipeline
     from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
-    from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 
     class HasInducedError(Params):
         def __init__(self):

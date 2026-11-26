@@ -34,15 +34,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{
+  CharVarcharUtils, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal,
+  NamedReference, SortOrder}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -216,6 +218,13 @@ abstract class JdbcDialect extends Serializable with Logging {
     val micros = localDateTimeToMicros(ldt)
     toJavaTimestampNoRebase(micros)
   }
+
+  /**
+   * Default of the `timestampNTZAsWallClock` and `zonelessTimestampAsNTZ` JDBC options.
+   * Snapshotted into `JDBCOptions` when the options are built.
+   */
+  @Since("4.4.0")
+  def timestampNTZAsWallClock: Boolean = false
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
@@ -410,6 +419,16 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def build(expr: Expression): String = expr match {
       case _: AlwaysTrue => "(1 = 1)"
       case _: AlwaysFalse => "(1 = 0)"
+      case e: GeneralScalarExpression
+          if e.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+        if (!isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+          throw new SparkUnsupportedOperationException(
+            errorClass = "_LEGACY_ERROR_TEMP_3177",
+            messageParameters = Map(
+              "class" -> this.getClass.getSimpleName,
+              "funcName" -> e.name()))
+        }
+        inputToSQL(e.children()(0))
       case _ => super.build(expr)
     }
 
@@ -527,6 +546,16 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns whether the database supports function.
+   *
+   * For most names this means the remote can execute that SQL function.
+   * CHAR_READ_SIDE_PADDING is different: Spark only emits it as a CHAR scan
+   * column in equality, null-safe equality, inequality, or IN against a
+   * literal already padded to the CHAR width. Returning true for that name
+   * means JDBC may compile it as the raw column, so the remote must compare
+   * that column with a blank-padded (PAD SPACE) CHAR literal the same way
+   * Spark compares the padded value. Dialects that strip trailing spaces or
+   * use a NO PAD collation must not opt in.
+   *
    * @param funcName Upper-cased function name
    * @return True if the database supports function.
    */
@@ -820,7 +849,25 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isNotSelectableObjectException(e: SQLException): Boolean = false
 
   /**
-   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * Returns true if the given exception means the remote engine denied access because the user
+   * lacks a privilege on the object (e.g. PostgreSQL SQLSTATE 42501). Spark then reports
+   * `JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR`, during output schema resolution or query execution.
+   * Dialects override this to recognize their own error codes; the default is false.
+   */
+  @Since("4.4.0")
+  def isPermissionDeniedException(e: SQLException): Boolean = false
+
+  /**
+   * Classifies a dialect exception using the supplied condition or a dialect-specific condition.
+   * Also called on executors for destination JDBC write failures, with `FAILED_JDBC.WRITE`
+   * and `isRuntime = true`.
+   *
+   * The default implementation delegates to the deprecated classifier and returns an
+   * `AnalysisException`, even for runtime failures. Dialects using condition-based classification
+   * can return a runtime exception when `isRuntime` is true. The executor write path replaces
+   * the generic `FAILED_JDBC.UNCLASSIFIED` fallback with the original `SQLException`, preserving
+   * specific dialect mappings. The default wrappers preserve the original exception as the cause;
+   * dialect-specific mappings may handle it differently.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
@@ -923,6 +970,15 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Returns true if dialect supports JOIN operator.
    */
   def supportsJoin: Boolean = false
+
+  /**
+   * Returns false if the dialect cannot run the given ORDER BY ... LIMIT (top N) when pushed.
+   * `aggregation` is the aggregate already pushed into the same query, if any; it stays pushed
+   * either way. Returning true does not guarantee the push, as other pushdown checks still apply.
+   * Defaults to true.
+   */
+  @Since("4.4.0")
+  def supportsTopN(orders: Array[SortOrder], aggregation: Option[Aggregation]): Boolean = true
 
   /**
    * Return the DB-specific quoted and fully qualified table name

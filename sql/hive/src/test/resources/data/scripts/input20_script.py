@@ -16,8 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-import sys
 import re
+import sys
+
 line = sys.stdin.readline()
 x = 1
 while line:

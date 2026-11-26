@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
-import org.apache.spark.TaskContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
@@ -27,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExternalUserDefinedFunction
 }
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.udf.worker.UDFWorkerSpecification
@@ -36,7 +36,6 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * Physical plan node that executes a mapPartitions-style UDF in an
  * external worker process.
  *
- * @param workerSpec       Specification describing the UDF worker.
  * @param function         The UDF to invoke.
  * @param isBarrier        Whether the UDF should be invoked using barrier execution.
  * @param profile          Optional resource profile for the UDF execution.
@@ -44,12 +43,13 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  */
 @Experimental
 case class MapPartitionsExternalUDFExec(
-    workerSpec: UDFWorkerSpecification,
     function: ExternalUserDefinedFunction,
     isBarrier: Boolean,
     profile: Option[ResourceProfile],
     child: SparkPlan)
   extends ExternalUDFExec {
+
+  override def workerSpec: UDFWorkerSpecification = function.workerSpec
 
   // Map partitions always operate on StructTypes
   override def output: Seq[Attribute] = toAttributes(
@@ -57,16 +57,9 @@ case class MapPartitionsExternalUDFExec(
   )
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { rows =>
-      withUDFWorkerSession(TaskContext.get(), securityScope = None) {
-        session =>
-          // TODO [SPARK-55278]: Stream rows to/from the worker
-          // via session.process().
-          // scalastyle:off throwerror
-          throw new NotImplementedError("doExecute() is not yet implemented.")
-          // scalastyle:on throwerror
-      }
-    }
+    // TODO(SPARK-55278): Stream rows to and from the worker through session.process().
+    throw QueryExecutionErrors.methodNotImplementedError(
+      "MapPartitionsExternalUDFExec.doExecute")
   }
 
   override protected def withNewChildInternal(

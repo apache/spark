@@ -16,8 +16,8 @@
 #
 
 import threading
-from typing import Optional
 from collections import deque
+from typing import Optional
 
 
 class ZeroCopyByteStream:

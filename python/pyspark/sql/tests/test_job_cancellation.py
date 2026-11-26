@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-import unittest
 import threading
 import time
+import unittest
 
 from pyspark import InheritableThread, inheritable_thread_target
 from pyspark.errors import IllegalArgumentException, PySparkValueError
@@ -219,6 +219,10 @@ class JobCancellationTestsMixin:
             [],
         )
         self.spark.clearTags()
+
+    def test_interrupt_operation_not_running(self):
+        # Interrupting an operation id that is not running is a no-op.
+        self.assertEqual(self.spark.interruptOperation("123456789"), [])
 
 
 class JobCancellationTests(JobCancellationTestsMixin, ReusedSQLTestCase):

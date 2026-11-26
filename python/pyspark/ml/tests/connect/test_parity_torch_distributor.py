@@ -19,24 +19,24 @@ import os
 import shutil
 import unittest
 
-from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import (
-    have_torch,
-    torch_requirement_message,
-    should_test_connect,
     connect_requirement_message,
+    have_torch,
+    should_test_connect,
+    torch_requirement_message,
 )
+from pyspark.util import is_remote_only
 
 if not is_remote_only() and should_test_connect:
     from pyspark.ml.torch.tests.test_distributor import (
         TorchDistributorBaselineUnitTestsMixin,
-        TorchDistributorLocalUnitTestsMixin,
         TorchDistributorDistributedUnitTestsMixin,
+        TorchDistributorLocalUnitTestsMixin,
         TorchWrapperUnitTestsMixin,
-        set_up_test_dirs,
-        get_local_mode_conf,
         get_distributed_mode_conf,
+        get_local_mode_conf,
+        set_up_test_dirs,
     )
 
     @unittest.skipIf(

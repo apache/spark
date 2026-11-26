@@ -22,7 +22,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ProtobufDescriptorFileReader}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{
+  BinaryType, CharType, MapType, NullType, StringType, StructType, VarcharType
+}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -77,7 +80,27 @@ case class FromProtobuf(
     data: Expression,
     messageName: Expression,
     descFilePath: Expression,
-    options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
+    options: Expression,
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies such as
+    // canonicalization's keep them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
+  extends QuaternaryExpression with RuntimeReplaceable {
+
+  def this(
+      data: Expression,
+      messageName: Expression,
+      descFilePath: Expression,
+      options: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePath,
+      options,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
+  }
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
     this(
@@ -85,7 +108,13 @@ case class FromProtobuf(
       messageName,
       descFilePathOrOptions match {
         case lit: Literal
-          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+            if lit.dataType == StringType || lit.dataType == BinaryType ||
+              lit.dataType.isInstanceOf[CharType] || lit.dataType.isInstanceOf[VarcharType] =>
+          descFilePathOrOptions
+        case expression if expression.foldable &&
+            (expression.dataType.isInstanceOf[CharType] ||
+              expression.dataType.isInstanceOf[VarcharType]) =>
+          descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
@@ -145,13 +174,32 @@ case class FromProtobuf(
   }
 
   override lazy val replacement: Expression = {
-    val messageNameValue: String = messageName.eval() match {
+    val conf = SQLConf.get
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
+      createReplacement()
+    } else {
+      val evalConf = conf.clone()
+      evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
+      SQLConf.withExistingConf(evalConf) {
+        createReplacement()
+      }
+    }
+  }
+
+  private def createReplacement(): Expression = {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
+    val messageNameValue: String = freshMessageName.eval() match {
       case null =>
         throw new IllegalArgumentException("Message name cannot be null")
       case s: UTF8String =>
         s.toString
     }
-    val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
+    val freshDescFilePath = descFilePath.freshCopyIfContainsStatefulExpression()
+    val descFilePathValue: Option[Array[Byte]] = freshDescFilePath.eval() match {
       case s: UTF8String if s.toString.isEmpty => None
       case s: UTF8String =>
         Some(ProtobufDescriptorFileReader.readDescriptorFileContent(s.toString))
@@ -159,7 +207,8 @@ case class FromProtobuf(
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
-    val optionsValue: Map[String, String] = options.eval() match {
+    val freshOptions = options.freshCopyIfContainsStatefulExpression()
+    val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
         val keys: Array[String] = a.keyArray.array.map(_.toString)
         val values: Array[String] = a.valueArray.array.map(_.toString)
@@ -177,6 +226,9 @@ case class FromProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_protobuf")
@@ -226,7 +278,27 @@ case class ToProtobuf(
     data: Expression,
     messageName: Expression,
     descFilePath: Expression,
-    options: Expression) extends QuaternaryExpression with RuntimeReplaceable {
+    options: Expression,
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies such as
+    // canonicalization's keep them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
+  extends QuaternaryExpression with RuntimeReplaceable {
+
+  def this(
+      data: Expression,
+      messageName: Expression,
+      descFilePath: Expression,
+      options: Expression) = {
+    this(
+      data,
+      messageName,
+      descFilePath,
+      options,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
+  }
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
     this(
@@ -234,7 +306,13 @@ case class ToProtobuf(
       messageName,
       descFilePathOrOptions match {
         case lit: Literal
-          if lit.dataType == StringType || lit.dataType == BinaryType => descFilePathOrOptions
+            if lit.dataType == StringType || lit.dataType == BinaryType ||
+              lit.dataType.isInstanceOf[CharType] || lit.dataType.isInstanceOf[VarcharType] =>
+          descFilePathOrOptions
+        case expression if expression.foldable &&
+            (expression.dataType.isInstanceOf[CharType] ||
+              expression.dataType.isInstanceOf[VarcharType]) =>
+          descFilePathOrOptions
         case _ => Literal(null)
       },
       descFilePathOrOptions.dataType match {
@@ -308,19 +386,39 @@ case class ToProtobuf(
   }
 
   override lazy val replacement: Expression = {
-    val messageNameValue: String = messageName.eval() match {
+    val conf = SQLConf.get
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
+      createReplacement()
+    } else {
+      val evalConf = conf.clone()
+      evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
+      SQLConf.withExistingConf(evalConf) {
+        createReplacement()
+      }
+    }
+  }
+
+  private def createReplacement(): Expression = {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
+    val messageNameValue: String = freshMessageName.eval() match {
       case null =>
         throw new IllegalArgumentException("Message name cannot be null")
       case s: UTF8String =>
         s.toString
     }
-    val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
+    val freshDescFilePath = descFilePath.freshCopyIfContainsStatefulExpression()
+    val descFilePathValue: Option[Array[Byte]] = freshDescFilePath.eval() match {
       case s: UTF8String =>
         Some(ProtobufDescriptorFileReader.readDescriptorFileContent(s.toString))
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
-    val optionsValue: Map[String, String] = options.eval() match {
+    val freshOptions = options.freshCopyIfContainsStatefulExpression()
+    val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
         val keys: Array[String] = a.keyArray.array.map(_.toString)
         val values: Array[String] = a.valueArray.array.map(_.toString)
@@ -338,6 +436,9 @@ case class ToProtobuf(
     val expr = constructor.newInstance(data, messageNameValue, descFilePathValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_protobuf")

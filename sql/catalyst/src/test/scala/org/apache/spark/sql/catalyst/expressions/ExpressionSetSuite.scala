@@ -189,11 +189,11 @@ class ExpressionSetSuite extends SparkFunSuite {
 
     assert((initialSet + (aUpper + 1)).size == 1)
     assert((initialSet + (aUpper + 2)).size == 2)
-    assert((initialSet - (aUpper + 1)).size == 0)
+    assert((initialSet - (aUpper + 1)).isEmpty)
     assert((initialSet - (aUpper + 2)).size == 1)
 
     assert((initialSet + (aLower + 1)).size == 1)
-    assert((initialSet - (aLower + 1)).size == 0)
+    assert((initialSet - (aLower + 1)).isEmpty)
 
   }
 

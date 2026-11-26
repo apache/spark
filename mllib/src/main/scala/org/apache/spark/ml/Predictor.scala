@@ -23,7 +23,7 @@ import org.apache.spark.ml.linalg.SQLDataTypes
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -182,6 +182,18 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   }
 
   /**
+   * Returns an expression that produces a predicted label directly from a features column.
+   * The default wraps [[predict]] in a UDF. Models may override this with a native expression or
+   * a UDF that snapshots prediction state.
+   *
+   * @param features input features column
+   * @return prediction column of type `Double`
+   */
+  protected def predictionColumn(features: Column): Column = {
+    udf { value: Any => predict(value.asInstanceOf[FeaturesType]) }.apply(features)
+  }
+
+  /**
    * Transforms dataset by reading from [[featuresCol]], calling `predict`, and storing
    * the predictions as a new column [[predictionCol]].
    *
@@ -201,10 +213,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    val predictUDF = udf { features: Any =>
-      predict(features.asInstanceOf[FeaturesType])
-    }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))),
+    dataset.withColumn($(predictionCol), predictionColumn(col($(featuresCol))),
       outputSchema($(predictionCol)).metadata)
   }
 

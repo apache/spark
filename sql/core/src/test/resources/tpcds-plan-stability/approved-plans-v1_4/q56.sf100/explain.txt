@@ -68,7 +68,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#4), dynamicpruningexpression(ss_sold_date_sk#4 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(ss_addr_sk), IsNotNull(ss_item_sk)]
-ReadSchema: struct<ss_item_sk:int,ss_addr_sk:int,ss_ext_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_item_sk:bigint,ss_addr_sk:bigint,ss_ext_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 5]
 Input [4]: [ss_item_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, ss_sold_date_sk#4]
@@ -95,7 +95,7 @@ Output [2]: [ca_address_sk#7, ca_gmt_offset#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_address_sk)]
-ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
+ReadSchema: struct<ca_address_sk:bigint,ca_gmt_offset:decimal(5,2)>
 
 (8) ColumnarToRow [codegen id : 2]
 Input [2]: [ca_address_sk#7, ca_gmt_offset#8]
@@ -110,7 +110,7 @@ Input [2]: [ca_address_sk#7, ca_gmt_offset#8]
 
 (11) BroadcastExchange
 Input [1]: [ca_address_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (12) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_addr_sk#2]
@@ -127,7 +127,7 @@ Output [2]: [i_item_sk#9, i_item_id#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_item_id:string>
+ReadSchema: struct<i_item_sk:bigint,i_item_id:string>
 
 (15) ColumnarToRow [codegen id : 4]
 Input [2]: [i_item_sk#9, i_item_id#10]
@@ -166,7 +166,7 @@ Join condition: None
 
 (23) BroadcastExchange
 Input [2]: [i_item_sk#9, i_item_id#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_item_sk#1]
@@ -202,7 +202,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#20), dynamicpruningexpression(cs_sold_date_sk#20 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(cs_bill_addr_sk), IsNotNull(cs_item_sk)]
-ReadSchema: struct<cs_bill_addr_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
+ReadSchema: struct<cs_bill_addr_sk:bigint,cs_item_sk:bigint,cs_ext_sales_price:decimal(7,2)>
 
 (30) ColumnarToRow [codegen id : 11]
 Input [4]: [cs_bill_addr_sk#17, cs_item_sk#18, cs_ext_sales_price#19, cs_sold_date_sk#20]
@@ -274,7 +274,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#32), dynamicpruningexpression(ws_sold_date_sk#32 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(ws_bill_addr_sk), IsNotNull(ws_item_sk)]
-ReadSchema: struct<ws_item_sk:int,ws_bill_addr_sk:int,ws_ext_sales_price:decimal(7,2)>
+ReadSchema: struct<ws_item_sk:bigint,ws_bill_addr_sk:bigint,ws_ext_sales_price:decimal(7,2)>
 
 (45) ColumnarToRow [codegen id : 17]
 Input [4]: [ws_item_sk#29, ws_bill_addr_sk#30, ws_ext_sales_price#31, ws_sold_date_sk#32]
@@ -368,7 +368,7 @@ Output [3]: [d_date_sk#6, d_year#43, d_moy#44]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (63) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#43, d_moy#44]
@@ -383,7 +383,7 @@ Input [3]: [d_date_sk#6, d_year#43, d_moy#44]
 
 (66) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=7]
 
 Subquery:2 Hosting operator id = 29 Hosting Expression = cs_sold_date_sk#20 IN dynamicpruning#5
 

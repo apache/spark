@@ -18,32 +18,30 @@
 #
 
 import asyncio
-import logging
-from argparse import ArgumentParser
-import os
 import io
+import logging
+import os
 import platform
 import pty
+import queue as Queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from threading import Thread, Lock
 import time
 import uuid
-import queue as Queue
+from argparse import ArgumentParser
 from multiprocessing import Manager
-
+from threading import Lock, Thread
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
 
 
 from sparktestsupport import SPARK_HOME
-from sparktestsupport.shellutils import which, subprocess_check_output
 from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
-
+from sparktestsupport.shellutils import subprocess_check_output, which
 
 python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != "root")
 

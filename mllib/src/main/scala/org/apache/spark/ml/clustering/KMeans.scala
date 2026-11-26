@@ -448,7 +448,7 @@ class KMeans @Since("1.5.0") (
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
   /** @group expertSetParam */
-  @Since("5.0.0")
+  @Since("4.3.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   @Since("2.0.0")
@@ -473,7 +473,7 @@ class KMeans @Since("1.5.0") (
     model
   }
 
-  private def preferBlockSolver(dataset: Dataset[_]): Boolean = {
+  private[clustering] def preferBlockSolver(dataset: Dataset[_]): Boolean = {
     $(solver) match {
       case ROW => false
       case BLOCK => true
@@ -487,7 +487,7 @@ class KMeans @Since("1.5.0") (
               .select("summary.count", "summary.numNonZeros")
               .first()
             val numFeatures = numNonzeros.size
-            val nnz = numNonzeros.activeIterator.map(_._1).foldLeft(BigDecimal(0))(_ + _)
+            val nnz = numNonzeros.activeIterator.map(_._2).foldLeft(BigDecimal(0))(_ + _)
             nnz >= BigDecimal(count) * numFeatures * 0.5
 
           case fdt: ArrayType =>
@@ -584,7 +584,8 @@ class KMeans @Since("1.5.0") (
 
       val newCenters = blocks.mapPartitions { iter =>
         if (iter.nonEmpty) {
-          val agg = new KMeansAggregator(bcCenters.value, $(k), numFeatures, $(distanceMeasure))
+          val agg = new KMeansAggregator(
+            bcCenters.value, centers.length, numFeatures, $(distanceMeasure))
           iter.foreach(agg.add)
           if (iteration == 0) {
             countSumAccum.add(agg.count)

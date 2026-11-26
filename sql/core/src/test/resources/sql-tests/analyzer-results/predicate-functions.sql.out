@@ -415,7 +415,7 @@ Project [1 IN (1,2,3) AS (1 IN (1, 2, 3))#x]
 -- !query
 select 1 in (1, 2, 3, null)
 -- !query analysis
-Project [cast(1 as int) IN (cast(1 as int),cast(2 as int),cast(3 as int),cast(null as int)) AS (1 IN (1, 2, 3, NULL))#x]
+Project [1 IN (1,2,3,cast(null as int)) AS (1 IN (1, 2, 3, NULL))#x]
 +- OneRowRelation
 
 
@@ -450,14 +450,14 @@ Project [cast(1 as bigint) IN (cast(2 as bigint),cast(3 as bigint),cast(4 as big
 -- !query
 select null in (1, 2, 3)
 -- !query analysis
-Project [cast(null as int) IN (cast(1 as int),cast(2 as int),cast(3 as int)) AS (NULL IN (1, 2, 3))#x]
+Project [cast(null as int) IN (1,2,3) AS (NULL IN (1, 2, 3))#x]
 +- OneRowRelation
 
 
 -- !query
 select null in (1, 2, null)
 -- !query analysis
-Project [cast(null as int) IN (cast(1 as int),cast(2 as int),cast(null as int)) AS (NULL IN (1, 2, NULL))#x]
+Project [cast(null as int) IN (1,2,cast(null as int)) AS (NULL IN (1, 2, NULL))#x]
 +- OneRowRelation
 
 
@@ -471,7 +471,7 @@ Project [NOT 1 IN (1,2,3) AS (NOT (1 IN (1, 2, 3)))#x]
 -- !query
 select 1 not in (1, 2, 3, null)
 -- !query analysis
-Project [NOT cast(1 as int) IN (cast(1 as int),cast(2 as int),cast(3 as int),cast(null as int)) AS (NOT (1 IN (1, 2, 3, NULL)))#x]
+Project [NOT 1 IN (1,2,3,cast(null as int)) AS (NOT (1 IN (1, 2, 3, NULL)))#x]
 +- OneRowRelation
 
 
@@ -506,14 +506,14 @@ Project [NOT cast(1 as bigint) IN (cast(2 as bigint),cast(3 as bigint),cast(4 as
 -- !query
 select null not in (1, 2, 3)
 -- !query analysis
-Project [NOT cast(null as int) IN (cast(1 as int),cast(2 as int),cast(3 as int)) AS (NOT (NULL IN (1, 2, 3)))#x]
+Project [NOT cast(null as int) IN (1,2,3) AS (NOT (NULL IN (1, 2, 3)))#x]
 +- OneRowRelation
 
 
 -- !query
 select null not in (1, 2, null)
 -- !query analysis
-Project [NOT cast(null as int) IN (cast(1 as int),cast(2 as int),cast(null as int)) AS (NOT (NULL IN (1, 2, NULL)))#x]
+Project [NOT cast(null as int) IN (1,2,cast(null as int)) AS (NOT (NULL IN (1, 2, NULL)))#x]
 +- OneRowRelation
 
 

@@ -90,6 +90,67 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
+  test("SPARK-61751: FILE DataType proto round-trip preserves the mode") {
+    val dataTypes = Seq(
+      FileType(),
+      FileType.external,
+      ArrayType(FileType.external),
+      MapType(StringType, FileType()),
+      new StructType().add("f", FileType.external).add("g", FileType()))
+    dataTypes.foreach { dataType =>
+      val protoType = DataTypeProtoConverter.toConnectProtoType(dataType)
+      assertResult(dataType)(DataTypeProtoConverter.toCatalystType(protoType))
+    }
+
+    assert(
+      DataTypeProtoConverter.toConnectProtoType(FileType.external).getFile.getMode ==
+        proto.DataType.FileTypeMode.FILE_TYPE_MODE_EXTERNAL)
+    assert(
+      DataTypeProtoConverter.toConnectProtoType(FileType()).getFile.getMode ==
+        proto.DataType.FileTypeMode.FILE_TYPE_MODE_UNKNOWN)
+    // A file without a mode, or with a mode this side does not know, such as the reserved value
+    // 2 or a value added later, is an unknown file.
+    Seq(None, Some(2), Some(42)).foreach { modeValue =>
+      val file = proto.DataType.File.newBuilder()
+      modeValue.foreach(file.setModeValue)
+      val protoType = proto.DataType.newBuilder().setFile(file).build()
+      assertResult(FileType())(DataTypeProtoConverter.toCatalystType(protoType))
+    }
+  }
+
+  test("SPARK-59276: CHAR/VARCHAR DataType proto round-trip preserves collations") {
+    val dataTypes = Seq(
+      CharType(4),
+      CharType(4, "UTF8_BINARY"),
+      CharType(4, "UTF8_LCASE"),
+      VarcharType(6),
+      VarcharType(6, "UTF8_BINARY"),
+      VarcharType(6, "UNICODE_CI"),
+      new StructType()
+        .add("c", CharType(4, "UTF8_LCASE"))
+        .add("v", ArrayType(VarcharType(6, "UNICODE_CI"))))
+
+    dataTypes.foreach { dataType =>
+      val protoType = DataTypeProtoConverter.toConnectProtoType(dataType)
+      assertResult(dataType)(DataTypeProtoConverter.toCatalystType(protoType))
+    }
+
+    val defaultChar = DataTypeProtoConverter.toConnectProtoType(CharType(4)).getChar
+    assert(!defaultChar.hasCollation)
+    val explicitBinaryChar =
+      DataTypeProtoConverter.toConnectProtoType(CharType(4, "UTF8_BINARY")).getChar
+    assert(explicitBinaryChar.hasCollation)
+    assert(explicitBinaryChar.getCollation == "UTF8_BINARY")
+
+    // Clients using an older proto definition ignore the new field. Conversely, a type from an
+    // older client has no field and retains the historical uncollated representation.
+    val oldClientChar = proto.DataType
+      .newBuilder()
+      .setChar(proto.DataType.Char.newBuilder().setLength(4))
+      .build()
+    assertResult(CharType(4))(DataTypeProtoConverter.toCatalystType(oldClientChar))
+  }
+
   test("SPARK-57161: TIMESTAMP_NTZ nanosecond literal proto and catalyst value round-trip") {
     // Boundary and pre-epoch values, plus a sub-microsecond value that exercises the extra nanos.
     val values = Seq(

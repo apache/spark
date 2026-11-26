@@ -377,6 +377,10 @@ abstract class KllSketchMergeBase
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
   """,
   arguments = """
     Arguments:
@@ -416,6 +420,10 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
   """,
   arguments = """
     Arguments:
@@ -455,6 +463,10 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(0.5D, NULL) is accepted, but array(0.5, NULL) fails.
   """,
   arguments = """
     Arguments:
@@ -594,6 +606,10 @@ abstract class KllSketchGetQuantileBase
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type BIGINT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(3L, NULL) is accepted, but array(3, NULL) fails.
   """,
   arguments = """
     Arguments:
@@ -629,6 +645,10 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type FLOAT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(3.0F, NULL) is accepted, but array(3.0, NULL) fails.
   """,
   arguments = """
     Arguments:
@@ -664,6 +684,10 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
+    When a quantile array already has element type DOUBLE, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL array(3.0D, NULL) is accepted, but array(3.0, NULL) fails.
   """,
   arguments = """
     Arguments:

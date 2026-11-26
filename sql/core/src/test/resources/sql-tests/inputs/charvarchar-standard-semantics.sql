@@ -15,6 +15,10 @@ SELECT CAST(12345 AS VARCHAR(4));
 SELECT CAST(12345 AS VARCHAR(5));
 SELECT try_cast(12345 AS VARCHAR(4));
 
+-- CAST CHAR to VARCHAR keeps the CHAR pad; CAST VARCHAR to CHAR pads to the target length.
+SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>');
+SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>');
+
 -- Explicit CAST inside LCT must keep inner truncation / overflow (do not retarget).
 SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)));
 SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2)) ELSE CAST('x' AS VARCHAR(4)) END;
@@ -45,6 +49,20 @@ SELECT typeof(cast('a' AS CHAR(1)) || cast('b' AS VARCHAR(1)));
 SELECT typeof(substr(cast('hello' AS VARCHAR(5)), 1, 2));
 SELECT typeof(upper(coalesce(cast('a' AS CHAR(2)), cast('b' AS CHAR(4)))));
 SELECT typeof(concat(cast('a' AS CHAR(2)), cast('b' AS CHAR(3))));
+SELECT typeof(concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)));
+SELECT concat('<', concat(
+  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)), '>');
+SELECT typeof(elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)));
+SELECT concat('<', elt(
+  1,
+  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)), '>');
 SELECT typeof(trim(cast('ab  ' AS CHAR(4))));
 SELECT typeof(lpad(cast('ab' AS CHAR(2)), 5, 'x'));
 

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   GetViewColumnByNameAndOrdinal,
   MultiAlias,
   NamedParameter,
+  OptionalReferences,
   ResolvedInlineTable,
   Star,
   UnresolvedAlias,
@@ -96,8 +97,6 @@ class ResolverGuard(
    * their children. For unimplemented ones, return Some("reason").
    */
   private def checkOperator(operator: LogicalPlan): Option[String] = {
-    checkOperatorSecondPassAnalysis(operator)
-
     operator match {
       case unresolvedWith: UnresolvedWith =>
         checkUnresolvedWith(unresolvedWith)
@@ -171,9 +170,6 @@ class ResolverGuard(
     def unapply(operator: LogicalPlan): Option[String] = checkOperator(operator)
   }
 
-  private def checkOperatorSecondPassAnalysis(operator: LogicalPlan): Unit = {
-  }
-
   /**
    * Method used to check if expressions are supported by the new analyzer.
    * For LeafNode types, we return None or Some("reason"). For other ones, check their children.
@@ -212,6 +208,9 @@ class ResolverGuard(
         checkCreateNamedStruct(createNamedStruct)
       case unresolvedFunction: UnresolvedFunction =>
         checkUnresolvedFunction(unresolvedFunction)
+      // A routine may own a routed constructor, so check it like the flat call.
+      case routedJsonConstructor: RoutedJsonConstructor =>
+        checkUnresolvedFunction(routedJsonConstructor.toUnresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
         checkGetViewColumnByNameAndOrdinal(getViewColumnByNameAndOrdinal)
       case semiStructuredExtract: SemiStructuredExtract =>
@@ -248,7 +247,7 @@ class ResolverGuard(
       Some("Recursive CTE")
     } else {
       unresolvedWith.cteRelations
-        .map(cteDefinition => cteDefinition._2)
+        .map(_.plan)
         .collectFirst { case CheckOperator(reason) => reason }
         .orElse(checkOperator(unresolvedWith.child))
     }
@@ -316,10 +315,10 @@ class ResolverGuard(
         checkExpression(asOfJoin.asOfCondition)
       }
       .orElse {
-        checkExpression(asOfJoin.orderExpression)
+        asOfJoin.orderExpression.flatMap(checkExpression)
       }
       .orElse {
-        asOfJoin.toleranceAssertion match {
+        asOfJoin.tolerance match {
           case Some(expression) => checkExpression(expression)
           case None => None
         }
@@ -423,8 +422,18 @@ class ResolverGuard(
 
   private def checkUnresolvedUpCast(upCast: UpCast) = checkExpression(upCast.child)
 
-  private def checkUnresolvedExtractValue(unresolvedExtractValue: UnresolvedExtractValue) =
-    unresolvedExtractValue.children.collectFirst { case CheckExpression(reason) => reason }
+  /**
+   * An optional field of an expression other than a name, e.g. `array_col[0].field?`, is
+   * unsupported: if the field is missing, the fixed-point analyzer resolves the reference to NULL
+   * without adding the columns of the expression to the operators below ORDER BY or HAVING.
+   */
+  private def checkUnresolvedExtractValue(unresolvedExtractValue: UnresolvedExtractValue) = {
+    if (OptionalReferences.isOptional(unresolvedExtractValue)) {
+      Some("optional field extraction")
+    } else {
+      unresolvedExtractValue.children.collectFirst { case CheckExpression(reason) => reason }
+    }
+  }
 
   /**
    * Recursively check the children of the [[Star]] expression.
@@ -455,7 +464,17 @@ class ResolverGuard(
     case _ => None
   }
 
-  private def checkNamedParameter(namedParameter: NamedParameter) = None
+  /**
+   * Named parameters are not resolved by the single-pass analyzer, so an optional named parameter
+   * marker (`:name?`), which resolves to NULL when it is not bound, is unsupported.
+   */
+  private def checkNamedParameter(namedParameter: NamedParameter) = {
+    if (OptionalReferences.isOptional(namedParameter)) {
+      Some("optional named parameter")
+    } else {
+      None
+    }
+  }
 
   private def checkGetStructField(getStructField: GetStructField) = {
     checkExpression(getStructField.child)
@@ -470,6 +489,7 @@ class ResolverGuard(
    * Checks whether the provided attribute is supported. It's unsupported if:
    *  - Any of its name parts is in the [[ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES]] list.
    *  - It has the `PLAN_ID_TAG` tag.
+   *  - It has an optional name part while optional reference resolution is disabled.
    */
   private def checkUnresolvedAttribute(unresolvedAttribute: UnresolvedAttribute) = {
     val unsupportedNameOption =
@@ -486,7 +506,22 @@ class ResolverGuard(
       case None if unresolvedAttribute.containsTag(LogicalPlan.PLAN_ID_TAG) =>
         Some("PLAN_ID_TAG")
       case None =>
-        None
+        checkOptionalReference(unresolvedAttribute)
+    }
+  }
+
+  /**
+   * Checks whether the provided attribute is supported with respect to optional references. It's
+   * unsupported if it has an optional name part while optional reference resolution is disabled.
+   */
+  private def checkOptionalReference(unresolvedAttribute: UnresolvedAttribute) = {
+    if (OptionalReferences.hasOptionalMarker(unresolvedAttribute) &&
+        !conf.getConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION
+        )) {
+      Some("optional reference")
+    } else {
+      None
     }
   }
 
@@ -633,7 +668,9 @@ class ResolverGuard(
         true
       // JSON
       case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
-          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
+          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray | _: JsonArray |
+          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr |
+          _: StockJsonConstructor =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
@@ -665,12 +702,8 @@ class ResolverGuard(
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
-    } else if (conf.getConfString("pipelines.id", null) != null) {
-      Some("dlt")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
-    } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
-      Some("persistentCatalogFirst")
     } else {
       None
     }
@@ -761,8 +794,6 @@ object ResolverGuard {
   private val UNSUPPORTED_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
     // User info functions are not supported.
-    // [[InlineUserInfoExpressions]] cannot be invoked as a post-hoc rule as it produces
-    // inconsistent aliases based on the table type (because of the rule ordering in fixed-point).
     map += ("current_user", ())
     map += ("session_user", ())
     map += ("user", ())
@@ -770,26 +801,12 @@ object ResolverGuard {
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
-    // Functions that are not resolved properly.
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
   }
 
   /**
-   * Experimental functions that are supported.
-   */
-  private val SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES = {
-    val map = new IdentifierMap[Unit]()
-    map += ("ai_complete", ())
-    map += ("ai_embed", ())
-    map += ("collate", ())
-    map += ("schema_of_json", ())
-    map += ("schema_of_xml", ())
-  }
-
-  /**
-   * Higher order functions that are supported but guarded under the
-   * `ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION` flag.
+   * Higher order functions that are not yet supported by the single-pass resolver.
    */
   private val HIGHER_ORDER_FUNCTIONS = {
     val map = new IdentifierMap[Unit]()

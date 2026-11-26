@@ -21,6 +21,11 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.SQLFunctionExpression
+import org.apache.spark.sql.catalyst.catalog.SQLFunction
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -33,6 +38,80 @@ class SQLFunctionSuite extends SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
+  }
+
+  test("SPARK-59970: a SQL function does not inherit the IDENTIFIER-clause variables of the " +
+    "functions it calls") {
+    withUserDefinedFunction("ident_callee" -> false, "ident_caller" -> false) {
+      sql("DECLARE OR REPLACE VARIABLE ident_col STRING DEFAULT 'a'")
+      try {
+        // The callee may only be created with the legacy flag; its dependency on `ident_col` is
+        // its own and is not persisted.
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          sql("CREATE FUNCTION ident_callee(x INT) RETURNS INT " +
+            "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        }
+        checkAnswer(sql("SELECT ident_callee(0)"), Row(1))
+        // Expanding the callee must not attribute `ident_col` to the caller: creating the caller
+        // succeeds without the flag. (The variable must still exist, since the callee's body is
+        // inlined and its IDENTIFIER clause is evaluated during this analysis.)
+        sql("CREATE FUNCTION ident_caller(x INT) RETURNS INT RETURN ident_callee(x) + 1")
+        // A direct IDENTIFIER read in the caller's own body is still rejected.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE FUNCTION ident_caller2(x INT) RETURNS INT " +
+              "RETURN ident_callee(x) + (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "FUNCTION",
+            "objName" -> "`default`.`ident_caller2`",
+            "tempObj" -> "VARIABLE",
+            "tempObjName" -> "`ident_col`"))
+        checkAnswer(sql("SELECT ident_caller(0)"), Row(2))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS ident_col")
+      }
+    }
+  }
+
+  test("SPARK-59970: IDENTIFIER-clause variables are stored for a temporary function only") {
+    val variableNamesKey = "referredTempVariableNames"
+    withUserDefinedFunction("ident_temp_fn" -> true, "ident_perm_fn" -> false) {
+      sql("DECLARE OR REPLACE VARIABLE ident_col STRING DEFAULT 'a'")
+      try {
+        // A temporary function records the variable in its properties, as it does a direct
+        // reference. The property is informational and is not consulted when the body is
+        // re-analyzed: a function body resolves variables from the caller's context.
+        sql("CREATE TEMPORARY FUNCTION ident_temp_fn(x INT) RETURNS INT " +
+          "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        // Temporary functions are registered under the qualified `system.session` namespace.
+        val tempFn = spark.sessionState.functionRegistry
+          .lookupFunctionBuilder(FunctionIdentifier(
+            "ident_temp_fn",
+            Some(CatalogManager.SESSION_NAMESPACE),
+            Some(CatalogManager.SYSTEM_CATALOG_NAME))).get
+          .apply(Seq(Literal(0))) match {
+            case f: SQLFunctionExpression => f.function
+            case other => fail(s"unexpected builder result: $other")
+          }
+        assert(tempFn.properties(variableNamesKey) === """[["ident_col"]]""")
+
+        // A persistent function created under the legacy flag stores no temporary variable, as a
+        // persisted view does not: the dependency is tolerated, not persisted.
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          sql("CREATE FUNCTION ident_perm_fn(x INT) RETURNS INT " +
+            "RETURN (SELECT IDENTIFIER(ident_col) FROM VALUES (1) AS T(a))")
+        }
+        val permFn = SQLFunction.fromCatalogFunction(
+          spark.sessionState.catalog.getFunctionMetadata(
+            FunctionIdentifier("ident_perm_fn", Some("default"))),
+          spark.sessionState.sqlParser)
+        assert(permFn.properties(variableNamesKey) === "[]")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS ident_col")
+      }
+    }
   }
 
   test("SQL scalar function") {
@@ -59,6 +138,139 @@ class SQLFunctionSuite extends SharedSparkSession {
             |""".stripMargin)
         checkAnswer(sql("SELECT foo(1)"), Row(5))
         checkAnswer(sql("SELECT foo(a) FROM t"), Seq(Row(null), Row(5)))
+      }
+    }
+  }
+
+  test("SPARK-61494: the body of a SQL function does not reference the query around the " +
+    "subquery that calls the function") {
+    withUserDefinedFunction("outer_name_fn" -> true, "outer_col_fn" -> true) {
+      sql("DECLARE OR REPLACE VARIABLE outer_name INT DEFAULT 100")
+      try {
+        sql("CREATE TEMPORARY FUNCTION outer_name_fn() RETURNS INT RETURN outer_name")
+        // `outer_name` in the body is the variable, not the column of the calling query.
+        checkAnswer(sql("SELECT outer_name_fn() FROM VALUES (5) AS t(outer_name)"), Row(100))
+        val inSubquery = "SELECT (SELECT outer_name_fn()) FROM VALUES (5) AS t(outer_name)"
+        checkAnswer(sql(inSubquery), Row(100))
+        // The legacy conf restores the column of the calling query, also for a function that was
+        // created before it was set, and also while optional references are enabled.
+        withSQLConf(
+          SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES.key -> "true") {
+          checkAnswer(sql(inSubquery), Row(5))
+          withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+            checkAnswer(sql(inSubquery), Row(5))
+          }
+        }
+        // So does an optional reference in the body, whose analysis replaces it like that of a
+        // function called outside of a subquery.
+        withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          sql("CREATE TEMPORARY FUNCTION outer_col_fn() RETURNS INT RETURN coalesce(outer_col?, 0)")
+          val optionalInSubquery = "SELECT (SELECT outer_col_fn()) FROM VALUES (5) AS t(outer_col)"
+          checkAnswer(sql(optionalInSubquery), Row(0))
+          withSQLConf(
+            SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES.key -> "true") {
+            checkAnswer(sql(optionalInSubquery), Row(5))
+            checkAnswer(sql("SELECT (SELECT outer_col_fn()) FROM VALUES (5) AS t(other_col)"),
+              Row(0))
+          }
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS outer_name")
+      }
+    }
+  }
+
+  test("SPARK-61494: an optional reference in the body of a persistent SQL function does not " +
+    "resolve to a variable of the caller") {
+    withUserDefinedFunction(
+        "persistent_var_fn" -> false,
+        "persistent_var_table_fn" -> false,
+        "persistent_label_var_fn" -> false,
+        "persistent_label_var_table_fn" -> false,
+        "temporary_var_fn" -> true) {
+      // No variable `x` exists, so the optional references are NULL when the functions are created.
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        sql("CREATE FUNCTION persistent_var_fn() RETURNS INT " +
+          "RETURN coalesce(x?, 0) + coalesce(session.x?, 0)")
+        sql("CREATE FUNCTION persistent_var_table_fn() RETURNS TABLE (v INT) " +
+          "RETURN SELECT coalesce(x?, 0)")
+        sql("CREATE TEMPORARY FUNCTION temporary_var_fn() RETURNS INT RETURN coalesce(x?, 0)")
+        // Nor does a label qualify a name of the body, so a dependency on a label fails when the
+        // function is created rather than when it is called outside of the labeled block, as for
+        // a view.
+        Seq(
+          "CREATE FUNCTION persistent_label_var_fn() RETURNS INT RETURN coalesce(lbl.x?, 0)",
+          "CREATE FUNCTION persistent_label_var_table_fn() RETURNS TABLE (v INT) " +
+            "RETURN SELECT coalesce(lbl.x?, 0)"
+        ).foreach { createFunction =>
+          Seq("", "DECLARE x INT DEFAULT 7; ").foreach { declare =>
+            val e = intercept[AnalysisException] {
+              sql(s"BEGIN lbl: BEGIN $declare$createFunction; END; END")
+            }
+            assert(e.getCondition.startsWith("UNRESOLVED_COLUMN"), e.getMessage)
+            assert(e.getMessageParameters.get("objectName") == "`lbl`.`x`", e.getMessage)
+          }
+        }
+        assert(!spark.catalog.functionExists("persistent_label_var_fn"))
+        assert(!spark.catalog.functionExists("persistent_label_var_table_fn"))
+      }
+      def checkPersistentFunctions(): Unit = {
+        checkAnswer(sql("SELECT persistent_var_fn()"), Row(0))
+        checkAnswer(sql("SELECT * FROM persistent_var_table_fn()"), Row(0))
+      }
+      checkPersistentFunctions()
+      sql("DECLARE VARIABLE x INT DEFAULT 5")
+      try {
+        // Like a persistent view, a persistent function does not see the session variable, unlike
+        // a temporary function, which can read the variables of its caller.
+        checkPersistentFunctions()
+        checkAnswer(sql("SELECT temporary_var_fn()"), Row(5))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE x")
+      }
+      // Nor the variables of a SQL script.
+      checkAnswer(sql("BEGIN DECLARE x INT DEFAULT 7; SELECT persistent_var_fn(); END"), Row(0))
+      checkAnswer(
+        sql("BEGIN lbl: BEGIN DECLARE x INT DEFAULT 7; SELECT persistent_var_fn(); END; END"),
+        Row(0))
+    }
+  }
+
+  test("SPARK-61494: a view defined in a labeled block does not resolve the label in the body of " +
+    "a SQL function created with optional references, also in a session that leaves them unset") {
+    withUserDefinedFunction("label_fn" -> true) {
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        sql("BEGIN lbl: BEGIN " +
+          "CREATE TEMPORARY FUNCTION label_fn() RETURNS INT RETURN lbl.missing?; END; END")
+      }
+      // The function keeps the setting, so its label-qualified reference is NULL in a query of the
+      // labeled block.
+      checkAnswer(sql("BEGIN lbl: BEGIN SELECT label_fn(); END; END"), Row(null))
+      withTempView("label_v", "label_c") {
+        sql("CREATE TEMPORARY VIEW label_v AS SELECT 1 AS m")
+        // A read of the view sees no label, so each definition fails when it is created.
+        Seq(
+          "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT label_fn() AS m",
+          "ALTER VIEW label_v AS SELECT label_fn() AS m",
+          "CACHE TABLE label_c AS SELECT label_fn() AS m"
+        ).foreach { definition =>
+          val script = s"BEGIN lbl: BEGIN $definition; END; END"
+          val call = "label_fn()"
+          checkError(
+            exception = intercept[AnalysisException](sql(script)),
+            condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+            parameters = Map("objectName" -> "`lbl`.`missing`"),
+            context = ExpectedContext(
+              fragment = call,
+              start = script.indexOf(call),
+              stop = script.indexOf(call) + call.length - 1))
+        }
+        // A captured label-qualified variable without `?` still resolves.
+        checkAnswer(
+          sql("BEGIN lbl: BEGIN DECLARE y INT DEFAULT 1; " +
+            "CREATE OR REPLACE TEMPORARY VIEW label_v AS SELECT lbl.y AS y; " +
+            "SELECT * FROM label_v; END; END"),
+          Row(1))
       }
     }
   }

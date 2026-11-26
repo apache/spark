@@ -54,10 +54,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         Seq.empty
       }
 
-      // Headers and row data are rendered client-side by DataTables from the
-      // column definitions in static/sql-execution-detail.js -- intentionally
-      // no <thead>/<tbody> in the Scala template below. Adding markup headers
-      // here causes DataTables to double-render and breaks layout (SPARK-56259).
+      // The summary table is rendered client-side by DataTables using the shared
+      // getSqlTableColumns() definitions in static/sql-table-utils.js, initialized from
+      // static/executionpage.js -- intentionally no <thead>/<tbody> here, so the headers
+      // live only in the JS column definitions and cannot drift from the data columns
+      // (cf. SPARK-56259).
       val summary =
         <div class="mb-3">
           <table id="sql-execution-table" class="table table-striped compact cell-border"
@@ -93,18 +94,18 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             }
           }
           <div id="plan-viz-download-btn-container">
-            <select id="plan-viz-format-select">
+            <select id="plan-viz-format-select" aria-label="Plan visualization download format">
               <option value="svg">SVG</option>
               <option value="dot">DOT</option>
               <option value="txt">TXT</option>
             </select>
-            <label for="plan-viz-format-select">
-              <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
-            </label>
+            <button id="plan-viz-download-btn" class="btn btn-sm btn-outline-secondary ms-2"
+                    type="button" title="Download plan visualization">
+              &#x2b07;&#xfe0f; Download</button>
             <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-2"
                     type="button" title="Copy physical plan to clipboard">
               &#x1f4cb; Copy Plan</button>
-            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-1"
+            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-2"
                     type="button" title="Copy shareable link to this execution">
               &#x1f517; Copy Link</button>
           </div>

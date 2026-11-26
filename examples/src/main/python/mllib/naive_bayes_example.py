@@ -25,10 +25,10 @@ Usage:
 import shutil
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.util import MLUtils
-
 
 # $example off$
 

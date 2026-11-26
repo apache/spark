@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import os
+import unittest
 
 from pyspark.errors import PySparkException
-from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests, ExecutorResourceRequests
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import (
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.utils import eventually
 

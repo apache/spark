@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -322,6 +322,55 @@ case class Xxh3128(child: Expression)
 }
 
 /**
+ * Computes the FarmHash Fingerprint64 of its argument, compatible with `FARM_FINGERPRINT` in
+ * BigQuery / GoogleSQL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns a 64-bit fingerprint of `expr` as a bigint, computed with the
+      FarmHash Fingerprint64 algorithm.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to fingerprint. A string or binary expression. Strings are hashed
+        as their UTF-8 bytes.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       -2743780590904673122
+  """,
+  note = """
+    The result matches `FARM_FINGERPRINT` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. It is not a cryptographic hash.
+  """,
+  since = "4.4.0",
+  group = "hash_funcs")
+case class FarmFingerprint(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = LongType
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    ExpressionImplUtils.farmFingerprint(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val utils = classOf[ExpressionImplUtils].getName
+    nullSafeCodeGen(ctx, ev, value => s"${ev.value} = $utils.farmFingerprint($value);")
+  }
+
+  override def prettyName: String = "farm_fingerprint"
+
+  override protected def withNewChildInternal(newChild: Expression): FarmFingerprint =
+    copy(child = newChild)
+}
+
+/**
  * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
  * is not exposed to users and should only be set inside spark SQL.
  *
@@ -378,6 +427,10 @@ abstract class HashExpression[E] extends Expression {
     dt.existsRecursively(_.isInstanceOf[VariantType])
   }
 
+  private def hasFileType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[FileType])
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
       throw QueryCompilationErrors.wrongNumArgsError(
@@ -391,6 +444,12 @@ abstract class HashExpression[E] extends Expression {
     } else if (children.exists(child => hasVariantType(child.dataType))) {
       DataTypeMismatch(
         errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
+    } else if (children.exists(child => hasFileType(child.dataType))) {
+      // FILE is not comparable, so hashing it with a hash function such as `hash` or `xxhash64` is
+      // rejected. Grouping, joining and partitioning by a FILE are rejected by the analyzer.
+      DataTypeMismatch(
+        errorSubClass = "HASH_FILE_TYPE",
         messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
@@ -656,6 +715,11 @@ abstract class HashExpression[E] extends Expression {
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
     case StructType(fields) => genHashForStruct(ctx, input, result, fields)
     case udt: UserDefinedType[_] => computeHashWithTailRec(input, udt.sqlType, result, ctx)
+    case ft: FileType =>
+      // FILE is not comparable, so its values cannot be hashed. Only a non-null value reaches
+      // here; a null FILE value keeps the seed, as for any other type.
+      val fileType = ctx.addReferenceObj("fileType", ft, classOf[DataType].getName)
+      s"if (true) throw QueryExecutionErrors.unsupportedDataTypeError($fileType);"
   }
 
   protected def computeHash(
@@ -808,6 +872,8 @@ abstract class InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
           case StructType(fields) => fields.map(_.dataType)
+          // FILE is not comparable, so its values cannot be hashed.
+          case ft: FileType => throw QueryExecutionErrors.unsupportedDataTypeError(ft)
         }
         var result = seed
         var i = 0
@@ -1348,6 +1414,8 @@ object HiveHashFunction extends InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
           case StructType(fields) => fields.map(_.dataType)
+          // FILE is not comparable, so its values cannot be hashed.
+          case ft: FileType => throw QueryExecutionErrors.unsupportedDataTypeError(ft)
         }
 
         var result = 0

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{JsonArray, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -138,6 +138,37 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("SELECT NAMED_STRUCT('a', 1)")
     checkResolverGuard("SELECT MAP_CONTAINS_KEY(MAP(1, 'a', 2, 'b'), 2)")
     checkResolverGuard("SELECT ARRAY_CONTAINS(ARRAY(1, 2, 3), 2);")
+  }
+
+  test("SQL JSON constructor and path functions") {
+    checkResolverGuard("""SELECT JSON_ARRAY(1, 'x', true)""")
+    checkResolverGuard("""SELECT JSON_ARRAY('[1]' FORMAT JSON)""")
+    // Nested clause-free JSON_ARRAY routes as UnresolvedRoutedJsonArray before resolution; the
+    // guard gives it the flat call's owner check and admits the unshadowed built-in.
+    checkResolverGuard("""SELECT JSON_ARRAY(JSON_ARRAY(1))""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a' RETURNING INT)""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a' WITH ARRAY WRAPPER)""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a' TRUE ON ERROR)""")
+    // Clause-bearing and explicit FORMAT JSON forms parse to a stock-owned UnresolvedJsonObject;
+    // assert the guard admits it.
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
+    // Both levels of a value-nested JSON_OBJECT parse to UnresolvedRoutedJsonObject; the guard
+    // checks them like the flat call before admitting the built-in.
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))""")
+    // A plan built on an analyzed query holds the resolved constructors; assert the guard admits
+    // them. They are time-zone aware, so the TimeZoneAwareExpression arm already covers them.
+    Seq(
+      "SELECT JSON_ARRAY(1 NULL ON NULL) AS j" -> classOf[JsonArray],
+      "SELECT JSON_OBJECT('a' VALUE 1 NULL ON NULL) AS j" -> classOf[JsonObjectExpr]
+    ).foreach { case (query, cls) =>
+      val analyzed = sql(query).queryExecution.analyzed
+      assert(analyzed.expressions.exists(_.exists(cls.isInstance)), query)
+      checkResolverGuard(Project(analyzed.output, analyzed), unsupportedReason = None)
+    }
   }
 
   test("Conditional expressions") {
@@ -447,13 +478,14 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
-  test("persistentCatalogFirst is unsupported") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
-      checkResolverGuard(
-        "SELECT 1",
-        unsupportedReason = Some("configuration: persistentCatalogFirst")
-      )
-    }
+  gridTest("persistentCatalogFirst does not make the plan unsupported")(Seq(true, false)) {
+    persistentCatalogFirst =>
+      withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> persistentCatalogFirst.toString) {
+        checkResolverGuard(
+          "SELECT 1",
+          unsupportedReason = None
+        )
+      }
   }
 
   gridTest("ASOF JOIN")(Seq(true, false)) { enabled =>
@@ -474,6 +506,40 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       enabled.toString
     ) {
       checkResolverGuard(asOfJoinQuery, expectedReason)
+    }
+  }
+
+  gridTest("Optional references")(Seq(true, false)) { enabled =>
+    val expectedReason = if (enabled) None else Some("optional reference")
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION.key ->
+      enabled.toString
+    ) {
+      checkResolverGuard("SELECT col1?, col2? FROM VALUES (1)", expectedReason)
+      checkResolverGuard(
+        "SELECT col1.a?, col1.b? FROM VALUES (named_struct('a', 1))",
+        expectedReason
+      )
+    }
+  }
+
+  test("Optional field extractions are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuard(
+        "SELECT named_struct('a', 1).b?",
+        unsupportedReason = Some("optional field extraction")
+      )
+      checkResolverGuard(
+        "SELECT col1 FROM VALUES (array(named_struct('a', 1))) ORDER BY col1[0].b?",
+        unsupportedReason = Some("optional field extraction")
+      )
+    }
+  }
+
+  test("Optional named parameters are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuard("SELECT :param?", unsupportedReason = Some("optional named parameter"))
     }
   }
 

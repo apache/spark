@@ -17,8 +17,8 @@
 
 from typing import Any, Callable, Iterator
 
-import torch
 import numpy as np
+import torch
 
 from pyspark.sql.types import StructType
 

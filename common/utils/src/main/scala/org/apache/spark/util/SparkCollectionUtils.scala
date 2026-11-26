@@ -52,6 +52,8 @@ private[spark] trait SparkCollectionUtils {
         Arrays.fill(arr.asInstanceOf[Array[Byte]], defaultValue.asInstanceOf[Byte])
       case c if c == classOf[Short] =>
         Arrays.fill(arr.asInstanceOf[Array[Short]], defaultValue.asInstanceOf[Short])
+      case c if c == classOf[Char] =>
+        Arrays.fill(arr.asInstanceOf[Array[Char]], defaultValue.asInstanceOf[Char])
       case c if c == classOf[Int] =>
         Arrays.fill(arr.asInstanceOf[Array[Int]], defaultValue.asInstanceOf[Int])
       case c if c == classOf[Long] =>

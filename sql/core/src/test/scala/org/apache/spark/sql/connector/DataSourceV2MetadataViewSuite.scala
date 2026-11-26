@@ -25,6 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for the view side of [[DelegatingTable]]: view-text expansion on read, and
@@ -39,6 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against the v2 path for full
  * parity with the v1 persisted-view coverage.
  */
+@DataSourceV2Test
 class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   import testImplicits._
 
@@ -284,6 +286,59 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
       assert(ex.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
       assert(ex.getMessage.contains("`view_catalog`.`ns1`.`inner`.`v_tempfn`"),
         s"expected full multi-part name, got: ${ex.getMessage}")
+    }
+  }
+
+  test("v2 CREATE / ALTER VIEW rejects a temporary variable read via an IDENTIFIER clause") {
+    // A variable read via an IDENTIFIER clause is not present in the analyzed view body (the
+    // placeholder is replaced by the plan built from the evaluated name), so it is captured during
+    // analysis (referredTempVariablesUnderIdentifier) and must be rejected for a permanent v2 view,
+    // just like a temporary function. The ALTER path is only covered once the v2 command threads
+    // the captured variables into CheckViewReferences.
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("DECLARE OR REPLACE VARIABLE v2_ident_col STRING DEFAULT 'x'")
+      try {
+        val createEx = intercept[AnalysisException] {
+          sql("CREATE VIEW view_catalog.default.v_ident_var AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+        }
+        assert(createEx.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+
+        sql("CREATE VIEW view_catalog.default.v_ident_var AS SELECT x FROM spark_catalog.default.t")
+        val alterEx = intercept[AnalysisException] {
+          sql("ALTER VIEW view_catalog.default.v_ident_var AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+        }
+        assert(alterEx.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE v2_ident_col")
+      }
+    }
+  }
+
+  test("v2 CREATE / ALTER VIEW allows a temporary variable under an IDENTIFIER clause when the " +
+    "legacy flag is enabled") {
+    // With `spark.sql.legacy.allowSessionVariableInPersistedView` enabled, `CheckViewReferences`
+    // takes its legacy branch for both the v2 CREATE VIEW and ALTER VIEW commands and permits the
+    // dependency instead of rejecting it (the default rejection is covered above). This checks that
+    // both commands are allowed under the flag; the flag does not persist the variable.
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("DECLARE OR REPLACE VARIABLE v2_ident_col STRING DEFAULT 'x'")
+      try {
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          // CREATE is allowed under the flag.
+          sql("CREATE VIEW view_catalog.default.v_ident_flag AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+          // ALTER is allowed under the flag too.
+          sql("ALTER VIEW view_catalog.default.v_ident_flag AS " +
+            "SELECT IDENTIFIER(v2_ident_col) AS y FROM spark_catalog.default.t")
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS view_catalog.default.v_ident_flag")
+        sql("DROP TEMPORARY VARIABLE v2_ident_col")
+      }
     }
   }
 
@@ -570,7 +625,7 @@ class TestingRelationCatalog extends RelationCatalog {
 
 /**
  * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests: the gate
- * fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
+ * fires in `RelationResolution.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
  * [[CheckViewReferences]] for CREATE VIEW -- in both cases before `loadTable` is called --
  * so this catalog's content is intentionally empty.
  */

@@ -208,7 +208,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * were created during the session. Called by SessionHolder during session cleanup.
    */
   def close(): Unit = {
-    if (hasCreatedMLDirs.get() || cachedModel.size() > 0) {
+    if (hasCreatedMLDirs.get() || !cachedModel.isEmpty) {
       try {
         clear()
       } catch {

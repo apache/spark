@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerat
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression, Years}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
@@ -48,7 +48,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{
+  FileSystemBasedCheckpointFileManager,
+  HDFSMetadataLog}
 import org.apache.spark.sql.execution.vectorized.{
   ColumnVectorUtils,
   ConstantColumnVector,
@@ -84,7 +86,8 @@ class QueryExecutionErrorsSuite
   extends ParquetTest
   with OrcTest
   with SharedSparkSession
-  with DataTypeErrorsBase {
+  with DataTypeErrorsBase
+  with IntervalErrorContextTestUtils {
 
   import testImplicits._
 
@@ -225,6 +228,31 @@ class QueryExecutionErrorsSuite
       "ECB", "None")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
       "CBC", "NoPadding")
+  }
+
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      // Use a value that is unambiguously invalid so this test focuses on the
+      // rendered error message rather than the full extension validation matrix.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`csv`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
+  }
+
+  test("SPARK-58945: invalid writer commit message reports detail") {
+    checkError(
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_WRITER_COMMIT_MESSAGE",
+      parameters = Map("detail" -> "zero"))
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
@@ -499,16 +527,9 @@ class QueryExecutionErrorsSuite
     }}
     spark.udf.register("luckyCharOfWord", luckyCharOfWord)
 
-    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
-      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
-    } else {
-      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
-    }
-    val reason = if (Utils.isJavaVersionAtLeast21) {
+    val functionNameRegex = "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
+    val reason =
       "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
-    } else {
-      "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"
-    }
 
     checkError(
       exception = intercept[SparkException] {
@@ -530,16 +551,9 @@ class QueryExecutionErrorsSuite
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
     }}
-    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
-      "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
-    } else {
-      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
-    }
-    val reason = if (Utils.isJavaVersionAtLeast21) {
+    val functionNameRegex = "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
+    val reason =
       "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
-    } else {
-      "java.lang.StringIndexOutOfBoundsException: begin 5, end 6, length 5"
-    }
 
     checkError(
       exception = intercept[SparkException] {
@@ -830,6 +844,50 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-61352: an interval error keeps its query context in non-ANSI mode") {
+    // The division and the `make_*_interval` functions raise in every mode. Without whole-stage
+    // codegen the projection is built on the executor from a deserialized copy of the expression.
+    // The expressions read a column, so that they are not constant-folded on the driver.
+    // `SimplifyCasts` replaces a cast to the type of the expression with the expression, which
+    // keeps its own context although the non-ANSI cast has none, and takes the context of a
+    // `try_cast`, which has one in every mode, as the ANSI expressions do.
+    def withSameTypeCast(expr: String, dataType: String): Seq[(String, String)] = {
+      val tryCast = s"try_cast($expr AS $dataType)"
+      Seq(expr -> expr, s"CAST($expr AS $dataType)" -> expr, tryCast -> tryCast)
+    }
+
+    val makeYM = "make_ym_interval(CAST(id AS INT) + 178956971, 0)"
+    val makeDT = "make_dt_interval(CAST(id AS INT) + 106751992)"
+    val cases = Seq(
+      (withSameTypeCast(ymDivide, "INTERVAL YEAR TO MONTH"),
+        "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION", "22015",
+        Map("functionName" -> "`try_divide`")),
+      (withSameTypeCast(dtDivide, "INTERVAL DAY TO SECOND"),
+        "INTERVAL_DIVIDED_BY_ZERO", "22012", Map.empty[String, String]),
+      (withSameTypeCast(makeYM, "INTERVAL YEAR TO MONTH"),
+        "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION", "22015", Map.empty[String, String]),
+      (withSameTypeCast(makeDT, "INTERVAL DAY TO SECOND"),
+        "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION", "22015", Map.empty[String, String]))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      Seq("true", "false").foreach { wholeStage =>
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+          cases.foreach { case (queries, condition, sqlState, parameters) =>
+            queries.foreach { case (query, fragment) =>
+              checkError(
+                exception = intercept[SparkArithmeticException] {
+                  sql(s"SELECT $query FROM range(1)").collect()
+                },
+                condition = condition,
+                sqlState = sqlState,
+                parameters = parameters,
+                context = expectedContext(query, fragment))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("CANNOT_PARSE_STRING_AS_DATATYPE: parse string as float use from_json") {
     val jsonStr = """{"a": "str"}"""
     checkError(
@@ -994,6 +1052,22 @@ class QueryExecutionErrorsSuite
           parameters = Map("sourcePath" -> s"$expectedPath.+")
         )
       }
+    }
+  }
+
+  test("SPARK-43940: BATCH_METADATA_NOT_FOUND") {
+    withTempDir { dir =>
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      val e = intercept[SparkFileNotFoundException] {
+        metadataLog.applyFnToBatchByStream(0L) { _ => () }
+      }
+
+      val batchMetadataFile = new Path(dir.getAbsolutePath, "0").toString
+      checkError(
+        exception = e,
+        condition = "BATCH_METADATA_NOT_FOUND",
+        parameters = Map("batchMetadataFile" -> batchMetadataFile),
+        sqlState = "42K03")
     }
   }
 
@@ -1297,35 +1371,53 @@ class QueryExecutionErrorsSuite
   test("Elements exceed limit for concat()") {
     val array = new ColumnarArray(
       new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+    val expr = Concat(Seq(Literal.create(array, ArrayType(BooleanType))))
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Concat(Seq(Literal.create(array, ArrayType(BooleanType)))).eval(EmptyRow)
-      },
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> Int.MaxValue.toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> toSQLId("concat")
+    // SPARK-59374: the generated code has to reject the length as well. Interpreted evaluation
+    // has always checked it, but codegen used to reach `ArrayData.allocateArrayData` and fail
+    // there with an internal error instead.
+    Seq(
+      () => expr.eval(EmptyRow),
+      () => GenerateUnsafeProjection.generate(Seq(expr)).apply(EmptyRow)
+    ).foreach { evaluate =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          evaluate()
+        },
+        condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+        parameters = Map(
+          "numberOfElements" -> Int.MaxValue.toString,
+          "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+          "functionName" -> toSQLId("concat")
+        )
       )
-    )
+    }
   }
 
   test("Elements exceed limit for flatten()") {
     val array = new ColumnarArray(
       new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+    val expr = Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType)))))
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType))))).eval(EmptyRow)
-      },
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> Int.MaxValue.toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> toSQLId("flatten")
+    // SPARK-59375: the generated code has to reject the length as well. Interpreted evaluation
+    // has always checked it, but codegen used to reach `ArrayData.allocateArrayData` and fail
+    // there with an internal error instead.
+    Seq(
+      () => expr.eval(EmptyRow),
+      () => GenerateUnsafeProjection.generate(Seq(expr)).apply(EmptyRow)
+    ).foreach { evaluate =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          evaluate()
+        },
+        condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+        parameters = Map(
+          "numberOfElements" -> Int.MaxValue.toString,
+          "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+          "functionName" -> toSQLId("flatten")
+        )
       )
-    )
+    }
   }
 
   test("Elements exceed limit for array_repeat()") {

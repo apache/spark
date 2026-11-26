@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import ChiSqSelector
 from pyspark.ml.linalg import Vectors
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

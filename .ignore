@@ -1,0 +1,2 @@
+# Let rg search agent docs, which live in hidden .agents/ directories.
+!.agents/

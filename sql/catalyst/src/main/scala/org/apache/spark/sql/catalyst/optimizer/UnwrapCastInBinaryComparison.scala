@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
  *     decimal, etc), boolean type or datetime type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
- *     int to long, but not long to int, nor int to boolean)
+ *     int to long, time(3) to time(6), but not long to int, nor int to boolean)
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
@@ -127,9 +127,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       unwrapCast(swap(exp)).map(swap)
 
     // In case both sides have numeric type, optimize the comparison by removing casts or
-    // moving cast to the literal side.
+    // moving cast to the literal side. The same applies to a time cast to a larger precision,
+    // which keeps the value like a decimal cast to a larger scale.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
+      Cast(fromExp, toType @ (_: NumericType | _: TimeType), _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
       Some(simplifyNumericComparison(be, fromExp, toType, value))
 
@@ -165,33 +166,28 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // 1. this rule doesn't convert in when `in.list` is empty or `in.list` contains only null
     // values.
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
-    // type.
+    // type, or of time type.
     // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
-    case in @ In(Cast(fromExp, toType: NumericType, tz, mode), list @ Seq(firstLit, _*))
+    case in @ In(Cast(fromExp, toType @ (_: NumericType | _: TimeType), tz, mode),
+        list @ Seq(firstLit, _*))
       if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
-
-      val buildIn = {
-        (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
-          // cast null value to fromExp.dataType, to make sure the new return list is in the same
-          // data type.
-          val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
-          In(fromExp, newList.toSeq)
+      val (nullList, canCastList) = castLiterals(fromExp.dataType, toType, list)
+      if (nullList.isEmpty && canCastList.isEmpty) {
+        // only have cannot cast to fromExp.dataType literals
+        Some(falseIfNotNull(fromExp))
+      } else {
+        // cast null value to fromExp.dataType, to make sure the new return list is in the same
+        // data type.
+        val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
+        Some(In(fromExp, newList.toSeq))
       }
-      simplifyIn(fromExp, toType, list, buildIn)
 
-    // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
-    // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
-    // both `fromExp.dataType` and `toType` is numeric type or not.
-    case InSet(Cast(fromExp, toType: NumericType, _, _), hset)
-      if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
-      val buildInSet =
-        (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
-          InSet(fromExp, (nullList ++ canCastList).map(_.value).toSet)
-      simplifyIn(
-        fromExp,
-        toType,
-        hset.map(v => Literal.create(v, toType)).toSeq,
-        buildInSet)
+    case inSet: InSet =>
+      unwrapCastInSet(inSet).map {
+        // only have cannot cast to fromExp.dataType literals
+        case (fromExp, values) if values.isEmpty => falseIfNotNull(fromExp)
+        case (fromExp, values) => InSet(fromExp, values)
+      }
 
     case _ => None
   }
@@ -205,7 +201,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   private def simplifyNumericComparison(
       exp: BinaryComparison,
       fromExp: Expression,
-      toType: NumericType,
+      toType: DataType,
       value: Any): Expression = {
 
     val fromType = fromExp.dataType
@@ -279,7 +275,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // decimal type), or that the literal `value` is within range `(min, max)`. For these, we
     // optimize by moving the cast to the literal side.
 
-    val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
+    val newValue = Cast(Literal(value, toType), fromType, ansiEnabled = false).eval()
     if (newValue == null) {
       // This means the cast failed, for instance, due to the value is not representable in the
       // narrower type. In this case we simply return the original expression.
@@ -412,12 +408,35 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
-  private def simplifyIn[IN <: Expression](
-      fromExp: Expression,
-      toType: NumericType,
-      list: Seq[Expression],
-      buildExpr: (ArrayBuffer[Literal], ArrayBuffer[Literal]) => IN): Option[Expression] = {
+  /**
+   * Unwraps the cast of `InSet(Cast(fromExp, toType), hset)`. Returns `fromExp` and the values
+   * of `hset` converted to its type, dropping the ones that don't survive the round trip (see
+   * `castLiterals`), so the set is empty when no row can match. Returns None if the cast can't
+   * be unwrapped.
+   *
+   * Besides the rule, this is also used at runtime to unwrap the cast of a dynamic partition
+   * pruning filter, whose values are only known once its subquery has been evaluated.
+   */
+  private[sql] def unwrapCastInSet(inSet: InSet): Option[(Expression, Set[Any])] = inSet match {
+    // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
+    // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
+    // both `fromExp.dataType` and `toType` is numeric type (or time type) or not.
+    case InSet(Cast(fromExp, toType @ (_: NumericType | _: TimeType), _, _), hset)
+        if hset.nonEmpty && canImplicitlyCast(fromExp, toType, toType) =>
+      val (nullList, canCastList) =
+        castLiterals(fromExp.dataType, toType, hset.map(v => Literal.create(v, toType)).toSeq)
+      Some((fromExp, (nullList ++ canCastList).map(_.value).toSet))
+    case _ => None
+  }
 
+  /**
+   * Casts the literals of an `In`/`InSet` list from `toType` to `fromType`. Returns the null
+   * literals and the literals that can be cast, the others are dropped as explained below.
+   */
+  private def castLiterals(
+      fromType: DataType,
+      toType: DataType,
+      list: Seq[Expression]): (ArrayBuffer[Literal], ArrayBuffer[Literal]) = {
     // There are 3 kinds of literals in the list:
     // 1. null literals
     // 2. The literals that can cast to fromExp.dataType
@@ -435,33 +454,25 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     //     note that 3.14 will be rounded to 3.14000010... after casting to float
 
     val (nullList, canCastList) = (ArrayBuffer[Literal](), ArrayBuffer[Literal]())
-    val fromType = fromExp.dataType
     val ordering = PhysicalDataType.ordering(toType)
 
     list.foreach {
       case lit @ Literal(null, _) => nullList += lit
       case NonNullLiteral(value, _) =>
-        val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
+        val newValue = Cast(Literal(value, toType), fromType, ansiEnabled = false).eval()
         val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
         if (newValue != null && ordering.compare(value, valueRoundTrip) == 0) {
           canCastList += Literal(newValue, fromType)
         }
     }
-
-    if (nullList.isEmpty && canCastList.isEmpty) {
-      // only have cannot cast to fromExp.dataType literals
-      Option(falseIfNotNull(fromExp))
-    } else {
-      val unwrapExpr = buildExpr(nullList, canCastList)
-      Option(unwrapExpr)
-    }
+    (nullList, canCastList)
   }
 
 
   /**
    * Check if the input `fromExp` can be safely cast to `toType` without any loss of precision,
    * i.e., the conversion is injective. Note this only handles the case when both sides are of
-   * numeric type.
+   * numeric type, or of time type.
    */
   private def canImplicitlyCast(
       fromExp: Expression,
@@ -469,7 +480,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     DataTypeUtils.sameType(toType, literalType) &&
       !fromExp.foldable &&
-      toType.isInstanceOf[NumericType] &&
+      (toType.isInstanceOf[NumericType] || toType.isInstanceOf[TimeType]) &&
       canUnwrapCast(fromExp.dataType, toType)
   }
 
@@ -481,6 +492,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case (LongType, FloatType) => false
     case (LongType, DoubleType) => false
     case _ if from.isInstanceOf[NumericType] => Cast.canUpCast(from, to)
+    // A time(p) value has at most p fractional digits, so casting it to a larger precision keeps
+    // the value. Casting a literal back to time(p) truncates it, i.e. rounds it down.
+    case (f: TimeType, t: TimeType) => f.precision < t.precision
     case _ => false
   }
 

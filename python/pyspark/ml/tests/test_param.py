@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-import inspect
 import array as pyarray
+import inspect
 
 import numpy as np
 
@@ -35,9 +35,9 @@ from pyspark.ml.feature import (
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
-from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
+from pyspark.ml.regression import GeneralizedLinearRegressionModel, LinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
-from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
+from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase, check_params
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -386,10 +386,10 @@ class DefaultValuesTests(PySparkTestCase):
     def test_java_params(self):
         import re
 
-        import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
         import pyspark.ml.evaluation
+        import pyspark.ml.feature
         import pyspark.ml.pipeline
         import pyspark.ml.recommendation
         import pyspark.ml.regression

@@ -91,7 +91,15 @@ trait CoercesExpressionTypes extends SQLConfHelper with ResolverMetricTracker {
 
         val coercionResult = expressionTreeTraversal.defaultCollation match {
           case Some(defaultCollation) =>
-            DefaultCollationTypeCoercion(expressionAfterTypeCoercion, defaultCollation)
+            // A `Cast` wrapped on here comes after `applyTypeCoercion` resolved child-cast
+            // timezones, so resolve its timezone too -- else it reaches `ResolutionValidator`
+            // unset (seen on the view re-resolution path).
+            DefaultCollationTypeCoercion(expressionAfterTypeCoercion, defaultCollation) match {
+              case cast: Cast =>
+                TimezoneAwareExpressionResolver
+                  .resolveTimezone(cast, expressionTreeTraversal.sessionLocalTimeZone)
+              case other => other
+            }
           case None =>
             expressionAfterTypeCoercion
         }

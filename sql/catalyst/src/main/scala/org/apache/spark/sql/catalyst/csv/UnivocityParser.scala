@@ -95,6 +95,10 @@ class UnivocityParser(
   // Pre-allocated empty sequence returned when the parsed row cannot pass filters.
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
+  // Existence DEFAULT values of the required columns, analyzed at most once per parser instead of
+  // once per missing or malformed token.
+  private lazy val existenceDefaultValues =
+    ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -278,8 +282,10 @@ class UnivocityParser(
         timeFormatter.parse(datum)
       }
 
-    case _: StringType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
+    case dt: StringType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { s =>
+        CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(s), dt)
+      }
 
     case _: BinaryType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.getBytes)
@@ -433,7 +439,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
+          row.update(i, existenceDefaultValues(i))
       }
       i += 1
     }
@@ -478,6 +484,11 @@ class UnivocityParser(
     def convertInput(builder: VariantBuilder, s: String): Unit = {
       if (s == null || s == options.nullValue) {
         builder.appendNull()
+        return
+      }
+
+      if (!options.inferSchemaFlag && options.variantRespectInferSchema) {
+        builder.appendString(s)
         return
       }
 

@@ -21,10 +21,16 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
 
-class UnsafeRowUtilsSuite extends SparkFunSuite {
+class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
 
   val testKeys: Seq[String] = Seq("key1", "key2")
   val testValues: Seq[String] = Seq("sum(key1)", "sum(key2)")
@@ -157,6 +163,231 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(!UnsafeRowUtils.isBinaryStable(
       StructType(StructField("field",
         StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
+  }
+
+  test("hash aggregate grouping key support for binary-unstable types") {
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+
+    assert(Aggregate.supportsHashAggregateGroupingKey(collatedString))
+    assert(Aggregate.supportsHashAggregateGroupingKey(ArrayType(collatedString)))
+    assert(Aggregate.supportsHashAggregateGroupingKey(
+      StructType(StructField("s", collatedString) :: Nil)))
+    assert(!Aggregate.supportsHashAggregateGroupingKey(MapType(collatedString, IntegerType)))
+    assert(Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
+      StructField("s", collatedString),
+      StructField("m", MapType(StringType, IntegerType))))))
+    assert(!Aggregate.supportsHashAggregateGroupingKey(StructType(Seq(
+      StructField("s", collatedString),
+      StructField("m", MapType(collatedString, IntegerType))))))
+  }
+
+  test("UnsafeRowKeyOperations equality and hash contract") {
+    case class KeyContractCase(
+        name: String,
+        schema: StructType,
+        left: InternalRow,
+        right: InternalRow,
+        different: InternalRow)
+
+    def collatedString(collationName: String): StringType = {
+      StringType(CollationFactory.collationNameToId(collationName))
+    }
+
+    def utf8(value: String): UTF8String = UTF8String.fromString(value)
+
+    def array(values: Any*): GenericArrayData = new GenericArrayData(values.toArray)
+
+    val lcase = collatedString("UTF8_LCASE")
+    val unicodeCI = collatedString("UNICODE_CI")
+    val binaryRtrim = collatedString("UTF8_BINARY_RTRIM")
+    val lcaseRtrim = collatedString("UTF8_LCASE_RTRIM")
+    val geometry = GeometryType(4326)
+    val geography = GeographyType(4326)
+    val nestedType = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("label", lcaseRtrim)))
+
+    val testCases = Seq(
+      KeyContractCase(
+        "scalar LCASE string",
+        StructType(StructField("s", lcase) :: Nil),
+        InternalRow(utf8("AAA")),
+        InternalRow(utf8("aaa")),
+        InternalRow(utf8("bbb"))),
+      KeyContractCase(
+        "mixed primitive fields",
+        StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("s", lcase),
+          StructField("flag", BooleanType),
+          StructField("count", LongType))),
+        InternalRow(1, utf8("HELLO"), true, 10L),
+        InternalRow(1, utf8("hello"), true, 10L),
+        InternalRow(2, utf8("hello"), true, 10L)),
+      KeyContractCase(
+        "array with ICU collation and null element",
+        StructType(StructField("a", ArrayType(unicodeCI)) :: Nil),
+        InternalRow(array(utf8("HELLO"), null, utf8("WORLD"))),
+        InternalRow(array(utf8("hello"), null, utf8("world"))),
+        InternalRow(array(utf8("hello"), null, utf8("other")))),
+      KeyContractCase(
+        "nested array with ICU collation",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array(utf8("HELLO")), array(utf8("WORLD")))),
+        InternalRow(array(array(utf8("hello")), array(utf8("world")))),
+        InternalRow(array(array(utf8("hello")), array(utf8("other"))))),
+      KeyContractCase(
+        "nested array with unequal lengths",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array(utf8("HELLO")))),
+        InternalRow(array(array(utf8("hello")))),
+        InternalRow(array(array(utf8("hello"), utf8("world"))))),
+      KeyContractCase(
+        "nested empty and non-empty arrays",
+        StructType(StructField("a", ArrayType(ArrayType(unicodeCI))) :: Nil),
+        InternalRow(array(array())),
+        InternalRow(array(array())),
+        InternalRow(array(array(utf8("value"))))),
+      KeyContractCase(
+        "nested struct with LCASE RTRIM collation",
+        StructType(StructField("nested", nestedType) :: Nil),
+        InternalRow(InternalRow(7, utf8("VALUE"))),
+        InternalRow(InternalRow(7, utf8("value   "))),
+        InternalRow(InternalRow(8, utf8("value")))),
+      KeyContractCase(
+        "array of structs with LCASE RTRIM collation",
+        StructType(StructField("a", ArrayType(nestedType)) :: Nil),
+        InternalRow(array(InternalRow(7, utf8("VALUE")))),
+        InternalRow(array(InternalRow(7, utf8("value   ")))),
+        InternalRow(array(InternalRow(8, utf8("value"))))),
+      KeyContractCase(
+        "binary RTRIM string with different lengths",
+        StructType(StructField("s", binaryRtrim) :: Nil),
+        InternalRow(utf8("value")),
+        InternalRow(utf8("value   ")),
+        InternalRow(utf8("VALUE"))),
+      KeyContractCase(
+        "null collated field",
+        StructType(Seq(StructField("s", unicodeCI), StructField("id", IntegerType))),
+        InternalRow(null, 1),
+        InternalRow(null, 1),
+        InternalRow(utf8("value"), 1)),
+      KeyContractCase(
+        "collated string with opaque binary-stable fields",
+        StructType(Seq(
+          StructField("s", lcase),
+          StructField("interval", CalendarIntervalType),
+          StructField("geometry", geometry),
+          StructField("geography", geography),
+          StructField("payload", BinaryType))),
+        InternalRow(
+          utf8("HELLO"),
+          new CalendarInterval(1, 2, 3),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9)),
+        InternalRow(
+          utf8("hello"),
+          new CalendarInterval(1, 2, 3),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9)),
+        InternalRow(
+          utf8("hello"),
+          new CalendarInterval(1, 2, 4),
+          BinaryView.fromBytes(Array[Byte](1, 2, 3)),
+          BinaryView.fromBytes(Array[Byte](4, 5, 6)),
+          Array[Byte](7, 8, 9))))
+
+    Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
+      codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+          testCases.foreach { testCase =>
+            withClue(s"$codegenMode: ${testCase.name}: ") {
+              val projection = UnsafeProjection.create(testCase.schema)
+              val left = projection(testCase.left).copy()
+              val right = projection(testCase.right).copy()
+              val different = projection(testCase.different).copy()
+              val keyOperations = new UnsafeRowKeyOperations(testCase.schema)
+
+              assert(keyOperations.areEqual(left, right))
+              assert(keyOperations.areEqual(right, left))
+              assert(!keyOperations.areEqual(left, different))
+              assert(!keyOperations.areEqual(different, left))
+              assert(keyOperations.hash(left) == keyOperations.hash(right))
+
+              val serializedOperations = keyOperations.create()
+              assert(serializedOperations.equals(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes,
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes))
+              assert(serializedOperations.equals(
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes,
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes))
+              assert(!serializedOperations.equals(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes,
+                different.getBaseObject,
+                different.getBaseOffset,
+                different.getSizeInBytes))
+              assert(serializedOperations.hash(
+                left.getBaseObject,
+                left.getBaseOffset,
+                left.getSizeInBytes) == serializedOperations.hash(
+                right.getBaseObject,
+                right.getBaseOffset,
+                right.getSizeInBytes))
+            }
+          }
+        }
+    }
+  }
+
+  test("UnsafeRowKeyOperations raw ICU keys match materialized sort-key hashes") {
+    // scalastyle:off nonascii
+    val values = Seq(
+      "a" * 4096,
+      "short",
+      "Résumé",
+      "resume   ",
+      "")
+    // scalastyle:on nonascii
+
+    Seq("UNICODE", "UNICODE_CI", "UNICODE_RTRIM", "UNICODE_CI_RTRIM").foreach {
+      collationName =>
+        val stringType = StringType(CollationFactory.collationNameToId(collationName))
+        val schema = StructType(StructField("value", stringType) :: Nil)
+        val projection = UnsafeProjection.create(schema)
+        val keyOperations = new UnsafeRowKeyOperations(schema)
+        val serializedOperations = keyOperations.create()
+        val collation = CollationFactory.fetchCollation(stringType.collationId)
+
+        values.foreach { value =>
+          val row = projection(InternalRow(UTF8String.fromString(value))).copy()
+          val materializedKey = collation.sortKeyFunction.apply(row.getUTF8String(0))
+          val expectedHash = Murmur3_x86_32.hashUnsafeBytes(
+            materializedKey,
+            Platform.BYTE_ARRAY_OFFSET,
+            materializedKey.length,
+            42)
+
+          withClue(s"$collationName: $value: ") {
+            assert(keyOperations.hash(row) == expectedHash)
+            assert(serializedOperations.hash(
+              row.getBaseObject,
+              row.getBaseOffset,
+              row.getSizeInBytes) == expectedHash)
+          }
+        }
+    }
   }
 
   test("PaddingProvider handles endianness") {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
@@ -167,6 +167,27 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if the expression could potentially throw an exception when evaluated.
    */
   lazy val throwable: Boolean = children.exists(_.throwable)
+
+  /**
+   * Returns true if this expression is total by itself, whatever its children are: it cannot
+   * raise an error for any values of its children of their current types, and it gives equal
+   * results for equal children of a binary-stable type (strings of a non-binary collation are
+   * guarded by the callers). This is about this node only, not about its children, and it is the
+   * declaration that [[ExprUtils.isTotalOperator]] and [[ExprUtils.canEvaluateUnconditionally]]
+   * read: the optimizer evaluates a total expression on rows it would otherwise not see, and
+   * replaces a child of it with a value equal to that child.
+   *
+   * Unlike [[throwable]], this is false unless an expression says otherwise, so an expression
+   * that says nothing is only left out of some optimizations. An expression that is always total
+   * mixes in [[NoThrow]]. An expression that is total only for some input types or in some eval
+   * modes, such as [[Cast]] and the arithmetic expressions, overrides this method instead. Before
+   * returning true, check every path of `eval` and of the generated code, in every eval mode and
+   * for every input type the expression accepts.
+   *
+   * This is meant for resolved expressions: an override may read the data types of the children,
+   * which fails for an unresolved one.
+   */
+  def isTotal: Boolean = false
 
   /**
    * Returns a copy of this expression where all stateful expressions are replaced with fresh
@@ -519,6 +540,8 @@ trait NonSQLExpression extends Expression {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
       case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+      case udf: ExternalUserDefinedFunction =>
+        PrettyPythonUDF(udf.name.getOrElse(udf.prettyName), udf.dataType, udf.children)
       // Render a transpiled UDF like the UDF it wraps (options must not leak
       // into user-visible strings).
       case t: TranspiledPythonUDF => PrettyPythonUDF(t.name, t.dataType, t.pythonUDFExpr.children)
@@ -560,6 +583,29 @@ trait Nondeterministic extends Expression {
   }
 
   protected def evalInternal(input: InternalRow): Any
+}
+
+/**
+ * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
+ * For example, UDFs, [[AssertTrue]], etc can throw an exception when they are executed.
+ * In such case, it is necessary to call [[Expression.eval]], and the optimization rule should
+ * not ignore it.
+ *
+ * This trait can be used in an optimization rule such as
+ * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that
+ * do not need to execute, for example, `size(array(c0, c1, c2))`. That rule only does so for
+ * [[CreateArray]] and [[CreateNamedStruct]] for now.
+ *
+ * Mixing it in is a promise by the author of the expression that it is always total, as
+ * [[Expression.isTotal]] defines it: it must not raise for any input of its children, in any eval
+ * mode, and it must give equal results for equal children of a binary-stable type. The promise
+ * covers every subclass of the expression that mixes it in, which cannot override
+ * [[Expression.isTotal]] any more, so mix it into concrete expressions and not into a base class
+ * or trait that other expressions may extend later. An expression that is total only for some
+ * input types or in some eval modes overrides [[Expression.isTotal]] instead.
+ */
+trait NoThrow extends Expression {
+  final override def isTotal: Boolean = true
 }
 
 /**
@@ -697,13 +743,30 @@ trait SupportQueryContext extends Expression with Serializable {
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
   //       for better performance. Thus, we need to copy the original query context during
   //       transforms. The query context string is considered as a "tag" on the expression here.
+  //       It is copied only when the replaced node has one with an origin: a node without a
+  //       context, such as a non-ANSI `Divide` that the analyzer turns into an interval
+  //       division, or with one built from an empty "Origin", would otherwise leave the
+  //       expression that replaces it, such as an interval division, which raises in every
+  //       mode, without a usable one.
   override def copyTagsFrom(other: Expression): Unit = {
     other match {
-      case s: SupportQueryContext =>
+      case s: SupportQueryContext if s.queryContext.exists(SupportQueryContext.hasOrigin) =>
         queryContext = s.queryContext
       case _ =>
     }
     super.copyTagsFrom(other)
+  }
+}
+
+object SupportQueryContext {
+  /**
+   * Whether `context` comes from an origin. A SQL context built from an empty "Origin" has no
+   * text and no start index. This test is O(1), unlike `SQLQueryContext.isValid`, which counts
+   * the code points of any non-Latin-1 text, so it can run on every transform.
+   */
+  def hasOrigin(context: QueryContext): Boolean = context match {
+    case c: SQLQueryContext => c.sqlText.isDefined && c.originStartIndex.isDefined
+    case _ => true
   }
 }
 

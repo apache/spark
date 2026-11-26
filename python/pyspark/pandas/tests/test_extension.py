@@ -21,12 +21,12 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import assert_produces_warning, PandasOnSparkTestCase
 from pyspark.pandas.extensions import (
     register_dataframe_accessor,
-    register_series_accessor,
     register_index_accessor,
+    register_series_accessor,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, assert_produces_warning
 
 
 @contextlib.contextmanager

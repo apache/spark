@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.sql import Row, Observation, functions as F
-from pyspark.sql.types import StructType, LongType
+import datetime
+
 from pyspark.errors import (
     AnalysisException,
     PySparkAssertionError,
@@ -24,6 +24,9 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.sql import Observation, Row
+from pyspark.sql import functions as F
+from pyspark.sql.types import LongType, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import assertDataFrameEqual, eventually
 
@@ -255,6 +258,36 @@ class DataFrameObservationTestsMixin:
         assertDataFrameEqual(df, [Row(id=id) for id in range(10)])
 
         self.assertEqual(observation.get, {"map": {"count": 10}})
+
+    def test_observe_with_various_types(self):
+        observation = Observation("types")
+
+        df = self.spark.range(10).observe(
+            observation,
+            F.max(F.lit(None).cast("int")).alias("null"),
+            F.max(F.col("id").cast("byte")).alias("byte"),
+            F.max(F.col("id").cast("short")).alias("short"),
+            F.max(F.col("id").cast("float")).alias("float"),
+            F.max(F.lit("2024-01-02 03:04:05").cast("timestamp_ntz")).alias("ntz"),
+            F.struct(
+                F.struct(F.max("id").alias("maxid")).alias("inner"),
+                F.create_map(F.lit("count"), F.count(F.lit(1))).alias("map"),
+            ).alias("nested"),
+        )
+
+        assertDataFrameEqual(df, [Row(id=id) for id in range(10)])
+
+        self.assertEqual(
+            observation.get,
+            {
+                "null": None,
+                "byte": 9,
+                "short": 9,
+                "float": 9.0,
+                "ntz": datetime.datetime(2024, 1, 2, 3, 4, 5),
+                "nested": Row(inner=Row(maxid=9), map={"count": 10}),
+            },
+        )
 
     def test_observation_errors_propagated_to_client(self):
         observation = Observation("test_observation")

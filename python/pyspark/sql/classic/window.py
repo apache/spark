@@ -15,16 +15,19 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, Iterable, Sequence, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Iterable, Sequence, Tuple, Union, cast
 
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.window import (
     Window as ParentWindow,
+)
+from pyspark.sql.window import (
     WindowSpec as ParentWindowSpec,
 )
-from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.sql._typing import ColumnOrName
 
 
@@ -34,7 +37,7 @@ __all__ = ["Window", "WindowSpec"]
 def _to_java_cols(
     cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...],
 ) -> "JavaObject":
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
@@ -125,8 +128,9 @@ class WindowSpec(ParentWindowSpec):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.window
+    from pyspark.sql import SparkSession
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.

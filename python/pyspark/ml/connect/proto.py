@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.plan import LogicalPlan

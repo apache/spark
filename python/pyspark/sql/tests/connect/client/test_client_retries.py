@@ -18,25 +18,25 @@
 import unittest
 import warnings
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
-    import grpc
     import google.protobuf.any_pb2 as any_pb2
     import google.protobuf.duration_pb2 as duration_pb2
-    from google.rpc import status_pb2
-    from google.rpc import error_details_pb2
+    import grpc
+    from google.rpc import error_details_pb2, status_pb2
+
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.client.core import RpcDeadlines
     from pyspark.sql.connect.client.retries import (
-        Retrying,
+        DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
         DefaultPolicy,
         RetryException,
-        DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+        Retrying,
     )
     from pyspark.sql.tests.connect.client.test_client import (
-        TestPolicy,
         TestException,
+        TestPolicy,
     )
 
     class SleepTimeTracker:
@@ -401,6 +401,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         self.assertIsNone(d.clone_session)
         self.assertIsNone(d.get_status)
         self.assertIsNone(d.fetch_error_details)
+        self.assertIsNone(d.release_relation)
 
     def test_rpc_deadlines_defaults_are_set(self):
         """RpcDeadlines() default instance should have documented timeout values."""
@@ -416,6 +417,16 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         self.assertEqual(d.clone_session, 10 * 60)
         self.assertEqual(d.get_status, 10 * 60)
         self.assertEqual(d.fetch_error_details, 10 * 60)
+        self.assertEqual(d.release_relation, 60)
+
+    def test_rpc_deadlines_preserves_existing_positional_arguments(self):
+        """New deadline fields should not shift existing positional arguments."""
+        d = RpcDeadlines(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+        self.assertEqual(d.artifact_status, 8)
+        self.assertEqual(d.clone_session, 9)
+        self.assertEqual(d.get_status, 10)
+        self.assertEqual(d.fetch_error_details, 11)
+        self.assertEqual(d.release_relation, 60)
 
     def test_rpc_deadlines_rejects_non_positive_values(self):
         """RpcDeadlines should raise ValueError for any non-None field that is <= 0."""

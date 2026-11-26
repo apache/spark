@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, EVAL_ONLY_WHEN, EXTERNAL_UDF, IF, PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -139,6 +139,133 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     trueValue = newSecond,
     falseValue = newThird
   )
+}
+
+/**
+ * Returns `child` when `condition` evaluates to true, and null otherwise, like
+ * `IF(condition, child, NULL)`. Unlike `If`, it also tells the operators that evaluate Python
+ * and external UDFs outside the expression tree (see `ExtractPythonUDFs` and
+ * `PlanExternalUDFs`) to evaluate a UDF inside `child` only for the rows where `condition` is
+ * true, so a UDF in a branch that a row does not take is not called for that row.
+ *
+ * The marker's `condition` is normally deterministic, so the operator can evaluate it again to
+ * decide which rows to send to the UDF. If it is not deterministic, the operator falls back to
+ * evaluating the UDF for every row (see `udfConditions`).
+ */
+case class EvalOnlyWhen(condition: Expression, child: Expression)
+  extends BinaryExpression with ConditionalExpression {
+
+  override def left: Expression = condition
+  override def right: Expression = child
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = true
+
+  override def alwaysEvaluatedInputs: Seq[Expression] = condition :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(
+      alwaysEvaluatedInputs: Seq[Expression]): EvalOnlyWhen = {
+    copy(condition = alwaysEvaluatedInputs.head)
+  }
+
+  // `child` is not always evaluated, and there is no other branch.
+  override def branchGroups: Seq[Seq[Expression]] = Nil
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (condition.dataType != BooleanType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> toSQLExpr(condition),
+          "inputType" -> toSQLType(condition.dataType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    if (java.lang.Boolean.TRUE.equals(condition.eval(input))) child.eval(input) else null
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val condEval = condition.genCode(ctx)
+    val childEval = child.genCode(ctx)
+    val code =
+      code"""
+         |${condEval.code}
+         |boolean ${ev.isNull} = true;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${condEval.isNull} && ${condEval.value}) {
+         |  ${childEval.code}
+         |  ${ev.isNull} = ${childEval.isNull};
+         |  ${ev.value} = ${childEval.value};
+         |}
+       """.stripMargin
+    ev.copy(code = code)
+  }
+
+  override def toString: String = s"eval_only_when($condition, $child)"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_ONLY_WHEN)
+
+  override def sql: String = s"(IF(${condition.sql}, ${child.sql}, NULL))"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): EvalOnlyWhen =
+    copy(condition = newLeft, child = newRight)
+}
+
+object EvalOnlyWhen {
+  /**
+   * Whether `e` contains a scalar Python UDF or an external UDF that the operators evaluating
+   * those UDFs lift out of a conditional branch (see `ExtractPythonUDFs` and `PlanExternalUDFs`),
+   * so that wrapping the branch in an `EvalOnlyWhen` marker changes when the UDF is evaluated.
+   * This applies the same scalar/external test those operators use, so a marker is added only
+   * when one of them will read it.
+   */
+  def hasLiftedUDF(e: Expression): Boolean =
+    e.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) &&
+      e.exists(x => PythonUDF.isScalarPythonUDF(x) || x.isInstanceOf[ExternalUserDefinedFunction])
+
+  /**
+   * The condition under which the UDFs in `exprs` need to be evaluated, for each UDF that
+   * `isUDF` selects, keyed by `key`: the conjunction of the deterministic conditions of the
+   * enclosing `EvalOnlyWhen` markers, or None if some occurrence of the UDF is not inside a
+   * marker (or the occurrences' conditions differ). Returns an empty map when `exprs` contain
+   * no marker.
+   */
+  def udfConditions[K](
+      exprs: Seq[Expression],
+      isUDF: Expression => Boolean,
+      key: Expression => K): Map[K, Option[Expression]] = {
+    if (!exprs.exists(_.containsPattern(EVAL_ONLY_WHEN))) {
+      return Map.empty
+    }
+    val result = scala.collection.mutable.LinkedHashMap.empty[K, Option[Expression]]
+    def visit(e: Expression, cond: Option[Expression]): Unit = e match {
+      case EvalOnlyWhen(c, child) =>
+        visit(c, cond)
+        // A nested marker needs both conditions; keep it deterministic so the operator can
+        // re-evaluate it. `cond` is itself always None or deterministic, so a non-deterministic
+        // inner condition falls back to the outer one (more rows, never fewer).
+        val inner = if (!c.deterministic) cond
+          else Some(cond.map(And(_, c)).getOrElse(c))
+        visit(child, inner)
+      case u if isUDF(u) =>
+        val k = key(u)
+        val merged = result.get(k) match {
+          case None => cond
+          case Some(Some(prev)) if cond.exists(_.semanticEquals(prev)) => Some(prev)
+          case Some(_) => None
+        }
+        result(k) = merged
+        u.children.foreach(visit(_, cond))
+      case other => other.children.foreach(visit(_, cond))
+    }
+    exprs.foreach(visit(_, None))
+    result.toMap
+  }
 }
 
 /**
@@ -361,8 +488,14 @@ case class CaseWhen(
     //     } while (false);
     //     return caseWhenResultState;
     //   }
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = allConditions,
+    // Under whole stage codegen each method takes the input variables its own branches read in
+    // place of the row `i`, which is why each piece of code goes with the expressions of its
+    // branch; a piece whose inputs no method can take stays inline between the calls, which works
+    // because every piece leaves the same `do { } while (false)` with the same result state.
+    val codes = ctx.splitExpressionsWithSources(
+      pieces = allConditions.zip(
+        branches.map { case (condExpr, valueExpr) => Seq(condExpr, valueExpr) } ++
+          elseValue.map(Seq(_))),
       funcName = "caseWhen",
       returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = func =>

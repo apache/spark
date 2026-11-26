@@ -23,11 +23,6 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.types import (
-    BooleanType,
-    DayTimeIntervalType,
-    StringType,
-)
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
@@ -38,6 +33,11 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql.types import (
+    BooleanType,
+    DayTimeIntervalType,
+    StringType,
+)
 from pyspark.sql.utils import pyspark_column_op
 
 

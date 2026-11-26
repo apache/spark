@@ -21,15 +21,15 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies()
 
+from pyspark.ml.connect import (
+    evaluation,
+    feature,
+    tuning,
+)
 from pyspark.ml.connect.base import (
     Estimator,
-    Transformer,
     Model,
-)
-from pyspark.ml.connect import (
-    feature,
-    evaluation,
-    tuning,
+    Transformer,
 )
 from pyspark.ml.connect.evaluation import Evaluator
 from pyspark.ml.connect.pipeline import Pipeline, PipelineModel

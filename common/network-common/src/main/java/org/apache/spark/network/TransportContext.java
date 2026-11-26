@@ -237,8 +237,11 @@ public class TransportContext implements Closeable {
         .addLast("handler", channelHandler);
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
       if (chunkFetchWorkers != null) {
+        // Use the per-channel handler (which may be wrapped by an authentication bootstrap),
+        // not the context-level one, so chunk fetches also fail closed until the channel has
+        // authenticated.
         ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
-          channelHandler.getClient(), rpcHandler.getStreamManager(),
+          channelHandler.getClient(), channelRpcHandler.getStreamManager(),
           conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }

@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 
 /**
  * Test suite for the new parameter substitution architecture.
@@ -27,13 +28,15 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
 
   test("ParameterHandler - basic named parameter substitution") {
     val context = NamedParameterContext(Map("param1" -> Literal(42)))
-    val (result, _) = ParameterHandler.substituteParameters("SELECT :param1", context)
+    val ParameterSubstitution(result, _, _, _) =
+      ParameterHandler.substituteParameters("SELECT :param1", context)
     assert(result === "SELECT 42")
   }
 
   test("ParameterHandler - basic positional parameter substitution") {
     val context = PositionalParameterContext(Seq(Literal(42)))
-    val (result, _) = ParameterHandler.substituteParameters("SELECT ?", context)
+    val ParameterSubstitution(result, _, _, _) =
+      ParameterHandler.substituteParameters("SELECT ?", context)
     assert(result === "SELECT 42")
   }
 
@@ -41,51 +44,58 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val context = NamedParameterContext(Map("param1" -> Literal(42)))
 
     // Regular statement
-    val (result1, _) = ParameterHandler.substituteParameters("SELECT :param1", context)
+    val ParameterSubstitution(result1, _, _, _) =
+      ParameterHandler.substituteParameters("SELECT :param1", context)
     assert(result1 === "SELECT 42")
 
     // SQL scripting block
-    val (result2, _) = ParameterHandler.substituteParameters("BEGIN SELECT :param1; END", context)
+    val ParameterSubstitution(result2, _, _, _) =
+      ParameterHandler.substituteParameters("BEGIN SELECT :param1; END", context)
     assert(result2.contains("SELECT 42"))
   }
 
   test("ParameterHandler - mixed parameter detection during substitution") {
 
     // Test that named parameters work
-    val (result1, _) = ParameterHandler.substituteParameters("SELECT :param1",
+    val ParameterSubstitution(result1, _, _, _) =
+      ParameterHandler.substituteParameters("SELECT :param1",
       NamedParameterContext(Map("param1" -> Literal("value"))))
     assert(result1.contains("'value'"))
 
     // Test that positional parameters work
-    val (result2, _) = ParameterHandler.substituteParameters("SELECT ?",
+    val ParameterSubstitution(result2, _, _, _) = ParameterHandler.substituteParameters("SELECT ?",
       PositionalParameterContext(List(Literal(42))))
     assert(result2.contains("42"))
 
     // Test that no parameters works
-    val (result3, _) = ParameterHandler.substituteParameters("SELECT 1",
+    val ParameterSubstitution(result3, _, _, _) = ParameterHandler.substituteParameters("SELECT 1",
       NamedParameterContext(Map.empty))
     assert(result3 == "SELECT 1")
   }
 
   test("ParameterHandler - named parameters direct") {
 
-    val (result, _) = ParameterHandler.substituteNamedParameters("SELECT :param1",
+    val ParameterSubstitution(result, _, _, _) =
+      ParameterHandler.substituteNamedParameters("SELECT :param1",
       Map("param1" -> Literal(42)))
     assert(result === "SELECT 42")
   }
 
   test("ParameterHandler - positional parameters direct") {
 
-    val (result, _) = ParameterHandler.substitutePositionalParameters("SELECT ?", Seq(Literal(42)))
+    val ParameterSubstitution(result, _, _, _) =
+      ParameterHandler.substitutePositionalParameters("SELECT ?", Seq(Literal(42)))
     assert(result === "SELECT 42")
   }
 
   test("ParameterHandler - empty parameters") {
 
-    val (result1, _) = ParameterHandler.substituteNamedParameters("SELECT 1", Map.empty)
+    val ParameterSubstitution(result1, _, _, _) =
+      ParameterHandler.substituteNamedParameters("SELECT 1", Map.empty)
     assert(result1 === "SELECT 1")
 
-    val (result2, _) = ParameterHandler.substitutePositionalParameters("SELECT 1", Seq.empty)
+    val ParameterSubstitution(result2, _, _, _) =
+      ParameterHandler.substitutePositionalParameters("SELECT 1", Seq.empty)
     assert(result2 === "SELECT 1")
   }
 
@@ -103,7 +113,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     ))
 
     val sql = "SELECT :id, :name WHERE id IN (SELECT explode(:ids)) AND meta = :metadata"
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
 
     assert(result.contains("42"))
     assert(result.contains("'John'"))
@@ -125,7 +135,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val emoji = new String(Character.toChars(0x1F4AA)) // supplementary char (2 UTF-16 code units)
     val context = NamedParameterContext(Map("team" -> Literal("abc")))
     val sql = s"SELECT '${emoji}' AS a FROM T WHERE :team IS NULL"
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${emoji}' AS a FROM T WHERE 'abc' IS NULL")
   }
 
@@ -133,7 +143,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val emoji = new String(Character.toChars(0x1F4AA))
     val context = PositionalParameterContext(Seq(Literal("abc")))
     val sql = s"SELECT '${emoji}' AS a FROM T WHERE ? IS NULL"
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${emoji}' AS a FROM T WHERE 'abc' IS NULL")
   }
 
@@ -145,7 +155,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
       "p2" -> Literal(42)
     ))
     val sql = s"SELECT '${flexed}', :p1, '${flexed}', :p2"
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}', 42")
   }
 
@@ -154,8 +164,34 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val tada = new String(Character.toChars(0x1F389))
     val context = PositionalParameterContext(Seq(Literal(tada), Literal(99)))
     val sql = s"SELECT '${flexed}', ?, '${flexed}${flexed}', ?"
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}${flexed}', 99")
+  }
+
+  test("whole-text origin stopIndex after substitution is a code-point offset") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val original = s"SELECT '$emoji' AS a, :p AS b"
+    val ParameterSubstitution(substituted, _, mapper, _) = ParameterHandler.substituteParameters(
+      original, NamedParameterContext(Map("p" -> Literal(1))))
+    val origin = Origin(
+      sqlText = Some(substituted),
+      startIndex = Some(0),
+      stopIndex = Some(substituted.codePointCount(0, substituted.length) - 1),
+      positionMapper = Some(mapper))
+    val ctx = origin.context.asInstanceOf[SQLQueryContext]
+    assert(ctx.isValid)
+    assert(ctx.fragment === original)
+    assert(ctx.startIndex === 0)
+    assert(ctx.stopIndex === original.codePointCount(0, original.length) - 1)
+  }
+
+  test("PositionMapper maps past a supplementary replacement in code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val original = "SELECT :p AS a, DATE 'bad'"
+    val ParameterSubstitution(substituted, _, mapper, _) = ParameterHandler.substituteParameters(
+      original, NamedParameterContext(Map("p" -> Literal(emoji))))
+    val dateInSubstituted = substituted.codePointCount(0, substituted.indexOf("DATE"))
+    assert(mapper.mapToOriginal(dateInSubstituted) === original.indexOf("DATE"))
   }
 
   test("Large parameter set") {
@@ -165,7 +201,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val paramRefs = (1 to 100).map(i => s":param$i").mkString(", ")
     val sql = s"SELECT $paramRefs"
 
-    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(sql, context)
 
     assert(result.contains("1, 2, 3"))
     assert(result.contains("98, 99, 100"))

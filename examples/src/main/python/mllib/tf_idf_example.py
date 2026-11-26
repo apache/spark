@@ -16,8 +16,10 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
-from pyspark.mllib.feature import HashingTF, IDF
+from pyspark.mllib.feature import IDF, HashingTF
+
 # $example off$
 
 if __name__ == "__main__":

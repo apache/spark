@@ -23,8 +23,8 @@ This example requires NumPy (http://www.numpy.org/).
 import sys
 
 from pyspark import SparkContext
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint
 
 
 def parsePoint(line):

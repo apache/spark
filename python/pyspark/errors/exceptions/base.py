@@ -17,12 +17,12 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
+from pickle import PicklingError
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, TypeVar, cast
 
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
 from pyspark.logger import PySparkLogger
-from pickle import PicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.types import Row
@@ -434,14 +434,18 @@ class QueryContext(ABC):
     @abstractmethod
     def startIndex(self) -> int:
         """
-        The starting index in the query text which throws the exception. The index starts from 0.
+        The starting index in the query text which throws the exception.
+
+        The index is a 0-based Unicode code-point offset.
         """
         ...
 
     @abstractmethod
     def stopIndex(self) -> int:
         """
-        The stopping index in the query which throws the exception. The index starts from 0.
+        The stopping index in the query text which throws the exception.
+
+        The index is a 0-based Unicode code-point offset, inclusive.
         """
         ...
 

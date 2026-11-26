@@ -335,6 +335,18 @@ object KubernetesUtils extends Logging {
     }
   }
 
+  /**
+   * The service account the pod's spec names, if any. Both spec fields are read,
+   * `serviceAccountName` winning and an empty value counting as unset, matching Kubernetes'
+   * SetDefaults_PodSpec. A pod template is deserialized with no API-server defaulting, so it can
+   * name the account in either field and leave the other null.
+   */
+  private[spark] def podServiceAccount(pod: SparkPod): Option[String] = {
+    val spec = Option(pod.pod.getSpec)
+    spec.flatMap(s => Option(s.getServiceAccountName)).filter(_.nonEmpty)
+      .orElse(spec.flatMap(s => Option(s.getServiceAccount)).filter(_.nonEmpty))
+  }
+
   @Since("3.0.0")
   def buildPodWithServiceAccount(serviceAccount: Option[String], pod: SparkPod): Option[Pod] = {
     serviceAccount.map { account =>

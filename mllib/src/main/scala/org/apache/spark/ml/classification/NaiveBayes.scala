@@ -442,7 +442,7 @@ class NaiveBayesModel private[ml] (
    */
   @transient private lazy val thetaMinusNegTheta = $(modelType) match {
     case Bernoulli =>
-      theta.map(value => value - math.log1p(-math.exp(value)))
+      NaiveBayesModel.bernoulliThetaMinusNegTheta(theta)
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
@@ -451,11 +451,7 @@ class NaiveBayesModel private[ml] (
 
   @transient private lazy val piMinusThetaSum = $(modelType) match {
     case Bernoulli =>
-      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
-      val piMinusThetaSum = pi.toDense.copy
-      BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
-      piMinusThetaSum
+      NaiveBayesModel.bernoulliPiMinusThetaSum(pi, theta)
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
@@ -469,11 +465,7 @@ class NaiveBayesModel private[ml] (
    */
   @transient private lazy val logVarSum = $(modelType) match {
     case Gaussian =>
-      Array.tabulate(numClasses) { i =>
-        Iterator.range(0, numFeatures).map { j =>
-          math.log(sigma(i, j))
-        }.sum
-      }
+      NaiveBayesModel.gaussianLogVarSum(sigma)
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
@@ -486,87 +478,71 @@ class NaiveBayesModel private[ml] (
   @Since("1.5.0")
   override val numClasses: Int = pi.size
 
-  private def multinomialCalculation(features: Vector) = {
-    requireNonnegativeValues(features)
-    val prob = pi.toDense.copy
-    BLAS.gemv(1.0, theta, features, 1.0, prob)
-    prob
+  override protected def predictRawColumn(features: Column): Column = {
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
+    udf((features: Vector) => localPredictRaw(features)).apply(features)
   }
 
-  private def complementCalculation(features: Vector) = {
-    requireNonnegativeValues(features)
-    val probArray = theta.multiply(features).toArray
-    // the following lines equal to:
-    // val logSumExp = math.log(probArray.map(math.exp).sum)
-    // However, it easily returns Infinity/NaN values.
-    // Here follows 'scipy.special.logsumexp' (which is used in Scikit-Learn's ComplementNB)
-    // to compute the log of the sum of exponentials of elements in a numeric-stable way.
-    val max = probArray.max
-    var sumExp = 0.0
-    var j = 0
-    while (j < probArray.length) {
-      sumExp += math.exp(probArray(j) - max)
-      j += 1
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      NaiveBayesModel.raw2probabilityInPlace(rawPrediction.copy)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
+    udf((features: Vector) => {
+      val rawPrediction = localPredictRaw(features)
+      NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability = NaiveBayesModel.raw2probabilityInPlace(rawPrediction.copy)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
     }
-    val logSumExp = math.log(sumExp) + max
-
-    j = 0
-    while (j < probArray.length) {
-      probArray(j) -= logSumExp
-      j += 1
-    }
-    Vectors.dense(probArray)
   }
 
-  private def bernoulliCalculation(features: Vector) = {
-    requireZeroOneBernoulliValues(features)
-    val prob = piMinusThetaSum.copy
-    BLAS.gemv(1.0, thetaMinusNegTheta, features, 1.0, prob)
-    prob
-  }
-
-  private def gaussianCalculation(features: Vector) = {
-    val prob = Array.ofDim[Double](numClasses)
-    var i = 0
-    while (i < numClasses) {
-      var s = 0.0
-      var j = 0
-      while (j < numFeatures) {
-        val d = features(j) - theta(i, j)
-        s += d * d / sigma(i, j)
-        j += 1
-      }
-      prob(i) = pi(i) - (s + logVarSum(i)) / 2
-      i += 1
-    }
-    Vectors.dense(prob)
-  }
-
-  @transient private lazy val predictRawFunc = {
-    $(modelType) match {
-      case Multinomial =>
-        features: Vector => multinomialCalculation(features)
-      case Complement =>
-        features: Vector => complementCalculation(features)
-      case Bernoulli =>
-        features: Vector => bernoulliCalculation(features)
-      case Gaussian =>
-        features: Vector => gaussianCalculation(features)
+  override protected def predictionColumn(features: Column): Column = {
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((features: Vector) => {
+        val rawPrediction = localPredictRaw(features)
+        val probability = NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) => localPredictRaw(features).argmax.toDouble).apply(features)
     }
   }
 
   @Since("3.0.0")
-  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  override def predictRaw(features: Vector): Vector = {
+    $(modelType) match {
+      case Multinomial =>
+        NaiveBayesModel.multinomialCalculation(features, pi, theta)
+      case Complement =>
+        NaiveBayesModel.complementCalculation(features, theta)
+      case Bernoulli =>
+        NaiveBayesModel.bernoulliCalculation(
+          features, piMinusThetaSum, thetaMinusNegTheta)
+      case Gaussian =>
+        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma, logVarSum)
+    }
+  }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    rawPrediction match {
-      case dv: DenseVector =>
-        Utils.softmax(dv.values)
-        dv
-      case sv: SparseVector =>
-        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
-          " raw2probabilityInPlace encountered SparseVector")
-    }
+    NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
   }
 
   private[spark] override def estimatedSize: Long = {
@@ -600,6 +576,128 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
+  import NaiveBayes._
+
+  private def predictRawFunction(
+      modelType: String,
+      pi: Vector,
+      theta: Matrix,
+      sigma: Matrix): Vector => Vector = {
+    modelType match {
+      case Multinomial =>
+        features: Vector => multinomialCalculation(features, pi, theta)
+      case Complement =>
+        features: Vector => complementCalculation(features, theta)
+      case Bernoulli =>
+        val localPiMinusThetaSum = bernoulliPiMinusThetaSum(pi, theta)
+        val localThetaMinusNegTheta = bernoulliThetaMinusNegTheta(theta)
+        features: Vector =>
+          bernoulliCalculation(features, localPiMinusThetaSum, localThetaMinusNegTheta)
+      case Gaussian =>
+        val localLogVarSum = gaussianLogVarSum(sigma)
+        features: Vector =>
+          gaussianCalculation(features, pi, theta, sigma, localLogVarSum)
+    }
+  }
+
+  private def multinomialCalculation(
+      features: Vector,
+      pi: Vector,
+      theta: Matrix): Vector = {
+    requireNonnegativeValues(features)
+    val prob = pi.toDense.copy
+    BLAS.gemv(1.0, theta, features, 1.0, prob)
+    prob
+  }
+
+  private def complementCalculation(features: Vector, theta: Matrix): Vector = {
+    requireNonnegativeValues(features)
+    val probArray = theta.multiply(features).toArray
+    // the following lines equal to:
+    // val logSumExp = math.log(probArray.map(math.exp).sum)
+    // However, it easily returns Infinity/NaN values.
+    // Here follows 'scipy.special.logsumexp' (which is used in Scikit-Learn's ComplementNB)
+    // to compute the log of the sum of exponentials of elements in a numeric-stable way.
+    val max = probArray.max
+    var sumExp = 0.0
+    var j = 0
+    while (j < probArray.length) {
+      sumExp += math.exp(probArray(j) - max)
+      j += 1
+    }
+    val logSumExp = math.log(sumExp) + max
+
+    j = 0
+    while (j < probArray.length) {
+      probArray(j) -= logSumExp
+      j += 1
+    }
+    Vectors.dense(probArray)
+  }
+
+  private def bernoulliThetaMinusNegTheta(theta: Matrix): Matrix = {
+    theta.map(value => value - math.log1p(-math.exp(value)))
+  }
+
+  private def bernoulliPiMinusThetaSum(pi: Vector, theta: Matrix): DenseVector = {
+    val negTheta = theta.map(value => math.log1p(-math.exp(value)))
+    val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
+    val piMinusThetaSum = pi.toDense.copy
+    BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
+    piMinusThetaSum
+  }
+
+  private def bernoulliCalculation(
+      features: Vector,
+      piMinusThetaSum: DenseVector,
+      thetaMinusNegTheta: Matrix): Vector = {
+    requireZeroOneBernoulliValues(features)
+    val prob = piMinusThetaSum.copy
+    BLAS.gemv(1.0, thetaMinusNegTheta, features, 1.0, prob)
+    prob
+  }
+
+  private def gaussianLogVarSum(sigma: Matrix): Array[Double] = {
+    Array.tabulate(sigma.numRows) { i =>
+      Iterator.range(0, sigma.numCols).map { j =>
+        math.log(sigma(i, j))
+      }.sum
+    }
+  }
+
+  private def gaussianCalculation(
+      features: Vector,
+      pi: Vector,
+      theta: Matrix,
+      sigma: Matrix,
+      logVarSum: Array[Double]): Vector = {
+    val prob = Array.ofDim[Double](pi.size)
+    var i = 0
+    while (i < pi.size) {
+      var s = 0.0
+      var j = 0
+      while (j < theta.numCols) {
+        val d = features(j) - theta(i, j)
+        s += d * d / sigma(i, j)
+        j += 1
+      }
+      prob(i) = pi(i) - (s + logVarSum(i)) / 2
+      i += 1
+    }
+    Vectors.dense(prob)
+  }
+
+  private def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        Utils.softmax(dv.values)
+        dv
+      case _: SparseVector =>
+        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
+  }
+
   private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {

@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
+import org.apache.spark.sql.catalyst.types.ops.{TypeApiOps, TypeOps}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -86,9 +86,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // nanos renders in it; zone-independent types (TimeType, TIMESTAMP_NTZ nanos) ignore it
   // (SPARK-57285).
   private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from, zoneId)
+    frameworkOps(from)
       .map(ops => acceptAny[Any](ops.formatUTF8))
       .getOrElse(castToStringDefault(from))
+
+  // The internal value of a type stored as a struct, such as FileType, is an InternalRow, which
+  // only its catalyst-side ops can format. Other framework types use their client-side ops, which
+  // carry the cast's zone.
+  private def frameworkOps(from: DataType): Option[TypeApiOps] =
+    structBackedOps(from).orElse(TypeApiOps(from, zoneId))
+
+  // The catalyst-side ops of a framework type whose row representation is a struct.
+  private def structBackedOps(from: DataType): Option[TypeOps] =
+    TypeOps(from).filter(_.rowRepresentationType.isDefined)
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -100,6 +110,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+    case VariantType =>
+      acceptAny[VariantVal](v => UTF8String.fromString(v.toJson(zoneId)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -238,7 +250,15 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   @scala.annotation.tailrec
   private def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+    val structOps = structBackedOps(from)
     from match {
+      case _ if structOps.isDefined =>
+        // A type stored as a struct, such as FileType, is formatted by its catalyst-side ops, as
+        // in `frameworkOps`.
+        val opsRef = JavaCode.global(
+          ctx.addReferenceObj("typeOps", structOps.get, classOf[TypeApiOps].getName),
+          classOf[TypeApiOps])
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case BinaryType =>
         // Pass the public BinaryFormatter trait as the reference's cast type.
         // `binaryFormatter` is a lambda (UTF8String.fromBytes); its runtime class is a
@@ -268,6 +288,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case VariantType =>
+        val zid = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName),
+          classOf[ZoneId])
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toJson($zid));"
       case _: AnyTimestampNanoType =>
         // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
         // call into the ops reference object. The cast's session zone is threaded into the lookup

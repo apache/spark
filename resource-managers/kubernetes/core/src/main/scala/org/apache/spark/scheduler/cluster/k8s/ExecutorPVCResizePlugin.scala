@@ -31,7 +31,7 @@ import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext,
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CURRENT_DISK_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CURRENT_DISK_SIZE, EXECUTOR_ID, MAX_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME, RATIO, REPORT_DETAILS, THRESHOLD}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -65,9 +65,12 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
   private var namespace: String = _
   private var threshold: Double = _
   private var factor: Double = _
+  private var maxStorage: Long = Long.MaxValue
 
-  private val latestReports = new ConcurrentHashMap[String, PVCDiskUsageReport]()
+  private[k8s] val latestReports = new ConcurrentHashMap[String, PVCDiskUsageReport]()
   private val failedPvcs = ConcurrentHashMap.newKeySet[String]()
+  // PVCs whose storage request already reached maxStorage, to log the skip only once.
+  private val cappedPvcs = ConcurrentHashMap.newKeySet[String]()
   private val requestedSizes = new ConcurrentHashMap[String, Long]()
 
   private val periodicService: ScheduledExecutorService =
@@ -88,6 +91,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
     }
     threshold = sc.conf.get(PVC_RESIZE_THRESHOLD)
     factor = sc.conf.get(PVC_RESIZE_FACTOR)
+    maxStorage = sc.conf.get(PVC_RESIZE_MAX_STORAGE)
     namespace = sc.conf.get(KUBERNETES_NAMESPACE)
     sparkContext = sc
 
@@ -117,22 +121,27 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
   }
 
   private[k8s] def checkAndResizePVCs(): Unit = {
-    logInfo(s"Latest PVC usage reports: $latestReports")
     val appId = sparkContext.applicationId
 
     sparkContext.schedulerBackend match {
       case b: KubernetesClusterSchedulerBackend =>
         val client = b.kubernetesClient
+        // Skip terminated pods kept by deleteOnTermination=false since their reports are stale.
         val pods = client.pods()
           .inNamespace(namespace)
           .withLabel(SPARK_APP_ID_LABEL, appId)
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+          .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
           .list()
           .getItems.asScala
 
         val podByExecId = pods.flatMap { p =>
           Option(p.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)).map(_ -> p)
         }.toMap
+
+        // Drop reports of executors without a pod so that latestReports does not grow unbounded.
+        latestReports.keySet().retainAll(podByExecId.keySet.asJava)
+        logInfo(log"Latest PVC usage reports: ${MDC(REPORT_DETAILS, latestReports)}")
 
         latestReports.values().asScala.foreach { report =>
           podByExecId.get(report.executorId).foreach { pod =>
@@ -166,8 +175,9 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
 
   private def tryResize(
       client: KubernetesClient, pvcName: String, ratio: Double, execId: String): Unit = {
-    logInfo(s"Try to resize executor $execId PVC $pvcName with ratio $ratio " +
-      s"(threshold $threshold).")
+    logInfo(log"Try to resize executor ${MDC(EXECUTOR_ID, execId)} PVC " +
+      log"${MDC(PVC_METADATA_NAME, pvcName)} with ratio ${MDC(RATIO, ratio)} " +
+      log"(threshold ${MDC(THRESHOLD, threshold)}).")
     if (ratio <= threshold) return
     try {
       val pvc = client.persistentVolumeClaims()
@@ -183,11 +193,20 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
         .map(q => Quantity.getAmountInBytes(q).longValue())
         .getOrElse(current)
       if (current > capacity) {
-        logInfo(s"PVC $pvcName resize is in progress or failed " +
-          s"(spec=$current, status=$capacity); skip.")
+        logInfo(log"PVC ${MDC(PVC_METADATA_NAME, pvcName)} resize is in progress or failed " +
+          log"(spec=${MDC(CURRENT_DISK_SIZE, current)}, " +
+          log"status=${MDC(ORIGINAL_DISK_SIZE, capacity)}); skip.")
         return
       }
-      val newSize = (current * (1.0 + factor)).toLong
+      if (current >= maxStorage) {
+        if (cappedPvcs.add(pvcName)) {
+          logInfo(log"Skip resizing PVC ${MDC(PVC_METADATA_NAME, pvcName)} as storage " +
+            log"${MDC(CURRENT_DISK_SIZE, current)} already reached the maximum " +
+            log"${MDC(MAX_SIZE, maxStorage)}.")
+        }
+        return
+      }
+      val newSize = math.min((current * (1.0 + factor)).toLong, maxStorage)
       if (requestedSizes.get(pvcName) == newSize) return
       logInfo(log"Increase PVC ${MDC(PVC_METADATA_NAME, pvcName)} storage " +
         log"from ${MDC(ORIGINAL_DISK_SIZE, current)} to " +
@@ -255,7 +274,8 @@ class ExecutorPVCResizeExecutorPlugin extends ExecutorPlugin with Logging {
       } catch { case _: Throwable => None }
     }.maxOption
     maxRatio.foreach { ratio =>
-      logInfo(s"Reporting max PVC disk usage ratio for executor ${env.executorId}: $ratio")
+      logInfo(log"Reporting max PVC disk usage ratio for executor " +
+        log"${MDC(EXECUTOR_ID, env.executorId)}: ${MDC(RATIO, ratio)}")
       pluginContext.send(PVCDiskUsageReport(env.executorId, ratio))
     }
   }

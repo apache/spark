@@ -10,7 +10,7 @@ Output [1]: [r_reason_sk#1]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
 PushedFilters: [IsNotNull(r_reason_sk), EqualTo(r_reason_sk,1)]
-ReadSchema: struct<r_reason_sk:int>
+ReadSchema: struct<r_reason_sk:bigint>
 
 (2) ColumnarToRow [codegen id : 1]
 Input [1]: [r_reason_sk#1]

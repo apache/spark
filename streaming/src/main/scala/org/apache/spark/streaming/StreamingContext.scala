@@ -336,6 +336,11 @@ class StreamingContext private[streaming] (
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    * @tparam T            Type of the objects in the received blocks
+   *
+   * @note rawSocketStream is a low-level API; most applications should prefer
+   * higher-level streaming sources. Frames announcing a negative length or one
+   * larger than `spark.streaming.raw.maxBlockSizeBytes` (default 1g) stop the
+   * receiver with an error.
    */
   def rawSocketStream[T: ClassTag](
       hostname: String,
@@ -630,7 +635,8 @@ class StreamingContext private[streaming] (
         val listeners = Utils.loadExtensions(classOf[StreamingListener], classNames, conf)
         listeners.foreach { listener =>
           addStreamingListener(listener)
-          logInfo(s"Registered streaming listener ${listener.getClass().getName()}")
+          logInfo(log"Registered streaming listener " +
+            log"${MDC(LogKeys.CLASS_NAME, listener.getClass().getName())}")
         }
       }
     } catch {

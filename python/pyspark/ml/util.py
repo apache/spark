@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 
+import functools
 import json
 import logging
 import os
 import threading
 import time
 import uuid
-import functools
+from contextlib import contextmanager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -33,11 +35,9 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
-    cast,
-    TYPE_CHECKING,
     Union,
+    cast,
 )
-from contextlib import contextmanager
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
@@ -48,13 +48,14 @@ from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
+
+    from pyspark.core.context import SparkContext
     from pyspark.ml._typing import PipelineStage
     from pyspark.ml.base import Params
-    from pyspark.core.context import SparkContext
+    from pyspark.ml.evaluation import JavaEvaluator
+    from pyspark.ml.wrapper import JavaEstimator, JavaWrapper
     from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-    from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
-    from pyspark.ml.evaluation import JavaEvaluator
 
 T = TypeVar("T")
 RW = TypeVar("RW", bound="BaseReadWrite")
@@ -89,15 +90,15 @@ def invoke_remote_attribute_relation(
     instance: "JavaWrapper", method: str, *args: Any
 ) -> "ConnectDataFrame":
     import pyspark.sql.connect.proto as pb2
-    from pyspark.ml.connect.util import _extract_id_methods
-    from pyspark.ml.connect.serialize import serialize
 
     # The attribute returns a dataframe, we need to wrap it
     # in the AttributeRelation
     from pyspark.ml.connect.proto import AttributeRelation
-    from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.connect.serialize import serialize
+    from pyspark.ml.connect.util import _extract_id_methods
     from pyspark.ml.wrapper import JavaModel
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.sql.connect.session import SparkSession
 
     session = SparkSession.getActiveSession()
     assert session is not None
@@ -107,7 +108,8 @@ def invoke_remote_attribute_relation(
         object_id = instance._java_obj.ref_id
     else:
         # model summary
-        object_id = instance._java_obj  # type: ignore
+        assert isinstance(instance._java_obj, str)
+        object_id = instance._java_obj
     methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
 
@@ -172,7 +174,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
     def wrapped(self: "JavaEstimator", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             import pyspark.sql.connect.proto as pb2
-            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+            from pyspark.ml.connect.serialize import deserialize, serialize_ml_params
 
             client = dataset.sparkSession.client
             input = dataset._plan.plan(client)
@@ -219,8 +221,8 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
     def wrapped(self: "JavaWrapper", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.ml import Model, Transformer
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
             from pyspark.ml.connect.serialize import serialize_ml_params
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
             session = dataset.sparkSession
             assert session is not None
@@ -278,15 +280,15 @@ def try_remote_call(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.errors.exceptions.connect import SparkException
             import pyspark.sql.connect.proto as pb2
+            from pyspark.errors.exceptions.connect import SparkException
             from pyspark.sql.connect.session import SparkSession
 
             session = SparkSession.getActiveSession()
 
             def remote_call() -> Any:
+                from pyspark.ml.connect.serialize import deserialize, serialize
                 from pyspark.ml.connect.util import _extract_id_methods
-                from pyspark.ml.connect.serialize import serialize, deserialize
                 from pyspark.ml.wrapper import JavaModel
 
                 assert session is not None
@@ -298,7 +300,8 @@ def try_remote_call(f: FuncT) -> FuncT:
                         obj_id = self._java_obj.ref_id
                     else:
                         # model summary
-                        obj_id = self._java_obj  # type: ignore
+                        assert isinstance(self._java_obj, str)
+                        obj_id = self._java_obj
                 methods, obj_ref = _extract_id_methods(obj_id)
                 methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
                 command = pb2.Command()
@@ -460,7 +463,7 @@ def try_remote_evaluate(f: FuncT) -> FuncT:
     def wrapped(self: "JavaEvaluator", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             import pyspark.sql.connect.proto as pb2
-            from pyspark.ml.connect.serialize import serialize_ml_params, deserialize
+            from pyspark.ml.connect.serialize import deserialize, serialize_ml_params
 
             client = dataset.sparkSession.client
             input = dataset._plan.plan(client)
@@ -1137,8 +1140,8 @@ class MetaAlgorithmReadWrite:
     @staticmethod
     def isMetaEstimator(pyInstance: Any) -> bool:
         from pyspark.ml import Estimator, Pipeline
-        from pyspark.ml.tuning import _ValidatorParams
         from pyspark.ml.classification import OneVsRest
+        from pyspark.ml.tuning import _ValidatorParams
 
         return (
             isinstance(pyInstance, Pipeline)
@@ -1149,8 +1152,8 @@ class MetaAlgorithmReadWrite:
     @staticmethod
     def getAllNestedStages(pyInstance: Any) -> List["Params"]:
         from pyspark.ml import Pipeline, PipelineModel
-        from pyspark.ml.tuning import _ValidatorParams
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
+        from pyspark.ml.tuning import _ValidatorParams
 
         # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
         #  support pipelineModel property.

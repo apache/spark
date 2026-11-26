@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.log10
@@ -144,16 +143,16 @@ private[spark] class PartitionIdPassthrough(override val numPartitions: Int) ext
  * The `valueMap` is a map that contains tuples of (partition value, partition id). It is generated
  * by [[org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning]], used to partition
  * the other side of a join to make sure records with same partition value are in the same
- * partition.
+ * partition. Keys are looked up with `equals`/`hashCode`, so the caller must supply the map keys
+ * and the per-record lookup keys in a single representation that compares partition values
+ * consistently (the caller uses the partitioning's own `InternalRowComparableWrapper`s). Keys
+ * absent from the map fall back to a partition derived from the key's hash code.
  */
 private[spark] class KeyGroupedPartitioner(
-    valueMap: mutable.Map[Seq[Any], Int],
+    valueMap: Map[Any, Int],
     override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = {
-    val keys = key.asInstanceOf[Seq[Any]]
-    val normalizedKeys = ArraySeq.from(keys)
-    valueMap.getOrElseUpdate(normalizedKeys,
-      Utils.nonNegativeMod(normalizedKeys.hashCode, numPartitions))
+    valueMap.getOrElse(key, Utils.nonNegativeMod(key.hashCode, numPartitions))
   }
 }
 

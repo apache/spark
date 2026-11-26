@@ -14,75 +14,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
+import decimal
+import json
+import warnings
+from threading import Lock
 from typing import (
-    cast,
     TYPE_CHECKING,
     Any,
     Callable,
-    Union,
+    Optional,
     Sequence,
     Tuple,
-    Optional,
+    Union,
+    cast,
 )
-
-import json
-import decimal
-import datetime
-import warnings
-from threading import Lock
 
 import numpy as np
 
-from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.types import (
-    _create_row,
-    _from_numpy_type,
-    DateType,
-    ArrayType,
-    NullType,
-    BooleanType,
-    BinaryType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
-    DataType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    DayTimeIntervalType,
-    MapType,
-    StructType,
-)
-
 import pyspark.sql.connect.proto as proto
-from pyspark.util import (
-    JVM_BYTE_MIN,
-    JVM_BYTE_MAX,
-    JVM_SHORT_MIN,
-    JVM_SHORT_MAX,
-    JVM_INT_MIN,
-    JVM_INT_MAX,
-    JVM_LONG_MIN,
-    JVM_LONG_MAX,
-)
-from pyspark.sql.connect.types import (
-    UnparsedDataType,
-    pyspark_types_to_proto_types,
-    proto_schema_to_pyspark_data_type,
-)
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import current_origin
-from pyspark.sql.utils import is_timestamp_ntz_preferred, enum_to_value
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.connect.types import (
+    UnparsedDataType,
+    proto_schema_to_pyspark_data_type,
+    pyspark_types_to_proto_types,
+)
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    BooleanType,
+    ByteType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    NullType,
+    ShortType,
+    StringType,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
+    _create_row,
+    _from_numpy_type,
+)
+from pyspark.sql.utils import enum_to_value, is_timestamp_ntz_preferred
+from pyspark.util import (
+    JVM_BYTE_MAX,
+    JVM_BYTE_MIN,
+    JVM_INT_MAX,
+    JVM_INT_MIN,
+    JVM_LONG_MAX,
+    JVM_LONG_MIN,
+    JVM_SHORT_MAX,
+    JVM_SHORT_MIN,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.window import WindowSpec
     from pyspark.sql.connect.plan import LogicalPlan
+    from pyspark.sql.connect.window import WindowSpec
 
 
 class Expression:

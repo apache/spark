@@ -64,7 +64,7 @@ sealed trait StreamingAggregationStateManager extends Serializable {
 
   /**
    * Return an iterator over the rows of the target state store whose event time is older than
-   * `evictionTimestamp`, removing each row as it is returned. See [[EvictionIterator]].
+   * `evictionTimestamp`, removing each row when `next()` returns it. See [[EvictionIterator]].
    */
   def evictionIterator(
       store: StateStore,

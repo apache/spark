@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -40,6 +41,7 @@ import org.apache.spark.sql.connector.catalog.{
   Table,
   TableCatalog,
   V1Table,
+  V1View,
   V2TableWithV1Fallback,
   View,
   ViewCatalog
@@ -63,6 +65,7 @@ class RelationResolution(
 
   private def relationCache = AnalysisContext.get.relationCache
   private def tableCache = AnalysisContext.get.tableCache
+  private def changelogCache = AnalysisContext.get.changelogCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -109,6 +112,87 @@ class RelationResolution(
    */
   private def normalizeSessionQualifiedViewIdentifier(nameParts: Seq[String]): Seq[String] = {
     Seq(nameParts.last)
+  }
+
+  /**
+   * Resolves DDL and miscellaneous command targets to [[ResolvedTable]], [[ResolvedTempView]] or
+   * [[ResolvedPersistentView]], without expanding view definitions. Temporary views are looked up
+   * before persistent catalog objects.
+   *
+   * When `viewOnly=true`, non-session catalogs that do not implement [[ViewCatalog]] are
+   * rejected with MISSING_CATALOG_ABILITY.VIEWS. [[UnresolvedView]] callers reject non-view results
+   * downstream via `expectViewNotTableError`.
+   *
+   * Persistent catalog lookup order:
+   *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
+   *      once. A returned [[View]] is interpreted as a view; a [[Table]] is a table.
+   *      [[NoSuchTableException]] means neither exists.
+   *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
+   *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
+   *      For the session catalog, a view-like [[V1Table]] from `loadTable` resolves to a
+   *      [[ResolvedPersistentView]] over a [[V1View]].
+   *      Catalogs without table support skip table lookup so MISSING_CATALOG_ABILITY.TABLES
+   *      does not mask the view-resolution path.
+   */
+  def lookupTableOrView(
+      identifier: Seq[String],
+      viewOnly: Boolean = false): Option[LogicalPlan] = {
+    lookupTempView(identifier).map { tempView =>
+      ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+    }.orElse {
+      expandIdentifier(identifier) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
+              !catalog.isInstanceOf[ViewCatalog]) {
+            throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+          }
+          catalog match {
+            case mc: RelationCatalog =>
+              try {
+                Some(mc.loadRelation(ident) match {
+                  case v: View =>
+                    ResolvedPersistentView(catalog, ident, v)
+                  case table: Table =>
+                    ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  case other => throw SparkException.internalError(
+                    s"Catalog ${catalog.name} returned an unexpected relation type for " +
+                      s"$ident: ${other.getClass.getName}. Expected a Table or a View.")
+                })
+              } catch {
+                case _: NoSuchTableException => None
+              }
+            case _ =>
+              val tableResolved: Option[LogicalPlan] = if (
+                CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+              ) {
+                CatalogV2Util.loadTable(catalog, ident).map {
+                  case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                    v1Table.v1Table.isViewLike =>
+                    val v1Ident = v1Table.catalogTable.identifier
+                    val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+                    ResolvedPersistentView(
+                      catalog, v2Ident, new V1View(v1Table.catalogTable))
+                  case table =>
+                    ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                }
+              } else {
+                None
+              }
+              tableResolved.orElse {
+                catalog match {
+                  case vc: ViewCatalog =>
+                    try {
+                      Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
+                    } catch {
+                      case _: NoSuchViewException => None
+                    }
+                  case _ => None
+                }
+              }
+          }
+        case _ => None
+      }
+    }
   }
 
   /**
@@ -277,19 +361,22 @@ class RelationResolution(
               None
             }
 
-            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
-            // `loadRelation` answers both "is there a table?" and "is there a view?" in one
-            // call. Time-travel and write privileges apply to tables only, so for those the
-            // lookup falls through to the table-only `loadTable` path below; views are not
-            // reachable via the v2 fallback in those cases.
+            // When this lookup through a `RelationCatalog` has no table-state options, time travel,
+            // or write privileges, the single-RPC `loadRelation` answers both "is there a table?"
+            // and "is there a view?" in one call. Table-state options, time travel, and write
+            // privileges apply to tables only, so for those the lookup falls through to the
+            // table-only `loadTable` path below. A state-aware table miss can still fall back to
+            // `loadView`;
+            // time-travel and write-privilege loads cannot.
             //
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
-            // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
-            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            // mixin): `CatalogV2Util.loadTableWithStateOptions` would call `asTableCatalog` and
+            // throw MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
             val relation: Option[Relation] = pinnedTable.orElse {
               catalog match {
                 case mc: RelationCatalog
-                    if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+                    if tableKey.stateOptions.isEmpty &&
+                      finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                   try {
                     Some(mc.loadRelation(ident))
                   } catch {
@@ -299,12 +386,12 @@ class RelationResolution(
                   val tableSide: Option[Table] = if (
                     CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
                   ) {
-                    CatalogV2Util.loadTable(
+                    CatalogV2Util.loadTableWithStateOptions(
                       catalog,
                       ident,
+                      tableKey.stateOptions,
                       finalTimeTravelSpec,
-                      Option(writePrivileges),
-                      finalOptions)
+                      Option(writePrivileges))
                   } else {
                     None
                   }
@@ -339,7 +426,7 @@ class RelationResolution(
               t <- table
               if pinnedTable.isEmpty && finalTimeTravelSpec.isEmpty &&
                 writePrivileges == null && !u.isStreaming
-              cached <- lookupSharedRelationCache(catalog, ident, t, finalOptions)
+              cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
@@ -380,13 +467,9 @@ class RelationResolution(
     expandIdentifier(u.multipartIdentifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val tableCatalog = catalog.asTableCatalog
-        val changelog = try {
-          tableCatalog.loadChangelog(ident, ctx, u.options)
-        } catch {
-          case _: UnsupportedOperationException =>
-            throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
-        }
-        val changelogTable = ChangelogTable(changelog, ctx)
+        val key = toChangelogCacheKey(catalog, ident, ctx, u.options)
+        val changelogTable = changelogCache.getOrElseUpdate(key,
+          ChangelogTable.load(tableCatalog, ident, ctx, key.stateOptions))
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
@@ -403,8 +486,9 @@ class RelationResolution(
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
-      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, options, conf)
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelationWithStateOptions(
+      sharedRelationCache, catalog, ident, table, stateOptions)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -509,14 +593,34 @@ class RelationResolution(
     }
   }
 
-  def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = if (ref.context.cacheable) {
-      getOrLoadRelation(ref)
-    } else {
-      loadRelation(ref)
+  def resolveReference(ref: V2Reference): LogicalPlan = {
+    val relation = ref match {
+      case changelogRef: V2ChangelogReference =>
+        resolveChangelogReference(changelogRef)
+      case tableRef: V2TableReference if tableRef.context.cacheable =>
+        getOrLoadRelation(tableRef)
+      case tableRef: V2TableReference =>
+        loadRelation(tableRef)
     }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
+  }
+
+  private def resolveChangelogReference(ref: V2ChangelogReference): DataSourceV2Relation = {
+    val catalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    val captured = ref.changelog
+    val key = toChangelogCacheKey(
+      catalog, ref.identifier, captured.changelogContext, ref.options)
+    def load(): ChangelogTable = {
+      ChangelogTable.load(catalog, ref.identifier, captured.changelogContext, key.stateOptions)
+    }
+    val current = if (ref.context.cacheable) {
+      changelogCache.getOrElseUpdate(key, load())
+    } else {
+      load()
+    }
+    captured.validateRefresh(current)
+    createRelation(ref, catalog, current.copy(resolved = captured.resolved))
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
@@ -531,9 +635,10 @@ class RelationResolution(
           case Some(pinnedTable) =>
             createRelation(ref, catalog, pinnedTable)
           case None =>
-            val table = CatalogV2Util.getTable(catalog, ref.identifier, options = ref.options)
+            val table = CatalogV2Util.getTableWithStateOptions(
+              catalog, ref.identifier, tableKey.stateOptions)
             val sharedCacheMatch = if (ref.context.sharedCacheable) {
-              lookupSharedRelationCache(catalog, ref.identifier, table, ref.options)
+              lookupSharedRelationCache(catalog, ref.identifier, table, tableKey.stateOptions)
             } else {
               None
             }
@@ -570,10 +675,10 @@ class RelationResolution(
   }
 
   private def createRelation(
-      ref: V2TableReference,
+      ref: V2Reference,
       resolvedCatalog: TableCatalog,
       table: Table): DataSourceV2Relation = {
-    V2TableReferenceUtils.validateLoadedTable(table, ref)
+    V2ReferenceUtils.validateLoadedTable(table, ref)
     DataSourceV2Relation(
       table = table,
       output = ref.output,
@@ -585,7 +690,7 @@ class RelationResolution(
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
-        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
+        V2ReferenceUtils.validateLoadedTable(r.table, ref)
         r.copy(output = ref.output, options = ref.options)
     }
   }
@@ -626,6 +731,18 @@ class RelationResolution(
       ident,
       timeTravelSpec,
       CatalogV2Util.extractTableStateOptions(catalog, options))
+  }
+
+  private def toChangelogCacheKey(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      context: ChangelogContext,
+      options: CaseInsensitiveStringMap): ChangelogCacheKey = {
+    ChangelogCacheKey(
+      catalog,
+      ident,
+      context,
+      CatalogV2Util.extractChangelogStateOptions(catalog, options))
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {

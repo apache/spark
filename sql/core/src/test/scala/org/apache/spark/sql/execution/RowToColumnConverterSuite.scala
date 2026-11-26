@@ -18,12 +18,23 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.ops.FileTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
-import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+
+private class StructBackedUDT extends UserDefinedType[InternalRow] {
+  override def sqlType: DataType = new StructType().add("x", IntegerType).add("y", IntegerType)
+  override def serialize(obj: InternalRow): Any = obj
+  override def deserialize(datum: Any): InternalRow = datum.asInstanceOf[InternalRow]
+  override def userClass: Class[InternalRow] = classOf[InternalRow]
+}
 
 class RowToColumnConverterSuite extends SparkFunSuite {
   def convertRows(rows: Seq[InternalRow], schema: StructType): Seq[WritableColumnVector] = {
@@ -107,6 +118,22 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-59273: CHAR/VARCHAR columns") {
+    val schema = StructType(Seq(
+      StructField("c", CharType(3)),
+      StructField("v", VarcharType(3)),
+      StructField("a", ArrayType(CharType(3)))))
+    val rows = Seq(InternalRow(
+      UTF8String.fromString("a  "),
+      UTF8String.fromString("bc"),
+      new GenericArrayData(Seq(UTF8String.fromString("d  ")))))
+    val vectors = convertRows(rows, schema)
+
+    assert(vectors(0).getUTF8String(0).toString === "a  ")
+    assert(vectors(1).getUTF8String(0).toString === "bc")
+    assert(vectors(2).getArray(0).getUTF8String(0).toString === "d  ")
+  }
+
   test("non-nullable map column with null values") {
     val mapType = MapType(IntegerType, StringType, valueContainsNull = true)
     val schema = StructType(Seq(StructField("m", mapType, nullable = false)))
@@ -131,16 +158,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampNTZNanosType column roundtrip") {
-    val t = TimestampNTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampNTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampNTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampNTZNanos(i) === v)
+      }
     }
   }
 
@@ -158,16 +187,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampLTZNanosType column roundtrip") {
-    val t = TimestampLTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampLTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampLTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampLTZNanos(i) === v)
+      }
     }
   }
 
@@ -206,6 +237,106 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getLong(0) === 0L)
     assert(vectors.head.isNullAt(1))
     assert(vectors.head.getLong(2) === 86399999999999L)
+  }
+
+  test("FileType columns, with null values, null fields and nested FILEs") {
+    def file(uri: String, size: java.lang.Long, inline: Array[Byte]): InternalRow =
+      InternalRow(UTF8String.fromString(uri), null, size, null, null, inline)
+    val f1 = file("s3://bucket/a.pdf", 10L, Array[Byte](1, 2))
+    val f2 = file("/b.txt", null, null)
+    val fileStruct = new StructType().add("f", FileType())
+    val schema = new StructType()
+      .add("f", FileType.external)
+      .add("fs", ArrayType(FileType(), containsNull = true))
+      .add("s", fileStruct)
+    val rows = Seq(
+      InternalRow(f1, new GenericArrayData(Array[Any](f2, null)), InternalRow(f2)),
+      InternalRow(null, null, InternalRow(null)),
+      InternalRow(f2, new GenericArrayData(Array[Any](f1)), null))
+    def toFileRef(row: InternalRow): FileRef = FileTypeOps.toFileRef(row)
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
+      val vectors = schema.map { f =>
+        if (mode == MemoryMode.ON_HEAP) new OnHeapColumnVector(5, f.dataType)
+        else new OffHeapColumnVector(5, f.dataType)
+      }.toArray[WritableColumnVector]
+      try {
+        // A FILE vector has one child vector per field.
+        assert(vectors.head.getChild(FileType.FIELDS.length - 1) != null)
+        val converter = new RowToColumnConverter(schema)
+        rows.foreach(converter.convert(_, vectors))
+        val batch = new ColumnarBatch(vectors.toArray[ColumnVector], rows.length)
+        val numFields = FileType.FIELDS.length
+
+        val r0 = batch.getRow(0)
+        assert(toFileRef(r0.getStruct(0, numFields)) === toFileRef(f1), mode)
+        assert(toFileRef(r0.get(0, FileType.external).asInstanceOf[InternalRow]) === toFileRef(f1))
+        val array = r0.getArray(1)
+        assert(toFileRef(array.getStruct(0, numFields)) === toFileRef(f2), mode)
+        assert(array.isNullAt(1), mode)
+        assert(toFileRef(r0.getStruct(2, 1).getStruct(0, numFields)) === toFileRef(f2), mode)
+
+        val r1 = batch.getRow(1)
+        assert(r1.isNullAt(0) && r1.isNullAt(1), mode)
+        assert(r1.getStruct(2, 1).isNullAt(0), mode)
+
+        val r2 = batch.getRow(2)
+        assert(toFileRef(r2.getStruct(0, numFields)) === toFileRef(f2), mode)
+        assert(toFileRef(r2.getArray(1).getStruct(0, numFields)) === toFileRef(f1), mode)
+        assert(r2.isNullAt(2), mode)
+      } finally {
+        vectors.foreach(_.close())
+      }
+    }
+  }
+
+  test("SPARK-60325: null type column") {
+    Seq(
+      StructType(Seq(StructField("n", NullType))),
+      StructType(Seq(StructField("n", NullType, nullable = false)))).foreach { schema =>
+      val vectors = convertRows(Seq.fill(10)(InternalRow(null)), schema)
+      (0 until 10).foreach(i => assert(vectors.head.isNullAt(i)))
+    }
+  }
+
+  test("SPARK-60325: reused null type vectors do not grow across batches") {
+    val batchSize = 10
+    val schema = StructType(Seq(
+      StructField("n", NullType),
+      StructField("s", new StructType().add("n", NullType))))
+    val converter = new RowToColumnConverter(schema)
+    val vectors =
+      schema.map(f => new OnHeapColumnVector(5, f.dataType)).toArray[WritableColumnVector]
+    (0 until 5).foreach { _ =>
+      vectors.foreach(_.reset())
+      (0 until batchSize).foreach { i =>
+        converter.convert(InternalRow(null, if (i % 2 == 0) null else InternalRow(null)), vectors)
+      }
+      // Nulls of a top-level NullType column are not appended at all.
+      assert(vectors(0).getElementsAppended === 0)
+      // A null struct appends a null to its NullType child, which reset() must clear.
+      assert(vectors(1).getChild(0).getElementsAppended <= batchSize)
+      (0 until batchSize).foreach { i =>
+        assert(vectors(0).isNullAt(i))
+        assert(vectors(1).isNullAt(i) === (i % 2 == 0))
+        if (i % 2 == 1) assert(vectors(1).getStruct(i).isNullAt(0))
+      }
+    }
+  }
+
+  test("SPARK-60325: user-defined type columns hold their SQL type") {
+    // A null of a struct-backed type must be appended as a struct.
+    val arrayBacked = new ExamplePointUDT
+    val arrayRows = Seq(InternalRow(new GenericArrayData(Array(1.0, 2.0))), InternalRow(null))
+    val arrayVectors = convertRows(arrayRows, StructType(Seq(StructField("p", arrayBacked))))
+    assert(arrayVectors.head.getArray(0).toDoubleArray() === Array(1.0, 2.0))
+    assert(arrayVectors.head.isNullAt(1))
+
+    val structBacked = new StructBackedUDT
+    val structRows = Seq(InternalRow(InternalRow(1, 2)), InternalRow(null))
+    val structVectors = convertRows(structRows, StructType(Seq(StructField("s", structBacked))))
+    assert(structVectors.head.getStruct(0).getInt(0) === 1)
+    assert(structVectors.head.getStruct(0).getInt(1) === 2)
+    assert(structVectors.head.isNullAt(1))
   }
 
   test("multiple columns") {

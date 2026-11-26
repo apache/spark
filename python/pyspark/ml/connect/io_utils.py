@@ -16,17 +16,17 @@
 #
 
 import json
-import shutil
 import os
+import shutil
 import tempfile
 import time
-from urllib.parse import urlparse
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
+from pyspark import __version__ as pyspark_version
 from pyspark.ml.base import Params
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
-from pyspark import __version__ as pyspark_version
 
 _META_DATA_FILE_NAME = "metadata.json"
 
@@ -36,7 +36,8 @@ def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
     if is_remote():
         session.copyFromLocalToFs(local_path, dest_path)
     else:
-        jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
+        assert session.sparkContext._gateway is not None
+        jvm = session.sparkContext._gateway.jvm
         getattr(jvm, "org.apache.spark.ml.python.MLUtil").copyFileFromLocalToFs(
             local_path, dest_path
         )

@@ -46,6 +46,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
+  override def timestampNTZAsWallClock: Boolean = dialects.exists(_.timestampNTZAsWallClock)
+
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
   }
@@ -60,6 +62,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
     dialects.head.isSyntaxErrorBestEffort(exception)
+  }
+
+  override def isPermissionDeniedException(e: SQLException): Boolean = {
+    dialects.exists(_.isPermissionDeniedException(e))
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {

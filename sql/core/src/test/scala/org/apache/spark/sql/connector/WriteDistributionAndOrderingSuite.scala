@@ -43,9 +43,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.{DateType, IntegerType, LongType, ObjectType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
-@SlowSQLTest
+@DataSourceV2Test
 class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase {
   import testImplicits._
 
@@ -1265,18 +1265,20 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty,
       distributionStrictlyRequired)
 
-    val df = if (!dataSkewed) {
-      spark.createDataFrame(Seq(
+    val data = if (!dataSkewed) {
+      Seq(
         (1, "a", Date.valueOf("2021-01-01")),
         (2, "b", Date.valueOf("2022-02-02")),
         (3, "c", Date.valueOf("2023-03-03")))
-      ).toDF("id", "data", "day")
     } else {
-      spark.sparkContext.parallelize(
-        (1 to 10).map {
-          i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
-        }, 3)
-        .toDF("id", "data", "day")
+      (1 to 10).map {
+        i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
+      }
+    }
+    val df = if (!dataSkewed) {
+      spark.createDataFrame(data).toDF("id", "data", "day")
+    } else {
+      spark.sparkContext.parallelize(data, 3).toDF("id", "data", "day")
     }
     val writer = writeTransform(df).writeTo(tableNameAsString)
 
@@ -1348,7 +1350,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         }
       }
 
-      checkAnswer(spark.table(tableNameAsString), df)
+      checkAnswer(spark.table(tableNameAsString), data.map(Row.fromTuple))
     }
     catalog.dropTable(ident)
   }
@@ -1545,10 +1547,12 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     val df = sql("SELECT id, data FROM testcat.ns1.test_table")
     val scans = collect(df.queryExecution.executedPlan) { case s: BatchScanExec => s }
     assert(scans.size === 1)
-    val ordering = scans.head.outputOrdering
+    val ordering = scans.head.ordering.getOrElse(Seq.empty)
     assert(ordering.nonEmpty,
-      "scan should report non-empty outputOrdering via SupportsReportOrdering")
+      "scan should keep the ordering reported via SupportsReportOrdering")
     assert(ordering.head.child.isInstanceOf[TransformExpression],
       "bucket-based sort order should resolve to a TransformExpression")
+    // SPARK-59995: the output ordering drops the sort order over the transform.
+    assert(scans.head.outputOrdering.isEmpty)
   }
 }

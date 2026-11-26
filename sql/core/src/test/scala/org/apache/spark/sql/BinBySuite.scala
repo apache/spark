@@ -20,11 +20,26 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
-import org.apache.spark.SparkThrowable
+import scala.concurrent.duration._
+
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkThrowable}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.{BinByExec, FilterExec, InputAdapter, ProjectExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.functions.{col, expr, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BinBySuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+      .set(SQLConf.ENABLE_BIN_BY_CODEGEN.key, "true")
+  }
 
   private def tsAt(s: String, zone: ZoneId = ZoneOffset.UTC): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
@@ -33,6 +48,60 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   private def ratio(overlapMicros: Long, totalMicros: Long): Double =
     overlapMicros.toDouble / totalMicros.toDouble
+
+  private def checkBinByDatetimeOverflow(
+      rangeStart: LocalDateTime,
+      rangeEnd: LocalDateTime,
+      binWidthSql: String,
+      originSql: String): Unit = {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        Seq((rangeStart, rangeEnd, 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.sql(
+              s"""SELECT * FROM bin_by_overflow
+                 |BIN BY (
+                 |  RANGE ts_start TO ts_end BIN WIDTH $binWidthSql
+                 |  ALIGN TO $originSql
+                 |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+          },
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "compute BIN BY bucket boundaries"))
+      }
+    }
+  }
+
+  private def apiInput: DataFrame = spark.sql(
+    """SELECT TIMESTAMP '2024-01-01 00:00:00' AS start,
+      |  TIMESTAMP '2024-01-01 00:10:00' AS end, 100.0D AS value""".stripMargin)
+
+  private def binByExecArgs(sqlText: String): String = {
+    val plan = spark.sql(sqlText).queryExecution.executedPlan
+    val binByExec = plan.collectFirst {
+      case b: BinByExec => b
+    }.getOrElse(fail(s"No BinByExec in plan:\n$plan"))
+    // exprIds are non-deterministic; normalize them to #x as the golden files do.
+    binByExec.simpleString(SQLConf.get.maxToStringFields).replaceAll("#\\d+", "#x")
+  }
+
+  // Nodes that run in the generated code of `stage`. An InputAdapter is the stage boundary.
+  private def stageNodes(stage: WholeStageCodegenExec): Seq[SparkPlan] = {
+    def collect(node: SparkPlan): Seq[SparkPlan] = node match {
+      case _: InputAdapter => Nil
+      case _ => node +: node.children.flatMap(collect)
+    }
+    collect(stage.child)
+  }
+
+  // The generated stage that runs BIN BY, if any.
+  private def binByCodegenStage(plan: SparkPlan): Option[WholeStageCodegenExec] =
+    plan.collectFirst {
+      case w: WholeStageCodegenExec if stageNodes(w).exists(_.isInstanceOf[BinByExec]) => w
+    }
 
   test("BIN BY is rejected when the operator is disabled") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
@@ -89,6 +158,38 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Seq(
         Row(tsAt("2024-01-01 00:00:00"), 50.0f, 100.0),
         Row(tsAt("2024-01-01 00:05:00"), 50.0f, 100.0)))
+    }
+  }
+
+  test("BIN BY scales every copy of a DISTRIBUTE column") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = spark.sql(
+        """SELECT * FROM (SELECT *, value, value AS raw_value FROM VALUES
+          |  (1, TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D),
+          |  (2, CAST(NULL AS TIMESTAMP), TIMESTAMP '2024-01-01 00:10:00', 10.0D)
+          |  AS metrics(id, ts_start, ts_end, value))
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      val plan = df.queryExecution.executedPlan
+      // A projection above BIN BY would read both copies from the first one.
+      assert(plan.collectFirst {
+        case p: ProjectExec if p.exists(_.isInstanceOf[BinByExec]) => p
+      }.isEmpty, plan)
+      val codegen = spark.sessionState.conf.getConf(SQLConf.ENABLE_BIN_BY_CODEGEN)
+      assert(binByCodegenStage(plan).isDefined == codegen, plan)
+      // Read the rows by position, because `collect` reads both copies from the first one.
+      val rows = plan.executeCollectPublic().toSeq
+        .map(row => Seq(row.get(0), row.get(3), row.get(4), row.get(5)))
+        .sortBy(_.head.asInstanceOf[Int])
+      // Both copies of `value` are scaled, or NULL for a NULL range. `raw_value` is not scaled.
+      assert(rows == Seq(
+        Seq[Any](1, 50.0, 50.0, 100.0),
+        Seq[Any](1, 50.0, 50.0, 100.0),
+        Seq[Any](2, null, null, 10.0)))
     }
   }
 
@@ -418,6 +519,56 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY raises DATETIME_OVERFLOW when the next bin index is not representable") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when the range duration is not representable") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MinValue),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a zero-length range bin overflows") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a non-empty range bin overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999998'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when advancing a bin index overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when a multi-day bin boundary overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = ntz("2020-01-01 00:00:00"),
+      rangeEnd = ntz("2020-01-02 00:00:00"),
+      binWidthSql = "INTERVAL '106751990' DAY",
+      originSql = "TIMESTAMP_NTZ '2000-01-01 00:00:00'")
+  }
+
   test("BIN BY raises BIN_BY_INVALID_RANGE for an inverted range") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
@@ -458,6 +609,268 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Seq(
         Row(1, null, null, null, null),
         Row(2, null, null, null, null)))
+    }
+  }
+
+  test("BIN BY codegen fuses wide output and bin filtering") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempView("bin_by_codegen") {
+        spark.range(start = 0L, end = 1000L, step = 1L, numPartitions = 1)
+          .selectExpr(
+            "id",
+            "concat('payload-', id) AS payload",
+            "named_struct('ids', array(id, id + 1), 'label', concat('row-', id)) AS nested",
+            "TIMESTAMP '2024-01-01 00:02:00' AS ts_start",
+            "TIMESTAMP '2024-01-01 00:17:00' AS ts_end",
+            "CAST(id + 1 AS FLOAT) AS f",
+            "CAST(id * 2 + 1 AS DOUBLE) AS d")
+          .createOrReplaceTempView("bin_by_codegen")
+        val query =
+          """SELECT id, payload, nested, f, d, bin_start, bin_end, bin_distribute_ratio
+            |FROM bin_by_codegen BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+            |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (f, d))
+            |WHERE bin_start >= TIMESTAMP '2024-01-01 00:05:00'""".stripMargin
+        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          sql(query).collect().toSeq
+        }
+        assert(expected.length == 3000)
+        val generated = sql(query)
+        val plan = generated.queryExecution.executedPlan
+        val stage = binByCodegenStage(plan)
+          .getOrElse(fail(s"BIN BY was not code generated:\n$plan"))
+        assert(stageNodes(stage).exists(_.isInstanceOf[FilterExec]))
+        assert(stageNodes(stage).exists(_.isInstanceOf[ProjectExec]))
+        val binBy = stageNodes(stage).collectFirst { case b: BinByExec => b }.get
+        // BIN BY's child runs in its own generated stage.
+        binBy.child match {
+          case InputAdapter(childStage: WholeStageCodegenExec) =>
+            assert(stageNodes(childStage).exists(_.isInstanceOf[RangeExec]), plan)
+          case other => fail(s"The child of BIN BY is not a separate generated stage:\n$other")
+        }
+        assert(!stageNodes(stage).exists(_.isInstanceOf[RangeExec]), plan)
+        checkAnswer(generated, expected)
+        assert(binBy.metrics("numOutputRows").value == 4000L)
+      }
+    }
+  }
+
+  gridTest("BIN BY codegen splits its consume for a parent that reads every column")(
+      Seq(false, true)) { split =>
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> split.toString) {
+      // DISTINCT reads every BIN BY column, so the consume code can be split.
+      val query =
+        """SELECT DISTINCT * FROM VALUES
+          |  (1, TIMESTAMP '2024-01-01 00:02:00', TIMESTAMP '2024-01-01 00:17:00', 150.0D),
+          |  (2, CAST(NULL AS TIMESTAMP), TIMESTAMP '2024-01-01 00:10:00', 100.0D),
+          |  (3, TIMESTAMP '2024-01-01 00:04:00', TIMESTAMP '2024-01-01 00:06:00', 20.0D)
+          |  AS metrics(id, ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        sql(query).collect().toSeq
+      }
+      assert(expected.length == 7)
+      val df = sql(query)
+      val plan = df.queryExecution.executedPlan
+      val stage = binByCodegenStage(plan)
+        .getOrElse(fail(s"BIN BY was not code generated:\n$plan"))
+      assert(stageNodes(stage).exists(_.isInstanceOf[HashAggregateExec]), plan)
+      assert(stage.doCodeGen()._2.body.contains("hashAgg_doConsume") == split)
+      checkAnswer(df, expected)
+    }
+  }
+
+  gridTest("BIN BY codegen handles mixed null and zero-length ranges")(Seq(false, true)) {
+    codegen =>
+      withSQLConf(
+          SQLConf.BIN_BY_ENABLED.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val df = sql(
+          """SELECT id, bin_start, bin_end, bin_distribute_ratio, f, d
+            |FROM VALUES
+            |  (1, NULL, TIMESTAMP '2024-01-01 00:10:00', 100.0F, 200.0D),
+            |  (2, TIMESTAMP '2024-01-01 00:00:00', NULL, 100.0F, 200.0D),
+            |  (3, TIMESTAMP '2024-01-01 00:02:00', TIMESTAMP '2024-01-01 00:02:00',
+            |    100.0F, 200.0D),
+            |  (4, TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00',
+            |    NULL, 200.0D),
+            |  (5, TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00',
+            |    100.0F, NULL),
+            |  (6, NULL, NULL, 100.0F, 200.0D)
+            |  AS t(id, ts_start, ts_end, f, d)
+            |BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+            |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (f, d))
+            |""".stripMargin)
+        checkAnswer(df, Seq(
+          Row(1, null, null, null, null, null),
+          Row(2, null, null, null, null, null),
+          Row(3, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"),
+            1.0, 100.0f, 200.0),
+          Row(4, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"),
+            0.5, null, 100.0),
+          Row(4, tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"),
+            0.5, null, 100.0),
+          Row(5, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"),
+            0.5, 50.0f, null),
+          Row(5, tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"),
+            0.5, 50.0f, null),
+          Row(6, null, null, null, null, null)))
+      }
+  }
+
+  test("BIN BY codegen preserves nondeterministic payloads across bins and under LIMIT") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempView("bin_by_codegen") {
+        spark.range(start = 0L, end = 100L, step = 1L, numPartitions = 1)
+          .selectExpr(
+            "id",
+            "rand(42) AS payload",
+            "TIMESTAMP '2024-01-01 00:00:00' AS ts_start",
+            "TIMESTAMP '2024-01-01 00:10:00' AS ts_end",
+            "100.0D AS value")
+          .createOrReplaceTempView("bin_by_codegen")
+        val query =
+          """SELECT id, payload, value, bin_start FROM bin_by_codegen BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+            |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+            |""".stripMargin
+        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          sql(query).collect().toSeq
+        }
+        checkAnswer(sql(query), expected)
+        assert(expected.groupBy(_.getLong(0)).values.forall { bins =>
+          bins.length == 2 && bins.map(_.getDouble(1)).distinct.length == 1
+        })
+        checkAnswer(sql(query).limit(5), expected.take(5))
+      }
+    }
+  }
+
+  gridTest("BIN BY stops expanding a row at a LIMIT in the same stage")(Seq(false, true)) {
+    codegen =>
+      withSQLConf(
+          SQLConf.BIN_BY_ENABLED.key -> "true",
+          SQLConf.ENABLE_BIN_BY_CODEGEN.key -> codegen.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // One input row spans 1000 one-minute bins. Both paths stop after the 5 bins that the
+        // LIMIT takes.
+        val df = sql(
+          """SELECT count(*) FROM (
+            |  SELECT bin_start FROM VALUES
+            |    (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 16:40:00', 100.0D)
+            |    AS t(ts_start, ts_end, value)
+            |  BIN BY (
+            |    RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' MINUTE
+            |    ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+            |  LIMIT 5)""".stripMargin)
+        checkAnswer(df, Row(5L))
+        val plan = df.queryExecution.executedPlan
+        assert(binByCodegenStage(plan).isDefined == codegen, plan)
+        val binBy = plan.collectFirst { case b: BinByExec => b }
+          .getOrElse(fail(s"No BinByExec in plan:\n$plan"))
+        assert(binBy.metrics("numOutputRows").value == 5L)
+      }
+  }
+
+  gridTest("BIN BY stops at a top-level LIMIT after the bins it returns")(Seq(false, true)) {
+    codegen =>
+      withSQLConf(
+          SQLConf.BIN_BY_ENABLED.key -> "true",
+          SQLConf.ENABLE_BIN_BY_CODEGEN.key -> codegen.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // One input row spans 1000 one-minute bins. The LIMIT runs outside the generated stage,
+        // so the bins go to the stage output.
+        val df = sql(
+          """SELECT bin_start FROM VALUES
+            |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 16:40:00', 100.0D)
+            |  AS t(ts_start, ts_end, value)
+            |BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' MINUTE
+            |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+            |LIMIT 20""".stripMargin)
+        assert(df.collect().length == 20)
+        val plan = df.queryExecution.executedPlan
+        assert(binByCodegenStage(plan).isDefined == codegen, plan)
+        val binBy = plan.collectFirst { case b: BinByExec => b }
+          .getOrElse(fail(s"No BinByExec in plan:\n$plan"))
+        assert(binBy.metrics("numOutputRows").value == 20L)
+      }
+  }
+
+  test("BIN BY returns the bins a LIMIT takes before a later bin boundary overflows") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        val rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 3L)
+        Seq((rangeStart, DateTimeUtils.microsToLocalDateTime(Long.MaxValue), 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+        // The third bin overflows the bin index. LIMIT 1 reads only the first bin.
+        val df = sql(
+          """SELECT bin_start FROM bin_by_overflow BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
+            |  ALIGN TO TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'
+            |  DISTRIBUTE UNIFORM (value))
+            |LIMIT 1""".stripMargin)
+        checkAnswer(df, Row(rangeStart))
+      }
+    }
+  }
+
+  test("BIN BY codegen checks for a task kill while it expands one row") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Cancel the stage after its task starts to expand the row. Then only the kill check in the
+      // bin loop can stop the task.
+      val listener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          val stageId = taskStart.stageId
+          new Thread(() => {
+            Thread.sleep(2000)
+            sparkContext.cancelStage(stageId)
+          }).start()
+        }
+      }
+      sparkContext.addSparkListener(listener)
+      try {
+        // One input row spans about 10^15 one-microsecond bins. The aggregate in the same stage
+        // takes every bin, so the loop does not return between bins.
+        val ex = intercept[SparkException] {
+          sql(
+            """SELECT count(*) FROM VALUES
+              |  (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2030-01-01 00:00:00', 1.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
+              |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+        }
+        assert(Option(ex.getCause).getOrElse(ex).getMessage.contains("cancelled"), ex)
+        sparkContext.listenerBus.waitUntilEmpty(20.seconds.toMillis)
+        eventually(timeout(20.seconds)) {
+          assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+        }
+      } finally {
+        sparkContext.removeSparkListener(listener)
+      }
     }
   }
 
@@ -567,4 +980,200 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("EXPLAIN for LTZ BIN BY") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val rendered = binByExecArgs(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:05:00', 100.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      assert(rendered ==
+        "BinBy range=[ts_start#x: timestamp, ts_end#x: timestamp], " +
+          "binWidth=INTERVAL '0 00:05:00' DAY TO SECOND, alignTo=2024-01-01 00:00:00, " +
+          "distribute=[value#x: double], scaledDistribute=[value#x: double], " +
+          "appends=[bin_start#x: timestamp, bin_end#x: timestamp, " +
+          "bin_distribute_ratio#x: double], zone=America/Los_Angeles")
+    }
+  }
+
+  test("EXPLAIN for TIMESTAMP_NTZ BIN BY") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val rendered = binByExecArgs(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP_NTZ '2024-01-01 00:00:00', TIMESTAMP_NTZ '2024-01-01 00:05:00', 100.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  ALIGN TO TIMESTAMP_NTZ '2024-01-01 00:00:00'
+          |  DISTRIBUTE UNIFORM (value))""".stripMargin)
+      assert(rendered ==
+        "BinBy range=[ts_start#x: timestamp_ntz, ts_end#x: timestamp_ntz], " +
+          "binWidth=INTERVAL '0 00:05:00' DAY TO SECOND, alignTo=2024-01-01 00:00:00, " +
+          "distribute=[value#x: double], scaledDistribute=[value#x: double], " +
+          "appends=[bin_start#x: timestamp_ntz, bin_end#x: timestamp_ntz, " +
+          "bin_distribute_ratio#x: double]")
+    }
+  }
+
+  test("BIN BY DataFrame API supports optional alignment and output names") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val input = apiInput
+      val width = expr("INTERVAL 5 MINUTES")
+      val renamed = input.binBy(
+        rangeStart = input("start"),
+        rangeEnd = input("end"),
+        binWidth = width,
+        distributeUniform = Array(input("value")),
+        alignTo = null,
+        binStartName = "bin.start",
+        binEndName = "bin`end",
+        binDistributeRatioName = "ratio")
+      assert(renamed.columns.toSeq ==
+        Seq("start", "end", "value", "bin.start", "bin`end", "ratio"))
+
+      val aligned = input.binBy(
+        rangeStart = col("start"),
+        rangeEnd = col("end"),
+        binWidth = width,
+        distributeUniform = Array(col("value")),
+        alignTo = expr("TIMESTAMP '2024-01-01 00:02:00'"))
+      checkAnswer(aligned.select("value", "bin_start", "bin_distribute_ratio"), Seq(
+        Row(20.0, tsAt("2023-12-31 23:57:00"), 0.2),
+        Row(50.0, tsAt("2024-01-01 00:02:00"), 0.5),
+        Row(30.0, tsAt("2024-01-01 00:07:00"), 0.3)))
+      val result = input.binBy(
+        rangeStart = input("start"),
+        rangeEnd = input("end"),
+        binWidth = width,
+        distributeUniform = Array(input("value")))
+      assert(result.columns.toSeq ==
+        Seq("start", "end", "value", "bin_start", "bin_end", "bin_distribute_ratio"))
+      checkAnswer(result.select("value", "bin_start", "bin_end", "bin_distribute_ratio"), Seq(
+        Row(50.0, tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 0.5),
+        Row(50.0, tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"), 0.5)))
+      checkAnswer(renamed, result)
+    }
+  }
+
+  test("BIN BY DataFrame API validates column inputs and an explicit NULL origin") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      val input = apiInput
+      val width = expr("INTERVAL 5 MINUTES")
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array.empty[Column])
+        },
+        condition = "BIN_BY_MISSING_DISTRIBUTE",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value"), input("value")))
+        },
+        condition = "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN",
+        parameters = Map("columnName" -> "`value`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value") + 1))
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"(value + 1)\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value").as("v")))
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"value AS v\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start").as("s"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value")))
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"start AS s\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start").cast("timestamp_ntz"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value")))
+        },
+        condition = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+        parameters = Map("columnName" -> "\"CAST(start AS TIMESTAMP_NTZ)\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          input.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = width,
+            distributeUniform = Array(col("value")),
+            alignTo = lit(null).cast("timestamp"))
+        },
+        condition = "BIN_BY_NULL_ARGUMENT",
+        parameters = Map("clause" -> "ALIGN TO"))
+    }
+  }
+
+  test("BIN BY DataFrame API respects the feature gate") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          apiInput.binBy(
+            rangeStart = col("start"),
+            rangeEnd = col("end"),
+            binWidth = expr("INTERVAL 5 MINUTES"),
+            distributeUniform = Array(col("value")))
+        },
+        condition = "UNSUPPORTED_FEATURE.BIN_BY",
+        parameters = Map.empty)
+    }
+  }
+}
+
+/**
+ * Runs [[BinBySuite]] with BIN BY code-gen disabled. It skips the tests that set the BIN BY
+ * code-gen config themselves.
+ */
+class BinByWithoutCodegenSuite extends BinBySuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ENABLE_BIN_BY_CODEGEN.key, "false")
+
+  override protected def excluded: Seq[String] = Seq(
+    "BIN BY codegen fuses wide output and bin filtering",
+    "BIN BY codegen splits its consume for a parent that reads every column (false)",
+    "BIN BY codegen splits its consume for a parent that reads every column (true)",
+    "BIN BY stops expanding a row at a LIMIT in the same stage (false)",
+    "BIN BY stops expanding a row at a LIMIT in the same stage (true)",
+    "BIN BY stops at a top-level LIMIT after the bins it returns (false)",
+    "BIN BY stops at a top-level LIMIT after the bins it returns (true)",
+    "BIN BY codegen checks for a task kill while it expands one row")
 }

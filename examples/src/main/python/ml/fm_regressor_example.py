@@ -20,9 +20,10 @@ FMRegressor Example.
 """
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import FMRegressor
-from pyspark.ml.feature import MinMaxScaler
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import MinMaxScaler
+from pyspark.ml.regression import FMRegressor
+
 # $example off$
 from pyspark.sql import SparkSession
 

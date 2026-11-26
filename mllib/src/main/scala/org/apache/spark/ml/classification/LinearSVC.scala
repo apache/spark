@@ -42,12 +42,14 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{get => fget, _}
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB {
+  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB
+  with HasIntermediateStorageLevel {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -170,6 +172,10 @@ class LinearSVC @Since("2.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
     var size = this.estimateMatadataSize
@@ -185,7 +191,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth,
-      maxBlockSizeInMB)
+      maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
@@ -303,7 +309,7 @@ class LinearSVC @Since("2.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val getAggregatorFunc = new HingeBlockAggregator(bcInverseStd, bcScaledMean,
@@ -377,8 +383,29 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, coefficients) + intercept
+  override protected def predictRawColumn(features: Column): Column = {
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
+      Vectors.dense(-margin, margin)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    val localThreshold = getThreshold
+    val rawScore = fget(unwrap_udt(rawPrediction).getField("values"), lit(1))
+    when(rawScore > localThreshold && !isnan(rawScore), 1.0).otherwise(0.0)
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    val localThreshold = getThreshold
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
+      if (margin > localThreshold) 1.0 else 0.0
+    }).apply(features)
   }
 
   /**
@@ -403,13 +430,14 @@ class LinearSVCModel private[classification] (
   }
 
   override def predict(features: Vector): Double = {
-    if (margin(features) > $(threshold)) 1.0 else 0.0
+    val margin = BLAS.dot(features, coefficients) + intercept
+    if (margin > $(threshold)) 1.0 else 0.0
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val m = margin(features)
-    Vectors.dense(-m, m)
+    val margin = BLAS.dot(features, coefficients) + intercept
+    Vectors.dense(-margin, margin)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

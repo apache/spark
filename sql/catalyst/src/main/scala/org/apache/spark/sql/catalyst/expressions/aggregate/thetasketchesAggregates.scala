@@ -44,8 +44,22 @@ case class UnionAggregationBuffer(union: Union) extends ThetaSketchState {
   override def eval(): Array[Byte] = union.getResult.toByteArrayCompressed
 }
 case class IntersectionAggregationBuffer(intersection: Intersection) extends ThetaSketchState {
-  override def serialize(): Array[Byte] = intersection.getResult.toByteArrayCompressed
-  override def eval(): Array[Byte] = intersection.getResult.toByteArrayCompressed
+  override def serialize(): Array[Byte] = {
+    // An untouched intersection represents no contribution, not an empty sketch.
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArrayCompressed
+    } else {
+      Array.emptyByteArray
+    }
+  }
+
+  override def eval(): Array[Byte] = {
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArrayCompressed
+    } else {
+      new UpdateSketchBuilder().build().compact().toByteArrayCompressed
+    }
+  }
 }
 case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
   override def serialize(): Array[Byte] = sketch.toByteArrayCompressed
@@ -157,6 +171,9 @@ case class ThetaSketchAgg(
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   /**
    * Instantiate an UpdateSketch instance using the lgNomEntries param.
@@ -395,6 +412,9 @@ case class ThetaUnionAgg(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   /**
    * Instantiate a Union instance using the lgNomEntries param.
    *
@@ -522,6 +542,13 @@ case class ThetaUnionAgg(
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
        1
+      > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -561,6 +588,9 @@ case class ThetaIntersectionAgg(
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   /**
    * Instantiate an Intersection instance using the lgNomEntries param.
@@ -617,6 +647,9 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     (intersectionBuffer, input) match {
+      // Untouched input states do not contribute to the intersection.
+      case (_, IntersectionAggregationBuffer(intersection)) if !intersection.hasResult() =>
+        intersectionBuffer
       // If both arguments are intersection objects, merge them directly.
       case (
             IntersectionAggregationBuffer(intersectLeft),

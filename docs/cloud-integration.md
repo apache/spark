@@ -135,6 +135,20 @@ especially public ones*
 Consult [the Hadoop documentation](https://hadoop.apache.org/docs/current/) for the relevant
 configuration and security options.
 
+## OIDC Credential Propagation
+
+The authentication methods above use credentials that are either static (keys in configuration) or
+shared by all jobs running on a host (an instance profile or a pod's service account). As an
+alternative, Spark can access object storage using short-lived credentials derived from a
+per-workload or per-user OIDC identity, so that authorization and audit happen at the granularity
+of that identity rather than a shared role. Spark ships a reference provider for Amazon S3 and any
+STS-compatible endpoint (such as MinIO or Ceph) that supplies `fs.s3a.*` credentials to the S3A
+connector.
+
+This is described in full, including how to enable the reference provider and its configuration
+options, under [OIDC Credential Propagation](security.html#oidc-credential-propagation) on the
+security page.
+
 ## Configuring
 
 Each cloud connector has its own set of configuration parameters, again, 
@@ -240,6 +254,14 @@ configuration to `org.apache.spark.internal.io.cloud.AbortableStreamBasedCheckpo
 which eliminates the slow rename. In this case users must be extra careful to avoid the reuse of
 the checkpoint location among multiple queries running parallelly as that could lead to corruption
 of the checkpointing data.
+
+1. Rename-based checkpoint file managers, including the default, write each checkpoint file to a
+temporary file and then rename it into place, trusting the rename as long as it does not throw.
+On an object store whose rename is not guaranteed to be atomic, consider setting
+`spark.sql.streaming.checkpoint.renamedFileCheck.enabled` to `true`. Spark then verifies that each
+checkpoint file exists after the rename and fails the write if it does not, instead of committing
+a batch whose checkpoint file is missing, which would make later restarts of the query fail.
+The check adds one existence request per checkpoint file written, so it is disabled by default.
 
 ## Committing work into cloud storage safely and fast.
 

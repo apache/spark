@@ -132,6 +132,23 @@ trait MergeIntoSchemaEvolutionTypeWideningTests extends MergeIntoSchemaEvolution
     expectErrorWithoutEvolutionContains = "CAST_OVERFLOW_IN_TABLE_INSERT"
   )
 
+  testEvolution("SPARK-60709: type widening top-level field" +
+    " and target metadata column in update condition")(
+    targetData = Seq((1, 100, "hr"), (2, 200, "software"), (3, 300, "hr"))
+      .toDF("pk", "salary", "dep"),
+    sourceData = Seq((1, 150L, "hr"), (2, 250L, "software"), (4, 450L, "hr"))
+      .toDF("pk", "salary", "dep"),
+    clauses = Seq(updateAll(condition = "t._partition = 'hr'")),
+    expected = Seq((1, 150L, "hr"), (2, 200L, "software"), (3, 300L, "hr"))
+      .toDF("pk", "salary", "dep"),
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", LongType, nullable = false),
+      StructField("dep", StringType))),
+    expectedWithoutEvolution = Seq((1, 150, "hr"), (2, 200, "software"), (3, 300, "hr"))
+      .toDF("pk", "salary", "dep")
+  )
+
   testEvolution("type widening - column not used in assignments")(
     targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
     sourceData = Seq((2, Long.MaxValue, "software"), (3, Long.MaxValue, "engineering"))

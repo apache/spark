@@ -14,19 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from typing import Any, Callable, List, Optional, TypeVar
 
-from py4j.java_gateway import java_import, is_instance_of, JavaObject
+from py4j.java_gateway import JavaObject, is_instance_of, java_import
 
 from pyspark import RDD, SparkConf
-from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
 from pyspark.core.context import SparkContext
+from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
-
-import warnings
 
 __all__ = ["StreamingContext"]
 

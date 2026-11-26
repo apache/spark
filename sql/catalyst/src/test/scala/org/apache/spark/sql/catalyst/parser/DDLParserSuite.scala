@@ -1496,15 +1496,25 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Renaming column",
-        "command" -> "ALTER COLUMN",
-        "msg" -> ", please run RENAME COLUMN instead"),
+      condition = "UNSUPPORTED_CHANGE_COLUMN.RENAME",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
         start = 0,
         stop = 54))
+
+    // NOT NULL not supported in hive style ALTER COLUMN.
+    val sqlNotNull = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT NOT NULL"
+    checkError(
+      exception = parseException(sqlNotNull),
+      condition = "UNSUPPORTED_CHANGE_COLUMN.NOT_NULL",
+      sqlState = "0A000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sqlNotNull,
+        start = 0,
+        stop = 56))
 
     // ALTER COLUMN for a partition is not supported.
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT"
@@ -1567,8 +1577,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql6 = "ALTER TABLE table_name REPLACE COLUMNS (x string NOT NULL)"
     checkError(
       exception = parseException(sql6),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map("operation" -> "NOT NULL", "command" -> "REPLACE COLUMNS", "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.NOT_NULL",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
         start = 0,
@@ -1577,11 +1588,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql7 = "ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)"
     checkError(
       exception = parseException(sql7),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Column position",
-        "command" -> "REPLACE COLUMNS",
-        "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.COLUMN_POSITION",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
         start = 0,
@@ -1590,11 +1599,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql8 = "ALTER TABLE table_name REPLACE COLUMNS (a.b.c string)"
     checkError(
       exception = parseException(sql8),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Replacing with a nested column",
-        "command" -> "REPLACE COLUMNS",
-        "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.NESTED_COLUMN",
+      sqlState = "0A000",
+      parameters = Map("columnName" -> "`a`.`b`.`c`"),
       context = ExpectedContext(
         fragment = sql8,
         start = 0,
@@ -2558,8 +2565,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
+          Seq(UnresolvedCTERelation("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))))))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
@@ -3083,8 +3090,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CACHE TABLE a.b.c AS SELECT * FROM testData"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0037",
-      parameters = Map("quoted" -> "a.b"),
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      sqlState = "42000",
+      parameters = Map("statement" -> "CACHE TABLE ... AS SELECT", "name" -> "`a`.`b`.`c`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
