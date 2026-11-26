@@ -577,7 +577,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    }
 
   // Whether `a` is an Aggregate without grouping expressions over outer references, whose one row
-  // on empty input decorrelation can lose (see rewriteSubQueries).
+  // on empty input decorrelation can lose (see rewriteSubQueries). Unlike mayHaveCountBugAgg there,
+  // which picks DecorrelateInnerQuery by the default results of the functions, this does not look
+  // at the functions.
   private[optimizer] def correlatedUngroupedAggregate(a: Aggregate): Boolean =
     a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a)
 
