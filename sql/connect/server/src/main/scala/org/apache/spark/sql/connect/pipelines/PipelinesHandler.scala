@@ -30,12 +30,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CATALOG_NAME, COMMAND, DATABASE_NAME}
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{PlanWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExecuteImmediate, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{OptionalReferences, PlanWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExecuteImmediate, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, Union, UnresolvedInsert, UnresolvedWith}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
@@ -297,7 +298,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
-              language = Option(Python())),
+              language = Some(Python)),
             format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
             isStreamingTable = output.getOutputType == proto.OutputType.TABLE))
@@ -317,7 +318,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Some(Python())),
+              language = Some(Python)),
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
@@ -337,7 +338,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Some(Python()))))
+              language = Some(Python))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
@@ -463,10 +464,23 @@ private[connect] object PipelinesHandler extends Logging {
         .nameParts,
       isStreaming = true)
 
-    val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
+    // Like the SQL form of the flow, reject optional references (`x?`): a column that the source
+    // does not have must not silently change which rows the flow deletes, or how it sequences
+    // them. The expressions still carry the markers of the parser.
+    val transformChangeArgument: proto.Expression => Expression = expr => {
+      val expression = transformExpressionFunc(expr)
+      OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
+        throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
+          "AUTO CDC",
+          reference.origin)
+      }
+      expression
+    }
+
+    val toColumn: proto.Expression => Column = expr => Column(transformChangeArgument(expr))
 
     val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName = expr =>
-      transformExpressionFunc(expr) match {
+      transformChangeArgument(expr) match {
         case a: UnresolvedAttribute => UnqualifiedColumnName(a.nameParts)
         case other =>
           throw new AnalysisException(
@@ -580,7 +594,7 @@ private[connect] object PipelinesHandler extends Logging {
       flow.getSourceCodeLocation.getLineNumber),
     objectType = Some(QueryOriginType.Flow.toString),
     objectName = Option(flowIdentifier.unquotedString),
-    language = Some(Python()))
+    language = Some(Python))
 
   private def startRun(
       cmd: proto.PipelineCommand.StartRun,

@@ -849,7 +849,25 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isNotSelectableObjectException(e: SQLException): Boolean = false
 
   /**
-   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * Returns true if the given exception means the remote engine denied access because the user
+   * lacks a privilege on the object (e.g. PostgreSQL SQLSTATE 42501). Spark then reports
+   * `JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR`, during output schema resolution or query execution.
+   * Dialects override this to recognize their own error codes; the default is false.
+   */
+  @Since("4.4.0")
+  def isPermissionDeniedException(e: SQLException): Boolean = false
+
+  /**
+   * Classifies a dialect exception using the supplied condition or a dialect-specific condition.
+   * Also called on executors for destination JDBC write failures, with `FAILED_JDBC.WRITE`
+   * and `isRuntime = true`.
+   *
+   * The default implementation delegates to the deprecated classifier and returns an
+   * `AnalysisException`, even for runtime failures. Dialects using condition-based classification
+   * can return a runtime exception when `isRuntime` is true. The executor write path replaces
+   * the generic `FAILED_JDBC.UNCLASSIFIED` fallback with the original `SQLException`, preserving
+   * specific dialect mappings. The default wrappers preserve the original exception as the cause;
+   * dialect-specific mappings may handle it differently.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`

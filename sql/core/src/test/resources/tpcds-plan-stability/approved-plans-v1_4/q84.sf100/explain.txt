@@ -43,7 +43,7 @@ Output [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_curr
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk)]
-ReadSchema: struct<c_customer_id:string,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string>
+ReadSchema: struct<c_customer_id:string,c_current_cdemo_sk:bigint,c_current_hdemo_sk:bigint,c_current_addr_sk:bigint,c_first_name:string,c_last_name:string>
 
 (2) ColumnarToRow [codegen id : 4]
 Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
@@ -57,7 +57,7 @@ Output [2]: [ca_address_sk#7, ca_city#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_city), EqualTo(ca_city,Edgewood), IsNotNull(ca_address_sk)]
-ReadSchema: struct<ca_address_sk:int,ca_city:string>
+ReadSchema: struct<ca_address_sk:bigint,ca_city:string>
 
 (5) ColumnarToRow [codegen id : 1]
 Input [2]: [ca_address_sk#7, ca_city#8]
@@ -72,7 +72,7 @@ Input [2]: [ca_address_sk#7, ca_city#8]
 
 (8) BroadcastExchange
 Input [1]: [ca_address_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_addr_sk#4]
@@ -89,7 +89,7 @@ Output [2]: [hd_demo_sk#9, hd_income_band_sk#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
+ReadSchema: struct<hd_demo_sk:bigint,hd_income_band_sk:bigint>
 
 (12) ColumnarToRow [codegen id : 3]
 Input [2]: [hd_demo_sk#9, hd_income_band_sk#10]
@@ -103,7 +103,7 @@ Output [3]: [ib_income_band_sk#11, ib_lower_bound#12, ib_upper_bound#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/income_band]
 PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), LessThanOrEqual(ib_upper_bound,88128), IsNotNull(ib_income_band_sk)]
-ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
+ReadSchema: struct<ib_income_band_sk:bigint,ib_lower_bound:int,ib_upper_bound:int>
 
 (15) ColumnarToRow [codegen id : 2]
 Input [3]: [ib_income_band_sk#11, ib_lower_bound#12, ib_upper_bound#13]
@@ -118,7 +118,7 @@ Input [3]: [ib_income_band_sk#11, ib_lower_bound#12, ib_upper_bound#13]
 
 (18) BroadcastExchange
 Input [1]: [ib_income_band_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (19) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [hd_income_band_sk#10]
@@ -132,7 +132,7 @@ Input [3]: [hd_demo_sk#9, hd_income_band_sk#10, ib_income_band_sk#11]
 
 (21) BroadcastExchange
 Input [1]: [hd_demo_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=3]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_hdemo_sk#3]
@@ -146,14 +146,14 @@ Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first
 
 (24) BroadcastExchange
 Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=4]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=4]
 
 (25) Scan parquet spark_catalog.default.customer_demographics
 Output [1]: [cd_demo_sk#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk)]
-ReadSchema: struct<cd_demo_sk:int>
+ReadSchema: struct<cd_demo_sk:bigint>
 
 (26) ColumnarToRow
 Input [1]: [cd_demo_sk#14]
@@ -174,14 +174,14 @@ Input [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6
 
 (30) BroadcastExchange
 Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(input[3, bigint, true]),false), [plan_id=5]
 
 (31) Scan parquet spark_catalog.default.store_returns
 Output [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_cdemo_sk)]
-ReadSchema: struct<sr_cdemo_sk:int>
+ReadSchema: struct<sr_cdemo_sk:bigint>
 
 (32) ColumnarToRow
 Input [2]: [sr_cdemo_sk#15, sr_returned_date_sk#16]

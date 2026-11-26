@@ -93,6 +93,12 @@ trait VariableManager {
    */
   def getVariableNameForError(variableName: String): String
 
+  /**
+   * @param label A label, normalized like the labels of the manager.
+   * @return true if a variable of the manager can be qualified with `label`, as `label.name`,
+   *         because `label` is the label of an active scope.
+   */
+  def isScopeLabel(label: String): Boolean = false
 }
 
 /**

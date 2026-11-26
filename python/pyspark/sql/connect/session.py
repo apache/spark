@@ -429,6 +429,15 @@ class SparkSession:
 
     table.__doc__ = PySparkSession.table.__doc__
 
+    def getOrCreateDataFrame(
+        self, path: str, create: Callable[[], ParentDataFrame]
+    ) -> ParentDataFrame:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "getOrCreateDataFrame"}
+        )
+
+    getOrCreateDataFrame.__doc__ = PySparkSession.getOrCreateDataFrame.__doc__
+
     @property
     def read(self) -> "DataFrameReader":
         return DataFrameReader(self)
@@ -1484,6 +1493,8 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+    # Classic only.
+    del pyspark.sql.connect.session.SparkSession.getOrCreateDataFrame.__doc__
 
     failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.session,

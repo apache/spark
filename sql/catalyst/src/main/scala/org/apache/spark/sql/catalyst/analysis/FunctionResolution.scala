@@ -59,6 +59,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class FunctionResolution(
     override val catalogManager: CatalogManager,
@@ -372,6 +373,28 @@ class FunctionResolution(
   def hasLambdaAndResolvedArguments(expressions: Seq[Expression]): Boolean = {
     val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
     lambdas.nonEmpty && others.forall(_.resolved)
+  }
+
+  /**
+   * Resolves function metadata for commands such as `DESCRIBE FUNCTION`, using the caller's
+   * catalog extractor when supplied.
+   */
+  private[sql] def resolveFunctionName(
+      unresolvedFunctionName: UnresolvedFunctionName,
+      lookupCatalog: LookupCatalog = this): LogicalPlan = {
+    val nameParts = unresolvedFunctionName.multipartIdentifier
+    lookupBuiltinOrTempFunction(nameParts, None)
+      .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
+      ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
+    }.getOrElse {
+      val lookupCatalog.CatalogAndIdentifier(catalog, ident) =
+        relationResolution.expandIdentifier(nameParts)
+      val fullName = catalog.name +: ident.namespace :+ ident.name
+      CatalogV2Util.loadFunction(catalog, ident).map { func =>
+        ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
+      }.getOrElse(unresolvedFunctionName.copy(
+        possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
+    }
   }
 
   def lookupBuiltinOrTempFunction(
