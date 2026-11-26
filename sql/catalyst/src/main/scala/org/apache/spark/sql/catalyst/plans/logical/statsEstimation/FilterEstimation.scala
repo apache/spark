@@ -163,9 +163,10 @@ case class FilterEstimation(
    * Currently we only support binary predicates where one side is a column,
    * and the other is a literal. A side may also be a column under the read-side padding or check
    * that a scan wraps a CHAR or VARCHAR column in, which a predicate pushed below the read-side
-   * Project compares, under a cast to STRING, or under the padding or widening that a comparison
-   * adds (see `unwrapCharVarcharRead`). It is estimated as the column itself, as
-   * `EstimationUtils.getAliasStats` does above the read-side Project.
+   * Project compares, under a cast to a STRING of the same collation, or under an rpad or a cast
+   * that pads or widens it, such as one a comparison adds (see `unwrapCharVarcharRead`). It is
+   * estimated as the column itself, as `EstimationUtils.getAliasStats` does above the read-side
+   * Project.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -261,7 +262,7 @@ case class FilterEstimation(
    * `EstimationUtils.getAliasStats` keeps it.
    */
   private def unwrapCharVarcharRead(e: Expression): Expression =
-    readColumn(e, childStats.attributeStats).map(_._1).getOrElse(e)
+    readColumn(e, childStats.attributeStats).map(_.attr).getOrElse(e)
 
   /**
    * Returns a percentage of rows meeting "IS NULL" or "IS NOT NULL" condition.

@@ -443,7 +443,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             }
           }
           // As first-class types a union of VARCHAR columns of different lengths casts the
-          // shorter one. A union of CHAR columns of different types is rejected then.
+          // shorter one. A union with a CHAR column of a different type is rejected then.
           if (leftType.startsWith("VARCHAR")) {
             checkRows(s"SELECT k, count(*) FROM (SELECT a AS k FROM $left UNION ALL " +
                 s"SELECT b FROM $right) GROUP BY k", 10, s"$modeConfs, union") {
@@ -457,11 +457,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("SPARK-61871: CBO estimates CHAR predicates that a comparison pads") {
     // A CHAR column compared with a longer literal is padded to the literal's length, and with
-    // read-side padding off to its own length as well. Both are estimated as the column.
-    Seq("true", "false").foreach { readSidePadding =>
-      withSQLConf(
-          SQLConf.CBO_ENABLED.key -> "true",
-          SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+    // read-side padding off to its own length as well. All are estimated as the column. Under
+    // `preserveCharVarcharTypeInfo` a comparison with a literal casts the column to STRING
+    // instead, and one with a CHAR column of the same type pads with a pad of as many spaces as
+    // its length.
+    val paddingOff = SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"
+    val preserve = SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true"
+    Seq(Nil, Seq(paddingOff), Seq(paddingOff, preserve)).foreach { modeConfs =>
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> "true") ++ modeConfs: _*) {
         val (left, right) = ("char_padded_predicate_left", "char_padded_predicate_right")
         withTable(left, right) {
           Seq(left, right).foreach { t =>
@@ -469,9 +472,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             sql(s"INSERT INTO $t SELECT $fiveCharValues")
             sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS c")
           }
-          val clue = s"readSideCharPadding $readSidePadding"
-          Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200, "c = '10003  '" -> 100,
-              "c IN ('10003  ', '10004')" -> 200).foreach { case (condition, expectedRows) =>
+          val clue = modeConfs.toString
+          val longerLiterals = if (modeConfs.contains(preserve)) {
+            Nil
+          } else {
+            Seq("c = '10003  '" -> 100, "c IN ('10003  ', '10004')" -> 200)
+          }
+          val predicates = Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200)
+          (predicates ++ longerLiterals).foreach { case (condition, expectedRows) =>
             checkRows(s"SELECT * FROM $left WHERE $condition", expectedRows, clue) {
               case f: Filter => f
             }

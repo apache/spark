@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, Literal, StringRPad}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
@@ -321,6 +321,12 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
         vRead)
       // A cast to a shorter type can truncate, also where stale stats show values that fit.
       assert(aliasStat(v, stat)(Cast(vRead, VarcharType(5))).isEmpty, vRead)
+      // As first-class types rpad keeps the type of its input, so a cast of rpad(c, 10) to
+      // CHAR(7) casts CHAR(5) to a longer type, but truncates the padded values.
+      val padded = StringRPad(read, Literal(10), Literal(" "))
+      assert(padded.dataType == CharType(5), padded)
+      assert(aliasStat(c, stat)(Cast(padded, CharType(10))).contains(lengths(10)), padded)
+      assert(aliasStat(c, stat)(Cast(padded, CharType(7))).isEmpty, padded)
     }
   }
 
