@@ -271,10 +271,16 @@ class EquivalentExpressions(
       // always evaluated, and `And`/`Or`/`In` are not `ConditionalExpression`s. Asking
       // `childrenToRecurse` about the chain above that operand walks past its guards; asking
       // `commonChildrenToRecurse` about the chain reaches no branch group at all.
+      // The operand the peel lands on is added itself, not only its children: it is always
+      // evaluated, so it is a candidate like any other always-evaluated expression. The peel
+      // cannot go further from it, so the call below takes the `else` branch for it.
       val alwaysEvaluated = skipForShortcut(expr)
-      childrenToRecurse(alwaysEvaluated).foreach(updateExprTree(_, map, uc))
-      commonChildrenToRecurse(alwaysEvaluated).filter(_.nonEmpty)
-        .foreach(updateCommonExprs(_, map, uc))
+      if (alwaysEvaluated ne expr) {
+        updateExprTree(alwaysEvaluated, map, uc)
+      } else {
+        childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
+        commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
+      }
     }
   }
 

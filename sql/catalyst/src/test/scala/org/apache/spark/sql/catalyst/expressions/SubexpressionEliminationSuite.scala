@@ -542,6 +542,33 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(eeWhole.getCommonSubexpressions == Seq(in1))
   }
 
+  test("SPARK-60418: the operand the short-circuit peel lands on is a candidate itself") {
+    // The peel lands on the one operand that is always evaluated: the `value` of an `In`, or the
+    // leftmost operand of an `And`/`Or` chain. Being always evaluated, that operand is a common
+    // subexpression in its own right when it occurs elsewhere too, not only through its
+    // children. Recursing straight into its children left it out, so that in
+    // `SELECT a + 1 IN (1, 2), a + 1 FROM t` the generated code evaluated `a + 1` twice.
+    val a = AttributeReference("a", IntegerType)()
+    val add = Add(a, Literal(1))
+    val inAdd = In(add, Seq(Literal(1), Literal(2)))
+    val equal = EqualTo(add, Literal(0))
+
+    def commonOf(exprs: Expression*): Seq[Expression] = {
+      val equivalence = new EquivalentExpressions(skipForShortcutEnable = true)
+      exprs.foreach(equivalence.addExprTree(_))
+      equivalence.getCommonSubexpressions
+    }
+
+    // `value` shared with an expression outside the `In`, directly and behind an `And`, and two
+    // `In`s that share only their `value`.
+    assert(commonOf(inAdd, add) == Seq(add))
+    assert(commonOf(And(inAdd, Literal(true)), add) == Seq(add))
+    assert(commonOf(inAdd, In(add, Seq(Literal(3)))) == Seq(add))
+    // The leftmost operand of an `And`/`Or` chain shared with an expression outside the chain.
+    assert(commonOf(And(equal, Literal(true)), equal) == Seq(equal))
+    assert(commonOf(Or(Or(equal, Literal(true)), Literal(false)), equal) == Seq(equal))
+  }
+
   test("SPARK-58211: shortcut eliminate operand past the first in a chained AND/OR") {
     val add = Add(Literal(1), Literal(0))
     val equal = EqualTo(add, add)
