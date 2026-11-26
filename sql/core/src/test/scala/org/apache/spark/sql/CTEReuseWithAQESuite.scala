@@ -1462,6 +1462,85 @@ class CTEReuseWithAQESuite
     }
   }
 
+  // As above, but the forced CTE is in the plan of a cached relation, which has an adaptive
+  // execution context of its own. The reading query builds the cache on its own thread, so the
+  // cached plan's shared inner plan runs under the reading query's execution id, and once it
+  // finishes it must release the jobs it registered under that id after the reading query ended.
+  test("an inner CTE plan of a cached relation that outlives the reading query releases its jobs") {
+    withCTEReuseEnabled {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation") {
+        DroppedCTEStageSync.reset()
+        spark.udf.register("cached_cte_wait_for_return", udf { (id: Long) =>
+          if (id == 0) {
+            DroppedCTEStageSync.await(DroppedCTEStageSync.queryReturned, "the query to return")
+          }
+          id
+        }.asNondeterministic())
+        spark.udf.register("cached_cte_opaque", udf((id: Long) => id).asNondeterministic())
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT k, count(*) AS n FROM (
+            |    SELECT cached_cte_wait_for_return(id) % 3 AS k FROM range(0, 4, 1, 2)
+            |  ) GROUP BY k
+            |)
+            |SELECT c1.k FROM c c1 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE cached_cte_opaque(id) > 100
+            |) e1 ON c1.k = e1.id
+            |UNION ALL
+            |SELECT c2.n FROM c c2 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE cached_cte_opaque(id) > 100
+            |) e2 ON c2.k = e2.id
+            |""".stripMargin)
+        val listener = new JobsByExecutionListener
+        val sc = spark.sparkContext
+        df.cache()
+        sc.addSparkListener(listener)
+        try {
+          val cachedAQE = spark.sharedState.cacheManager
+            .lookupCachedData(spark, df.queryExecution.analyzed).get
+            .cachedRepresentation.cacheBuilder.cachedPlan match {
+            case a: AdaptiveSparkPlanExec => a
+            case other => fail(s"Expected an adaptive cached plan:\n${other.treeString}")
+          }
+          val reader = df.groupBy("k").count()
+          assert(reader.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec],
+            reader.queryExecution.executedPlan.treeString)
+          assert(reader.collect().isEmpty)
+          sc.listenerBus.waitUntilEmpty()
+          val jobsBeforeReturn = listener.snapshot
+          assert(jobsBeforeReturn.size == 1, s"Expected one execution, got $jobsBeforeReturn")
+          val (executionId, earlyJobs) = jobsBeforeReturn.head
+          val inner = cachedAQE.context.cteAQERegistry.values.toSeq
+          assert(inner.size == 1 && !inner.head.isFinalPlan,
+            s"Expected the cached plan's shared inner plan to still run after the reading query " +
+              s"returned: $inner")
+          DroppedCTEStageSync.queryReturned.countDown()
+          eventually(timeout(1.minute)) {
+            assert(inner.head.isFinalPlan)
+          }
+          eventually(timeout(1.minute)) {
+            sc.listenerBus.waitUntilEmpty()
+            val lateJobs = listener.snapshot.getOrElse(executionId, Set.empty) -- earlyJobs
+            assert(lateJobs.nonEmpty,
+              "Expected the cached plan's inner plan to start a job under the reading query's " +
+                "execution id after the reading query returned")
+          }
+          eventually(timeout(1.minute)) {
+            assert(!sc.dagScheduler.activeQueryToJobs.containsKey(executionId),
+              s"Expected no scheduler job entries for the ended execution $executionId")
+          }
+        } finally {
+          DroppedCTEStageSync.releaseAll()
+          sc.removeSparkListener(listener)
+          df.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
   test("a forced CTE query keeps its scheduler job entries until each of its executions ends") {
     withCTEReuseEnabled {
       val df = sqlWithForcedCTEReuse(
@@ -1484,26 +1563,73 @@ class CTEReuseWithAQESuite
       sc.addSparkListener(listener)
       sc.addSparkListener(endListener)
       try {
-        // The first execution materializes the shared inner plan while it runs, and the second
-        // shares the same adaptive execution context.
-        df.collect()
-        df.collect()
+        // The first execution materializes the shared inner plan while it runs, and the later
+        // ones share the same adaptive execution context.
+        (1 to 3).foreach(_ => df.collect())
         sc.listenerBus.waitUntilEmpty()
       } finally {
         sc.removeSparkListener(listener)
         sc.removeSparkListener(endListener)
       }
       val jobs = listener.snapshot
-      assert(jobs.size == 2, s"Expected two executions, got $jobs")
+      assert(jobs.size == 3, s"Expected three executions, got $jobs")
       jobs.foreach { case (executionId, started) =>
         assert(jobsAtEnd.synchronized(jobsAtEnd.get(executionId)).contains(started),
           s"Expected execution $executionId to keep the entries of its jobs $started until it " +
             s"ended, got ${jobsAtEnd.synchronized(jobsAtEnd.get(executionId))}")
         eventually(timeout(1.minute)) {
           assert(!sc.dagScheduler.activeQueryToJobs.containsKey(executionId))
+          assert(!SQLExecution.sharedCTEPlanStates.containsKey(executionId),
+            s"Expected no shared CTE plan entry for the ended execution $executionId")
         }
       }
     }
+  }
+
+  test("a shared CTE plan releases its execution's jobs on finish only if the execution ended") {
+    val sc = spark.sparkContext
+    def currentExecutionId: Long = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong
+    def runJob(): Unit = sc.parallelize(1 to 2, 2).count()
+    // Jobs queue behind every event posted to the scheduler's event loop before them, so once one
+    // completes, any job cleanup posted earlier has been handled.
+    def drainScheduler(): Unit = sc.parallelize(1 to 1, 1).count()
+    def hasJobs(executionId: Long): Boolean =
+      sc.dagScheduler.activeQueryToJobs.containsKey(executionId)
+    def hasEntry(executionId: Long): Boolean =
+      SQLExecution.sharedCTEPlanStates.containsKey(executionId)
+
+    // An execution with no pending inner plan leaves no entry when it ends. An inner plan that
+    // starts under its id afterwards, as from a thread that still carries the id, releases the
+    // jobs it registers when it finishes.
+    val endedId = SQLExecution.withNewExecutionId(spark.range(1).queryExecution) {
+      assert(hasEntry(currentExecutionId))
+      currentExecutionId
+    }
+    assert(!hasEntry(endedId))
+    SQLExecution.sharedCTEPlanStarted(endedId)
+    assert(hasEntry(endedId))
+    SQLExecution.withExecutionId(spark, endedId.toString)(runJob())
+    assert(hasJobs(endedId))
+    SQLExecution.sharedCTEPlanFinished(sc, endedId)
+    drainScheduler()
+    assert(!hasJobs(endedId), s"Expected the ended execution $endedId to have no job entries")
+    assert(!hasEntry(endedId))
+
+    // An inner plan that finishes while its execution runs releases nothing, and the execution's
+    // own end then removes the entry and the job entries.
+    val runningId = SQLExecution.withNewExecutionId(spark.range(1).queryExecution) {
+      val id = currentExecutionId
+      SQLExecution.sharedCTEPlanStarted(id)
+      runJob()
+      SQLExecution.sharedCTEPlanFinished(sc, id)
+      drainScheduler()
+      assert(hasJobs(id), s"Expected the running execution $id to keep its job entries")
+      assert(hasEntry(id))
+      id
+    }
+    assert(!hasEntry(runningId))
+    drainScheduler()
+    assert(!hasJobs(runningId))
   }
 
   test("forced CTE bodies with subqueries share one inner AQE") {

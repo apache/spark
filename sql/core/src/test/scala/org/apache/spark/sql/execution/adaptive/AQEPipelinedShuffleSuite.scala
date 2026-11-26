@@ -308,8 +308,10 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       assert(pipelinedExchanges(control.queryExecution.executedPlan).nonEmpty,
         s"expected the control to pipeline; plan:\n${control.queryExecution.executedPlan}")
 
-      // The count's exchange reads no CTE stage, so only the regular-prefix guard for the CTE
-      // reuse stages in the sibling branches keeps it regular.
+      // The count's exchange reads no CTE reference. It is staged together with the CTE
+      // references, which are still unstaged CTEReuseExchange leaves in the initial plan, so the
+      // regular-prefix guard for those leaves keeps it regular; AQEEnablePipelinedShuffleRuleSuite
+      // covers the guard for CTE reuse stages on a hand-built plan.
       val analyzed = session.sql(
         """WITH cte AS (SELECT /*+ REPARTITION(1) */ id AS k, rand() AS r FROM range(0, 100, 1, 2))
           |SELECT k FROM cte

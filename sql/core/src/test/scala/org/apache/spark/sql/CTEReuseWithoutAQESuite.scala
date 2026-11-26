@@ -58,8 +58,9 @@ class CTEReuseWithoutAQESuite
   /**
    * Asserts guaranteed CTE shuffle reuse held (AQE off): the executed plan has at least one
    * [[ReusedExchangeExec]], no [[CTEReuseExchange]] left, and live `LOCAL_SHUFFLE_FOR_CTE`
-   * shuffles for exactly `expectedDistinctCTEs` distinct plan-reuse ids, one per sealed forced
-   * CTE, so the check fails when any CTE the test expects to share is not sealed and only
+   * shuffles for exactly `expectedDistinctCTEs` distinct plan-reuse ids (one id can cover several
+   * sealed definitions, such as ones with canonically equal deterministic bodies), so the check
+   * fails when any CTE the test expects to share is not sealed and only
    * canonical exchange reuse deduplicates its copies. (`withCTEReuseNoAQE` turns
    * FAIL_ON_CTE_REUSE_WITHOUT_AQE on, so a reuse failure would already have thrown during
    * preparation; the flag itself defaults to false.)
@@ -75,7 +76,7 @@ class CTEReuseWithoutAQESuite
         s.shuffleOrigin.asInstanceOf[LOCAL_SHUFFLE_FOR_CTE].cteId
     }.distinct
     assert(cteIds.size == expectedDistinctCTEs,
-      s"Expected live CTE reuse shuffles for $expectedDistinctCTEs sealed CTE(s), got " +
+      s"Expected live CTE reuse shuffles for $expectedDistinctCTEs plan-reuse id(s), got " +
         s"${cteIds.size} (cteIds ${cteIds.mkString(", ")}):\n${executedPlan.treeString}")
   }
 

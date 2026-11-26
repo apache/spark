@@ -7644,13 +7644,15 @@ object SQLConf {
         "reuse, which is best effort: a miss is only detected, and logged or, under " +
         "spark.sql.cteReuse.failOnMissWithoutAQE, thrown. Such a definition can also pin its " +
         "partitioning. An ordinary retained or user MATERIALIZED CTE, like a forceSkipInline " +
-        "CTE read once, keeps a plain repartition, unless its deterministic body equals the " +
-        "body of such a sealed CTE, or the body of such a sealed CTE that does not pin its " +
-        "partitioning only selects it and the plan also reads it elsewhere: it is then sealed " +
-        "with it and shares its single materialization. When sealing these CTEs would leave " +
-        "one of them not sharing the materialization of a CTE sealed on its own, every such CTE " +
-        "of the query keeps its plain repartition. When false, forceSkipInline " +
-        "definitions are lowered like any other retained CTE.")
+        "CTE whose body the plan holds only one copy of, keeps its plain lowering, unless its " +
+        "deterministic body equals the body of such a sealed CTE, or the body of such a sealed " +
+        "CTE that does not pin its partitioning only selects it and the plan also reads it " +
+        "elsewhere: it is then sealed with it and shares its single materialization. When " +
+        "sealing these CTEs would leave one of them not sharing the materialization of a CTE " +
+        "sealed on its own, every such CTE of the query keeps its plain repartition. A " +
+        "forceSkipInline CTE that pins a hash partitioning is repartitioned on its pin even " +
+        "when it is not sealed. When false, forceSkipInline definitions are lowered like any " +
+        "other retained CTE.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

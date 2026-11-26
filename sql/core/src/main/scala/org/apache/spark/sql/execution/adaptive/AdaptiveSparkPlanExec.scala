@@ -369,31 +369,41 @@ case class AdaptiveSparkPlanExec(
   /**
    * Runs [[withFinalPlanUpdate]] (skipping the result stage) on the CTE materialization pool.
    *
-   * The pool thread does not inherit the initiating query's thread-locals, so
-   * [[SQLExecution.withThreadLocalCaptured]] captures them on the thread that first forces this
-   * lazy val (carrying the execution id, job group, scheduler properties, and artifact state) and
-   * forwards them to the pool thread, mirroring subquery execution (see
-   * [[org.apache.spark.sql.execution.SubqueryExec]]), so the inner CTE jobs stay attributed to the
-   * query and reachable by its cancellation instead of running with an absent or stale context.
-   * The returned `CompletableFuture` is adapted to a Scala `Future`.
+   * A pool thread inherits the SparkContext local properties only of the thread that created it,
+   * which are stale once the thread is reused, and no pool thread inherits plain thread-locals such
+   * as the job artifact state, so [[SQLExecution.withThreadLocalCaptured]] captures the initiating
+   * query's thread-locals on the thread that first forces this lazy val (carrying the execution id,
+   * job group, scheduler properties, and artifact state) and forwards them to the pool thread,
+   * mirroring subquery execution (see [[org.apache.spark.sql.execution.SubqueryExec]]), so the
+   * inner CTE jobs stay attributed to the query and reachable by its cancellation instead of
+   * running with an absent or stale context. The returned `CompletableFuture` is adapted to a Scala
+   * `Future`.
    *
    * This plan is not cancelled when its query no longer needs it, so it can still be submitting
    * jobs under the query's execution id after the query has ended and released the scheduler's
-   * per-query job entries for that id. When the plan finishes, successfully or not, and the
-   * context has recorded that execution as ended, it releases those entries once more (see
-   * [[AdaptiveExecutionContext.recordExecutionEnded]]).
+   * per-query job entries for that id. So the plan registers with
+   * [[SQLExecution.sharedCTEPlanStarted]] before it submits any job, and when it finishes,
+   * successfully or not, [[SQLExecution.sharedCTEPlanFinished]] releases those entries once more
+   * if that execution has ended.
    */
   @transient private lazy val materializeFuture: Future[Any] = {
     // The execution the inner jobs run under: the captured thread-locals carry this id.
     val executionId = Option(context.session.sparkContext.getLocalProperty(
       SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
-    val javaFuture = SQLExecution.withThreadLocalCaptured(
-        context.session, AdaptiveSparkPlanExec.cteExecutionContext) {
-      withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
+    executionId.foreach(SQLExecution.sharedCTEPlanStarted)
+    val javaFuture = try {
+      SQLExecution.withThreadLocalCaptured(
+          context.session, AdaptiveSparkPlanExec.cteExecutionContext) {
+        withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
+      }
+    } catch {
+      case NonFatal(e) =>
+        executionId.foreach(releaseJobsOfEndedExecution)
+        throw e
     }
     val scalaPromise: Promise[Any] = Promise()
     javaFuture.whenComplete { (result: Any, exception: Throwable) =>
-      executionId.foreach(cleanupJobsOfEndedExecution)
+      executionId.foreach(releaseJobsOfEndedExecution)
       if (exception != null) {
         scalaPromise.failure(exception match {
           case completionException: java.util.concurrent.CompletionException =>
@@ -408,23 +418,13 @@ case class AdaptiveSparkPlanExec(
   }
 
   /**
-   * Releases the scheduler's per-query job entries of `executionId` once more when that execution
-   * has ended, because this inner plan may have registered jobs under it after the execution's own
-   * cleanup. Each stage submission of this plan is posted to the scheduler's event loop before its
-   * materialization completes, and the execution's end is recorded before its own cleanup is
-   * posted, so whichever of the two cleanups is posted last is handled after every job this plan
-   * registered.
+   * Unregisters this finished inner plan from `executionId`, releasing the scheduler's per-query
+   * job entries of that id once more when the execution has ended, because this plan may have
+   * registered jobs under it after the execution's own cleanup (see
+   * [[SQLExecution.sharedCTEPlanFinished]]).
    */
-  private def cleanupJobsOfEndedExecution(executionId: Long): Unit = {
-    try {
-      if (context.hasExecutionEnded(executionId)) {
-        Option(context.session.sparkContext.dagScheduler).foreach(_.cleanupQueryJobs(executionId))
-      }
-    } catch {
-      case NonFatal(e) =>
-        logWarning(log"Failed to clean up the jobs of ended execution " +
-          log"${MDC(EXECUTION_ID, executionId)} after a shared CTE plan finished.", e)
-    }
+  private def releaseJobsOfEndedExecution(executionId: Long): Unit = {
+    SQLExecution.sharedCTEPlanFinished(context.session.sparkContext, executionId)
   }
 
   /**
@@ -1472,27 +1472,6 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val cteAQERegistry: TrieMap[Long, AdaptiveSparkPlanExec] =
     new TrieMap[Long, AdaptiveSparkPlanExec]()
-
-  /**
-   * The ids of the SQL executions of this query that have ended while it held shared inner CTE
-   * plans. Such a plan can outlive the execution that started it, for example when a replan drops
-   * every reference to it, and register jobs under that execution's id after the execution's end
-   * released the scheduler's per-query job entries; when it finishes, it releases them again if
-   * its execution is recorded here. Every execution of one DataFrame shares this context, so the
-   * record keeps one id per execution for as long as the plan lives.
-   */
-  private val endedExecutionIds = ConcurrentHashMap.newKeySet[java.lang.Long]()
-
-  /**
-   * Records that `executionId` has ended, when this query holds shared inner CTE plans. Must be
-   * called before the execution's end posts its own scheduler job cleanup.
-   */
-  private[execution] def recordExecutionEnded(executionId: Long): Unit = {
-    if (cteAQERegistry.nonEmpty) endedExecutionIds.add(executionId)
-  }
-
-  private[adaptive] def hasExecutionEnded(executionId: Long): Boolean =
-    endedExecutionIds.contains(executionId)
 
   private val stageLifecycleLock = new Object
 

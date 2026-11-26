@@ -1127,10 +1127,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 s"produce a ShuffleExchangeExec, but got ${other.getClass.getSimpleName}:\n" +
                 other.treeString)
         }
-        // Set the logical link explicitly because the shuffle is stored inside
-        // CTEReuseExchange.subplan (metadata, not a child), so setLogicalLink
-        // propagation from the parent won't reach it.
-        shuffle.setLogicalLink(subplan)
         CTEReuseExchange(r.cteId, shuffle) :: Nil
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
