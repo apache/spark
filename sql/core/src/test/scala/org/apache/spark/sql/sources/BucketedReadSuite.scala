@@ -658,19 +658,21 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("SPARK-60610: the frozen bucketing flag stays in a bucketed scan's canonical form " +
-    "but is scoped out of a non-bucketed scan's") {
-    // The scan freezes spark.sql.sources.bucketing.enabled as a field, so the flag feeds
-    // sameResult. For a bucketed relation the flag changes outputPartitioning, so two scans planned
-    // under different bucketing configs must not be sameResult, or exchange/broadcast reuse could
-    // swap a bucketed scan for a non-bucketed one. For a non-bucketed relation the flag changes
-    // nothing, so the two scans must stay sameResult, which dynamic partition pruning relies on to
-    // reuse a broadcast across a config change. doCanonicalize scopes the flag with the frozen
-    // isBucketedRelation field (not the @transient relation) to get both directions right.
-    def scanOf(table: String): FileSourceScanExec =
-      collect(spark.table(table).queryExecution.sparkPlan) {
-        case f: FileSourceScanExec => f
-      }.head
+  test("SPARK-60610: the frozen bucketing decision changes a bucketed scan's canonical form " +
+    "but not a non-bucketed scan's") {
+    // The bucketing decision is frozen into disableBucketedScan at planning, so it feeds sameResult.
+    // For a bucketed relation the decision changes outputPartitioning, so a scan planned with
+    // bucketing on and one planned with it off must not be sameResult, or exchange/broadcast reuse
+    // could swap a bucketed scan for a non-bucketed one. For a non-bucketed relation the decision is
+    // false either way, so the two scans must stay sameResult, which dynamic partition pruning
+    // relies on to reuse a broadcast across a config change. Each scan is planned under its own
+    // config rather than copied, so the test exercises the real planning path.
+    def scanUnder(table: String, bucketing: String): FileSourceScanExec =
+      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> bucketing) {
+        collect(spark.table(table).queryExecution.sparkPlan) {
+          case f: FileSourceScanExec => f
+        }.head
+      }
 
     withTable("bucketed_t", "plain_t") {
       spark.range(0, 100).selectExpr("id", "cast(id % 8 as int) as k")
@@ -679,16 +681,18 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
       spark.range(0, 100).selectExpr("id", "cast(id % 8 as int) as k")
         .write.format("parquet").mode("overwrite").saveAsTable("plain_t")
 
-      val bucketed = scanOf("bucketed_t")
-      assert(bucketed.relation.bucketSpec.isDefined)
-      assert(!bucketed.copy(bucketingEnabled = true)
-          .sameResult(bucketed.copy(bucketingEnabled = false)),
+      val bucketedOn = scanUnder("bucketed_t", "true")
+      val bucketedOff = scanUnder("bucketed_t", "false")
+      assert(bucketedOn.relation.bucketSpec.isDefined)
+      assert(bucketedOn.bucketedScan && !bucketedOff.bucketedScan,
+        "planning under bucketing on vs off must freeze different bucketing decisions")
+      assert(!bucketedOn.sameResult(bucketedOff),
         "two scans of a bucketed table planned with bucketing on vs off must not be sameResult")
 
-      val plain = scanOf("plain_t")
-      assert(plain.relation.bucketSpec.isEmpty)
-      assert(plain.copy(bucketingEnabled = true)
-          .sameResult(plain.copy(bucketingEnabled = false)),
+      val plainOn = scanUnder("plain_t", "true")
+      val plainOff = scanUnder("plain_t", "false")
+      assert(plainOn.relation.bucketSpec.isEmpty)
+      assert(plainOn.sameResult(plainOff),
         "two scans of a non-bucketed table must stay sameResult across a bucketing-config change")
     }
   }
