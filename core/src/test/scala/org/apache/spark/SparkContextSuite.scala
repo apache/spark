@@ -54,6 +54,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1595,6 +1596,37 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
     sc = new SparkContext(conf)
     assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
+  }
+
+  test("Driver reports its off-heap storage memory to the status store in local mode") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
+    sc = new SparkContext(conf)
+    // In local mode, tasks run in the driver and can store off-heap blocks there.
+    sc.parallelize(1 to 10, 1).persist(StorageLevel.OFF_HEAP).count()
+    sc.listenerBus.waitUntilEmpty()
+    val metrics = sc.statusStore.executorSummary(SparkContext.DRIVER_IDENTIFIER)
+      .memoryMetrics.get
+    assert(metrics.totalOffHeapStorageMemory > 0)
+    assert(metrics.totalOffHeapStorageMemory === sc.env.memoryManager.maxOffHeapStorageMemory)
+    assert(metrics.usedOffHeapStorageMemory > 0)
+    assert(metrics.usedOffHeapStorageMemory <= metrics.totalOffHeapStorageMemory)
+  }
+
+  test("Driver reports no off-heap storage memory to the status store in non-local mode") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local-cluster[1,1,1024]")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
+    sc = new SparkContext(conf)
+    sc.listenerBus.waitUntilEmpty()
+    val metrics = sc.statusStore.executorSummary(SparkContext.DRIVER_IDENTIFIER)
+      .memoryMetrics.get
+    assert(metrics.totalOffHeapStorageMemory === 0)
   }
 
   test("SPARK-41246: fail-fast on RDD id overflow") {
