@@ -519,7 +519,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
         val formatted =
           TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).formatNanos(nanos, t.precision)
         s"TIMESTAMP_LTZ '${ExprLiteral.padToNanosPrecision(formatted, t.precision)}Z'"
-      // The same forms as `Literal.sql` for a value that contains such a timestamp.
+      // Mirror Literal.sql's supported internal containers, but recurse through this
+      // renderer so timestamps nested inside them also retain an explicit offset.
       case (array: GenericArrayData, ArrayType(elementType, _)) =>
         array.array.map(existenceDefaultSQL(_, elementType)).mkString("ARRAY(", ", ", ")")
       case (row: GenericInternalRow, structType: StructType) =>
