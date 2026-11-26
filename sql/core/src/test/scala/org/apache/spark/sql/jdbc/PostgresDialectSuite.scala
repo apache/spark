@@ -92,6 +92,14 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
   }
 
+  test("SPARK-61982: classify only SQLSTATE 42501 as a permission error") {
+    assert(dialect.isPermissionDeniedException(new SQLException("permission denied", "42501")))
+    assert(!dialect.isPermissionDeniedException(new SQLException("syntax error", "42601")))
+    assert(!dialect.isPermissionDeniedException(new SQLException("access rule violation", "42000")))
+    assert(!dialect.isPermissionDeniedException(new SQLException("undefined table", "42P01")))
+    assert(!dialect.isPermissionDeniedException(new SQLException("error without SQLSTATE")))
+  }
+
   test("updateExtraColumnMeta escapes a single quote in the table and column name") {
     // The array-dimension lookup embeds the table and column name as SQL string literals, so a
     // single quote in either must be escaped to keep the WHERE clause well-formed.

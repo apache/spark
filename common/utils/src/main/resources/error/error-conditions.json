@@ -3119,6 +3119,11 @@
         "message" : [
           "<message>"
         ]
+      },
+      "WRITE" : {
+        "message" : [
+          "Write rows to the table <tableName>."
+        ]
       }
     },
     "sqlState" : "HV000"
@@ -6316,6 +6321,24 @@
     ],
     "sqlState" : "2200N"
   },
+  "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR" : {
+    "message" : [
+      "JDBC external engine permission error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
+    ],
+    "subClass" : {
+      "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
+        "message" : [
+          "The error occurred during output schema resolution."
+        ]
+      },
+      "DURING_QUERY_EXECUTION" : {
+        "message" : [
+          "The error occurred during query execution."
+        ]
+      }
+    },
+    "sqlState" : "42501"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
@@ -7402,6 +7425,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Partition [<specString>] did not specify locationUri."
+    ],
+    "sqlState" : "42601"
+  },
   "PARTITION_RENAME_NOT_SUPPORTED" : {
     "message" : [
       "Partition renaming is not supported."
@@ -7465,6 +7494,14 @@
   "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
     "message" : [
       "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED" : {
+    "message" : [
+      "Changing the comment of a struct field nested under consecutive arrays or maps is not supported.",
+      "The comments on <columnPath> in the pipeline's declared or inferred schema differ from the comments on the table.",
+      "Declare the table's full schema with the comments the table currently has to keep them, or drop the table and full refresh it so that it is re-created with the new comments."
     ],
     "sqlState" : "0A000"
   },
@@ -8831,6 +8868,13 @@
     },
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED" : {
+    "message" : [
+      "Cannot restart the stream-stream join because the state store <storeName> would read the stored timestamp column <storedColumn> as <newColumn>.",
+      "Revert the changes to the join or start the query with a new checkpoint."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
@@ -9585,6 +9629,11 @@
       "SESSION_EXPERIMENTAL_METHODS" : {
         "message" : [
           "Access to SparkSession Experimental (methods). This is server side developer API"
+        ]
+      },
+      "SESSION_GET_OR_CREATE_DATAFRAME" : {
+        "message" : [
+          "Invoking SparkSession 'getOrCreateDataFrame'."
         ]
       },
       "SESSION_LISTENER_MANAGER" : {
@@ -11162,11 +11211,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1082" : {
-    "message" : [
-      "Partition [<specString>] did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {

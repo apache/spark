@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
 import org.apache.spark.sql.catalyst.catalog.{ClusterBySpec, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table, ViewCatalog}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 
 /**
@@ -115,8 +111,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case UnsetViewProperties(ResolvedViewIdentifier(ident), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident, keys, ifExists, isView = true)
 
-    case DescribeNamespace(ResolvedV1Database(db), extended, output) if conf.useV1Command =>
-      DescribeDatabaseCommand(db, extended, output)
+    case describeNamespace: DescribeNamespace =>
+      DescribeCommandHelper.rewriteDescribeNamespace(
+        describeNamespace, useV1Command = conf.useV1Command)
 
     case SetNamespaceProperties(ResolvedV1Database(db), properties) if conf.useV1Command =>
       AlterDatabasePropertiesCommand(db, properties)
@@ -127,52 +124,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
 
-    // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(
-        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
-        isExtended,
-        output) =>
-      DescribeTableCommand(resolvedChild, ident, Map.empty, isExtended, output)
+    case describeRelation: DescribeRelation =>
+      DescribeCommandHelper.rewriteDescribeRelation(describeRelation)
 
-    case DescribeTablePartition(
-        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
-        UnresolvedPartitionSpec(spec, _),
-        isExtended,
-        output) =>
-      DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
+    case describeTablePartition: DescribeTablePartition =>
+      DescribeCommandHelper.rewriteDescribeTablePartition(describeTablePartition)
 
-    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
-    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
-    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
-    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
-    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
-    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
-    case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
-      val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
-        .map(quoteIfNeeded).mkString(".")
-      throw QueryCompilationErrors.descPartitionNotAllowedOnView(quoted)
-
-    case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
-      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
-      // typically resolves the column to an `Attribute` here. We also accept the legacy
-      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
-      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
-      val nameParts = DescribeColumn.extractColumnNameParts(column)
-      DescribeColumnCommand(ident, nameParts, isExtended, output)
-
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
-      column match {
-        case u: UnresolvedAttribute =>
-          throw QueryCompilationErrors.columnNotFoundError(u.name)
-        case a: Attribute =>
-          DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
-        case _ =>
-          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
-      }
+    case describeColumn: DescribeColumn =>
+      DescribeCommandHelper.rewriteDescribeColumn(describeColumn)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -215,34 +174,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(ResolvedV1Database(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(ResolvedV1Database(db), pattern, output) if conf.useV1Command =>
-      ShowTablesCommand(Some(db), pattern, output)
-
-    case ShowTablesExtended(
-        ResolvedV1Database(db),
-        pattern,
-        output) =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        output.head.withName("database") +: output.tail
-      } else {
-        output
-      }
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true)
-
-    case ShowTablePartition(
-        ResolvedTable(catalog, _, table: V1Table, _),
-        partitionSpec,
-        output) if supportsV1Command(catalog) =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        output.head.withName("database") +: output.tail
-      } else {
-        output
-      }
-      val tablePartitionSpec = Option(partitionSpec).map(
-        _.asInstanceOf[UnresolvedPartitionSpec].spec)
-      ShowTablesCommand(table.catalogTable.identifier.database,
-        Some(table.catalogTable.identifier.table), newOutput,
-        isExtended = true, tablePartitionSpec)
+    case command @ (_: ShowTables | _: ShowTablesExtended | _: ShowViews | _: ShowFunctions |
+        _: ShowTablePartition | _: ShowCreateTable | _: ShowPartitions | _: ShowColumns |
+        _: ShowTableProperties) =>
+      ShowCommandHelper.rewrite(command, conf)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -279,25 +214,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedTable(catalog, _, t: V1Table, _), asSerde, output)
-        if supportsV1Command(catalog) && (asSerde ||
-          (conf.hiveTableShowCreateTableAsSerde && DDLUtils.isHiveTable(t.catalogTable))) =>
-      ShowCreateTableAsSerdeCommand(t.catalogTable.identifier, output)
-
-    case ShowCreateTable(ResolvedViewIdentifier(ident), asSerde, output) if asSerde =>
-      ShowCreateTableAsSerdeCommand(ident, output)
-
-    // If target is view, force use v1 command
-    case ShowCreateTable(ResolvedViewIdentifier(ident), _, output) =>
-      ShowCreateTableCommand(ident, output)
-
-    case ShowCreateTable(ResolvedV1TableIdentifier(ident), _, output)
-      if conf.useV1Command => ShowCreateTableCommand(ident, output)
-
-    case ShowCreateTable(ResolvedTable(catalog, _, table: V1Table, _), _, output)
-        if supportsV1Command(catalog) && DDLUtils.isHiveTable(table.catalogTable) =>
-      ShowCreateTableCommand(table.catalogTable.identifier, output)
-
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
       TruncateTableCommand(ident, None)
 
@@ -305,40 +221,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       TruncateTableCommand(
         ident,
         Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
-
-    case ShowPartitions(
-        ResolvedV1TableOrViewIdentifier(ident),
-        pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
-      ShowPartitionsCommand(
-        ident,
-        output,
-        pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
-
-    case ShowColumns(resolvedChild @ ResolvedViewIdentifier(ident), ns, output) =>
-      val resolver = conf.resolver
-      val db = ns match {
-        case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
-          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
-            Seq(nsSeq.head), Seq(ident.database.get))
-        case _ => ns.map(_.head)
-      }
-      // Use unqualified table name when namespace comes from FROM clause so analyzer output
-      // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
-      val tableNameForCommand =
-        if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
-      ShowColumnsCommand(resolvedChild, db, tableNameForCommand, output)
-
-    case ShowColumns(
-        resolvedChild @ ResolvedV1TableIdentifier(ident), ns, output) =>
-      val v1TableName = ident
-      val resolver = conf.resolver
-      val db = ns match {
-        case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
-          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
-            Seq(db.head), Seq(v1TableName.database.get))
-        case _ => ns.map(_.head)
-      }
-      ShowColumnsCommand(resolvedChild, db, v1TableName, output)
 
     // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
     case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
@@ -418,38 +300,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         cm.allowExisting,
         cm.replace)
 
-    // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
-    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
-    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
-    case ShowViews(ns: ResolvedNamespace, pattern, output)
-        if !ns.catalog.isInstanceOf[ViewCatalog] =>
-      ns match {
-        case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
-        case _ =>
-          throw QueryCompilationErrors.missingCatalogViewsAbilityError(ns.catalog)
-      }
-
-    // If target is view, force use v1 command
-    case ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
-      ShowTablePropertiesCommand(ident, propertyKey, output)
-
-    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey, output)
-        if conf.useV1Command =>
-      ShowTablePropertiesCommand(ident, propertyKey, output)
-
-    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
-      DescribeFunctionCommand(v1Func.info, extended)
-
-    case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
-      if (isSessionCatalog(catalog)) {
-        DescribeFunctionCommand(func.asInstanceOf[V1Function].info, extended)
-      } else {
-        throw QueryCompilationErrors.missingCatalogFunctionsAbilityError(catalog)
-      }
-
-    case ShowFunctions(
-        ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
-      ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
+    case describeFunction: DescribeFunction =>
+      DescribeCommandHelper.rewriteDescribeFunction(describeFunction)
 
     case d @ DropFunction(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
       // Builtin or temp function - throw appropriate error

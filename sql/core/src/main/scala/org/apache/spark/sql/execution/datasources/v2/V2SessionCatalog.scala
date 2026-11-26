@@ -294,8 +294,18 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
-    val comment = properties.get(TableCatalog.PROP_COMMENT)
-    val collation = properties.get(TableCatalog.PROP_COLLATION)
+    // These live in dedicated CatalogTable fields and `properties` may not hold them; keep the
+    // fields unless a change names the key.
+    val comment = if (affectsProperty(changes, TableCatalog.PROP_COMMENT)) {
+      properties.get(TableCatalog.PROP_COMMENT)
+    } else {
+      catalogTable.comment
+    }
+    val collation = if (affectsProperty(changes, TableCatalog.PROP_COLLATION)) {
+      properties.get(TableCatalog.PROP_COLLATION)
+    } else {
+      catalogTable.collation
+    }
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
     val storage = if (location.isDefined) {
@@ -321,6 +331,14 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     null // Return null to save the `loadTable` call for ALTER TABLE.
+  }
+
+  private def affectsProperty(changes: Seq[TableChange], property: String): Boolean = {
+    changes.exists {
+      case set: TableChange.SetProperty => set.property == property
+      case remove: TableChange.RemoveProperty => remove.property == property
+      case _ => false
+    }
   }
 
   override def purgeTable(ident: Identifier): Boolean = {

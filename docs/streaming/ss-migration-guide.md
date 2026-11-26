@@ -34,6 +34,19 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join
+  can retain watermarked timestamp columns even when they are not selected. This applies when
+  the optimizer sees no unexpanded CTEs, the join condition contains only equality keys after
+  predicate pushdown, and each input has at most one watermarked column, which must be a
+  timestamp. Eligible joins use the timestamps to filter late input rows and store them in join
+  state. Checkpoints from earlier Spark versions keep their previous behavior.
+  To keep the previous behavior for a new query, set
+  `spark.sql.streaming.join.preserveEventTimeColumns.enabled` to `false` before starting it.
+  On restart, editing the join condition or a filter that compares the two inputs can change
+  whether the join qualifies and which columns it stores. An incompatible schema can fail
+  with `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE` or
+  `STREAM_STREAM_JOIN_STATE_TIMESTAMP_COLUMN_CHANGED`.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
@@ -46,6 +59,19 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `STREAMING_FILE_SINK_PARTITIONING_MISMATCH`. As a result, such existing queries fail to restart.
   To recover, write to a new table location with a new checkpoint location, or rewrite the
   committed files with the partition columns of the table.
+
+- Since Spark 4.4, a DataFrame as-of join with a streaming left side, such as PySpark
+  `DataFrame._joinAsOf` on a streaming DataFrame, runs with the stateless sort-merge as-of join.
+  Previously, its rewrite added a streaming aggregation and a stream-stream join. Without a
+  watermark, such a query failed at its first micro-batch. With a watermark on the as-of column, it
+  ran, but held back rows for the watermark, dropped late rows, and never emitted some rows, such as
+  the unmatched rows of a left join. Now it emits each row in the micro-batch that reads the row,
+  including late rows. As a result, an existing query with a watermark fails to restart with
+  `STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA`. To recover, use a new checkpoint
+  location, or set `spark.sql.legacy.asOfJoin.rewriteStreamingLeftToSubquery` to `true` before
+  building the query to restore the previous behavior. The join keys are also checked during
+  analysis as for the sort-merge as-of join. For example, a key that does not reference its own
+  input fails with `AS_OF_JOIN.KEY_REFERENCE`.
 
 - Since Spark 4.4, a column derived from a typed Scala UDF with a primitive parameter is nullable
   when the input of the parameter can be null, as the UDF returns NULL for a NULL input.

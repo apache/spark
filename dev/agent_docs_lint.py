@@ -24,7 +24,7 @@ file is a Markdown file directly in a .agents/ directory; subdirectories such as
 .agents/skills/ are loaded by the tools themselves and are not checked here.
 
   pairing   Each directory with agent instructions has both names, one a symlink to the
-            other, as the root AGENTS.md asks. Codex reads AGENTS.md (or AGENTS.override.md
+            other, as `.agents/agent-docs.md` asks. Codex reads AGENTS.md (or AGENTS.override.md
             when present) and ignores CLAUDE.md by default. Claude Code reads AGENTS.md only
             when no CLAUDE.md exists in the working directory or above it, so once the root
             has a CLAUDE.md, a nested directory with only an AGENTS.md is skipped. Two

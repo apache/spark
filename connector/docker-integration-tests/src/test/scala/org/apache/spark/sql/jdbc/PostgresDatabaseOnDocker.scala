@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.internal.Logging
 
 class PostgresDatabaseOnDocker extends DatabaseOnDocker with Logging {
@@ -33,4 +35,21 @@ class PostgresDatabaseOnDocker extends DatabaseOnDocker with Logging {
   override def getJdbcUrl(ip: String, port: Int): String = {
     s"jdbc:postgresql://$ip:$port/postgres?user=$postgres_user&password=$postgres_password"
   }
+
+  private val restrictedUser = "restricted_user"
+  private val restrictedPassword = "restricted_password"
+
+  override def createRestrictedUser(conn: Connection, ip: String, port: Int): Option[String] = {
+    dropRestrictedUser(conn)
+    conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
+      .executeUpdate()
+    Some(s"jdbc:postgresql://$ip:$port/postgres?user=$restrictedUser&password=$restrictedPassword")
+  }
+
+  override def dropRestrictedUser(conn: Connection): Unit = {
+    conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
+  }
+
+  override def restrictedUserSessionInitStatement: Option[String] =
+    Some(s"SET ROLE $restrictedUser")
 }

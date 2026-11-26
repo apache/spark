@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.lang.reflect.Proxy
+import java.sql.{Connection, DatabaseMetaData, DriverManager}
 import java.util.{HexFormat, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -3431,6 +3432,63 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       }
     } finally {
       JdbcDialects.unregisterDialect(countingDialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
+  }
+
+  test("SPARK-60507: Per-read connection override reads its own database metadata") {
+    val overrideUrl = s"$url;IFEXISTS=TRUE"
+    val overrideMajorVersion = Int.box(42)
+    val metadataConnectionUrls = new ConcurrentLinkedQueue[String]()
+    val overrideDialect = new H2Dialect() {
+      private def delegatingProxy[T](
+          iface: Class[T],
+          target: T,
+          methodName: String,
+          value: AnyRef): T = {
+        Proxy.newProxyInstance(iface.getClassLoader, Array[Class[_]](iface), (_, method, args) =>
+          if (method.getName == methodName) {
+            value
+          } else {
+            method.invoke(target, Option(args).getOrElse(Array.empty[AnyRef]): _*)
+          }
+        ).asInstanceOf[T]
+      }
+
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        val factory = super.createConnectionFactory(options)
+        partitionId => {
+          if (partitionId == -1) metadataConnectionUrls.add(options.url)
+          val conn = factory(partitionId)
+          if (options.url != overrideUrl) {
+            conn
+          } else {
+            val metadata = delegatingProxy(classOf[DatabaseMetaData], conn.getMetaData,
+              "getDatabaseMajorVersion", overrideMajorVersion)
+            delegatingProxy(classOf[Connection], conn, "getMetaData", metadata)
+          }
+        }
+      }
+    }
+    def scanMetadata(df: DataFrame): JDBCDatabaseMetadata = {
+      df.collect()
+      df.queryExecution.executedPlan
+        .collect { case r: RowDataSourceScanExec => r }
+        .head.rdd.asInstanceOf[JDBCRDD].getDatabaseMetadata
+    }
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(overrideDialect)
+      val sameConnection = spark.read.option("fetchsize", "10").table("h2.test.people")
+      assert(scanMetadata(sameConnection).databaseMajorVersion === Some(2))
+      assert(metadataConnectionUrls.asScala.toSeq === Seq(url))
+
+      metadataConnectionUrls.clear()
+      val overridden = spark.read.option("url", overrideUrl).table("h2.test.people")
+      assert(scanMetadata(overridden).databaseMajorVersion === Some(42))
+      assert(metadataConnectionUrls.asScala.toSeq === Seq(url, overrideUrl))
+    } finally {
+      JdbcDialects.unregisterDialect(overrideDialect)
       JdbcDialects.registerDialect(h2Dialect)
     }
   }
