@@ -32,18 +32,19 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
-   * Transform the array of structs to the target struct type.
+   * Transform the array of structs to the target struct type. The lambda variable is named after
+   * its nesting depth `lambdaDepth`, so that resolving the same plan always gives the same names.
    */
   private def transformArray(arrayCol: Expression, targetType: ArrayType,
-      allowMissing: Boolean) = {
+      allowMissing: Boolean, lambdaDepth: Int) = {
     assert(arrayCol.dataType.isInstanceOf[ArrayType], "Only support ArrayType.")
 
     val arrayType = arrayCol.dataType.asInstanceOf[ArrayType]
 
-    val x = NamedLambdaVariable(UnresolvedNamedLambdaVariable.freshVarName("x"),
+    val x = NamedLambdaVariable(s"x_$lambdaDepth",
       arrayType.elementType,
       arrayType.containsNull)
-    val function = mergeFields(x, targetType.elementType, allowMissing)
+    val function = mergeFields(x, targetType.elementType, allowMissing, lambdaDepth + 1)
     ArrayTransform(arrayCol, LambdaFunction(function, Seq(x)))
   }
 
@@ -55,7 +56,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * already contain them. Currently we don't support merging structs nested inside of maps.
    */
   private def addFields(col: Expression,
-     targetType: StructType, allowMissing: Boolean): Expression = {
+     targetType: StructType, allowMissing: Boolean, lambdaDepth: Int): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = conf.resolver
@@ -68,7 +69,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
       val newExpression = (currentField, expectedField.dataType) match {
         case (Some(cf), expectedType) =>
-          mergeFields(ExtractValue(col, Literal(cf.name), resolver), expectedType, allowMissing)
+          mergeFields(
+            ExtractValue(col, Literal(cf.name), resolver), expectedType, allowMissing, lambdaDepth)
         case (None, expectedType) =>
           if (allowMissing) {
             // for allowMissingCol allow the null values
@@ -100,13 +102,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * Handles the merging of complex types. Currently supports structs and arrays recursively.
    */
   private def mergeFields(col: Expression, targetType: DataType,
-      allowMissing: Boolean): Expression = {
+      allowMissing: Boolean, lambdaDepth: Int): Expression = {
     if (!DataType.equalsStructurallyByName(col.dataType, targetType, conf.resolver)) {
       (col.dataType, targetType) match {
         case (_: StructType, targetStruct: StructType) =>
-          addFields(col, targetStruct, allowMissing)
+          addFields(col, targetStruct, allowMissing, lambdaDepth)
         case (_: ArrayType, targetArray: ArrayType) =>
-          transformArray(col, targetArray, allowMissing)
+          transformArray(col, targetArray, allowMissing, lambdaDepth)
         case _ =>
           // Unsupported combination, let the resulting union analyze
           col
@@ -141,7 +143,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
           // The two types are complex and have different nested structs at some level.
           // Map types are currently not supported and will return the existing attribute.
           aliased += foundAttr
-          Alias(mergeFields(foundAttr, lattr.dataType, allowMissingCol), foundAttr.name)()
+          Alias(mergeFields(foundAttr, lattr.dataType, allowMissingCol, lambdaDepth = 0),
+            foundAttr.name)()
         } else {
           // Either both sides are primitive types or equivalent complex types
           foundAttr
