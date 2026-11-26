@@ -481,8 +481,7 @@ Congratulations on running your first Spark application!
 * Finally, Spark includes several samples in the `examples` directory
 ([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
- [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples)).
 You can run them as follows:
 
 {% highlight bash %}
@@ -491,7 +490,4 @@ You can run them as follows:
 
 # For Scala and Java, use run-example:
 ./bin/run-example SparkPi
-
-# For R examples, use spark-submit directly:
-./bin/spark-submit examples/src/main/r/dataframe.R
 {% endhighlight %}

@@ -59,14 +59,6 @@ spark.read().format("binaryFile").option("pathGlobFilter", "*.png").load("/path/
 {% endhighlight %}
 </div>
 
-<div data-lang="r" markdown="1">
-{% highlight r %}
-
-read.df("/path/to/data", source = "binaryFile", pathGlobFilter = "*.png")
-
-{% endhighlight %}
-</div>
-
 </div>
 
 Binary file data source does not support writing a DataFrame back to the original files.

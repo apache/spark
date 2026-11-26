@@ -72,15 +72,6 @@ usersDF.select("name", "favorite_color").write().format("avro").save("namesAndFa
 {% endhighlight %}
 </div>
 
-<div data-lang="r" markdown="1">
-{% highlight r %}
-
-df <- read.df("examples/src/main/resources/users.avro", "avro")
-write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
-
-{% endhighlight %}
-</div>
-
 </div>
 
 ## to_avro() and from_avro()
@@ -189,39 +180,6 @@ StreamingQuery query = output
   .option("topic", "topic2")
   .start();
 
-{% endhighlight %}
-</div>
-
-<div data-lang="r" markdown="1">
-{% highlight r %}
-
-# `from_avro` requires Avro schema in JSON string format.
-jsonFormatSchema <- paste0(readLines("examples/src/main/resources/user.avsc"), collapse=" ")
-
-df <- read.stream(
-  "kafka",
-  kafka.bootstrap.servers = "host1:port1,host2:port2",
-  subscribe = "topic1"
-)
-
-# 1. Decode the Avro data into a struct;
-# 2. Filter by column `favorite_color`;
-# 3. Encode the column `name` in Avro format.
-
-output <- select(
-  filter(
-    select(df, alias(from_avro("value", jsonFormatSchema), "user")),
-    column("user.favorite_color") == "red"
-  ),
-  alias(to_avro("user.name"), "value")
-)
-
-write.stream(
-  output,
-  "kafka",
-  kafka.bootstrap.servers = "host1:port1,host2:port2",
-  topic = "topic2"
-)
 {% endhighlight %}
 </div>
 

@@ -122,9 +122,6 @@ Example usage is
 ```bash
 # To build additional PySpark docker image
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
-
-# To build additional SparkR docker image
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
 
 You can also use the [Apache Spark Docker images](https://hub.docker.com/r/apache/spark) (such as `apache/spark:<version>`) directly.

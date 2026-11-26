@@ -323,21 +323,6 @@ def build_python_docs
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
-def build_r_docs
-  print_header "Building R API docs."
-  cd("#{SPARK_PROJECT_ROOT}/R")
-  system("./create-docs.sh") || raise("R doc generation failed")
-
-  puts "Moving back into docs dir."
-  cd("../docs")
-
-  puts "Making directory api/R"
-  mkdir_p "api/R"
-
-  puts "cp -r ../R/pkg/docs/. api/R"
-  cp_r("../R/pkg/docs/.", "api/R")
-end
-
 def build_sql_docs
   build_spark_if_necessary
 
@@ -379,10 +364,6 @@ if not (ENV['SKIP_API'] == '1')
 
   if not (ENV['SKIP_PYTHONDOC'] == '1')
     build_python_docs
-  end
-
-  if not (ENV['SKIP_RDOC'] == '1')
-    build_r_docs
   end
 
   if not (ENV['SKIP_SQLDOC'] == '1')

@@ -194,11 +194,4 @@ ALS als = new ALS()
 
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.als.html) for more details.
-
-{% include_example r/ml/als.R %}
-</div>
-
 </div>

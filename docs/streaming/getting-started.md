@@ -21,7 +21,7 @@ license: |
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
-[Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount.py)/[Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCount.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCount.java)/[R]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/r/streaming/structured_network_wordcount.R).
+[Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount.py)/[Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCount.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCount.java).
 And if you [download Spark](https://spark.apache.org/downloads.html), you can directly [run the example](../index.html#running-the-examples-and-shell). In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
 
 <div class="codetabs">
@@ -75,13 +75,6 @@ SparkSession spark = SparkSession
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session(appName = "StructuredNetworkWordCount")
-{% endhighlight %}
-
-</div>
 </div>
 
 Next, let’s create a streaming DataFrame that represents text data received from a server listening on localhost:9999, and transform the DataFrame to calculate word counts.
@@ -159,23 +152,6 @@ This `lines` DataFrame represents an unbounded table containing the streaming te
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-# Create DataFrame representing the stream of input lines from connection to localhost:9999
-lines <- read.stream("socket", host = "localhost", port = 9999)
-
-# Split the lines into words
-words <- selectExpr(lines, "explode(split(value, ' ')) as word")
-
-# Generate running word count
-wordCounts <- count(group_by(words, "word"))
-{% endhighlight %}
-
-This `lines` SparkDataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have a SQL expression with two SQL functions - split and explode, to split each line into multiple rows with a word each. In addition, we name the new column as "word". Finally, we have defined the `wordCounts` SparkDataFrame by grouping by the unique values in the SparkDataFrame and counting them. Note that this is a streaming SparkDataFrame which represents the running word counts of the stream.
-
-</div>
-
 </div>
 
 We have now set up the query on the streaming data. All that is left is to actually start receiving data and computing the counts. To do this, we set it up to print the complete set of counts (specified by `outputMode("complete")`) to the console every time they are updated. And then start the streaming computation using `start()`.
@@ -225,17 +201,6 @@ query.awaitTermination();
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-# Start running the query that prints the running counts to the console
-query <- write.stream(wordCounts, "console", outputMode = "complete")
-
-awaitTermination(query)
-{% endhighlight %}
-
-</div>
-
 </div>
 
 After this code is executed, the streaming computation will have started in the background. The `query` object is a handle to that active streaming query, and we have decided to wait for the termination of the query using `awaitTermination()` to prevent the process from exiting while the query is active.
@@ -266,12 +231,6 @@ $ ./bin/run-example org.apache.spark.examples.sql.streaming.StructuredNetworkWor
 <div data-lang="java"  markdown="1">
 {% highlight bash %}
 $ ./bin/run-example org.apache.spark.examples.sql.streaming.JavaStructuredNetworkWordCount localhost 9999
-{% endhighlight %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight bash %}
-$ ./bin/spark-submit examples/src/main/r/streaming/structured_network_wordcount.R localhost 9999
 {% endhighlight %}
 </div>
 
@@ -404,35 +363,6 @@ Batch: 1
 {% endhighlight %}
 </div>
 
-<div data-lang="r" markdown="1">
-{% highlight bash %}
-# TERMINAL 2: RUNNING structured_network_wordcount.R
-
-$ ./bin/spark-submit examples/src/main/r/streaming/structured_network_wordcount.R localhost 9999
-
--------------------------------------------
-Batch: 0
--------------------------------------------
-+------+-----+
-| value|count|
-+------+-----+
-|apache|    1|
-| spark|    1|
-+------+-----+
-
--------------------------------------------
-Batch: 1
--------------------------------------------
-+------+-----+
-| value|count|
-+------+-----+
-|apache|    2|
-| spark|    1|
-|hadoop|    1|
-+------+-----+
-...
-{% endhighlight %}
-</div>
 </div>
     </td>
 </table>

@@ -1,7 +1,7 @@
 # Apache Spark
 
 Spark is a unified analytics engine for large-scale data processing. It provides
-high-level APIs in Scala, Java, Python, and R (Deprecated), and an optimized engine that
+high-level APIs in Scala, Java, and Python, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
@@ -57,7 +57,6 @@ of Spark's CI usage.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_minimum.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_minimum.yml)                     |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect40.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect40.yml)                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect.yml)                     |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml)                       |
 | branch-4.x | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_main.yml?query=branch%3Abranch-4.x)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java17.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_java17.yml?query=branch%3Abranch-4.x)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java21.yml/badge.svg?branch=branch-4.x)](https://github.com/apache/spark/actions/workflows/build_java21.yml?query=branch%3Abranch-4.x)                   |

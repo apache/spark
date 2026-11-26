@@ -47,15 +47,6 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 {% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-
-The entry point into all functionality in Spark is the [`SparkSession`](api/R/reference/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
-
-{% include_example init_session r/RSparkSQLExample.R %}
-
-Note that when invoked for the first time, `sparkR.session()` initializes a global `SparkSession` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SparkSession` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SparkSession` instance around.
-</div>
-
 </div>
 
 `SparkSession` in Spark 2.0 provides builtin support for Hive features including the ability to
@@ -93,22 +84,12 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 {% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-With a `SparkSession`, applications can create DataFrames from a local R data.frame,
-from a Hive table, or from [Spark data sources](sql-data-sources.html).
-
-As an example, the following creates a DataFrame based on the content of a JSON file:
-
-{% include_example create_df r/RSparkSQLExample.R %}
-
-</div>
-
 </div>
 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html), [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html) and [R](api/R/reference/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html), [Scala](api/scala/org/apache/spark/sql/Dataset.html), and [Java](api/java/index.html?org/apache/spark/sql/Dataset.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -147,16 +128,6 @@ For a complete list of the types of operations that can be performed on a Datase
 In addition to simple column references and expressions, Datasets also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/java/org/apache/spark/sql/functions.html).
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% include_example untyped_ops r/RSparkSQLExample.R %}
-
-For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/reference/index.html).
-
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/R/reference/SparkDataFrame.html).
-
-</div>
-
 </div>
 
 ## Running SQL Queries Programmatically
@@ -181,12 +152,6 @@ The `sql` function on a `SparkSession` enables applications to run SQL queries p
 {% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
-
-{% include_example run_sql r/RSparkSQLExample.R %}
-
-</div>
 </div>
 
 

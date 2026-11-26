@@ -58,9 +58,6 @@ To ignore corrupt files while reading data files, you can use:
 {% include_example ignore_corrupt_files java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example ignore_corrupt_files r/RSparkSQLExample.R %}
-</div>
 </div>
 
 ### Ignore Missing Files
@@ -92,9 +89,6 @@ you can use:
 {% include_example load_with_path_glob_filter java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example load_with_path_glob_filter r/RSparkSQLExample.R %}
-</div>
 </div>
 
 ### Ignored Path Segment Regex
@@ -132,9 +126,6 @@ To surface files that are hidden by default, you can use:
 {% include_example ignored_path_segment_regex java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example ignored_path_segment_regex r/RSparkSQLExample.R %}
-</div>
 </div>
 
 ### Recursive File Lookup
@@ -157,9 +148,6 @@ To load all files recursively, you can use:
 {% include_example recursive_file_lookup java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example recursive_file_lookup r/RSparkSQLExample.R %}
-</div>
 </div>
 
 ### Modification Time Path Filters
@@ -195,7 +183,4 @@ To load files with paths matching a given modified time range, you can use:
 {% include_example load_with_modified_time_filter  java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example load_with_modified_time_filter  r/RSparkSQLExample.R %}
-</div>
 </div>

@@ -100,26 +100,6 @@ Will output:
 {% endhighlight %}
 </div>
 
-<div data-lang="r" markdown="1">
-In SparkR we provide Spark SQL data source API for loading image data as a DataFrame.
-
-{% highlight r %}
-> df = read.df("data/mllib/images/origin/kittens", "image")
-> head(select(df, df$image.origin, df$image.width, df$image.height))
-
-1               file:///spark/data/mllib/images/origin/kittens/54893.jpg
-2            file:///spark/data/mllib/images/origin/kittens/DP802813.jpg
-3 file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg
-4            file:///spark/data/mllib/images/origin/kittens/DP153539.jpg
-  width height
-1   300    311
-2   199    313
-3   300    200
-4   300    296
-
-{% endhighlight %}
-</div>
-
 
 </div>
 
@@ -210,28 +190,6 @@ Will output:
 +-----+--------------------+
 only showing top 10 rows
 */
-{% endhighlight %}
-</div>
-
-<div data-lang="r" markdown="1">
-In SparkR we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
-
-{% highlight r %}
-> df = read.df("data/mllib/sample_libsvm_data.txt", "libsvm")
-> head(select(df, df$label, df$features), 10)
-
-   label                      features
-1      0 <environment: 0x7fe6d35366e8>
-2      1 <environment: 0x7fe6d353bf78>
-3      1 <environment: 0x7fe6d3541840>
-4      1 <environment: 0x7fe6d3545108>
-5      1 <environment: 0x7fe6d354c8e0>
-6      0 <environment: 0x7fe6d35501a8>
-7      1 <environment: 0x7fe6d3555a70>
-8      1 <environment: 0x7fe6d3559338>
-9      0 <environment: 0x7fe6d355cc00>
-10     0 <environment: 0x7fe6d35643d8>
-
 {% endhighlight %}
 </div>
 

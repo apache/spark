@@ -21,7 +21,7 @@ license: |
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
-([Python](/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[Scala](/api/scala/org/apache/spark/sql/SparkSession.html)/[Java](/api/java/org/apache/spark/sql/SparkSession.html)/[R](/api/R/reference/sparkR.session.html) docs)
+([Python](/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[Scala](/api/scala/org/apache/spark/sql/SparkSession.html)/[Java](/api/java/org/apache/spark/sql/SparkSession.html) docs)
 to create streaming DataFrames/Datasets from streaming sources, and apply the same operations on them as static DataFrames/Datasets. If you are not familiar with Datasets/DataFrames, you are strongly advised to familiarize yourself with them using the
 [DataFrame/Dataset Programming Guide](../sql-programming-guide.html).
 
@@ -29,7 +29,7 @@ to create streaming DataFrames/Datasets from streaming sources, and apply the sa
 ## Creating streaming DataFrames and streaming Datasets
 Streaming DataFrames can be created through the `DataStreamReader` interface
 ([Python](/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader)/[Scala](/api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](/api/java/org/apache/spark/sql/streaming/DataStreamReader.html) docs)
-returned by `SparkSession.readStream()`. In [R](/api/R/reference/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
+returned by `SparkSession.readStream()`. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
 There are a few built-in sources.
@@ -94,8 +94,7 @@ Here are the details of all the sources in Spark.
         NOTE 3: Both delete and move actions are best effort. Failing to delete or move files will not fail the streaming query. Spark may not clean up some source files in some circumstances - e.g. the application doesn't shut down gracefully, too many files are queued to clean up.
         <br/><br/>
         For file-format-specific options, see the related methods in <code>DataStreamReader</code>
-        (<a href="api/python/reference/pyspark.sql/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a href="api/scala/org/apache/spark/sql/streaming/DataStreamReader.html">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a
-        href="api/R/read.stream.html">R</a>).
+        (<a href="api/python/reference/pyspark.sql/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a href="api/scala/org/apache/spark/sql/streaming/DataStreamReader.html">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>).
         E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code>.
         <br/><br/>
         In addition, there are session configurations that affect certain file-formats. See the <a href="../sql-programming-guide.html">SQL Programming Guide</a> for more details. E.g., for "parquet", see <a href="../sql-data-sources-parquet.html#configuration">Parquet configuration</a> section.
@@ -240,25 +239,6 @@ Dataset<Row> csvDF = spark
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-sparkR.session(...)
-
-# Read text from socket
-socketDF <- read.stream("socket", host = hostname, port = port)
-
-isStreaming(socketDF)    # Returns TRUE for SparkDataFrames that have streaming sources
-
-printSchema(socketDF)
-
-# Read all the csv files written atomically in a directory
-schema <- structType(structField("name", "string"),
-                     structField("age", "integer"))
-csvDF <- read.stream("csv", path = "/path/to/directory", schema = schema, sep = ";")
-{% endhighlight %}
-
-</div>
 </div>
 
 These examples generate streaming DataFrames that are untyped, meaning that the schema of the DataFrame is not checked at compile time, only checked at runtime when the query is submitted. Some operations like `map`, `flatMap`, etc. need the type to be known at compile time. To do those, you can convert these untyped streaming DataFrames to typed streaming Datasets using the same methods as static DataFrame. See the [SQL Programming Guide](../sql-programming-guide.html) for more details. Additionally, more details on the supported streaming sources are discussed later in the document.
@@ -350,19 +330,6 @@ ds.groupByKey((MapFunction<DeviceData, String>) value -> value.getDeviceType(), 
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-df <- ...  # streaming DataFrame with IOT device data with schema { device: string, deviceType: string, signal: double, time: DateType }
-
-# Select the devices which have signal more than 10
-select(where(df, "signal > 10"), "device")
-
-# Running count of the number of updates for each device type
-count(groupBy(df, "deviceType"))
-{% endhighlight %}
-</div>
-
 </div>
 
 You can also register a streaming DataFrame/Dataset as a temporary view and then apply SQL commands on it.
@@ -390,13 +357,6 @@ spark.sql("select count(*) from updates");  // returns another streaming DF
 {% endhighlight %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-createOrReplaceTempView(df, "updates")
-sql("select count(*) from updates")
-{% endhighlight %}
-</div>
-
 </div>
 
 Note, you can identify whether a DataFrame/Dataset has streaming data or not by using `df.isStreaming`.
@@ -418,12 +378,6 @@ df.isStreaming
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 df.isStreaming()
-{% endhighlight %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-isStreaming(df)
 {% endhighlight %}
 </div>
 
@@ -484,20 +438,6 @@ Dataset<Row> windowedCounts = words.groupBy(
   functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
   words.col("word")
 ).count();
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
-
-# Group the data by window and word and compute the count of each group
-windowedCounts <- count(
-                    groupBy(
-                      words,
-                      window(words$timestamp, "10 minutes", "5 minutes"),
-                      words$word))
 {% endhighlight %}
 
 </div>
@@ -578,22 +518,6 @@ Dataset<Row> windowedCounts = words
         window(col("timestamp"), "10 minutes", "5 minutes"),
         col("word"))
     .count();
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
-
-# Group the data by window and word and compute the count of each group
-
-words <- withWatermark(words, "timestamp", "10 minutes")
-windowedCounts <- count(
-                    groupBy(
-                      words,
-                      window(words$timestamp, "10 minutes", "5 minutes"),
-                      words$word))
 {% endhighlight %}
 
 </div>
@@ -1032,21 +956,6 @@ streamingDf.join(staticDf, "type", "left_outer");  // left outer join with a sta
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-staticDf <- read.df(...)
-streamingDf <- read.stream(...)
-joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
-joined <- join(
-            streamingDf,
-            staticDf,
-            streamingDf$value == staticDf$value,
-            "left_outer")  # left outer join with a static DF
-{% endhighlight %}
-
-</div>
-
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1178,31 +1087,6 @@ impressionsWithWatermark.join(
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-impressions <- read.stream(...)
-clicks <- read.stream(...)
-
-# Apply watermarks on event-time columns
-impressionsWithWatermark <- withWatermark(impressions, "impressionTime", "2 hours")
-clicksWithWatermark <- withWatermark(clicks, "clickTime", "3 hours")
-
-# Join with event-time constraints
-joined <- join(
-  impressionsWithWatermark,
-  clicksWithWatermark,
-  expr(
-    paste(
-      "clickAdId = impressionAdId AND",
-      "clickTime >= impressionTime AND",
-      "clickTime <= impressionTime + interval 1 hour"
-)))
-
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ###### Semantic Guarantees of Stream-stream Inner Joins with Watermarking
@@ -1269,24 +1153,6 @@ impressionsWithWatermark.join(
 
 {% endhighlight %}
 
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-joined <- join(
-  impressionsWithWatermark,
-  clicksWithWatermark,
-  expr(
-    paste(
-      "clickAdId = impressionAdId AND",
-      "clickTime >= impressionTime AND",
-      "clickTime <= impressionTime + interval 1 hour"),
-  "left_outer"                 # can be "inner", "left_outer", "right_outer", "full_outer", "left_semi"
-))
-
-{% endhighlight %}
 
 </div>
 
@@ -1621,21 +1487,6 @@ streamingDf
   .dropDuplicates("guid", "eventTime");
 {% endhighlight %}
 
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-streamingDf <- read.stream(...)
-
-# Without watermark using guid column
-streamingDf <- dropDuplicates(streamingDf, "guid")
-
-# With watermark using guid and eventTime columns
-streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
-streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
-{% endhighlight %}
 
 </div>
 
@@ -2165,8 +2016,7 @@ Here are the details of all the sinks in Spark.
         By default it's disabled.
         <br/><br/>
         For file-format-specific options, see the related methods in DataFrameWriter
-        (<a href="api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter">Python</a>/<a href="api/scala/org/apache/spark/sql/DataFrameWriter.html">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a
-        href="api/R/write.stream.html">R</a>).
+        (<a href="api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter">Python</a>/<a href="api/scala/org/apache/spark/sql/DataFrameWriter.html">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
     </td>
     <td>Yes (exactly-once)</td>
@@ -2355,36 +2205,6 @@ spark.sql("select * from aggregates").show();   // interactively query in-memory
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-# ========== DF with no aggregations ==========
-noAggDF <- select(where(deviceDataDf, "signal > 10"), "device")
-
-# Print new data to console
-write.stream(noAggDF, "console")
-
-# Write new data to Parquet files
-write.stream(noAggDF,
-             "parquet",
-             path = "path/to/destination/dir",
-             checkpointLocation = "path/to/checkpoint/dir")
-
-# ========== DF with aggregation ==========
-aggDF <- count(groupBy(df, "device"))
-
-# Print updated aggregations to console
-write.stream(aggDF, "console", outputMode = "complete")
-
-# Have all the aggregates in an in memory table. The query name will be the table name
-write.stream(aggDF, "memory", queryName = "aggregates", outputMode = "complete")
-
-# Interactively query in-memory table
-head(sql("select * from aggregates"))
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ##### Using Foreach and ForeachBatch
@@ -2434,10 +2254,6 @@ streamingDatasetOfString.writeStream().foreachBatch(
 ).start();
 {% endhighlight %}
 
-</div>
-
-<div data-lang="r"  markdown="1">
-R is not yet supported.
 </div>
 
 </div>
@@ -2576,10 +2392,6 @@ streamingDatasetOfString.writeStream().foreach(
 
 {% endhighlight %}
 
-</div>
-
-<div data-lang="r"  markdown="1">
-R is not yet supported.
 </div>
 
 </div>
@@ -2721,10 +2533,6 @@ spark.readStream()
 spark.read().table("newTable").show();
 {% endhighlight %}
 
-</div>
-
-<div data-lang="r"  markdown="1">
-Not available in R.
 </div>
 
 </div>
@@ -2926,22 +2734,6 @@ df.writeStream
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-# Default trigger (runs micro-batch as soon as it can)
-write.stream(df, "console")
-
-# ProcessingTime trigger with two-seconds micro-batch interval
-write.stream(df, "console", trigger.processingTime = "2 seconds")
-
-# One-time trigger
-write.stream(df, "console", trigger.once = TRUE)
-
-# Continuous trigger is not yet supported
-{% endhighlight %}
-</div>
-
 </div>
 
 
@@ -3031,25 +2823,6 @@ query.lastProgress();    // the most recent progress update of this streaming qu
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-query <- write.stream(df, "console")  # get the query object
-
-queryName(query)          # get the name of the auto-generated or user-specified name
-
-explain(query)            # print detailed explanations of the query
-
-stopQuery(query)          # stop the query
-
-awaitTermination(query)   # block until query is terminated, with stop() or with error
-
-lastProgress(query)       # the most recent progress update of this streaming query
-
-{% endhighlight %}
-
-</div>
-
 </div>
 
 You can start any number of queries in a single SparkSession. They will all be running concurrently sharing the cluster resources. You can use `sparkSession.streams()` to get the `StreamingQueryManager`
@@ -3096,13 +2869,6 @@ spark.streams().active();    // get the list of currently active streaming queri
 spark.streams().get(id);   // get a query object by its unique id
 
 spark.streams().awaitAnyTermination();   // block until any one of them terminates
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight bash %}
-Not available in R.
 {% endhighlight %}
 
 </div>
@@ -3293,59 +3059,6 @@ System.out.println(query.status());
 
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-query <- ...  # a StreamingQuery
-lastProgress(query)
-
-'''
-Will print something like the following.
-
-{
-  "id" : "8c57e1ec-94b5-4c99-b100-f694162df0b9",
-  "runId" : "ae505c5a-a64e-4896-8c28-c7cbaf926f16",
-  "name" : null,
-  "timestamp" : "2017-04-26T08:27:28.835Z",
-  "numInputRows" : 0,
-  "inputRowsPerSecond" : 0.0,
-  "processedRowsPerSecond" : 0.0,
-  "durationMs" : {
-    "getOffset" : 0,
-    "triggerExecution" : 1
-  },
-  "stateOperators" : [ {
-    "numRowsTotal" : 4,
-    "numRowsUpdated" : 0
-  } ],
-  "sources" : [ {
-    "description" : "TextSocketSource[host: localhost, port: 9999]",
-    "startOffset" : 1,
-    "endOffset" : 1,
-    "numInputRows" : 0,
-    "inputRowsPerSecond" : 0.0,
-    "processedRowsPerSecond" : 0.0
-  } ],
-  "sink" : {
-    "description" : "org.apache.spark.sql.execution.streaming.ConsoleSink@76b37531"
-  }
-}
-'''
-
-status(query)
-'''
-Will print something like the following.
-
-{
-  "message" : "Waiting for data to arrive",
-  "isDataAvailable" : false,
-  "isTriggerActive" : false
-}
-'''
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ### Reporting Metrics programmatically using Asynchronous APIs
@@ -3422,13 +3135,6 @@ spark.streams().addListener(new StreamingQueryListener() {
 
 </div>
 
-<div data-lang="r"  markdown="1">
-{% highlight bash %}
-Not available in R.
-{% endhighlight %}
-
-</div>
-
 </div>
 
 ### Reporting Metrics using Dropwizard
@@ -3457,12 +3163,6 @@ spark.sql("SET spark.sql.streaming.metricsEnabled=true")
 spark.conf().set("spark.sql.streaming.metricsEnabled", "true");
 // or
 spark.sql("SET spark.sql.streaming.metricsEnabled=true");
-{% endhighlight %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-sql("SET spark.sql.streaming.metricsEnabled=true")
 {% endhighlight %}
 </div>
 
@@ -3511,14 +3211,6 @@ aggDF
   .option("checkpointLocation", "path/to/HDFS/dir")
   .format("memory")
   .start();
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-write.stream(aggDF, "memory", outputMode = "complete", checkpointLocation = "path/to/HDFS/dir")
 {% endhighlight %}
 
 </div>

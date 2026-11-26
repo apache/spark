@@ -102,13 +102,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/KMeans.html
 {% include_example java/org/apache/spark/examples/ml/JavaKMeansExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.kmeans.html) for more details.
-
-{% include_example r/ml/kmeans.R %}
-</div>
-
 </div>
 
 ## Latent Dirichlet allocation (LDA)
@@ -140,13 +133,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/LDA.html)
 Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/LDA.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaLDAExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.lda.html) for more details.
-
-{% include_example r/ml/lda.R %}
 </div>
 
 </div>
@@ -183,12 +169,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/BisectingKM
 {% include_example java/org/apache/spark/examples/ml/JavaBisectingKMeansExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more details.
-
-{% include_example r/ml/bisectingKmeans.R %}
-</div>
 </div>
 
 ## Gaussian Mixture Model (GMM)
@@ -272,13 +252,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/GaussianMix
 {% include_example java/org/apache/spark/examples/ml/JavaGaussianMixtureExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.gaussianMixture.html) for more details.
-
-{% include_example r/ml/gaussianMixture.R %}
-</div>
-
 </div>
 
 ## Power Iteration Clustering (PIC)
@@ -317,13 +290,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/PowerIter
 Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/PowerIterationClustering.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaPowerIterationClusteringExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.powerIterationClustering.html) for more details.
-
-{% include_example r/ml/powerIterationClustering.R %}
 </div>
 
 </div>

@@ -62,21 +62,6 @@ For a regular multi-line JSON file, set the `multiLine` option to `true`.
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame. using
-the `read.json()` function, which loads data from a directory of JSON files where each line of the
-files is a JSON object.
-
-Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
-
-For a regular multi-line JSON file, set a named parameter `multiLine` to `TRUE`.
-
-{% include_example json_dataset r/RSparkSQLExample.R %}
-
-</div>
-
 <div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}

@@ -100,13 +100,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for
 {% include_example java/org/apache/spark/examples/ml/JavaFPGrowthExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.fpGrowth.html) for more details.
-
-{% include_example r/ml/fpm.R %}
-</div>
-
 </div>
 
 ## PrefixSpan
@@ -151,13 +144,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/PrefixSpan.html)
 Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaPrefixSpanExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.prefixSpan.html) for more details.
-
-{% include_example r/ml/prefixSpan.R %}
 </div>
 
 </div>

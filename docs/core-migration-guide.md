@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.5 to 5.0
+
+- Since Spark 5.0, SparkR, which was deprecated in Spark 4.0, has been removed. `bin/sparkR` no longer exists, `spark-submit` rejects R applications, and the `spark.r.*` configurations and `spark.sql.execution.arrow.sparkr.enabled` no longer have any effect. Use [sparklyr](https://spark.posit.co/) to work with Spark from R. The Kubernetes developer API `org.apache.spark.deploy.k8s.submit.RMainAppResource` is deprecated and kept only so that code referring to it still compiles; building a driver pod for it fails.
+
 ## Upgrading from Core 4.3 to 4.4
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
