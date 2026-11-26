@@ -99,6 +99,18 @@ def serialize_sort_order(writer: DataSourceWriter, order: Any) -> dict:
     }
 
 
+def check_distribution_field(distribution: str, field: str, value: Any, element: str) -> None:
+    """Validates that a distribution field holds a sequence, such as the declared tuple."""
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": f"a tuple of {element} for '{distribution}.{field}'",
+                "actual": f"'{type(value).__name__}'",
+            },
+        )
+
+
 def serialize_distribution(writer: DataSourceWriter, distribution: Any) -> dict:
     """Converts a `Distribution` to a JSON-serializable dict."""
     if not isinstance(distribution, Distribution):
@@ -113,6 +125,7 @@ def serialize_distribution(writer: DataSourceWriter, distribution: Any) -> dict:
         return {"name": "UnspecifiedDistribution"}
     if isinstance(distribution, ClusteredDistribution):
         clustering = distribution.clustering
+        check_distribution_field("ClusteredDistribution", "clustering", clustering, "ColumnPath")
         if not clustering:
             raise PySparkValueError(
                 errorClass="DATA_SOURCE_EMPTY_DISTRIBUTION",
@@ -128,6 +141,7 @@ def serialize_distribution(writer: DataSourceWriter, distribution: Any) -> dict:
         }
     if isinstance(distribution, OrderedDistribution):
         ordering = distribution.ordering
+        check_distribution_field("OrderedDistribution", "ordering", ordering, "SortOrder")
         if not ordering:
             raise PySparkValueError(
                 errorClass="DATA_SOURCE_EMPTY_DISTRIBUTION",
@@ -208,8 +222,9 @@ def _main(infile: IO, outfile: IO) -> None:
     Main method for planning the required distribution and ordering of a data source write.
 
     This process is invoked from `UserDefinedPythonDataSourceWriteDistributionAndOrderingRunner`,
-    which `PythonWrite` runs when the optimizer rule `V2Writes` asks the write for its required
-    distribution and ordering.
+    which `PythonWriteWithRequirements` runs the first time the optimizer rule `V2Writes` asks the
+    write for its required distribution and ordering; `PythonWriteBuilder` builds that write only
+    for a batch write with `spark.sql.python.writeDistributionAndOrdering.enabled` on.
 
     The JVM sends the data source class, the input schema of the write, the write options and
     the overwrite flag. This process instantiates the data source, creates its

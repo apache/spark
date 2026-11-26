@@ -37,6 +37,7 @@ from pyspark.sql.datasource import (
     DataSourceReader,
     DataSourceStreamWriter,
     DataSourceWriter,
+    Distribution,
     EqualNullSafe,
     EqualTo,
     Filter,
@@ -2034,9 +2035,12 @@ class BasePythonDataSourceTestsMixin:
     def test_write_invalid_requirement_values(self):
         cases = [
             ("write_req_bad_num_parts_bool", dict(num_partitions=True)),
+            ("write_req_bad_num_parts_float", dict(num_partitions=1.5)),
             ("write_req_bad_num_parts_big", dict(num_partitions=2**31)),
+            ("write_req_bad_advisory_float", dict(advisory_size=1.5)),
             ("write_req_bad_advisory_big", dict(advisory_size=2**63)),
             ("write_req_bad_ordering_type", dict(ordering="value")),
+            ("write_req_bad_sort_order", dict(ordering=[("value",)])),
             ("write_req_bad_direction", dict(ordering=[SortOrder(("value",), "asc")])),
             (
                 "write_req_bad_null_ordering",
@@ -2146,14 +2150,50 @@ class BasePythonDataSourceTestsMixin:
                 self.assertIn(f"invalid column reference: {column!r}", str(cm.exception))
 
     def test_write_invalid_distribution_type(self):
-        with tempfile.TemporaryDirectory(prefix="write_req_bad_dist") as d:
-            self._register_write_requirements_source(
-                "write_req_bad_dist", d, distribution="clustered by key"
-            )
-            with self.sql_conf(self._write_conf()):
-                with self.assertRaises(AnalysisException) as cm:
-                    self._write_df().write.format("write_req_bad_dist").mode("append").save()
-            self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+        cases = [
+            ("write_req_bad_dist", "clustered by key", "an instance of Distribution"),
+            ("write_req_base_dist", Distribution(), "one of UnspecifiedDistribution"),
+            # A bare string or SortOrder where the field needs a tuple of them.
+            (
+                "write_req_bad_clustering",
+                ClusteredDistribution("key"),
+                "a tuple of ColumnPath for 'ClusteredDistribution.clustering'",
+            ),
+            (
+                "write_req_bad_range_ordering",
+                OrderedDistribution(SortOrder(("value",))),
+                "a tuple of SortOrder for 'OrderedDistribution.ordering'",
+            ),
+        ]
+        for name, distribution, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, distribution=distribution)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+                self.assertIn(f"Expected {expected}", str(cm.exception))
+
+    def test_write_requirements_writer_type_mismatch(self):
+        class NotAWriter:
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+        class NotAWriterDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_not_a_writer"
+
+            def writer(self, schema, overwrite):
+                return NotAWriter()
+
+        self.spark.dataSource.register(NotAWriterDataSource)
+        with self.sql_conf(self._write_conf()):
+            with self.assertRaises(AnalysisException) as cm:
+                self._write_df().write.format("write_req_not_a_writer").mode("append").save()
+        # Planning asks the writer for its requirements, so it is the first to reject it.
+        self.assertIn("write distribution and ordering", str(cm.exception))
+        self.assertIn("Expected an instance of DataSourceWriter", str(cm.exception))
 
     def test_write_unknown_column(self):
         with tempfile.TemporaryDirectory(prefix="write_req_unknown_column") as d:
