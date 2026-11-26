@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
@@ -42,7 +43,8 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1836,17 +1838,115 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60813: a cogroup places a key stored as the layout's column by its bytes") {
+    // A cogroup pairs its groups by comparing key rows, so a key stored as the layout's column is
+    // goes to the function by storage (`TransformExpression.storedKey`), even where a datetime
+    // value of its type would be read differently, and lands where the keyed side put the same
+    // bytes, as the hash shuffle pairs them, with the keyed side on either side, and on an
+    // executor too, which resolves the call of a deserialized copy again.
+    def readAs(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.get(1, declared).hashCode, input.getInt(0))
+    }
+    def values(dataType: DataType): Seq[Any] = dataType match {
+      case TimestampType | TimestampNTZType => Seq(0L, 7L, -3L, 1000L)
+      case _: TimeType => Seq(7L, 3600000000001L, 86399999999999L)
+      case _: DayTimeIntervalType => Seq(7L, -1L, 90061123456L)
+      case _: YearMonthIntervalType => Seq(14, 7, -25)
+      case _: TimestampNTZNanosType =>
+        Seq(TimestampNanosVal.fromParts(3600123456L, 789.toShort),
+          TimestampNanosVal.fromParts(-1L, 5.toShort))
+      case StructType(Array(field)) => values(field.dataType).map(InternalRow(_))
+    }
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    // (the column's type, the layout's function, the key's type)
+    Seq[(DataType, ScalarFunction[Int], DataType)](
+      // The test catalog's `bucket`, which declares the `BIGINT` both are held as.
+      (TimestampType, BucketFunction, TimeType(9)),
+      // A function declaring the column's own type, as Iceberg's `bucket` does.
+      (TimestampType, readAs(TimestampType), TimestampNTZType),
+      (TimestampNTZType, readAs(TimestampNTZType), TimestampType),
+      (TimestampType, readAs(TimestampType), TimeType(9)),
+      (TimestampType, readAs(TimestampType), DayTimeIntervalType()),
+      (TimeType(6), readAs(TimeType(6)), TimeType(9)),
+      (DayTimeIntervalType(0, 1), readAs(DayTimeIntervalType(0, 1)), DayTimeIntervalType()),
+      (TimestampNTZNanosType(7), readAs(TimestampNTZNanosType(7)), TimestampNTZNanosType(9)),
+      (DateType, readAs(DateType), YearMonthIntervalType()),
+      // A datetime member is compared by storage too.
+      (new StructType().add("t", TimestampType), readAs(new StructType().add("t", TimestampType)),
+        new StructType().add("t", TimeType(9)))
+    ).foreach { case (columnType, function, keyType) =>
+      Seq(true, false).foreach { keyedLeft =>
+        val name = s"a $keyType key onto a $columnType column, keyed on the " +
+          (if (keyedLeft) "left" else "right")
+        val cL = AttributeReference("cL", columnType)()
+        val cR = AttributeReference("cR", keyType)()
+        val layout = TransformExpression(function, Seq(cL), Some(4))
+        val keyedPlan = DummySparkPlan(outputPartitioning =
+          KeyedPartitioning(Seq(layout), (0 until 4).map(InternalRow(_))))
+        val plainPlan = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+        val output = AttributeReference("value", IntegerType)() :: Nil
+        val cogroup = if (keyedLeft) {
+          FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf, output, keyedPlan, plainPlan)
+        } else {
+          FlatMapCoGroupsInPandasExec(Seq(cR), Seq(cL), pythonUdf, output, plainPlan, keyedPlan)
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val keyed = EnsureRequirements.apply(cogroup).collect {
+            case s: ShuffleExchangeExec => s.outputPartitioning
+          }.collect { case k: KeyedPartitioning => k }
+          assert(keyed.size == 1, s"$name: the other side is shuffled onto the bucket layout")
+          val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+          val serializer = new JavaSerializer(new SparkConf()).newInstance()
+          val onExecutor = serializer.deserialize[Expression](serializer.serialize(placed))
+          val stored = BindReferences.bindReference(layout: Expression, Seq(cL))
+          values(keyType).foreach { v =>
+            assert(placed.eval(InternalRow(v)) == stored.eval(InternalRow(v)), s"$name: $v")
+            assert(onExecutor.eval(InternalRow(v)) == stored.eval(InternalRow(v)),
+              s"$name, on an executor: $v")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60813: a join side shuffled onto a transform equals the layout over its key") {
+    // A join's key has the column's type, so the transform rebuilt over it is not marked and
+    // equals the layout's over that key, which e.g. `UnionExec` compares to keep a layout.
+    val l = AttributeReference("l", LongType)()
+    val r = AttributeReference("r", LongType)()
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val left = new DummySparkPlanWithBatchScanChild(outputPartitioning =
+        KeyedPartitioning(Seq(bucket(4, l)), (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = SinglePartition)
+      val join = SortMergeJoinExec(l :: Nil, r :: Nil, Inner, None, left, right)
+      val shuffled = EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.collect { case k: KeyedPartitioning => k }
+      assert(shuffled.size == 1, shuffled)
+      assert(shuffled.head.expressions.head.semanticEquals(bucket(4, r)), shuffled.head)
+    }
+  }
+
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
     // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
-    // have another key of a type the layout's function does not take: a `BIGINT` against a
-    // function declaring `INT`,
-    // or a string of another collation, which master paired wrongly. Or one the function takes but
-    // that is stored otherwise than the layout's column, so the cogroup, which compares the key
-    // rows, would not pair its groups: an `INT` widened to a `BIGINT` column's declared type, which
-    // master failed on in a task, or a `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)`
-    // column, stored as a `long`. Falling back to a hash shuffle would pair the groups wrongly
-    // too, so it fails, while planning, with an error that names the key's type. The storage check
-    // needs no call, so nothing is logged about the transform not being evaluated first.
+    // have another key stored otherwise than the layout's column: a `BIGINT` against a function
+    // declaring `INT`, or a string of another collation, which master paired wrongly, an `INT`
+    // widened to a `BIGINT` column's declared type, which master failed on in a task, or a
+    // `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)` column, stored as a `long`. The
+    // cogroup compares the key rows, and falling back to a hash shuffle would pair such groups
+    // wrongly too, so it fails, while planning, with an error that names the key and its type. The
+    // storage check needs no call, and the call over a key it takes is asked quietly, so nothing is
+    // logged about the transform first. A key stored as the column is but that the function cannot
+    // take even by storage fails too: a nested decimal of more precision than declared.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType
@@ -1859,11 +1959,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
+    // (the column's type, the key's, as the error names them)
     Seq(
       (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
       (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\""),
       (LongType, IntegerType, "\"BIGINT\"", "\"INT\""),
-      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"")
+      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\""),
+      (ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(12, 2)),
+        "\"ARRAY<DECIMAL(10,2)>\"", "\"ARRAY<DECIMAL(12,2)>\"")
     ).foreach { case (columnType, keyType, declared, key) =>
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()

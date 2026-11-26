@@ -48,10 +48,13 @@ import org.apache.spark.sql.internal.SQLConf
  *                               repartition shuffles in the plan.
  * @param requiredDistribution The root required distribution we should ensure. This value is used
  *                             in AQE in case we change final stage output partitioning.
+ * @param pushDownShuffleThroughUnionEnabled Whether this AQE preparation enables union shuffle
+ *                                           push-down, requiring records of elided user layouts.
  */
 case class EnsureRequirements(
     optimizeOutRepartition: Boolean = true,
-    requiredDistribution: Option[Distribution] = None)
+    requiredDistribution: Option[Distribution] = None,
+    pushDownShuffleThroughUnionEnabled: Boolean = false)
   extends Rule[SparkPlan] {
 
   /**
@@ -1465,15 +1468,10 @@ case class EnsureRequirements(
       case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
-        def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
-          partitioning match {
-            case lower: HashPartitioning if upper.semanticEquals(lower) => true
-            case lower: PartitioningCollection =>
-              lower.partitionings.exists(hasSemanticEqualPartitioning)
-            case _ => false
+        if (PartitioningOrigin.matchesHashLayout(child.outputPartitioning, upper)) {
+          if (pushDownShuffleThroughUnionEnabled) {
+            PartitioningOrigin.record(child, upper, shuffleOrigin)
           }
-        }
-        if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
           child
         } else {
           operator

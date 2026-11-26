@@ -2,69 +2,69 @@
 Build HighlyCompressedMapStatus, skewed block sizes
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.1        7166.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.1       18042.0       0.4X
+skewed block sizes not recorded                       0              0           0          0.5        1984.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       34704.0       0.1X
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.1       14792.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0       55917.0       0.3X
+skewed block sizes not recorded                       0              0           0          0.0       26279.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       91360.0       0.3X
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.0       53250.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0      375959.0       0.1X
+skewed block sizes not recorded                       0              0           0          0.0      120805.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0      775355.0       0.2X
 
 
 ================================================================================================
 Build HighlyCompressedMapStatus, organ pipe block sizes
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.1        7375.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0       25209.0       0.3X
+skewed block sizes not recorded                       0              0           0          0.1        6953.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       31278.0       0.2X
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.0       20166.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0      105375.0       0.2X
+skewed block sizes not recorded                       0              0           0          0.0       23303.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0      160969.0       0.1X
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.0       85708.0       1.0X
-skewed block sizes recorded accurately                1              1           0          0.0      579709.0       0.1X
+skewed block sizes not recorded                       0              0           0          0.0      122308.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0      895539.0       0.1X
 
 
 ================================================================================================
 Read block sizes out of HighlyCompressedMapStatus
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 2048 shuffle partitions:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-sum every block size over the map statuses              1              1           0        210.7           4.7       1.0X
+sum every block size over the map statuses              2              2           0        123.3           8.1       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
-Apple M4
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 50000 shuffle partitions:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-sum every block size over the map statuses             19             20           0        256.5           3.9       1.0X
+sum every block size over the map statuses             37             37           0        133.8           7.5       1.0X
 
 
 ================================================================================================
@@ -73,7 +73,7 @@ Driver heap retained by MapOutputTracker
 
 2001 partitions, 10000 map tasks             retained MiB   bytes per task serialized KiB
 ------------------------------------------------------------------------------------------
-skewed block sizes not recorded                         1              164             13
-skewed block sizes recorded accurately                  6              668             27
+skewed block sizes not recorded                         1              172             15
+skewed block sizes recorded accurately                  2              308             15
 
 

@@ -17,11 +17,33 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CollectMetricsExec, DeserializeToObjectExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 
 object AQEUtils {
+
+  /**
+   * Canonical shuffle forms occurring more than once in the current plan, its shuffle query
+   * stages, and visible subquery plans. Stages contribute their pre-optimization canonical form.
+   * Adaptive subquery plans are opaque to this walk, so their internal exchanges are not counted.
+   */
+  private[adaptive] def duplicatedShuffleForms(plan: SparkPlan): Set[SparkPlan] = {
+    val counts = mutable.HashMap.empty[SparkPlan, Int]
+    def count(canonical: SparkPlan): Unit = {
+      counts.update(canonical, counts.getOrElse(canonical, 0) + 1)
+    }
+    def visit(p: SparkPlan): Unit = p.foreach {
+      case exchange: ShuffleExchangeExec => count(exchange.canonicalized)
+      case stage: ShuffleQueryStageExec => count(stage.canonicalized)
+      case _ =>
+    }
+    visit(plan)
+    plan.subqueriesAll.foreach(visit)
+    counts.collect { case (exchange, copies) if copies > 1 => exchange }.toSet
+  }
 
   // Analyze the given plan and calculate the required distribution of this plan w.r.t. the
   // user-specified repartition.

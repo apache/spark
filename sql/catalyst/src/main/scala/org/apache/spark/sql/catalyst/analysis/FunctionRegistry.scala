@@ -515,6 +515,8 @@ object FunctionRegistry {
     expression[TryMod]("try_mod"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
+    expression[TryAbs]("try_abs"),
+    expression[TryNegative]("try_negative"),
     expression[Unhex]("unhex")
   )
 
@@ -718,6 +720,7 @@ object FunctionRegistry {
     expression[XxHash64]("xxhash64"),
     expression[Xxh364]("xxh3_64"),
     expression[Xxh3128]("xxh3_128"),
+    expression[FarmFingerprint]("farm_fingerprint"),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2")

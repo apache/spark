@@ -16,38 +16,93 @@
  */
 package org.apache.spark.sql.connect.utils
 
+import java.sql.SQLException
 import java.util.UUID
 
-import com.google.rpc.Code
-import io.grpc.{Status, StatusRuntimeException}
-import io.grpc.stub.StreamObserver
+import scala.jdk.CollectionConverters._
 
+import com.google.rpc.{Code, ErrorInfo}
+import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
+import io.grpc.stub.StreamObserver
+import org.json4s.jackson.JsonMethods
+
+import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ErrorUtilsSuite extends SharedSparkSession {
 
-  test("handleError fallback uses throwable class when fatal throwable has no message") {
+  for (fatalError <- Seq(new InterruptedException(), new StackOverflowError())) {
+    test(s"handleError keeps the UNKNOWN fallback for ${fatalError.getClass.getSimpleName}") {
+      val observer = new StreamObserver[Unit] {
+        override def onNext(value: Unit): Unit = {
+          fail(s"Unexpected response: $value")
+        }
+
+        override def onError(t: Throwable): Unit = {
+          throw t
+        }
+
+        override def onCompleted(): Unit = {
+          fail("Unexpected completion")
+        }
+      }
+
+      val error = intercept[StatusRuntimeException] {
+        ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(
+          fatalError)
+      }
+
+      assert(error.getStatus.getCode == Status.Code.UNKNOWN)
+      assert(error.getStatus.getDescription == fatalError.getClass.getName)
+      assert(StatusProto.fromThrowable(error).getDetailsCount == 0)
+    }
+  }
+
+  test("handleError preserves linkage error details when session-state initialization fails") {
+    val linkageError = new NoSuchMethodError("incompatible session extension")
+    val session = new SparkSession(spark.sparkContext)
+    session.sqlConf.setConf(Connect.CONNECT_ENRICH_ERROR_ENABLED, true)
+    session.sqlConf.setConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED, true)
+    var parserBuilds = 0
+    session.extensions.injectParser { (_, _) =>
+      parserBuilds += 1
+      throw linkageError
+    }
+    val holder = SessionHolder("user1", UUID.randomUUID().toString, session)
+    SparkConnectService.sessionManager.putSessionForTesting(holder)
+    var callbackCalled = false
     val observer = new StreamObserver[Unit] {
-      override def onNext(value: Unit): Unit = {
-        fail(s"Unexpected response: $value")
-      }
-
-      override def onError(t: Throwable): Unit = {
-        throw t
-      }
-
-      override def onCompleted(): Unit = {
-        fail("Unexpected completion")
-      }
+      override def onNext(value: Unit): Unit = fail("Unexpected response")
+      override def onError(t: Throwable): Unit = throw t
+      override def onCompleted(): Unit = fail("Unexpected completion")
     }
-
-    val error = intercept[StatusRuntimeException] {
-      ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(
-        new InterruptedException())
+    try {
+      assert(intercept[NoSuchMethodError](session.sessionState) eq linkageError)
+      val error = intercept[StatusRuntimeException] {
+        ErrorUtils.handleError(
+          "execute",
+          observer,
+          holder.userId,
+          holder.sessionId,
+          callback = Some(() => callbackCalled = true))(linkageError)
+      }
+      assert(error.getStatus.getCode == Status.Code.INTERNAL)
+      assert(error.getStatus.getDescription == linkageError.getMessage)
+      val info = StatusProto.fromThrowable(error).getDetails(0).unpack(classOf[ErrorInfo])
+      assert(info.getReason == linkageError.getClass.getName)
+      val errorId = info.getMetadataOrThrow("errorId")
+      assert(holder.errorIdToError.getIfPresent(errorId) eq linkageError)
+      assert(info.getMetadataOrThrow("stackTrace").contains(linkageError.getMessage))
+      assert(parserBuilds == 1)
+      assert(callbackCalled)
+    } finally {
+      SparkConnectService.sessionManager.closeSession(holder.key)
     }
-
-    assert(error.getStatus.getCode == Status.Code.UNKNOWN)
-    assert(error.getStatus.getDescription == classOf[InterruptedException].getName)
   }
 
   test("buildStatusFromThrowable uses throwable class when non-fatal throwable has no message") {
@@ -69,5 +124,52 @@ class ErrorUtilsSuite extends SharedSparkSession {
 
     assert(status.getCode == Code.INTERNAL_VALUE)
     assert(status.getMessage == "boom")
+  }
+
+  test("JDBC write errors remain reconstructable by Connect clients") {
+    val cause = new SQLException("batch rejected", "23000")
+    val error = new SparkRuntimeException(
+      "FAILED_JDBC.WRITE",
+      Map("url" -> "jdbc:redacted", "tableName" -> "t"),
+      cause)
+
+    val expectedParameters =
+      Map("url" -> "jdbc:redacted", "message" -> "Write rows to the table t.")
+    val status = ErrorUtils.buildStatusFromThrowable(error, None)
+    val info = status.getDetails(0).unpack(classOf[ErrorInfo])
+    assert(info.getMetadataOrDefault("errorClass", "") == "FAILED_JDBC.UNCLASSIFIED")
+    assert(info.getMetadataOrDefault("sqlState", "") == "HV000")
+    val statusParameters = info.getMetadataOrDefault("messageParameters", "")
+    assert(JsonMethods.parse(statusParameters).values == expectedParameters)
+    val expectedMessage =
+      "[FAILED_JDBC.UNCLASSIFIED] Failed JDBC jdbc:redacted on the operation: " +
+        "Write rows to the table t. SQLSTATE: HV000"
+    assert(status.getMessage == expectedMessage)
+
+    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(error)
+    val root = response.getErrors(0)
+    val projected = root.getSparkThrowable
+    assert(projected.getErrorClass == "FAILED_JDBC.UNCLASSIFIED")
+    assert(projected.getSqlState == "HV000")
+    assert(projected.getMessageParametersMap.asScala.toMap == expectedParameters)
+    assert(root.getMessage == expectedMessage)
+    assert(root.getCauseIdx == 1)
+    assert(response.getErrors(1).getMessage == cause.getMessage)
+  }
+
+  test("other JDBC error messages and causes are unchanged") {
+    val cause = new SQLException("connection rejected", "08001")
+    val error =
+      new SparkRuntimeException("FAILED_JDBC.CONNECTION", Map("url" -> "jdbc:redacted"), cause)
+
+    val status = ErrorUtils.buildStatusFromThrowable(error, None)
+    val info = status.getDetails(0).unpack(classOf[ErrorInfo])
+    assert(info.getMetadataOrDefault("errorClass", "") == "FAILED_JDBC.CONNECTION")
+    assert(status.getMessage == error.getMessage)
+    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(error)
+    assert(response.getErrors(0).getMessage == error.getMessage)
+    assert(response.getErrors(0).getSparkThrowable.getErrorClass == "FAILED_JDBC.CONNECTION")
+    assert(response.getErrors(0).getCauseIdx == 1)
+    assert(response.getErrors(1).getMessage == cause.getMessage)
   }
 }

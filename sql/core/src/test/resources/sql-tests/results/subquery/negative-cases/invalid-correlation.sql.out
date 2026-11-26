@@ -206,3 +206,31 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "t1a"
   } ]
 }
+
+
+-- !query
+SELECT *
+FROM   t1
+WHERE  EXISTS (WITH cte AS (SELECT * FROM t2 WHERE t2a = t1.t1a)
+               SELECT *
+               FROM   t3
+                      LEFT JOIN cte
+                             ON t3b = cte.t2b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (t2a#x = outer(t1a#x))\n+- SubqueryAlias t2\n   +- View (`t2`, [t2a#x, t2b#x, t2c#x])\n      +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n         +- Project [t2a#x, t2b#x, t2c#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [t2a#x, t2b#x, t2c#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 82,
+    "fragment" : "SELECT * FROM t2 WHERE t2a = t1.t1a"
+  } ]
+}
