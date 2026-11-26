@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Coalesce, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Coalesce, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedHashPartitioning, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioning, HashPartitioningLike, KeyedPartitioning, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedHashPartitioning, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioning, HashPartitioningLike, KeyedPartitioning, KeyedShuffleSpec, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -136,7 +136,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * Neither side's partitioning describes the output: a NULL-padded row of one side was placed by
    * the other side's key. The coalesced key does describe every row. A matched row has equal keys
    * on both sides, and an unmatched row has its own key next to NULLs, so it sits in the partition
-   * its coalesced key hashes to. That takes three things:
+   * its coalesced key describes. For hash layouts, that takes three things:
    *  - the two sides are co-partitioned hash layouts, so the i-th expressions of the two sides are
    *    the two sides of one join key pair and hash into the same partition space;
    *  - every key evaluates to NULL on a NULL-padded row (see `isNullOnNullPadding`);
@@ -144,23 +144,45 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * A null-aware side may have spread its NULL-keyed rows, and each of those has a NULL in its
    * coalesced key, so the output is null-aware whenever either side is.
    *
+   * Keyed layouts keep their partition keys when:
+   *  - both sides are grouped, so each declared key belongs to just one partition;
+   *  - their expressions still describe those keys, excluding layouts reduced onto a key space
+   *    that neither transform describes;
+   *  - each expression is a column of its input or a unary transform directly over one;
+   *  - KeyedShuffleSpec finds corresponding join-key positions, matching transforms, and the
+   *    same partition-key values and types in the same physical partition order. Compare the
+   *    reported layouts directly: createShuffleSpec can project and regroup them.
+   * For a transform f, report f(coalesce(l, r)), not coalesce(f(l), f(r)): f(NULL) need not be
+   * NULL, but coalesce(l, r) selects the unmatched row's own column before f is applied.
+   * Keep either side's collapse and unknown-key markers, since FULL OUTER retains unmatched
+   * rows, including keys outside the declared set. Such rows remain grouped by their whole key,
+   * but the unknown-key marker prevents claiming that subsets of that key are grouped too.
+   *
    * Every sound pair of the children's members is reported, each in the two argument orders of
    * `coalescedKeys`, in a `PartitioningCollection`.
    */
   private lazy val fullOuterOutputPartitioning: Partitioning = {
     val leftPartitioning = left.outputPartitioning
+    val rightPartitioning = right.outputPartitioning
     // Spreading is allowed here rather than read from `requiredChildDistribution`, which follows
     // the live `spark.sql.shuffle.spreadNullJoinKeys.enabled`. A null-aware side then pairs with a
     // strict one however the conf has changed since planning, and the output takes the null-aware
     // shape, which is sound either way.
     val leftDist = ClusteredDistribution(leftKeys, allowNullKeySpreading = true)
     val rightDist = ClusteredDistribution(rightKeys, allowNullKeySpreading = true)
-    lazy val rightHashes = hashPartitionings(right.outputPartitioning, right.outputSet)
-    val coalesced = for {
+    lazy val rightHashes = hashPartitionings(rightPartitioning, right.outputSet)
+    val hashes = for {
       l <- hashPartitionings(leftPartitioning, left.outputSet)
       r <- rightHashes
       p <- coalescedPartitionings(l, leftDist, r, rightDist)
     } yield p
+    lazy val rightKeyed = keyedPartitionings(rightPartitioning, right.outputSet)
+    val keyed = for {
+      l <- keyedPartitionings(leftPartitioning, left.outputSet)
+      r <- rightKeyed
+      p <- coalescedKeyedPartitionings(l, leftDist, r, rightDist)
+    } yield p
+    val coalesced = hashes ++ keyed
     if (coalesced.isEmpty) {
       UnknownPartitioning(leftPartitioning.numPartitions)
     } else {
@@ -257,6 +279,53 @@ trait ShuffledJoin extends JoinCodegenSupport {
       case x =>
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} not take $x as the JoinType")
+    }
+  }
+
+  private def keyedPartitionings(
+      partitioning: Partitioning,
+      side: AttributeSet): Seq[KeyedPartitioning] = {
+    def isColumn(e: Expression): Boolean = e match {
+      case a: Attribute => side.contains(a)
+      case _ => false
+    }
+    PartitioningCollection.flatten(partitioning).collect {
+      case k: KeyedPartitioning if k.isGrouped && k.expressionsDescribeKeys &&
+          k.expressions.forall {
+            case t: TransformExpression => t.children.size == 1 && isColumn(t.children.head)
+            case e => isColumn(e)
+          } => k
+    }
+  }
+
+  private def coalescedKeyedPartitionings(
+      leftPartitioning: KeyedPartitioning,
+      leftDist: ClusteredDistribution,
+      rightPartitioning: KeyedPartitioning,
+      rightDist: ClusteredDistribution): Seq[Partitioning] = {
+    // Compare the layouts as reported. createShuffleSpec may project and regroup their keys,
+    // which would hide a mismatch in the physical partition order.
+    if (!KeyedShuffleSpec(leftPartitioning, leftDist)
+        .isCompatibleWith(KeyedShuffleSpec(rightPartitioning, rightDist))) {
+      return Nil
+    }
+
+    val keyPairs = leftPartitioning.expressions.zip(rightPartitioning.expressions).map {
+      case (l: TransformExpression, r: TransformExpression) => (l.children.head, r.children.head)
+      case pair => pair
+    }
+    // FULL OUTER preserves unmatched rows from either side, including undeclared keys. Unlike
+    // an inner join, an unmarked side cannot clear the other side's unknown-key marker.
+    val layout = leftPartitioning.layout.copy(
+      isCollapsed = leftPartitioning.isCollapsed || rightPartitioning.isCollapsed,
+      unknownKeysOrigin = KeyedPartitioning.combine(
+        Seq(leftPartitioning.unknownKeysOrigin, rightPartitioning.unknownKeysOrigin)))
+    coalescedKeys(keyPairs).map { keys =>
+      val expressions = leftPartitioning.expressions.zip(keys).map {
+        case (t: TransformExpression, key) => t.copy(children = Seq(key))
+        case (_, key) => key
+      }
+      KeyedPartitioning(expressions, layout)
     }
   }
 }
