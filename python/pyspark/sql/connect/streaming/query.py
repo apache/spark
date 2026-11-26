@@ -17,7 +17,7 @@
 import json
 import sys
 import warnings
-from threading import Lock, Thread
+from threading import Lock, Thread, current_thread
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union, cast
 
 import pyspark.sql.connect.proto as pb2
@@ -283,11 +283,16 @@ class StreamingQueryListenerBus:
         self._execution_thread: Optional[Thread] = None
         # _thread_lock serializes listener lifecycle ops (append/remove) so at most one
         # event-handling thread exists at a time. It is held across the thread join in
-        # remove(), so the handler thread must never acquire it.
+        # remove(), so the handler thread must never acquire it. When a listener callback
+        # adds or removes a listener, _sync_handler_thread() does that on another thread.
         self._thread_lock = Lock()
         # _bus_lock guards _listener_bus and is acquired by the handler thread in
-        # post_to_all(); it must stay free while remove() joins, to avoid deadlock.
+        # post_to_all(); it must stay free while remove() joins, to avoid deadlock. It is
+        # never held while a listener callback runs.
         self._bus_lock = Lock()
+        # Set under _bus_lock when a listener callback changed the bus, so the handler thread
+        # may have to be started or stopped once the current event is posted.
+        self._sync_pending = False
 
     def close(self) -> None:
         if self._sqm._session.client.is_closed:
@@ -310,33 +315,93 @@ class StreamingQueryListenerBus:
         self._execution_thread = None
         self._listener_bus.clear()
 
+    def _on_handler_thread(self) -> bool:
+        # Listener callbacks run on the handler thread, which must never acquire _thread_lock:
+        # remove() may hold it while joining that thread.
+        return current_thread() is self._execution_thread
+
+    def _sync_handler_thread(self) -> None:
+        # Start or stop the handler thread to match the bus after a listener callback changed
+        # it. This runs on its own thread, which can take _thread_lock and join the handler.
+        with self._thread_lock:
+            with self._bus_lock:
+                has_listeners = len(self._listener_bus) > 0
+            if has_listeners and self._execution_thread is None:
+                if not self._start_handler_thread():
+                    with self._bus_lock:
+                        self._listener_bus.clear()
+            elif not has_listeners and self._execution_thread is not None:
+                self._stop_handler_thread()
+
+    def _start_handler_thread(self) -> bool:
+        """
+        Register the server side listener and start the handler thread. The caller holds
+        _thread_lock. Returns False if the registration failed.
+        """
+        try:
+            result_iter = self._register_server_side_listener()
+        except Exception as e:
+            warnings.warn(
+                f"Failed to add the listener because of exception: {e}\n"
+                f"The listener is not added, please add it again."
+            )
+            return False
+        self._execution_thread = Thread(target=self._query_event_handler, args=(result_iter,))
+        self._execution_thread.start()
+        return True
+
+    def _stop_handler_thread(self) -> bool:
+        """
+        Remove the server side listener and wait for the handler thread to process the remaining
+        events. The caller holds _thread_lock. Returns False if the removal failed.
+        """
+        cmd = pb2.StreamingQueryListenerBusCommand()
+        cmd.remove_listener_bus_listener = True
+        exec_cmd = pb2.Command()
+        exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
+        try:
+            self._sqm._session.client.execute_command(exec_cmd)
+        except Exception as e:
+            warnings.warn(
+                f"Failed to remove the listener because of exception: {e}\n"
+                f"The listener is not removed, please remove it again."
+            )
+            return False
+        # Join without holding _bus_lock so the handler thread can keep
+        # acquiring it in post_to_all() to drain remaining events and exit.
+        # _thread_lock still blocks a concurrent append() from starting a
+        # second handler thread. Snapshot the reference first, since the
+        # handler's error path may clear it concurrently.
+        execution_thread = self._execution_thread
+        if execution_thread is not None:
+            execution_thread.join()
+            self._execution_thread = None
+        return True
+
     def append(self, listener: StreamingQueryListener) -> None:
         """
         Append a listener to the local listener bus. When the added listener is
         the first listener, request the server to create the server side listener
         and start a thread to handle query events.
         """
+        if self._on_handler_thread():
+            with self._bus_lock:
+                self._listener_bus.append(listener)
+                # remove() may be stopping the handler thread, so make sure one runs afterwards.
+                self._sync_pending = True
+            return
+
         with self._thread_lock:
             with self._bus_lock:
                 self._listener_bus.append(listener)
                 is_first_listener = len(self._listener_bus) == 1
 
-            if is_first_listener:
-                assert self._execution_thread is None
-                try:
-                    result_iter = self._register_server_side_listener()
-                except Exception as e:
-                    warnings.warn(
-                        f"Failed to add the listener because of exception: {e}\n"
-                        f"The listener is not added, please add it again."
-                    )
+            # When a listener callback removed the last listener, the handler thread runs until
+            # _sync_handler_thread() stops it. Keep it for the added listener instead.
+            if is_first_listener and self._execution_thread is None:
+                if not self._start_handler_thread():
                     with self._bus_lock:
                         self._listener_bus.remove(listener)
-                    return
-                self._execution_thread = Thread(
-                    target=self._query_event_handler, args=(result_iter,)
-                )
-                self._execution_thread.start()
 
     def remove(self, listener: StreamingQueryListener) -> None:
         """
@@ -348,36 +413,32 @@ class StreamingQueryListenerBus:
         the server side listener.
         As a result, the listener handling thread created before
         will return after processing remaining listener events. This function blocks until
-        all events are processed.
+        all events are processed, unless it is called from a listener callback. Then it
+        returns at once, and the server side listener is removed on another thread after the
+        current event is posted.
         """
+        if self._on_handler_thread():
+            with self._bus_lock:
+                if listener not in self._listener_bus:
+                    return
+                self._listener_bus.remove(listener)
+                if len(self._listener_bus) == 0:
+                    self._sync_pending = True
+            return
+
         with self._thread_lock:
             with self._bus_lock:
                 if listener not in self._listener_bus:
                     return
                 is_last_listener = len(self._listener_bus) == 1
-
-            if is_last_listener:
-                cmd = pb2.StreamingQueryListenerBusCommand()
-                cmd.remove_listener_bus_listener = True
-                exec_cmd = pb2.Command()
-                exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
-                try:
-                    self._sqm._session.client.execute_command(exec_cmd)
-                except Exception as e:
-                    warnings.warn(
-                        f"Failed to remove the listener because of exception: {e}\n"
-                        f"The listener is not removed, please remove it again."
-                    )
+                if not is_last_listener:
+                    # Decide and remove at once: a listener callback may remove listeners
+                    # concurrently, and whoever empties the bus stops the handler thread.
+                    self._listener_bus.remove(listener)
                     return
-                # Join without holding _bus_lock so the handler thread can keep
-                # acquiring it in post_to_all() to drain remaining events and exit.
-                # _thread_lock still blocks a concurrent append() from starting a
-                # second handler thread. Snapshot the reference first, since the
-                # handler's error path may clear it concurrently.
-                execution_thread = self._execution_thread
-                if execution_thread is not None:
-                    execution_thread.join()
-                    self._execution_thread = None
+
+            if not self._stop_handler_thread():
+                return
 
             with self._bus_lock:
                 # The handler's error path may have cleared the bus while we joined.
@@ -470,21 +531,30 @@ class StreamingQueryListenerBus:
         Post listener events to all active listeners, note that if one listener throws,
         it should not affect other listeners.
         """
+        # Call the listeners without holding _bus_lock, so a callback can add or remove
+        # listeners. Like the listener bus in the JVM, the listeners of an event are the
+        # ones registered when it is posted.
         with self._bus_lock:
-            for listener in self._listener_bus:
-                try:
-                    if isinstance(event, QueryStartedEvent):
-                        listener.onQueryStarted(event)
-                    elif isinstance(event, QueryProgressEvent):
-                        listener.onQueryProgress(event)
-                    elif isinstance(event, QueryIdleEvent):
-                        listener.onQueryIdle(event)
-                    elif isinstance(event, QueryTerminatedEvent):
-                        listener.onQueryTerminated(event)
-                    else:
-                        warnings.warn(f"Unknown StreamingQueryListener event: {event}")
-                except Exception as e:
-                    warnings.warn(f"Listener {str(listener)} threw an exception\n{e}")
+            listeners = list(self._listener_bus)
+        for listener in listeners:
+            try:
+                if isinstance(event, QueryStartedEvent):
+                    listener.onQueryStarted(event)
+                elif isinstance(event, QueryProgressEvent):
+                    listener.onQueryProgress(event)
+                elif isinstance(event, QueryIdleEvent):
+                    listener.onQueryIdle(event)
+                elif isinstance(event, QueryTerminatedEvent):
+                    listener.onQueryTerminated(event)
+                else:
+                    warnings.warn(f"Unknown StreamingQueryListener event: {event}")
+            except Exception as e:
+                warnings.warn(f"Listener {str(listener)} threw an exception\n{e}")
+        with self._bus_lock:
+            sync_pending = self._sync_pending
+            self._sync_pending = False
+        if sync_pending:
+            Thread(target=self._sync_handler_thread, daemon=True).start()
 
 
 def _test() -> None:
