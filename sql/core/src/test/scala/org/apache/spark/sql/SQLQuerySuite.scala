@@ -5401,6 +5401,27 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         Seq(Row(0), Row(1), Row(2)))
     }
   }
+
+  test("SPARK-62092: a limit pushed into an outer join keeps the top rows of ORDER BY LIMIT") {
+    // sorted_t has four files of 250 values each, in descending order, so no file starts with 0
+    // to 4. A local limit in place of LIMIT 5 would keep the first rows of each file.
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      withTable("sorted_t", "join_r") {
+        sql("CREATE TABLE sorted_t USING parquet AS SELECT id AS a FROM range(999, -1, -1, 4)")
+        sql("CREATE TABLE join_r USING parquet AS SELECT id AS b FROM range(0, 1000, 1, 4)")
+        val top5 = "(SELECT a FROM sorted_t ORDER BY a LIMIT 5)"
+        Seq(
+          s"SELECT l.a FROM $top5 l LEFT JOIN join_r r ON l.a = r.b LIMIT 3",
+          s"SELECT l.a FROM join_r r RIGHT JOIN $top5 l ON l.a = r.b LIMIT 3").foreach { query =>
+          val rows = sql(query).collect().map(_.getLong(0))
+          assert(rows.length == 3 && rows.forall(_ < 5), rows.mkString(", "))
+        }
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
