@@ -37,14 +37,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * is handled separately by the inner AQE thread.
  *
  * This node is generated from [[RepartitionByExpression]] nodes marked for plan reuse (the
- * references of a shared `forceSkipInline` CTE definition, and of any definition whose
- * deterministic body equals such a shared body, are first turned into such repartitions by
- * [[ReplaceCTERefWithRepartition]]). This generation happens in the
+ * references of a shared `forceSkipInline` CTE definition, of any definition whose deterministic
+ * body equals such a shared body, and of any definition that the body of such a shared, unpinned
+ * forced definition only selects and that the plan also reads elsewhere, are first turned into
+ * such repartitions by [[ReplaceCTERefWithRepartition]]). This generation happens in the
  * [[ReplaceRepartitionWithCTEReuse]] rule.
  *
  * @param cteId The plan-reuse id of the shared body: every reference of one sealed definition
- *              carries it, and sealed definitions whose deterministic bodies are canonically equal
- *              share it. It is not the [[CTERelationDef]] id that plans print.
+ *              carries it, sealed definitions whose deterministic bodies are canonically equal
+ *              share it, and a sealed definition whose body only selects another sealed
+ *              definition shares that definition's id. It is not the [[CTERelationDef]] id that
+ *              plans print.
  * @param partitioning Pre-determined partitioning for the shared exchange, taken from the
  *                     plan-reuse repartition at the root of [[sharedSubplan]]: the pinned
  *                     HashPartitioning when the CTE is pinned via forcePartitioning; for a wrapped

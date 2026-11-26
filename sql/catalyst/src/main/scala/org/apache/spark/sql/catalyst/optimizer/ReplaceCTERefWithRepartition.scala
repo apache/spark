@@ -47,9 +47,14 @@ import org.apache.spark.sql.internal.SQLConf
  * with a sealed definition when its deterministic body, lowered as a sealed root, is canonically
  * equal to that definition's root: it then shares that body's plan-reuse id, so the body is still
  * computed once, as canonical exchange reuse did for their plain repartitions (see
- * `LoweringContext.unsealedTwins`). Likewise, such a definition, deterministic or not, is sealed
- * together with a sealed forced definition whose body only selects it, so the two share its single
- * shuffle. Every other definition, including every definition of a streaming query, keeps the
+ * `LoweringContext.unsealedTwins`). Likewise, such a definition, deterministic or not, that the
+ * body of a sealed forced definition only selects and that the plan also reads outside that body
+ * is sealed together with the forced definition, so the two share its single shuffle, unless the
+ * forced definition pins its partitioning through `forcePartitioning`: the pin's repartition over
+ * the selected root is a shuffle the pin requires. A second lowering pass seals these twins; when
+ * sealing them changes a twin's root so that it no longer shares the plan-reuse id of a
+ * definition sealed on its own, `apply` keeps the first lowering, in which no twin of the query is
+ * sealed. Every other definition, including every definition of a streaming query, keeps the
  * plain lowering: a repartition without a plan-reuse id, or no extra repartition when the body
  * already repartitions or hosts a merged scalar subquery. The one
  * exception is a forced definition pinned through `forcePartitioning` while the flag is on: it is
@@ -370,9 +375,11 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
         sealableRoot(inlined)
       }
     }
-    // Only a forced definition whose body a batch query holds two or more copies of, or a
-    // definition whose deterministic body equals such a sealed body, is sealed for reuse (see
-    // `sealedDefinitions`). A single copy of any other body already runs it once.
+    // Only a forced definition whose body a batch query holds two or more copies of, a definition
+    // whose deterministic body equals such a sealed body, or a definition that the body of such a
+    // sealed, unpinned forced definition only selects and that the plan also reads elsewhere, is
+    // sealed for reuse (see `sealedDefinitions` and `LoweringContext.unsealedTwins`). A single
+    // copy of any other body already runs it once.
     if (ctx.shouldSeal(cteDef.id)) {
       // A pin's repartition over the other definition's root is a shuffle the pin requires, so a
       // pinned definition does not seal that definition with it.

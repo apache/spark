@@ -37,8 +37,11 @@ import org.apache.spark.sql.execution.SparkPlan
  * etc.) process each CTE subplan copy normally, in its own consumer context.
  * The `LOCAL_SHUFFLE_FOR_CTE` shuffle serves as a protected boundary: `EnsureRequirements` never
  * rewrites its partitioning in place (see `ShuffleExchangeLike.isCreatedForSubplanReuse`) and adds
- * any shuffle a consumer needs above it, so the subtree below stays canonically equal across
- * copies. The final `ReuseExchangeAndSubquery` then reuses the copies by canonical equality.
+ * any shuffle a consumer needs above it. The copies are planned from one canonical body, so they
+ * usually stay canonically equal and the final `ReuseExchangeAndSubquery` reuses them. A later
+ * preparation rule that carries a consumer's context through an exchange, such as
+ * `DisableUnnecessaryBucketedScan` for a body that scans a bucketed table, can still plan two
+ * copies differently; [[VerifyCTEReuse]] then reports the miss.
  *
  * Runs in both main and subquery preparation batches so CTE references inside subqueries are also
  * unwrapped.
@@ -86,14 +89,15 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
  *
  * We rely on the stock [[ReuseExchangeAndSubquery]] (canonical matching) to reuse the CTE shuffles:
  * because all copies of a `cteId` are planned from the same canonicalized `sharedSubplan` and the
- * `LOCAL_SHUFFLE_FOR_CTE` shuffle is protected from `EnsureRequirements`, the copies stay
+ * `LOCAL_SHUFFLE_FOR_CTE` shuffle is protected from `EnsureRequirements`, the copies usually stay
  * canonically equal and are deduplicated into [[ReusedExchangeExec]]. After that pass, at most one
  * live (non-reused) shuffle per `cteId` should remain.
  *
  * If two or more live shuffles carry the same `cteId` in their `LOCAL_SHUFFLE_FOR_CTE` origin,
- * reuse did NOT apply for that CTE (for example because `spark.sql.exchange.reuse` is off), and the
- * CTE body runs once per live shuffle, so the references of a nondeterministic CTE can see
- * different rows. Then:
+ * reuse did NOT apply for that CTE (for example because `spark.sql.exchange.reuse` is off, or
+ * because a preparation rule such as `DisableUnnecessaryBucketedScan` planned the copies
+ * differently), and the CTE body runs once per live shuffle, so the references of a
+ * nondeterministic CTE can see different rows. Then:
  *  - when [[SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE]] is on, throw; the flag defaults to false,
  *    in tests too, and only the suites that check this rule turn it on;
  *  - otherwise, log the plan and the cteIds that were not reused.

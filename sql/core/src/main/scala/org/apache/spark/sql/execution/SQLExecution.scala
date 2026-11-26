@@ -177,6 +177,31 @@ object SQLExecution extends Logging {
     }
   }
 
+  /**
+   * Records the end of `executionId` on the adaptive execution context of `queryExecution`, found
+   * the way `cleanupShuffleDependencies` finds its adaptive plan, so that a shared inner CTE plan
+   * of that context which outlives the execution releases the scheduler's per-query job entries it
+   * registers afterwards (see `AdaptiveExecutionContext.recordExecutionEnded`). Called before the
+   * execution's own job cleanup is posted, whatever the shuffle cleanup mode.
+   */
+  private def recordExecutionEndForSharedCTEPlans(
+      queryExecution: QueryExecution,
+      executionId: Long): Unit = {
+    try {
+      val plans = queryExecution.executedPlan match {
+        case command: V2CommandExec => command.children
+        case dataWritingCommand: DataWritingCommandExec => Seq(dataWritingCommand.child)
+        case plan => Seq(plan)
+      }
+      plans.foreach(_.collectFirst { case ae: AdaptiveSparkPlanExec => ae }
+        .foreach(_.context.recordExecutionEnded(executionId)))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to record the end of execution ${MDC(EXECUTION_ID, executionId)} " +
+          log"for its shared CTE plans.", e)
+    }
+  }
+
   private[sql] val NONE_EXPLAIN_MODE = "none"
 
   private[sql] val NO_PLAN_DESCRIPTION =
@@ -363,6 +388,12 @@ object SQLExecution extends Logging {
                     .getOrElse(Set.empty)
                 }
 
+                // A shared inner CTE plan can outlive this execution and register jobs under its
+                // id after the cleanup below. Record the end first, so that such a plan releases
+                // them again when it finishes.
+                if (isExecutedPlanAvailable) {
+                  recordExecutionEndForSharedCTEPlans(queryExecution, executionId)
+                }
                 // Clean up jobs tracked by DAGScheduler for this query execution.
                 dagSchedulerOpt.foreach(_.cleanupQueryJobs(executionId))
 

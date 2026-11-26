@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_NONE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_NONE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
@@ -406,7 +406,9 @@ class CTEReuseWithoutAQESuite
 
   test("CTE feeding a broadcast join on one side and a shuffle on the other") {
     withCTEReuseNoAQE {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048576") {
+      // Only the hints choose the join strategies: c1 is broadcast into the join with big_side, and
+      // c2 is shuffled into a sort-merge join.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         withReuseSrc {
           withTable("big_side") {
             sql("CREATE TABLE big_side (id INT, w INT) USING parquet")
@@ -415,13 +417,31 @@ class CTEReuseWithoutAQESuite
             // impose different requirements above the shared shuffle, which must still be reused.
             val df = sqlWithForcedCTEReuse(
               """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
-                |SELECT c1.id
+                |SELECT /*+ BROADCAST(c1), MERGE(c2) */ c1.id
                 |FROM cte c1 JOIN big_side b ON c1.id = b.id
                 |JOIN cte c2 ON c1.id = c2.id
                 |""".stripMargin)
+            val plan = df.queryExecution.executedPlan
+            def isCTECopy(p: SparkPlan): Boolean = p match {
+              case s: ShuffleExchangeExec => s.shuffleOrigin.isInstanceOf[LOCAL_SHUFFLE_FOR_CTE]
+              case r: ReusedExchangeExec => isCTECopy(r.child)
+              case _ => false
+            }
+            val broadcastOverCopy = plan.collect {
+              case b: BroadcastExchangeExec if b.find(isCTECopy).isDefined => b
+            }
+            val shuffleOverCopy = plan.collect {
+              case s: ShuffleExchangeExec if !isCTECopy(s) && s.child.find(isCTECopy).isDefined &&
+                  s.find(_.isInstanceOf[BroadcastExchangeExec]).isEmpty => s
+            }
+            assert(broadcastOverCopy.size == 1 && shuffleOverCopy.size == 1,
+              s"Expected a broadcast over one CTE copy and a shuffle over the other:\n" +
+                plan.treeString)
+            assert(plan.collect { case s: ShuffleExchangeExec if isCTECopy(s) => s }.size == 1,
+              s"Expected one live CTE reuse shuffle:\n${plan.treeString}")
             assertCTEReuseApplied(df)
             assertNoDanglingReusedExchange(df)
-            df.collect()
+            checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
           }
         }
       }

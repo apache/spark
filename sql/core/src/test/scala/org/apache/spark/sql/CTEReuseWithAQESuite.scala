@@ -17,28 +17,32 @@
 
 package org.apache.spark.sql
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkContext, SparkThrowable}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkThrowable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, CTEReuseQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, Cost, CostEvaluator, CTEReuseQueryStageExec, ShuffleQueryStageExec, SimpleCostEvaluator}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -747,14 +751,16 @@ class CTEReuseWithAQESuite
   }
 
   test("jobs that materialize a forced CTE carry the query's execution id and job tags") {
+    // A new CTE pool thread inherits the query thread's local properties, so the execution id and
+    // job tags would reach the inner jobs even without the thread-local capture in
+    // `materializeFuture`. The job artifact state is kept in a plain `ThreadLocal`, which only the
+    // capture forwards, so it is also checked where the shared inner plan replans: in a cost
+    // evaluator, which the inner plan calls on its pool thread.
+    CTEArtifactStateRecorder.reset()
     withCTEReuseEnabled {
       withTable("job_ctx_src") {
         sql("CREATE TABLE job_ctx_src (id INT) USING parquet")
         sql("INSERT INTO job_ctx_src VALUES (1), (2), (3)")
-        val df = sqlWithForcedCTEReuse(
-          """WITH cte AS (SELECT id, rand() AS r FROM job_ctx_src)
-            |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
-            |""".stripMargin)
         val jobs = mutable.ArrayBuffer.empty[java.util.Properties]
         val listener = new SparkListener {
           override def onJobStart(jobStart: SparkListenerJobStart): Unit = jobs.synchronized {
@@ -765,12 +771,23 @@ class CTEReuseWithAQESuite
         spark.sparkContext.addSparkListener(listener)
         spark.sparkContext.addJobTag(tag)
         try {
-          df.collect()
+          withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+              classOf[CTEArtifactStateRecordingCostEvaluator].getName) {
+            val df = sqlWithForcedCTEReuse(
+              """WITH cte AS (SELECT id, rand() AS r FROM job_ctx_src)
+                |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+                |""".stripMargin)
+            df.collect()
+          }
           spark.sparkContext.listenerBus.waitUntilEmpty()
         } finally {
           spark.sparkContext.removeJobTag(tag)
           spark.sparkContext.removeSparkListener(listener)
         }
+        val states = CTEArtifactStateRecorder.states
+        assert(states.nonEmpty, "Expected the shared inner plan to replan on a CTE pool thread")
+        assert(states.forall(_.contains(spark.artifactManager.state)),
+          s"Expected the session's job artifact state on the CTE pool thread, got $states")
         val props = jobs.synchronized(jobs.toSeq)
         // The CTE's map-stage job runs from the CTE pool, and the result job from this thread.
         assert(props.size >= 2, s"Expected the CTE materialization and result jobs, got $props")
@@ -1354,6 +1371,141 @@ class CTEReuseWithAQESuite
     }
   }
 
+  /** Records the ids of the jobs that start under each SQL execution id. */
+  private class JobsByExecutionListener extends SparkListener {
+    private val jobs = mutable.HashMap.empty[Long, mutable.Set[Int]]
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+      Option(jobStart.properties)
+        .flatMap(p => Option(p.getProperty(SQLExecution.EXECUTION_ID_KEY)))
+        .foreach { id =>
+          jobs.synchronized {
+            jobs.getOrElseUpdate(id.toLong, mutable.Set.empty[Int]) += jobStart.jobId
+          }
+        }
+    }
+
+    def snapshot: Map[Long, Set[Int]] = jobs.synchronized {
+      jobs.map { case (id, ids) => id -> ids.toSet }.toMap
+    }
+  }
+
+  // A replan drops every reference to the CTE while its shared inner plan still runs, so the query
+  // returns first. The CTE body's aggregation shuffles its two input partitions, and the task that
+  // reads row 0 waits until the query has returned, so the inner plan submits its root shuffle
+  // stage under the query's execution id after the query's end released the scheduler's per-query
+  // job entries of that id. Once the inner plan finishes, it must release them again. Only one task
+  // waits, so the empty sides still get one of the two cores. They filter through a
+  // nondeterministic UDF, so their filter is not inferred onto the CTE side, where it would empty
+  // the CTE body before its root shuffle stage is planned.
+  test("an inner CTE plan that outlives its query releases the jobs it registers later") {
+    withCTEReuseEnabled {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation") {
+        DroppedCTEStageSync.reset()
+        spark.udf.register("late_cte_wait_for_return", udf { (id: Long) =>
+          if (id == 0) {
+            DroppedCTEStageSync.await(DroppedCTEStageSync.queryReturned, "the query to return")
+          }
+          id
+        }.asNondeterministic())
+        spark.udf.register("late_cte_opaque", udf((id: Long) => id).asNondeterministic())
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT k, count(*) AS n FROM (
+            |    SELECT late_cte_wait_for_return(id) % 3 AS k FROM range(0, 4, 1, 2)
+            |  ) GROUP BY k
+            |)
+            |SELECT c1.k FROM c c1 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE late_cte_opaque(id) > 100
+            |) e1 ON c1.k = e1.id
+            |UNION ALL
+            |SELECT c2.n FROM c c2 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE late_cte_opaque(id) > 100
+            |) e2 ON c2.k = e2.id
+            |""".stripMargin)
+        val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        val listener = new JobsByExecutionListener
+        val sc = spark.sparkContext
+        sc.addSparkListener(listener)
+        try {
+          assert(df.collect().isEmpty)
+          sc.listenerBus.waitUntilEmpty()
+          val jobsBeforeReturn = listener.snapshot
+          assert(jobsBeforeReturn.size == 1, s"Expected one execution, got $jobsBeforeReturn")
+          val (executionId, earlyJobs) = jobsBeforeReturn.head
+          val inner = aqe.context.cteAQERegistry.values.toSeq
+          assert(inner.size == 1 && !inner.head.isFinalPlan,
+            s"Expected the shared inner plan to still run after the query returned: $inner")
+          DroppedCTEStageSync.queryReturned.countDown()
+          eventually(timeout(1.minute)) {
+            assert(inner.head.isFinalPlan)
+          }
+          eventually(timeout(1.minute)) {
+            sc.listenerBus.waitUntilEmpty()
+            val lateJobs = listener.snapshot.getOrElse(executionId, Set.empty) -- earlyJobs
+            assert(lateJobs.nonEmpty,
+              "Expected the inner plan to start a job under the query's execution id after the " +
+                "query returned")
+          }
+          eventually(timeout(1.minute)) {
+            assert(!sc.dagScheduler.activeQueryToJobs.containsKey(executionId),
+              s"Expected no scheduler job entries for the ended execution $executionId")
+          }
+        } finally {
+          DroppedCTEStageSync.releaseAll()
+          sc.removeSparkListener(listener)
+        }
+      }
+    }
+  }
+
+  test("a forced CTE query keeps its scheduler job entries until each of its executions ends") {
+    withCTEReuseEnabled {
+      val df = sqlWithForcedCTEReuse(
+        """WITH cte AS (SELECT id, rand() AS r FROM range(0, 6, 1, 2))
+          |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+          |""".stripMargin)
+      val listener = new JobsByExecutionListener
+      // The scheduler's per-query job entries of each execution right before its end releases
+      // them, which `SQLExecution` records on the end event in tests only.
+      val jobsAtEnd = mutable.HashMap.empty[Long, Set[Int]]
+      val endListener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+          case e: SparkListenerSQLExecutionEnd => jobsAtEnd.synchronized {
+            jobsAtEnd(e.executionId) = e.jobIds
+          }
+          case _ =>
+        }
+      }
+      val sc = spark.sparkContext
+      sc.addSparkListener(listener)
+      sc.addSparkListener(endListener)
+      try {
+        // The first execution materializes the shared inner plan while it runs, and the second
+        // shares the same adaptive execution context.
+        df.collect()
+        df.collect()
+        sc.listenerBus.waitUntilEmpty()
+      } finally {
+        sc.removeSparkListener(listener)
+        sc.removeSparkListener(endListener)
+      }
+      val jobs = listener.snapshot
+      assert(jobs.size == 2, s"Expected two executions, got $jobs")
+      jobs.foreach { case (executionId, started) =>
+        assert(jobsAtEnd.synchronized(jobsAtEnd.get(executionId)).contains(started),
+          s"Expected execution $executionId to keep the entries of its jobs $started until it " +
+            s"ended, got ${jobsAtEnd.synchronized(jobsAtEnd.get(executionId))}")
+        eventually(timeout(1.minute)) {
+          assert(!sc.dagScheduler.activeQueryToJobs.containsKey(executionId))
+        }
+      }
+    }
+  }
+
   test("forced CTE bodies with subqueries share one inner AQE") {
     withCTEReuseEnabled {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
@@ -1441,25 +1593,44 @@ class CTEReuseWithAQESuite
       ApplyColumnarRulesAndInsertTransitions(Nil, outputsColumnar = false).apply(stage)
     assert(withTransitions.isInstanceOf[ColumnarToRowExec], withTransitions.treeString)
   }
+
+  test("a CTE reuse stage executes columnar against the inner plan's executed root") {
+    val range = spark.range(1).queryExecution
+    val leaf = ColumnarOnlyLeafExec(range.analyzed.output)
+    leaf.setLogicalLink(range.analyzed)
+    val inner = AdaptiveSparkPlanExec(
+      leaf, AdaptiveExecutionContext(spark, range), Nil, isSubquery = true)
+    val stage = CTEReuseQueryStageExec(0, inner, leaf.output, leaf.canonicalized)
+    val values = stage.executeColumnar().mapPartitions { batches =>
+      batches.flatMap(_.rowIterator().asScala.map(_.getLong(0)))
+    }.collect()
+    assert(values.toSeq.sorted == ColumnarOnlyLeafExec.values)
+    // Executing the inner adaptive plan itself would drive it again and leave a result stage at
+    // its root, which every other reference to the CTE would then read.
+    assert(inner.executedPlan.isInstanceOf[ColumnarOnlyLeafExec], inner.executedPlan.treeString)
+  }
 }
 
-/** Orders the events of the dropped-CTE-stage test across its query and task threads. */
+/** Orders the events of the dropped-CTE-stage tests across their query and task threads. */
 object DroppedCTEStageSync {
   private val timeoutSeconds = 60L
   @volatile var stagesSeen = new CountDownLatch(1)
   @volatile var stagesDropped = new CountDownLatch(1)
   @volatile var failureSeen = new CountDownLatch(1)
+  @volatile var queryReturned = new CountDownLatch(1)
 
   def reset(): Unit = {
     stagesSeen = new CountDownLatch(1)
     stagesDropped = new CountDownLatch(1)
     failureSeen = new CountDownLatch(1)
+    queryReturned = new CountDownLatch(1)
   }
 
   def releaseAll(): Unit = {
     stagesSeen.countDown()
     stagesDropped.countDown()
     failureSeen.countDown()
+    queryReturned.countDown()
   }
 
   def await(latch: CountDownLatch, what: String): Unit = {
@@ -1479,12 +1650,55 @@ object DroppedCTEStageSync {
   }
 }
 
-/** A leaf that only produces columnar batches, like the root of a columnar plugin's plan. */
+/**
+ * A leaf that only produces columnar batches, like the root of a columnar plugin's plan. Its one
+ * long column holds [[ColumnarOnlyLeafExec.values]], one batch per partition.
+ */
 case class ColumnarOnlyLeafExec(output: Seq[Attribute]) extends LeafExecNode {
   override def supportsColumnar: Boolean = true
   override def supportsRowBased: Boolean = false
   override protected def doExecute(): RDD[InternalRow] =
     throw new UnsupportedOperationException("columnar only")
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
-    throw new UnsupportedOperationException("not executed in this test")
+    sparkContext.parallelize(ColumnarOnlyLeafExec.values, 2).mapPartitions { it =>
+      val values = it.toArray
+      val vector = new OnHeapColumnVector(values.length, LongType)
+      values.zipWithIndex.foreach { case (v, i) => vector.putLong(i, v) }
+      Iterator.single(new ColumnarBatch(Array(vector), values.length))
+    }
+}
+
+object ColumnarOnlyLeafExec {
+  val values: Seq[Long] = Seq(3L, 5L, 7L, 11L)
+}
+
+/** Records the job artifact state seen on the CTE pool threads, see the cost evaluator below. */
+object CTEArtifactStateRecorder {
+  private val recorded = new ConcurrentLinkedQueue[Option[JobArtifactState]]()
+
+  def reset(): Unit = recorded.clear()
+
+  def record(): Unit = {
+    if (Thread.currentThread().getName.startsWith("CTEReuseInnerAQE")) {
+      recorded.add(JobArtifactSet.getCurrentJobArtifactState)
+    }
+  }
+
+  def states: Seq[Option[JobArtifactState]] = recorded.asScala.toSeq
+}
+
+/**
+ * Ranks plans as AQE does by default, and records the job artifact state of each call made on a
+ * CTE pool thread, where a shared inner CTE plan replans.
+ */
+class CTEArtifactStateRecordingCostEvaluator extends CostEvaluator {
+  // Built, like AQE's default evaluator, when the adaptive plan is, under the session's conf.
+  private val default = SimpleCostEvaluator(
+    SQLConf.get.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
+    SQLConf.get.costEvaluatorCountLocalSortEnabled)
+
+  override def evaluateCost(plan: SparkPlan): Cost = {
+    CTEArtifactStateRecorder.record()
+    default.evaluateCost(plan)
+  }
 }
