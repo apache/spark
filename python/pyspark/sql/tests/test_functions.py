@@ -19,19 +19,26 @@ import datetime
 import io
 import math
 import re
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from enum import Enum
 from inspect import getmembers, isclass, isfunction
 from itertools import chain
 
-from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
+from pyspark.errors import (
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+    SparkRuntimeException,
+)
 from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import Row, Window, types
 from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
+from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
 from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual, have_numpy
@@ -4034,6 +4041,31 @@ class FunctionsTestsMixin:
                 errorClass="INVALID_TYPE",
                 messageParameters={"arg_name": parameters[i], "arg_type": expected_type[i]},
             )
+
+    def test_protobuf_descriptor_file_not_found(self):
+        # The descriptor file is read before the JVM or the Connect server is involved.
+        path = "/nonexistent/path/file.desc"
+        for func in [from_protobuf, to_protobuf]:
+            with self.subTest(func=func.__name__):
+                with self.assertRaises(PySparkRuntimeError) as pe:
+                    func("value", "SimpleMessage", descFilePath=path)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+                    messageParameters={"filePath": path},
+                )
+
+    def test_protobuf_descriptor_file_read_failed(self):
+        # Reading a directory raises IsADirectoryError, an OSError other than FileNotFoundError.
+        with tempfile.TemporaryDirectory() as path:
+            for func in [from_protobuf, to_protobuf]:
+                with self.subTest(func=func.__name__):
+                    with self.assertRaises(PySparkRuntimeError) as pe:
+                        func("value", "SimpleMessage", descFilePath=path)
+                    self.assertEqual(
+                        pe.exception.getCondition(), "PROTOBUF_DESCRIPTOR_FILE_READ_FAILED"
+                    )
+                    self.assertEqual(pe.exception.getMessageParameters()["filePath"], path)
 
     def test_enum_literals(self):
         class IntEnum(Enum):
