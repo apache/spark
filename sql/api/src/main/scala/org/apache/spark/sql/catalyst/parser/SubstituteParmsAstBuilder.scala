@@ -33,7 +33,22 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   private val positionalParams = mutable.ListBuffer[Int]()
   private val namedParamLocations = mutable.Map[String, mutable.ListBuffer[ParameterLocation]]()
   private val positionalParamLocations = mutable.ListBuffer[ParameterLocation]()
+  private val conditionalNamedParamLocations =
+    mutable.ListBuffer[ConditionalNamedParameterLocation]()
+  private val parameterEnds = mutable.Set[Int]()
   private var hasOptionalReferences = false
+
+  private def recordNamedParameter(
+      paramName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      optional: Boolean = false): Unit = {
+    namedParams += paramName
+    val locations =
+      namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
+    locations += ParameterLocation(startIndex, stopIndex, optional)
+    parameterEnds += stopIndex
+  }
 
   /**
    * Extract parameter location information from a parse context. This method traverses the parse
@@ -45,6 +60,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     positionalParams.clear()
     namedParamLocations.clear()
     positionalParamLocations.clear()
+    conditionalNamedParamLocations.clear()
+    parameterEnds.clear()
     hasOptionalReferences = false
 
     // Visit the context to collect parameters and their locations
@@ -53,7 +70,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     ParameterLocationInfo(
       namedParamLocations.view.mapValues(_.toList).toMap,
       positionalParamLocations.toList,
-      hasOptionalReferences)
+      hasOptionalReferences,
+      conditionalNamedParamLocations.toList)
   }
 
   // The `?` of an optional reference (`x?`) is not a parameter marker. Record that the statement
@@ -82,13 +100,16 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     positionalParams.clear()
     namedParamLocations.clear()
     positionalParamLocations.clear()
+    conditionalNamedParamLocations.clear()
+    parameterEnds.clear()
 
     // Visit the context to collect parameters and their locations
     visit(ctx)
 
     val locations = ParameterLocationInfo(
       namedParamLocations.view.mapValues(_.toList).toMap,
-      positionalParamLocations.toList)
+      positionalParamLocations.toList,
+      conditionalNamedParameterLocations = conditionalNamedParamLocations.toList)
     val hasPositionalParams = positionalParamLocations.nonEmpty
     val hasNamedParams = namedParamLocations.nonEmpty
 
@@ -103,15 +124,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx) {
       // Named parameters use simpleIdentifier, so .getText() is correct.
       val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
-      namedParams += paramName
-
-      // Calculate the location of the entire parameter (including the colon, and the `?` of an
-      // optional named parameter marker)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      val locations =
-        namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
-      locations += ParameterLocation(startIndex, stopIndex, optional = ctx.optionalMarker != null)
+      recordNamedParameter(paramName, startIndex, stopIndex, optional = ctx.optionalMarker != null)
 
       null // Return value not used
     }
@@ -128,6 +143,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Question mark is single character, so stopIndex = startIndex + 1
       val stopIndex = startIndex + 1
       positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+      parameterEnds += stopIndex
 
       null // Return value not used
     }
@@ -141,14 +157,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx) {
       // Named parameters use simpleIdentifier, so .getText() is correct.
       val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
-      namedParams += paramName
-
-      // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      val locations =
-        namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
-      locations += ParameterLocation(startIndex, stopIndex)
+      recordNamedParameter(paramName, startIndex, stopIndex)
 
       null // Return value not used
     }
@@ -168,8 +179,32 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = startIndex + 1
       positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+      parameterEnds += stopIndex
 
       null // Return value not used
+    }
+
+  /**
+   * Record a single-token extraction path after a parameter as a conditional marker. Once the
+   * preceding parameter is replaced, string-literal coalescing treats the path as another marker;
+   * other replacements retain the extraction. Whitespace and comments between them are hidden.
+   */
+  override def visitSemiStructuredExtract(ctx: SemiStructuredExtractContext): AnyRef =
+    withOrigin(ctx) {
+      visit(ctx.col)
+      visit(ctx.path)
+
+      val precedingParameterEnd = ctx.col.getStop.getStopIndex + 1
+      if (parameterEnds.contains(precedingParameterEnd) &&
+          ctx.path.getStart.getTokenIndex == ctx.path.getStop.getTokenIndex) {
+        val startIndex = ctx.COLON().getSymbol.getStartIndex
+        val stopIndex = ctx.path.getStop.getStopIndex + 1
+        conditionalNamedParamLocations += ConditionalNamedParameterLocation(
+          ctx.path.getText, ParameterLocation(startIndex, stopIndex), precedingParameterEnd)
+        parameterEnds += stopIndex
+      }
+
+      null
     }
 
   /**
@@ -209,6 +244,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterMarkerRule(ctx)
       case ctx: PositionalParameterMarkerRuleContext =>
         visitPositionalParameterMarkerRule(ctx)
+      case ctx: SemiStructuredExtractContext =>
+        visitSemiStructuredExtract(ctx)
       case ctx: SingleStringLitContext =>
         visitSingleStringLit(ctx)
       case ctx: ColumnReferenceContext =>
@@ -269,13 +306,22 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 case class ParameterLocationInfo(
     namedParameterLocations: Map[String, List[ParameterLocation]],
     positionalParameterLocations: List[ParameterLocation],
-    hasOptionalReferences: Boolean = false) {
+    hasOptionalReferences: Boolean = false,
+    conditionalNamedParameterLocations: List[ConditionalNamedParameterLocation] = Nil) {
 
-  def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty
+  def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty &&
+    conditionalNamedParameterLocations.isEmpty
   def nonEmpty: Boolean = !isEmpty
   def totalCount: Int =
-    namedParameterLocations.values.map(_.size).sum + positionalParameterLocations.size
+    namedParameterLocations.values.map(_.size).sum + positionalParameterLocations.size +
+      conditionalNamedParameterLocations.size
 }
+
+/** A named marker that is active only when the preceding marker becomes a string literal. */
+case class ConditionalNamedParameterLocation(
+    name: String,
+    location: ParameterLocation,
+    precedingParameterEnd: Int)
 
 /**
  * Data class representing a parameter location in the source text.

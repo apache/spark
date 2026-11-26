@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 
@@ -31,6 +32,54 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val ParameterSubstitution(result, _, _, _) =
       ParameterHandler.substituteParameters("SELECT :param1", context)
     assert(result === "SELECT 42")
+  }
+
+  test("ParameterHandler - adjacent named parameter substitution") {
+    val context = NamedParameterContext(Map(
+      "first" -> Literal("first"),
+      "second" -> Literal("second"),
+      "third" -> Literal("third")))
+    val cases = Seq(
+      "SELECT :first:second" -> "SELECT 'first' 'second'",
+      "SELECT :first :second" -> "SELECT 'first' 'second'",
+      "SELECT :first\n:second" -> "SELECT 'first'\n'second'",
+      "SELECT :first/**/:second" -> "SELECT 'first'/**/'second'",
+      "SELECT :first:second:third" -> "SELECT 'first' 'second' 'third'")
+
+    cases.foreach { case (sql, expected) =>
+      val ParameterSubstitution(result, _, mapper, _) =
+        ParameterHandler.substituteParameters(sql, context)
+      assert(result === expected)
+      assert(mapper.mapToOriginal(result.indexOf("'second'")) === sql.indexOf(":second"))
+    }
+  }
+
+  test("ParameterHandler - adjacent marker must be bound after a string parameter") {
+    val sql = "SELECT :first:second"
+    checkError(
+      exception = intercept[AnalysisException] {
+        ParameterHandler.substituteParameters(
+          sql, NamedParameterContext(Map("first" -> Literal("first"))))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "second"),
+      context = ExpectedContext(fragment = ":second", start = 13, stop = 19))
+  }
+
+  test("ParameterHandler - extraction paths are not parameter markers") {
+    val context = NamedParameterContext(Map(
+      "json" -> Literal("{\"a\":{\"b\":1}}"),
+      "array" -> Literal("[1]"),
+      "value" -> Literal("{\"field\":1}")))
+    val ParameterSubstitution(result, _, _, _) = ParameterHandler.substituteParameters(
+      "SELECT :json:a.b, :array:[0], parse_json(:value):field, v:field FROM t", context)
+    assert(result ===
+      "SELECT '{\"a\":{\"b\":1}}':a.b, '[1]':[0], " +
+        "parse_json('{\"field\":1}'):field, v:field FROM t")
+
+    val ParameterSubstitution(variantResult, _, _, _) = new SubstituteParamsParser().substitute(
+      "SELECT :variant:a", Map("variant" -> "PARSE_JSON('{\"a\":1}')"))
+    assert(variantResult === "SELECT PARSE_JSON('{\"a\":1}'):a")
   }
 
   test("ParameterHandler - basic positional parameter substitution") {
