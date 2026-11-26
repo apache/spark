@@ -660,10 +660,10 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
 
   test("SPARK-60610: the frozen bucketing decision changes a bucketed scan's canonical form " +
     "but not a non-bucketed scan's") {
-    // The bucketing decision is frozen into disableBucketedScan at planning, so it feeds sameResult.
+    // disableBucketedScan freezes the bucketing decision at planning, so it feeds sameResult.
     // For a bucketed relation the decision changes outputPartitioning, so a scan planned with
     // bucketing on and one planned with it off must not be sameResult, or exchange/broadcast reuse
-    // could swap a bucketed scan for a non-bucketed one. For a non-bucketed relation the decision is
+    // could swap a bucketed scan for a non-bucketed one. For a non-bucketed relation it is
     // false either way, so the two scans must stay sameResult, which dynamic partition pruning
     // relies on to reuse a broadcast across a config change. Each scan is planned under its own
     // config rather than copied, so the test exercises the real planning path.
