@@ -1527,6 +1527,34 @@ class JDBCSuite extends SharedSparkSession {
       """CAST(TRUNC("a") AS INTEGER)""")
   }
 
+  test("SPARK-58372: casts between arrays follow the rules for their elements") {
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    def cast(from: DataType, to: DataType): V2Cast = new V2Cast(FieldReference("a"), from, to)
+    val doublesToInts = cast(ArrayType(DoubleType), ArrayType(IntegerType))
+
+    Seq(doublesToInts, cast(ArrayType(DecimalType(10, 2)), ArrayType(LongType)),
+      cast(ArrayType(ArrayType(DoubleType)), ArrayType(ArrayType(IntegerType))),
+      cast(ArrayType(TimestampType), ArrayType(LongType))
+    ).foreach(c => assert(postgres.compileExpression(c).isEmpty, s"$c"))
+    assert(postgres.compileExpression(cast(ArrayType(DecimalType(10, 0)), ArrayType(IntegerType)))
+      .get === """CAST("a" AS INTEGER[])""")
+    assert(postgres.compileExpression(cast(ArrayType(DoubleType), ArrayType(DecimalType(10, 2))))
+      .get === """CAST("a" AS NUMERIC(10,2)[])""")
+    withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+      assert(postgres.compileExpression(doublesToInts).get === """CAST("a" AS INTEGER[])""")
+    }
+
+    val castAlreadyTruncates = new JdbcDialect {
+      override def canHandle(url: String): Boolean = false
+      override def getJDBCType(dt: DataType): Option[JdbcType] =
+        Some(JdbcType("INTEGER[]", java.sql.Types.ARRAY))
+      override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+        Some(expr)
+    }
+    assert(castAlreadyTruncates.compileExpression(doublesToInts).get ===
+      """CAST("a" AS INTEGER[])""")
+  }
+
   test("SPARK-58372: fractional casts to unmapped SMALLINT and BIGINT targets use SQL type names") {
     val decimal = DecimalType(10, 0)
     val toBigint = new V2Cast(FieldReference("a"), decimal, LongType)
@@ -1559,7 +1587,8 @@ class JDBCSuite extends SharedSparkSession {
       (DecimalType(6, 2), ShortType, true), (DecimalType(5, 0), ShortType, false),
       (DecimalType(11, 2), IntegerType, true), (DecimalType(10, 0), IntegerType, false),
       (DecimalType(18, 0), LongType, true), (DecimalType(20, 2), LongType, true),
-      (DecimalType(20, 0), LongType, false), (DecimalType(38, 10), LongType, false)
+      (DecimalType(19, 0), LongType, false), (DecimalType(20, 0), LongType, false),
+      (DecimalType(38, 10), LongType, false)
     ).foreach { case (from, to, fits) =>
       val value = if (from.scale == 0) "`a`" else "TRUNCATE(`a`, 0)"
       val expected = if (fits) Some(s"CAST($value AS SIGNED)") else None
