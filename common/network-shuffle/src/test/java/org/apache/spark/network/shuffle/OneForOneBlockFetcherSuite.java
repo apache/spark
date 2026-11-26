@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -331,6 +332,54 @@ public class OneForOneBlockFetcherSuite {
     verify(downloadFileManager, never()).registerTempFileToClean(any());
     // closeAndRead() failed, so the buffer must not have been handed off to the listener.
     verify(listener, never()).onBlockFetchSuccess(any(), any());
+  }
+
+  /**
+   * Verifies that when fetching to disk, a failure of the channel's close() during onFailure does
+   * not strand the block: failRemainingBlocks still runs (so the listener is notified) even though
+   * the cleanup error propagates. This matters because the stream callback has already been polled
+   * off the response handler's queue, so a connection teardown cannot notify it again -- if close()
+   * skipped the notification the block would be left outstanding indefinitely.
+   */
+  @Test
+  public void testFetchToDiskFailsBlockWhenChannelCloseThrowsOnFailure() throws IOException {
+    String blockId = "shuffle_0_0_0";
+    String[] blockIds = new String[] { blockId };
+
+    TransportClient client = mock(TransportClient.class);
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+
+    DownloadFileWritableChannel channel = mock(DownloadFileWritableChannel.class);
+    doThrow(new IOException("close boom")).when(channel).close();
+    DownloadFile downloadFile = mock(DownloadFile.class);
+    when(downloadFile.openForWriting()).thenReturn(channel);
+    DownloadFileManager downloadFileManager = mock(DownloadFileManager.class);
+    when(downloadFileManager.createTempFile(any())).thenReturn(downloadFile);
+
+    OneForOneBlockFetcher fetcher = new OneForOneBlockFetcher(
+      client, "app-id", "exec-id", blockIds, listener, conf, downloadFileManager);
+
+    // Respond to the "openBlocks" RPC with a StreamHandle of a single chunk.
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = (RpcResponseCallback) invocation.getArguments()[1];
+      callback.onSuccess(new StreamHandle(123, 1).toByteBuffer());
+      return null;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+
+    // Drive the StreamCallback's onFailure. channel.close() throws, so the cleanup error propagates
+    // out of onFailure, but the block must still be failed first.
+    RuntimeException fetchError = new RuntimeException("stream failed");
+    doAnswer(invocation -> {
+      StreamCallback callback = (StreamCallback) invocation.getArguments()[1];
+      assertThrows(IOException.class, () -> callback.onFailure("stream", fetchError));
+      return null;
+    }).when(client).stream(any(), any(StreamCallback.class));
+
+    fetcher.start();
+
+    // Despite the close() failure, the block was failed (not stranded) and the temp file deleted.
+    verify(listener).onBlockFetchFailure(eq(blockId), any());
+    verify(downloadFile).delete();
   }
 
   /**
