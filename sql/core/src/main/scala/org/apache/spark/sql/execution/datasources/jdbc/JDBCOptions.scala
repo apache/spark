@@ -326,10 +326,9 @@ class JdbcOptionsInWrite(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
-  require(
-    parameters.get(JDBC_TABLE_NAME).isDefined,
-    s"Option '$JDBC_TABLE_NAME' is required. " +
-      s"Option '$JDBC_QUERY_STRING' is not applicable while writing.")
+  if (!parameters.contains(JDBC_TABLE_NAME)) {
+    throw QueryExecutionErrors.jdbcWriteTableOptionMissingError(JDBC_TABLE_NAME)
+  }
 
   val table = parameters(JDBC_TABLE_NAME)
 }

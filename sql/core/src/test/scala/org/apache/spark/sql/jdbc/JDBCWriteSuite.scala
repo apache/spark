@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -335,15 +335,17 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }.getMessage
     assert(e1.contains("Option 'dbtable' or 'query' is required"))
 
-    val e2 = intercept[RuntimeException] {
-      df.write.format("jdbc")
-        .option("url", url1)
-        .options(properties.asScala)
-        .option("query", "select * from TEST.SAVETEST")
-        .save()
-    }.getMessage
-    val msg = "Option 'dbtable' is required. Option 'query' is not applicable while writing."
-    assert(e2.contains(msg))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        df.write.format("jdbc")
+          .option("url", url1)
+          .options(properties.asScala)
+          .option("query", "select * from TEST.SAVETEST")
+          .save()
+      },
+      condition = "JDBC_WRITE_TABLE_OPTION_MISSING",
+      sqlState = Some("42616"),
+      parameters = Map("option" -> "\"dbtable\""))
   }
 
   test("save errors if wrong user/password combination") {
