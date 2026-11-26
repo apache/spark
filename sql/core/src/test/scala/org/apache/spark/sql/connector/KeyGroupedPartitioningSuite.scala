@@ -13095,6 +13095,36 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("FULL OUTER keyed partitioning survives checkpointing non-nullable inputs") {
+    withSQLConf(fullOuterKeyedConfs: _*) {
+      val cols = Array(Column.create("id", IntegerType, false))
+      createTable("fo1", cols, Array(identity("id")))
+      createTable("fo2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.fo1 VALUES (1), (2)")
+      sql("INSERT INTO testcat.ns.fo2 VALUES (2), (3), (4)")
+      val joined = sql("SELECT l.id AS lk, r.id AS rk FROM testcat.ns.fo1 l " +
+        "FULL OUTER JOIN testcat.ns.fo2 r ON l.id = r.id")
+      val join = collect(joined.queryExecution.executedPlan) { case j: ShuffledJoin => j }.head
+      assert((join.left.output ++ join.right.output).forall(!_.nullable), join)
+      assert(allExchanges(joined.queryExecution.executedPlan).isEmpty)
+      val checkpointed = joined.localCheckpoint()
+      val ps = keyedPartitioningsOf(collect(checkpointed.queryExecution.executedPlan) {
+        case r: RDDScanExec => r
+      })
+      assert(ps.size == 2 && ps.forall(_.numPartitions > 1), checkpointed.queryExecution)
+
+      // The recorded claim must not simplify coalesce(lk, rk) to the formerly non-nullable lk.
+      val byLeft = checkpointed.groupBy("lk").count()
+      checkAnswer(byLeft, Seq(Row(1, 1L), Row(2, 1L), Row(null, 2L)))
+      assert(allExchanges(byLeft.queryExecution.executedPlan).size == 1)
+      val byMerged = checkpointed.groupBy(
+        org.apache.spark.sql.functions.coalesce(col("lk"), col("rk"))).count()
+      checkAnswer(byMerged, Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L), Row(4, 1L)))
+      assert(allExchanges(byMerged.queryExecution.executedPlan).isEmpty)
+      assert(satisfiesRequirements(byMerged.queryExecution.executedPlan))
+    }
+  }
+
   private val fullOuterKeyedConfs = Seq(
     SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
     SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",

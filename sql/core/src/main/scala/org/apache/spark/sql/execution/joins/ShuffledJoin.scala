@@ -144,9 +144,19 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * A null-aware side may have spread its NULL-keyed rows, and each of those has a NULL in its
    * coalesced key, so the output is null-aware whenever either side is.
    *
-   * Grouped keyed layouts also keep their actual partition keys and order when both sides agree.
-   * Their expressions must be columns or matching unary transforms of columns. For a transform,
-   * coalesce its arguments, not its results: a transform need not return NULL on a padded row.
+   * Keyed layouts keep their partition keys when:
+   *  - both sides are grouped, so each declared key belongs to just one partition;
+   *  - their expressions still describe those keys, excluding layouts reduced onto a key space
+   *    that neither transform describes;
+   *  - each expression is a column of its input or a unary transform directly over one;
+   *  - KeyedShuffleSpec finds corresponding join-key positions, matching transforms, and the
+   *    same partition-key values and types in the same physical partition order. Compare the
+   *    reported layouts directly: createShuffleSpec can project and regroup them.
+   * For a transform f, report f(coalesce(l, r)), not coalesce(f(l), f(r)): f(NULL) need not be
+   * NULL, but coalesce(l, r) selects the unmatched row's own column before f is applied.
+   * Keep either side's collapse and unknown-key markers, since FULL OUTER retains unmatched
+   * rows, including keys outside the declared set. Such rows remain grouped by their whole key,
+   * but the unknown-key marker prevents claiming that subsets of that key are grouped too.
    *
    * Every sound pair of the children's members is reported, each in the two argument orders of
    * `coalescedKeys`, in a `PartitioningCollection`.
