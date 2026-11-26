@@ -688,8 +688,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // The computed result is the result of every outer row when the output of the top
         // Aggregate reads nothing of the one row below it. That holds for a grouped top Aggregate
         // too, which reads its grouping keys only to form its group: the result is computed only
-        // over a correlated lower Aggregate without grouping expressions, which returns one row
-        // for every outer row, so the top sees one group, e.g. COUNT(*) is 1.
+        // over a chain of Projects and Aggregates above a correlated lower Aggregate without
+        // grouping expressions, which returns one row for every outer row, as does each node of
+        // the chain over it, so the top sees one group, e.g. COUNT(*) is 1.
         lazy val countBugResultForEveryRow = sub match {
           case agg: Aggregate => agg.aggregateExpressions.forall(_.references.isEmpty)
           case _ => false
@@ -1039,9 +1040,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * values, and then its evaluate expression; a FILTER keeps the initial values when its condition
    * does not hold. COLLECT_LIST and COLLECT_SET are computed directly where their arguments over
    * the row are literals, e.g. `m + 1` or `struct(m)` for a value `m` of the row. DISTINCT
-   * does not change the result over a single row. Returns None for other functions, and if the
-   * result does not keep the data type and nullability of `ae`. A result that depends on a
-   * non-deterministic argument or FILTER is not a literal, and is not taken by the caller.
+   * does not change the result over a single row. Returns None for other functions, including
+   * user-defined ones, and if the result does not keep the data type and nullability of `ae`. A
+   * result that depends on a non-deterministic argument or FILTER is not a literal, and is not
+   * taken by the caller.
    */
   private def evalAggregateOnOneRow(
       ae: AggregateExpression,
@@ -1052,6 +1054,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val f = bind(ae.aggregateFunction).asInstanceOf[AggregateFunction]
     val filter = ae.filter.map(c => tryEvalExpr(bind(c)))
     val result = f match {
+      // A user-defined function, e.g. a typed Aggregator, runs user code.
+      case _ if isUserDefinedAggregate(f) => None
       case f: DeclarativeAggregate =>
         def bindBuffer(e: Expression, values: Seq[Expression]): Expression = {
           val buffer = AttributeMap(f.aggBufferAttributes.zip(values))

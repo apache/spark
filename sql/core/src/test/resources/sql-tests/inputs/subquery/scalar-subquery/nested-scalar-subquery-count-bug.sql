@@ -345,6 +345,25 @@ select a1, ( select collect_list(struct(m)) from
   (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
+-- with a lower function without a default result whose result over no rows, NULL, is computed
+-- through a fresh buffer
+select a1, ( select count(*) filter (where s is null)
+  from (select approx_percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) filter (where s is null)
+  from (select percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+-- with outer values that compare equal but differ, -0.0 and 0.0, correlated through a string
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1;
+
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('-0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1;
+
 -- with the legacy behavior, which does not compute the result for an outer row without matching
 -- rows before decorrelation
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true;

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable, TaskContext}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, EqualTo, EvalOnlyWhen,
@@ -40,6 +40,13 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+
+// Counts the calls of the Aggregator of the SPARK-60501 test of a user-defined aggregate function
+// that are made outside of tasks.
+private object Spark60501DriverCalls {
+  val count = new java.util.concurrent.atomic.AtomicInteger(0)
+  def note(): Unit = if (TaskContext.get() == null) count.incrementAndGet()
+}
 
 class SubquerySuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -4069,14 +4076,16 @@ class SubquerySuite extends SharedSparkSession
       "the query is optimized") {
     // A Scala Aggregator with a zero of 0 returns 0, not NULL, on empty input. k = 2 has no
     // matching rows. A top aggregate that needs its value keeps the count bug handling of before,
-    // and COUNT(*), which does not, gets the fix.
+    // and COUNT(*), which does not, gets the fix. The Aggregator is called only in tasks, not on
+    // the driver while the query is optimized.
+    Spark60501DriverCalls.count.set(0)
     withTempView("a", "b") {
       withUserDefinedFunction("spark60501_sum0" -> true) {
         spark.udf.register("spark60501_sum0", functions.udaf(new Aggregator[Long, Long, Long] {
-          def zero: Long = 0L
-          def reduce(b: Long, a: Long): Long = b + a
-          def merge(b1: Long, b2: Long): Long = b1 + b2
-          def finish(r: Long): Long = r
+          def zero: Long = { Spark60501DriverCalls.note(); 0L }
+          def reduce(b: Long, a: Long): Long = { Spark60501DriverCalls.note(); b + a }
+          def merge(b1: Long, b2: Long): Long = { Spark60501DriverCalls.note(); b1 + b2 }
+          def finish(r: Long): Long = { Spark60501DriverCalls.note(); r }
           def bufferEncoder: Encoder[Long] = Encoders.scalaLong
           def outputEncoder: Encoder[Long] = Encoders.scalaLong
         }))
@@ -4088,6 +4097,7 @@ class SubquerySuite extends SharedSparkSession
         checkAnswer(sql("SELECT a.k, (SELECT COUNT(*) FROM " +
           "(SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k)) FROM a"),
           Seq(Row(1, 1), Row(2, 1)))
+        assert(Spark60501DriverCalls.count.get == 0)
       }
     }
   }

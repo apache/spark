@@ -1745,6 +1745,82 @@ Sort [a1#x ASC NULLS FIRST], true
 
 
 -- !query
+select a1, ( select count(*) filter (where s is null)
+  from (select approx_percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#xL]
+   :  +- Aggregate [count(1) FILTER (WHERE isnull(s#x)) AS count(1) FILTER (WHERE (s IS NULL))#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [approx_percentile(b2#x, cast(0.5 as double), 10000, 0, 0) AS s#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select a1, ( select count(*) filter (where s is null)
+  from (select percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, scalar-subquery#x [a1#x] AS a#xL]
+   :  +- Aggregate [count(1) FILTER (WHERE isnull(s#x)) AS count(1) FILTER (WHERE (s IS NULL))#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [percentile(b2#x, cast(0.5 as double), 1, 0, 0, false) AS s#x]
+   :           +- Filter (outer(a1#x) = b1#x)
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [b1#x, b2#x])
+   :                    +- Project [cast(col1#x as int) AS b1#x, cast(col2#x as int) AS b2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [a1#x, a2#x])
+         +- Project [cast(col1#x as int) AS a1#x, cast(col2#x as int) AS a2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1
+-- !query analysis
+Sort [d#x ASC NULLS FIRST], true
++- Project [cast(d#x as string) AS d#x, scalar-subquery#x [d#x] AS c#xL]
+   :  +- Aggregate [count(1) FILTER (WHERE isnull(m#x)) AS count(1) FILTER (WHERE (m IS NULL))#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(v#x) AS m#x]
+   :           +- Filter (s#x = cast(outer(d#x) as string))
+   :              +- SubqueryAlias b
+   :                 +- LocalRelation [s#x, v#x]
+   +- SubqueryAlias o
+      +- LocalRelation [d#x]
+
+
+-- !query
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('-0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1
+-- !query analysis
+Sort [d#x ASC NULLS FIRST], true
++- Project [cast(d#x as string) AS d#x, scalar-subquery#x [d#x] AS c#xL]
+   :  +- Aggregate [count(1) FILTER (WHERE isnull(m#x)) AS count(1) FILTER (WHERE (m IS NULL))#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(v#x) AS m#x]
+   :           +- Filter (s#x = cast(outer(d#x) as string))
+   :              +- SubqueryAlias b
+   :                 +- LocalRelation [s#x, v#x]
+   +- SubqueryAlias o
+      +- LocalRelation [d#x]
+
+
+-- !query
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true
 -- !query analysis
 SetCommand (spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior,Some(true))

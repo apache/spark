@@ -874,6 +874,50 @@ struct<a1:int,a:array<struct<m:int>>>
 
 
 -- !query
+select a1, ( select count(*) filter (where s is null)
+  from (select approx_percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+select a1, ( select count(*) filter (where s is null)
+  from (select percentile(b2, 0.5) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1
+-- !query schema
+struct<d:string,c:bigint>
+-- !query output
+-0.0	1
+0.0	0
+
+
+-- !query
+select cast(o.d as string) d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values ('-0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
+from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1
+-- !query schema
+struct<d:string,c:bigint>
+-- !query output
+-0.0	0
+0.0	1
+
+
+-- !query
 set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true
 -- !query schema
 struct<key:string,value:string>
