@@ -72,7 +72,6 @@ ignored_file_patterns = (
     "/.github/workflows/build_python_pypy3.10.yml",
     "/.github/workflows/build_rockdb_as_ui_backend.yml",
     "/.github/workflows/build_scala213.yml",
-    "/.github/workflows/build_sparkr_window.yml",
     "/.github/workflows/build_uds.yml",
     "/.github/workflows/maven_test.yml",
     "/.github/workflows/python_hosted_runner_test.yml",
@@ -136,7 +135,6 @@ ignored_file_patterns = (
     "/bin/beeline*",
     "/bin/spark-connect-shell",
     "/bin/spark-pipelines",
-    "/bin/sparkR*",
     # Default config templates. Some CI jobs copy log4j2.properties.template
     # only to reduce log noise; they do not test these templates.
     "/conf/",
@@ -244,7 +242,6 @@ class Module(object):
         shell_script_test_goals: Sequence[ShellScriptTestGoal] = (),
         excluded_python_implementations=(),
         test_tags=(),
-        should_run_r_tests=False,
     ):
         """
         Define a new module.
@@ -269,7 +266,6 @@ class Module(object):
             strings returned by Python's `platform.python_implementation()`.
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
-        :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
@@ -291,7 +287,6 @@ class Module(object):
         self.shell_script_test_goals = shell_script_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
-        self.should_run_r_tests = should_run_r_tests
 
         self.dependent_modules = set()
         for dep in dependencies:
@@ -1915,17 +1910,6 @@ pyspark_pipelines = Module(
     ],
 )
 
-sparkr = Module(
-    name="sparkr",
-    dependencies=[hive, mllib],
-    source_file_regexes=[
-        "R/",
-        "dev/spark-test-image/sparkr/",
-    ],
-    should_run_r_tests=True,
-)
-
-
 docs = Module(
     name="docs",
     dependencies=[],
@@ -1976,18 +1960,6 @@ lint_js = Module(
         r"dev/spark-test-image/lint/",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
-)
-
-lint_r = Module(
-    name="lint-r",
-    dependencies=[],
-    source_file_regexes=[
-        # dev/lint-r lints R/pkg and, if needed, installs SparkR from R/.
-        "R/",
-        r"dev/lint-r(\.R)?$",
-        "dev/spark-test-image/lint/",
-    ],
-    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-r")],
 )
 
 yarn = Module(
@@ -2059,7 +2031,6 @@ root = Module(
     shell_script_test_goals=list(
         itertools.chain.from_iterable(m.shell_script_test_goals for m in all_modules)
     ),
-    should_run_r_tests=True,
 )
 
 

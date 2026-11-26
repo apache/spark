@@ -87,14 +87,7 @@ local-1430917381535_2
 local-1430917381536
 local-1642039451826
 eventlog_v2_local-1766844910796
-DESCRIPTION
-NAMESPACE
 test_support/*
-.*\.Rd
-help/*
-html/*
-INDEX
-.lintr
 gen-java.*
 .*\.avpr
 .*\.parquet

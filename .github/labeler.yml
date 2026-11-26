@@ -184,7 +184,6 @@ KUBERNETES:
 ML:
   - changed-files:
     - any-glob-to-any-file: [
-        '**/*mllib_*.R',
         '**/ml/**/*',
         ]
 
@@ -214,14 +213,6 @@ PYTHON:
         '**/python/**/*',
         'bin/pyspark*',
         'pyproject.toml',
-        ]
-
-R:
-  - changed-files:
-    - any-glob-to-any-file: [
-        '**/R/**/*',
-        '**/r/**/*',
-        'bin/sparkR*',
         ]
 
 SCHEDULER:
@@ -265,15 +256,6 @@ SQL:
         '!python/**/streaming/**/*',
         ]
     - any-glob-to-any-file: [
-        '**/*catalog.R',
-        '**/*column.R',
-        '**/*functions.R',
-        '**/*group.R',
-        '**/*schema.R',
-        '**/*SQL*.R',
-        '**/*types.R',
-        '**/*WindowSpec.R',
-        '**/DataFrame.R',
         'bin/beeline*',
         'bin/spark-sql*',
         'common/config/**/sql.textproto',
@@ -287,7 +269,6 @@ SQL:
 STRUCTURED STREAMING:
   - changed-files:
     - any-glob-to-any-file: [
-        '**/*streaming.R',
         '**/sql/**/streaming/**/*',
         'connector/kafka-0-10-sql/**/*',
         'connector/kafka-0-10-token-provider/**/*',
@@ -323,7 +304,6 @@ WINDOWS:
   - changed-files:
     - any-glob-to-any-file: [
         '**/*.cmd',
-        'R/pkg/tests/fulltests/test_Windows.R',
         ]
 
 YARN:

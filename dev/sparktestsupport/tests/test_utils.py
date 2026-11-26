@@ -41,7 +41,7 @@ class DetermineModulesForFilesTests(unittest.TestCase):
         cases = {
             "docs/js/main.js": {modules.docs, modules.lint_js},
             "dev/lint-js": {modules.lint_js},
-            "dev/spark-test-image/lint/Dockerfile": {modules.lint_js, modules.lint_r},
+            "dev/spark-test-image/lint/Dockerfile": {modules.lint_js},
             "ui-test/tests/__snapshots__/utils.test.js.snap": {modules.lint_js},
             "ui-test/package.json": set(),
         }
@@ -52,22 +52,6 @@ class DetermineModulesForFilesTests(unittest.TestCase):
             modules.lint_js,
             determine_modules_for_files(["python/docs/source/_static/copybutton.js"]),
         )
-
-    def test_lint_r_module_selection(self):
-        self.assertIn(
-            modules.ShellScriptTestGoal("dev/lint-r"),
-            determine_shell_script_test_goals([modules.root], modules.TestStage.PRE_BUILD),
-        )
-        cases = {
-            "R/pkg/R/DataFrame.R": {modules.sparkr, modules.lint_r},
-            "R/pkg/.lintr": {modules.sparkr, modules.lint_r},
-            "dev/lint-r": {modules.lint_r},
-            "dev/lint-r.R": {modules.lint_r},
-            "examples/src/main/r/dataframe.R": {modules.examples},
-        }
-        for filename, expected in cases.items():
-            with self.subTest(filename=filename):
-                self.assertEqual(determine_modules_for_files([filename]), expected)
 
 
 class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
@@ -114,13 +98,12 @@ class DetermineModulesToTestTests(unittest.TestCase):
             "pyspark-structured-streaming-connect",
             "pyspark-testing",
             "repl",
-            "sparkr",
             "sql",
             "sql-kafka-0-10",
         }
         for changed, deduplicated in (
             ([modules.sql], True),
-            ([modules.sparkr, modules.sql], False),
+            ([modules.repl, modules.sql], False),
         ):
             with self.subTest(changed=changed, deduplicated=deduplicated):
                 result = determine_modules_to_test(changed, deduplicated=deduplicated)
@@ -162,7 +145,6 @@ class DetermineModulesToTestTests(unittest.TestCase):
             "pyspark-testing",
             "repl",
             "root",
-            "sparkr",
             "sql",
             "sql-kafka-0-10",
             "streaming",
