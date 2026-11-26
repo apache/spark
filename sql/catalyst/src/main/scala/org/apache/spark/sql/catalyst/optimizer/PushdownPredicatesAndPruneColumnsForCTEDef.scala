@@ -191,12 +191,10 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
    * projection aliases, through grouping-key aliases with float/double grouping keys normalized
    * as `pushBelowAggregate` does, positionally into each branch (`Union`), and unchanged
    * through operators that pass the referenced attributes verbatim (`Join`, `Window`, and
-   * output-preserving unary nodes like `Filter`, `Sort`, `Repartition`). The descent is recursive
-   * because the filter can end up several operators down -- in particular between the projections
-   * `PushPredicateThroughNonJoin` splits a `Project` into for expensive projected expressions.
-   * Descent stops at operators that remap attributes in other ways (e.g. `Generate`, `Expand`):
-   * if the filter cannot be located, the input plan is returned unchanged, and the caller
-   * re-pushes on top, which is redundant but always semantics-preserving.
+   * output-preserving unary nodes like `Filter`, `Sort`, `Repartition`). Descent stops at
+   * operators that remap attributes in other ways (e.g. `Generate`, `Expand`): if the filter
+   * cannot be located, the input plan is returned unchanged, and the caller re-pushes on top,
+   * which is redundant but always semantics-preserving.
    *
    * Ancestors of the removed filter are rebuilt with `withNewChildren` rather than direct
    * case-class copies so that `TreeNode` tags (e.g. `Project.hiddenOutputTag`, which the

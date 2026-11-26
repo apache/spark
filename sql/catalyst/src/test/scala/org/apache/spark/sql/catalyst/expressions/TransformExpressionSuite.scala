@@ -601,6 +601,41 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(logged.exists(_.contains("(int, string)")), logged)
   }
 
+  test("SPARK-62319: isEvaluableQuietly tells whether a transform is evaluable without logging") {
+    // Classes of their own, since what was logged is shared by the JVM.
+    class QuietUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = IntegerType
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    class QuietBucket extends IntBucketFunction {
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    class QuietInvokeBucket extends IntBucketFunction {
+      def invoke(numBuckets: Int, value: Int): Int = 0
+    }
+    class QuietNotScalar extends BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "quiet_bucket"
+    }
+    class QuietFailing extends QuietBucket {
+      override def inputTypes(): Array[DataType] = throw new IllegalStateException("connector bug")
+    }
+    val appender = new LogAppender("transforms asked quietly")
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.DEBUG)) {
+      assert(bucket(ProduceResultBucketFunction, Literal(7)).isEvaluableQuietly.get)
+      assert(!bucket(new QuietBucket, Literal(7L)).isEvaluableQuietly.get)
+      val udt = BoundReference(0, new QuietUDT, nullable = true)
+      assert(!bucket(new QuietInvokeBucket, udt).isEvaluableQuietly.get)
+      assert(!bucket(new QuietNotScalar, Literal(7)).isEvaluableQuietly.get)
+      assert(bucket(new QuietFailing, Literal(7)).isEvaluableQuietly.isFailure)
+    }
+    assert(appender.loggingEvents.isEmpty,
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage))
+  }
+
   test("SPARK-60027: a function that is not a ScalarFunction is logged once per class") {
     // A class of its own, since the set of classes logged for is shared by the JVM.
     class NotScalar extends BoundFunction {

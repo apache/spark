@@ -36,11 +36,9 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
         case s: ShowTables =>
           keepLegacyShowTablesOutput(s)
         case d: DescribeNamespace =>
-          assert(d.output.length == 2)
-          d.copy(output = Seq(d.output.head.withName("database_description_item"),
-            d.output.last.withName("database_description_value")))
+          keepLegacyDescribeNamespaceOutput(d)
         case s: ShowTableProperties if s.propertyKey.isDefined =>
-           s.copy(output = Seq(s.output.last))
+          keepLegacyShowTablePropertiesOutput(s)
       }
     }
   }
@@ -58,8 +56,30 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Keeps only the value column for keyed SHOW TBLPROPERTIES, preserving its expression ID.
+   * The caller checks `spark.sql.legacy.keepCommandOutputSchema`.
+   */
+  def keepLegacyShowTablePropertiesOutput(
+      showTableProperties: ShowTableProperties): ShowTableProperties = {
+    if (showTableProperties.propertyKey.isDefined) {
+      showTableProperties.copy(output = Seq(showTableProperties.output.last))
+    } else {
+      showTableProperties
+    }
+  }
+
   /** Unconditionally renames the first SHOW TABLES output column to its legacy name. */
   def withLegacyShowTablesDatabaseColumn(output: Seq[Attribute]): Seq[Attribute] = {
     output.head.withName("database") +: output.tail
+  }
+
+  /** Renames namespace output to its legacy names; the caller applies the legacy-schema gate. */
+  def keepLegacyDescribeNamespaceOutput(
+      describeNamespace: DescribeNamespace): DescribeNamespace = {
+    assert(describeNamespace.output.length == 2)
+    describeNamespace.copy(output = Seq(
+      describeNamespace.output.head.withName("database_description_item"),
+      describeNamespace.output.last.withName("database_description_value")))
   }
 }

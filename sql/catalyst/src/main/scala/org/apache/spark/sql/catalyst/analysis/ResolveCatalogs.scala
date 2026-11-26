@@ -145,9 +145,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       catalogIdentifierResolution.resolveUnresolvedIdentifier(unresolvedIdentifier)
 
     case CurrentNamespace =>
-      catalogIdentifierResolution.resolveCurrentNamespace()
+      catalogIdentifierResolution.resolveCurrentNamespace(lookupCatalog = ResolveCatalogs.this)
     case unresolvedNamespace: UnresolvedNamespace =>
-      catalogIdentifierResolution.resolveUnresolvedNamespace(unresolvedNamespace)
+      catalogIdentifierResolution.resolveUnresolvedNamespace(
+        unresolvedNamespace, lookupCatalog = ResolveCatalogs.this)
   }
 
   private def resolveIdentifier(
