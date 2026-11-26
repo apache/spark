@@ -178,11 +178,19 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
                 messageParameters={"field_name": key},
             )
 
+    database = spec_data.get("database")
+    schema = spec_data.get("schema")
+    if "database" in spec_data and "schema" in spec_data and database != schema:
+        raise PySparkException(
+            errorClass="PIPELINE_SPEC_CONFLICTING_FIELDS",
+            messageParameters={"first_field": "database", "second_field": "schema"},
+        )
+
     return PipelineSpec(
         name=spec_data["name"],
         storage=spec_data["storage"],
         catalog=spec_data.get("catalog"),
-        database=spec_data.get("database", spec_data.get("schema")),
+        database=database if "database" in spec_data else schema,
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),
         libraries=[
             LibrariesGlob(include=entry["glob"]["include"])

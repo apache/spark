@@ -792,6 +792,11 @@
       "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
     ]
   },
+  "PIPELINE_SPEC_CONFLICTING_FIELDS": {
+    "message": [
+      "Pipeline spec fields `<first_field>` and `<second_field>` must have the same value when both are specified."
+    ]
+  },
   "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
     "message": [
       "For pipeline spec field `<field_name>`, key should be a string, got <key_type>."
