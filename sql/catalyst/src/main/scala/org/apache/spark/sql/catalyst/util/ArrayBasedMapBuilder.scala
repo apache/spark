@@ -68,6 +68,20 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       case _ => identity
     }
 
+  // Whether `keyNormalizer` changed a key, such as -0.0 to 0.0. It compares the bits, since
+  // -0.0 == 0.0.
+  private lazy val isChangedByNormalizer: (Any, Any) => Boolean = keyType match {
+    case FloatType => (key, normalized) =>
+      java.lang.Float.floatToRawIntBits(key.asInstanceOf[Float]) !=
+        java.lang.Float.floatToRawIntBits(normalized.asInstanceOf[Float])
+    case DoubleType => (key, normalized) =>
+      java.lang.Double.doubleToRawLongBits(key.asInstanceOf[Double]) !=
+        java.lang.Double.doubleToRawLongBits(normalized.asInstanceOf[Double])
+    case _ => (_, _) => false
+  }
+
+  // Whether `put` has changed a key by normalizing it since the last reset.
+  private var hasNormalizedKey = false
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
@@ -75,6 +89,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     }
 
     val keyNormalized = keyNormalizer(key)
+    hasNormalizedKey ||= isChangedByNormalizer(key, keyNormalized)
     val index = keyToIndex.getOrDefault(keyNormalized, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -119,6 +134,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     keyToIndex.clear()
     keys.clear()
     values.clear()
+    hasNormalizedKey = false
   }
 
   /**
@@ -139,9 +155,11 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   def from(keyArray: ArrayData, valueArray: ArrayData): ArrayBasedMapData = {
     assert(keyToIndex.isEmpty, "'from' can only be called with a fresh ArrayBasedMapBuilder.")
     putAll(keyArray, valueArray)
-    if (keyToIndex.size == keyArray.numElements()) {
-      // If there is no duplicated map keys, creates the MapData with the input key and value array,
-      // as they might already in unsafe format and are more efficient.
+    if (keyToIndex.size == keyArray.numElements() && !hasNormalizedKey) {
+      // If no map key is duplicated or changed by normalization, creates the MapData with the
+      // input key and value arrays, as they might already be in unsafe format and are more
+      // efficient. A changed key must not be kept: -0.0 would make maps that are equal as maps
+      // differ in their bytes, which GROUP BY compares.
       reset()
       new ArrayBasedMapData(keyArray, valueArray)
     } else {

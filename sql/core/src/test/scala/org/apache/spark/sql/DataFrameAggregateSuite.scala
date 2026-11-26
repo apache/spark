@@ -3923,6 +3923,24 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62382: GROUP BY a map whose key is 0.0 or -0.0") {
+    Seq("double", "float").foreach { dt =>
+      withTempView("v") {
+        Seq(-0.0d, 0.0d).toDF("d").selectExpr(s"cast(d as $dt) as x").createOrReplaceTempView("v")
+        Seq(
+          "map(x, 1)",
+          "map_from_arrays(array(x), array(1))",
+          "transform_keys(map(1, 1), (k, v) -> x)").foreach { m =>
+          assertAggregateOnDataframe(spark.sql(s"SELECT $m, count(*) FROM v GROUP BY $m"), 1)
+          checkAnswer(spark.sql(s"SELECT count(DISTINCT $m) FROM v"), Row(1))
+          checkAnswer(
+            spark.sql(s"SELECT DISTINCT cast(map_keys($m)[0] AS string) FROM v"),
+            Row("0.0"))
+        }
+      }
+    }
+  }
+
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
     val numRows = 50
 

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
 
 class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
@@ -88,6 +88,40 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val map = builder.build()
     assert(map.numElements() == 1)
     assert(ArrayBasedMapData.toScalaMap(map) == Map(0.0 -> 1))
+  }
+
+  test("SPARK-62382: apply key normalization in from") {
+    // The bits are compared, since -0.0 == 0.0 and toScalaMap cannot tell them apart.
+    def doubleKeyBits(map: MapData): Seq[Long] = map.keyArray().toDoubleArray().toSeq
+      .map(java.lang.Double.doubleToRawLongBits)
+    val bits = Seq(0.0, Double.NaN, 1.0).map(java.lang.Double.doubleToRawLongBits)
+    val otherNaN = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
+    val values = new GenericArrayData(Seq(1, 2, 3))
+    Seq(
+      new GenericArrayData(Seq(-0.0, otherNaN, 1.0)),
+      UnsafeArrayData.fromPrimitiveArray(Array(-0.0, otherNaN, 1.0))).foreach { keys =>
+      val map = new ArrayBasedMapBuilder(DoubleType, IntegerType).from(keys, values)
+      assert(doubleKeyBits(map) == bits)
+      assert(map.valueArray.toIntArray().toSeq == Seq(1, 2, 3))
+    }
+
+    val floatMap = new ArrayBasedMapBuilder(FloatType, IntegerType)
+      .from(UnsafeArrayData.fromPrimitiveArray(Array(-0.0f)), new GenericArrayData(Seq(1)))
+    assert(java.lang.Float.floatToRawIntBits(floatMap.keyArray.getFloat(0)) == 0)
+
+    // Without a duplicated or normalized key, the input arrays are kept.
+    val keys = UnsafeArrayData.fromPrimitiveArray(Array(0.0, 1.0))
+    val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+    assert(builder.from(keys, new GenericArrayData(Seq(1, 2))).keyArray eq keys)
+    // A normalized key does not carry over to the next map that the same builder builds.
+    builder.from(UnsafeArrayData.fromPrimitiveArray(Array(-0.0)), new GenericArrayData(Seq(1)))
+    assert(builder.from(keys, new GenericArrayData(Seq(1, 2))).keyArray eq keys)
+
+    withSQLConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key -> "true") {
+      val map = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+        .from(UnsafeArrayData.fromPrimitiveArray(Array(-0.0)), new GenericArrayData(Seq(1)))
+      assert(doubleKeyBits(map) == Seq(java.lang.Double.doubleToRawLongBits(-0.0)))
+    }
   }
 
   test("remove duplicated keys with last wins policy") {
