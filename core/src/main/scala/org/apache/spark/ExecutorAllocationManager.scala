@@ -904,7 +904,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToNumRunningTask(stageAttempt) =
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // Do not recreate pending-task state for completed stage attempts on late task starts.
-        if (stageAttemptToNumTasks.contains(stageAttempt)) {
+        if (isStageAttemptActive(stageAttempt)) {
           if (taskStart.taskInfo.speculative) {
             stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
               new mutable.HashSet[Int]) += taskIndex
@@ -946,7 +946,7 @@ private[spark] class ExecutorAllocationManager(
             stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
           case _ =>
-            if (stageAttemptToNumTasks.contains(stageAttempt) && !hasPendingTasks) {
+            if (isStageAttemptActive(stageAttempt) && !hasPendingTasks) {
               // If the task failed (not intentionally killed), we expect it to be resubmitted
               // later. To ensure we have enough resources to run the resubmitted task, we need to
               // mark the scheduler as backlogged again if it's not already marked as such
@@ -973,7 +973,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = speculativeTask.taskIndex
       allocationManager.synchronized {
-        if (stageAttemptToNumTasks.contains(stageAttempt)) {
+        if (isStageAttemptActive(stageAttempt)) {
           stageAttemptToPendingSpeculativeTasks.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]).add(taskIndex)
           allocationManager.onSchedulerBacklogged()
@@ -1002,6 +1002,10 @@ private[spark] class ExecutorAllocationManager(
         unschedulableTaskSets.remove(stageAttempt)
         removeStageFromResourceProfileIfUnused(stageAttempt)
       }
+    }
+
+    private def isStageAttemptActive(stageAttempt: StageAttempt): Boolean = {
+      stageAttemptToNumTasks.contains(stageAttempt)
     }
 
     def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
