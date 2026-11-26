@@ -581,18 +581,6 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   private[optimizer] def correlatedUngroupedAggregate(a: Aggregate): Boolean =
     a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a)
 
-  // Whether `a` has a user-defined aggregate function. Such a function has no default result, but
-  // can return a value other than NULL on empty input, e.g. a Scala Aggregator with a zero that is
-  // not NULL, while the count bug handling takes NULL there (see
-  // RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups).
-  private def hasUserDefinedAggregate(a: Aggregate): Boolean =
-    a.aggregateExpressions.exists(_.exists {
-      case ae: AggregateExpression =>
-        ae.aggregateFunction.isInstanceOf[UserDefinedExpression] ||
-          ae.aggregateFunction.containsPattern(USER_DEFINED_AGGREGATION)
-      case _ => false
-    })
-
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
@@ -666,17 +654,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // is computed from the subquery before decorrelation instead, if possible (see
         // evalSubqueryOnEmptyCorrelatedInput), and constructLeftJoins uses it. Otherwise, e.g.
         // with a filter between the Aggregates, the subquery keeps the handling of before. So
-        // does a subquery with a user-defined aggregate function in a lower Aggregate without
-        // grouping expressions, whose value over no rows can be other than NULL (see
-        // hasUserDefinedAggregate), and every subquery with
-        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR. The result is kept when this
-        // rule runs again on the decorrelated subquery.
+        // does every subquery with LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.
+        // The result is kept when this rule runs again on the decorrelated subquery.
         val computedCountBugResult = if (mayHaveCountBugOld.isDefined) {
           countBugResultOld
         } else if (handleCountBug && !handleCountBugInDecorrelate &&
             !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) &&
-            lowerAggs.exists(correlatedUngroupedAggregate) &&
-            !lowerAggs.exists(a => a.groupingExpressions.isEmpty && hasUserDefinedAggregate(a))) {
+            lowerAggs.exists(correlatedUngroupedAggregate)) {
           RewriteCorrelatedScalarSubquery.evalSubqueryOnEmptyCorrelatedInput(sub)
         } else {
           None
@@ -685,28 +669,29 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // subquery returns no row. Where decorrelation adds a domain join, e.g. for a
         // non-equality correlation or a correlation below a UNION ALL, such a row is one without
         // matching rows only if the domain has every outer row, which it may not have when it
-        // computes the outer input again and that gives other rows. Master gives such a row the
-        // result over no rows, and computedCountBugResult could make it wrong where master's
-        // happens to be right, e.g. for COUNT(*) FILTER (WHERE s IS NULL) over s = MAX, or the
-        // other value of outer values that compare equal, e.g. -0.0 and 0.0, which the domain
-        // keeps one of. So under a domain join it is used only where it is the result of every
-        // outer row, as for COUNT(*) over a MAX, whose top Aggregate reads nothing of the one row
-        // below it, so that no row gets worse than on master.
+        // computes the outer input again and that gives other rows. The handling without
+        // computedCountBugResult gives such a row the result over no rows (evalSubqueryOnZeroTups),
+        // and computedCountBugResult could make it wrong where that one happens to be right, e.g.
+        // for COUNT(*) FILTER (WHERE s IS NULL) over s = MAX, or give it the result of another of
+        // the outer values that compare equal, e.g. -0.0 and 0.0, which the domain keeps one of.
+        // So under a domain join it is used only where it is the result of every outer row, as
+        // for COUNT(*) over a MAX, whose top Aggregate reads nothing of the one row below it, so
+        // that no row gets a worse result than without it.
         //
         // A NULL result of a grouped top Aggregate is not used, with or without a domain join: it
-        // gives the same result as master, which returns no row there, and leaves the plan of
-        // master, with mayHaveCountBug false.
+        // gives the same result as without it, where the subquery returns no row, and keeps the
+        // plan without it, with mayHaveCountBug false.
         lazy val groupedTop = sub match {
           case agg: Aggregate => agg.groupingExpressions.nonEmpty
           case _ => false
         }
-        // The computed result is the result of every outer row when the top Aggregate reads
-        // nothing of the one row below it. A grouped top Aggregate reads its grouping keys, so a
-        // grouped top under a domain join keeps the result of before (which is also correct: it
-        // returns no row, hence NULL, for an outer row without matching rows).
+        // The computed result is the result of every outer row when the output of the top
+        // Aggregate reads nothing of the one row below it. That holds for a grouped top Aggregate
+        // too, which reads its grouping keys only to form its group: the result is computed only
+        // over a correlated lower Aggregate without grouping expressions, which returns one row
+        // for every outer row, so the top sees one group, e.g. COUNT(*) is 1.
         lazy val countBugResultForEveryRow = sub match {
-          case agg: Aggregate =>
-            !groupedTop && agg.aggregateExpressions.forall(_.references.isEmpty)
+          case agg: Aggregate => agg.aggregateExpressions.forall(_.references.isEmpty)
           case _ => false
         }
         val countBugResult = if (mayHaveCountBugOld.isEmpty && computedCountBugResult.isDefined &&
@@ -961,6 +946,93 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   }
 
   /**
+   * Stands for a value of the row that `evalSubqueryOnEmptyCorrelatedInput` computes that is not
+   * a literal, e.g. one that fails or has an outer reference, when it is passed to the level
+   * above. An expression that needs its value is not foldable, so a result that needs the value
+   * is not a literal and is not taken, as for the value itself, while the value is not copied
+   * into each use, which would make the work double with each level that uses it twice, e.g.
+   * `d + d`. Unlike the value, it does not let evaluation skip a value that fails, e.g. in
+   * `COALESCE(1, d)`, so such a result or grouping key is not taken either.
+   */
+  private case class NonLiteralValue(dataType: DataType, nullable: Boolean)
+    extends LeafExpression with Unevaluable
+
+  private def literalOrPlaceholder(e: Expression): Expression = e match {
+    case l: Literal => l
+    case other => NonLiteralValue(other.dataType, other.nullable)
+  }
+
+  /**
+   * Returns the result of the aggregate function `f` over no rows: its default result if it has
+   * one (PullupCorrelatedPredicates does not call this for such a function in a lower Aggregate
+   * without grouping expressions, which DecorrelateInnerQuery handles), otherwise, as execution
+   * computes it, its evaluate expression over its initial values for a [[DeclarativeAggregate]],
+   * or its result over a freshly initialized buffer for an [[ImperativeAggregate]]. Returns None
+   * if that is not a literal of its data type and nullability or cannot be computed, and for a
+   * user-defined aggregate function, which runs user code. Unlike
+   * `evalAggExprOnZeroTups`, this does not take NULL for a function without a default result,
+   * since some return another value on empty input, e.g. `pandas_product` returns 1 and
+   * `PivotFirst` an array of NULLs.
+   */
+  private def evalAggregateFunctionOnEmptyInput(f: AggregateFunction): Option[Literal] = {
+    val result = f.defaultResult.orElse {
+      if (isUserDefinedAggregate(f)) {
+        None
+      } else {
+        f match {
+          case d: DeclarativeAggregate =>
+            val buffer = AttributeMap(d.aggBufferAttributes.zip(d.initialValues))
+            tryEvalExpr(d.evaluateExpression.transform {
+              case a: AttributeReference if buffer.contains(a) => buffer(a)
+            }) match {
+              case l: Literal => Some(l)
+              case _ => None
+            }
+          case i: ImperativeAggregate =>
+            try {
+              val agg = i.withNewMutableAggBufferOffset(0).withNewInputAggBufferOffset(0)
+              val buffer = new GenericInternalRow(agg.aggBufferAttributes.length)
+              agg.initialize(buffer)
+              Some(Literal.create(agg.eval(buffer), agg.dataType))
+            } catch {
+              case NonFatal(_) => None
+            }
+          case _ => None
+        }
+      }
+    }
+    result.filter(l => l.dataType == f.dataType && (f.nullable || l.value != null))
+  }
+
+  // Whether `f` is a user-defined aggregate function, such as a Scala Aggregator or a Python
+  // UDAF, which runs user code.
+  private def isUserDefinedAggregate(f: AggregateFunction): Boolean =
+    f.isInstanceOf[UserDefinedExpression] || f.containsPattern(USER_DEFINED_AGGREGATION)
+
+  /**
+   * Returns the row of the Aggregate without grouping expressions `a` over no rows, by output
+   * expression ID, with each aggregate function's result over no rows (see
+   * `evalAggregateFunctionOnEmptyInput`). The Aggregate returns one row whatever its functions
+   * are, so a function whose result over no rows cannot be computed, e.g. a user-defined one,
+   * gives a NonLiteralValue: a result above that needs its value is not taken, and one that does
+   * not, such as COUNT(*), still is.
+   */
+  private def evalUngroupedAggregateOnEmptyInput(a: Aggregate): Map[ExprId, Expression] = {
+    val bound: Map[Expression, Expression] = a.aggregateExpressions
+      .flatMap(_.collect { case ae: AggregateExpression => ae })
+      .map { ae =>
+        (ae: Expression) -> evalAggregateFunctionOnEmptyInput(ae.aggregateFunction)
+          .getOrElse(NonLiteralValue(ae.dataType, ae.nullable))
+      }.toMap
+    a.aggregateExpressions.map { ne =>
+      (ne.exprId, tryEvalExpr(ne.transformDown {
+        case ae: AggregateExpression => bound(ae)
+        case r: AttributeReference => Literal.create(null, r.dataType)
+      }))
+    }.toMap
+  }
+
+  /**
    * Returns an expression that computes `ae` over the single input row `row` (the values of the
    * attributes of the input, by expression ID), or None if it cannot. For a
    * [[DeclarativeAggregate]], the expression applies its update expressions once to its initial
@@ -980,12 +1052,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val f = bind(ae.aggregateFunction).asInstanceOf[AggregateFunction]
     val filter = ae.filter.map(c => tryEvalExpr(bind(c)))
     val result = f match {
-      // A user-defined aggregate function runs user code; do not evaluate it here, and do not
-      // run it on the driver while the query is optimized (it is also excluded as a lower
-      // aggregate without grouping expressions, see hasUserDefinedAggregate).
-      case _ if f.isInstanceOf[UserDefinedExpression] ||
-          f.containsPattern(USER_DEFINED_AGGREGATION) =>
-        None
       case f: DeclarativeAggregate =>
         def bindBuffer(e: Expression, values: Seq[Expression]): Expression = {
           val buffer = AttributeMap(f.aggBufferAttributes.zip(values))
@@ -1032,30 +1098,35 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * row for an outer row only if the correlated input is empty for it. That holds if the correlated
    * input has no correlated Aggregate without grouping expressions, whose row decorrelation loses,
    * and if the domain joins that decorrelation adds there anyway, e.g. for a non-equality
-   * correlation, have every outer row (they compute the outer input again, as on master;
-   * PullupCorrelatedPredicates uses the result under such domain joins only where it cannot make a
-   * row worse than on master, see rewriteSubQueries). So for such an outer row the correlated
+   * correlation, have every outer row (they compute the outer input again;
+   * PullupCorrelatedPredicates uses the result under such domain joins only where it is the
+   * result of every outer row, see rewriteSubQueries). So for such an outer row the correlated
    * input is taken as empty, and the chain is evaluated over it as before decorrelation: an
-   * Aggregate without grouping expressions returns one row on empty input, of the default results
-   * of its aggregate functions or NULL (see evalAggregateOnZeroTups; PullupCorrelatedPredicates
-   * does not call this for a user-defined aggregate function there, which can return another
-   * value). An outer reference in the chain does not change which rows it returns; a value or
-   * grouping key that depends on one is not a literal, and is not taken (see below). A NULL
+   * Aggregate without grouping expressions returns one row on empty input, of the results of its
+   * aggregate functions over no rows (see evalAggregateFunctionOnEmptyInput; one that cannot be
+   * computed is a NonLiteralValue). An outer reference in the chain does not change which rows it
+   * returns; a value or grouping key that depends on one is not a literal, and is not taken (see
+   * below), and a value that is not a literal is passed to the level above as a
+   * NonLiteralValue, so that the work stays linear in the size of the chain. A NULL
    * result is a NULL Literal, unlike in `evalSubqueryOnZeroTups`, since None here means that the
    * result cannot be computed. Only a literal is taken, so this needs `tryEvalExpr` to keep a
    * value that fails as an expression instead of failing the query (SPARK-61444).
    */
   private[optimizer] def evalSubqueryOnEmptyCorrelatedInput(
       plan: LogicalPlan): Option[Literal] = {
-    // None: cannot evaluate. Some(None): no rows. Some(Some(row)): exactly one row.
+    // None: cannot evaluate. Some(None): no rows. Some(Some(row)): exactly one row. A value of
+    // the row that is not a literal is passed to the level above as a NonLiteralValue.
+    def placeholders(row: Map[ExprId, Expression]): Map[ExprId, Expression] =
+      row.map { case (id, e) => id -> literalOrPlaceholder(e) }
     def rowsOf(lp: LogicalPlan): Option[Option[Map[ExprId, Expression]]] = lp match {
       case SubqueryAlias(_, child) => rowsOf(child)
       case Project(projectList, child) =>
-        rowsOf(child).map(_.map(row => projectList.map(ne =>
-          (ne.exprId, bindingExpr(ne, row))).toMap))
+        rowsOf(child).map(_.map(row => placeholders(projectList.map(ne =>
+          (ne.exprId, bindingExpr(ne, row))).toMap)))
       case a: Aggregate =>
         rowsOf(a.child).flatMap {
-          case None if a.groupingExpressions.isEmpty => Some(Some(evalAggregateOnZeroTups(a)))
+          case None if a.groupingExpressions.isEmpty =>
+            Some(Some(placeholders(evalUngroupedAggregateOnEmptyInput(a))))
           case None => Some(None)
           // A grouping key is computed over the row too. One that is not a literal there, e.g.
           // because it fails, as it would at runtime, or needs a Python UDF or an outer reference,
@@ -1077,7 +1148,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 Some((ne.exprId, tryEvalExpr(bound)))
               }
             }
-            if (results.forall(_.isDefined)) Some(Some(results.map(_.get).toMap)) else None
+            if (results.forall(_.isDefined)) Some(Some(placeholders(results.map(_.get).toMap)))
+            else None
         }
       case input if input.exists {
           case a: Aggregate => PullupCorrelatedPredicates.correlatedUngroupedAggregate(a)

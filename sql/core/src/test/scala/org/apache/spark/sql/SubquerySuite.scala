@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, EvalOnlyWhen, Expression,
-  ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, EqualTo, EvalOnlyWhen,
+  Expression, ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
@@ -3824,9 +3824,9 @@ class SubquerySuite extends SharedSparkSession
       sql("CREATE TEMP VIEW t1(a1) AS VALUES (0), (1)")
       sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
       // The top aggregate returns one row for the group of the row of the lower MAX, also for
-      // a1 = 1, which has no matching rows. On master, the subquery had no count bug handling,
-      // since it has a GROUP BY. It returns at most one row, so it gets a left outer join, also
-      // with single joins on, and no other join.
+      // a1 = 1, which has no matching rows. Before SPARK-60501, the subquery had no count bug
+      // handling, since it has a GROUP BY. It returns at most one row, so it gets a left outer
+      // join, also with single joins on, and no other join.
       withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
         val df = sql("SELECT a1, (SELECT COUNT(*) FROM (SELECT MAX(b2) m FROM t2 " +
           "WHERE t2.b1 = t1.a1) GROUP BY m) FROM t1")
@@ -3902,15 +3902,33 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: a NULL result for an outer row without matching rows adds no count bug " +
+      "branch") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1) AS VALUES (0), (1)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
+      // SUM over the row of the lower MAX is NULL, as over no rows, so the plan keeps no If over
+      // alwaysTrue, as before.
+      val query =
+        "SELECT a1, (SELECT SUM(m) FROM (SELECT MAX(b2) m FROM t2 WHERE t1.a1 = t2.b1)) FROM t1"
+      Seq(false, true).foreach { legacy =>
+        assert(!optimizedPlan(query, legacyNestedAggregate = legacy).exists(_.expressions.exists(
+          _.exists { case a: Alias => a.name == "alwaysTrue"; case _ => false })), legacy)
+      }
+      checkAnswer(sql(query), Row(0, 3) :: Row(1, null) :: Nil)
+    }
+  }
+
   test("SPARK-60501: a non-deterministic input of the operator with the subquery gets the fix") {
     withTempView("b") {
       spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
       withUserDefinedFunction("spark60501_rk" -> true) {
         spark.udf.register("spark60501_rk",
-          udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
-        // Every key has one row in b, so COUNT(*) over its MAX is 1. The result is computed
-        // before decorrelation and needs no domain join, which computes the outer input again,
-        // also for a non-deterministic CTE that is referenced twice, which is not inlined.
+          udf((_: Long) => scala.util.Random.nextInt(2000)).asNondeterministic())
+        // COUNT(*) over the MAX is 1 for every key, with one row in b (below 1000) or none. The
+        // result is computed before decorrelation and needs no domain join, which computes the
+        // outer input again, also for a non-deterministic CTE that is referenced twice, which is
+        // not inlined.
         val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.kk))"
         checkAnswer(
           sql(s"SELECT c, COUNT(*) FROM (SELECT $subquery c FROM " +
@@ -3928,16 +3946,16 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-60501: a result computed before decorrelation is used under the domain join that " +
-      "decorrelation adds anyway only where it cannot make a row worse than on master") {
+      "decorrelation adds anyway only where it is the result of every outer row") {
     withTempView("b", "o") {
       spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
       withUserDefinedFunction("spark60501_rk" -> true) {
         spark.udf.register("spark60501_rk",
           udf((_: Long) => 1 + scala.util.Random.nextInt(999)).asNondeterministic())
         // Every key has rows below it in b, so s is not NULL and the result is 0 for every row.
-        // For the non-equality correlation, decorrelation adds a domain join, as on master, which
-        // computes the random keys again; a row whose key is missing there gets the result over
-        // no rows of master, 0, and would get 1, the result for a row without matching rows.
+        // For the non-equality correlation, decorrelation adds a domain join, as before
+        // SPARK-60501, which computes the random keys again; a row whose key is missing there gets
+        // the result over no rows, 0, and would get 1, the result for a row without matching rows.
         val isNullCount = "(SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
           "(SELECT MAX(b.v) s FROM b WHERE b.k < o.kk))"
         // A COUNT(*) over the MAX is 1 for every outer row, with matching rows or not (kk below
@@ -3949,6 +3967,13 @@ class SubquerySuite extends SharedSparkSession
           Row(0, 1000))
         checkAnswer(
           sql(s"SELECT c, COUNT(*) FROM (SELECT $count c FROM " +
+            "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
+          Row(1, 1000))
+        // And for a grouped top aggregate, which sees the one group of the row of the MAX.
+        val groupedCount = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) s FROM b " +
+          "WHERE b.k < o.kk - 500) GROUP BY s)"
+        checkAnswer(
+          sql(s"SELECT c, COUNT(*) FROM (SELECT $groupedCount c FROM " +
             "(SELECT spark60501_rk(id) kk FROM range(1000)) o) GROUP BY c"),
           Row(1, 1000))
         // The same over an RDD of random values, which gives other rows when computed again.
@@ -3971,9 +3996,10 @@ class SubquerySuite extends SharedSparkSession
       withUserDefinedFunction("spark60501_rk" -> true) {
         spark.udf.register("spark60501_rk",
           udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
+        // Keys from 1000 have no matching rows in b.
         checkAnswer(
-          sql(s"SELECT DISTINCT c FROM (SELECT * FROM (SELECT o.k, $subquery c FROM o) " +
-            "WHERE spark60501_rk(k) > 500)"),
+          sql(s"SELECT DISTINCT c FROM (SELECT * FROM (SELECT o.k, $subquery c FROM " +
+            "(SELECT id k FROM range(2000)) o) WHERE spark60501_rk(k) > 500)"),
           Row(1))
       }
       // No domain join: the same joins as before, and the correct result for keys without
@@ -4039,10 +4065,11 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60501: a user-defined aggregate function in the lower aggregate keeps the count " +
-      "bug handling of before") {
+  test("SPARK-60501: a user-defined aggregate function in the lower aggregate is not run while " +
+      "the query is optimized") {
     // A Scala Aggregator with a zero of 0 returns 0, not NULL, on empty input. k = 2 has no
-    // matching rows.
+    // matching rows. A top aggregate that needs its value keeps the count bug handling of before,
+    // and COUNT(*), which does not, gets the fix.
     withTempView("a", "b") {
       withUserDefinedFunction("spark60501_sum0" -> true) {
         spark.udf.register("spark60501_sum0", functions.udaf(new Aggregator[Long, Long, Long] {
@@ -4058,6 +4085,9 @@ class SubquerySuite extends SharedSparkSession
         checkAnswer(sql("SELECT a.k, (SELECT COUNT(*) FILTER (WHERE s IS NULL) FROM " +
           "(SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k)) FROM a"),
           Seq(Row(1, 0), Row(2, 0)))
+        checkAnswer(sql("SELECT a.k, (SELECT COUNT(*) FROM " +
+          "(SELECT spark60501_sum0(b.v) s FROM b WHERE b.k = a.k)) FROM a"),
+          Seq(Row(1, 1), Row(2, 1)))
       }
     }
   }

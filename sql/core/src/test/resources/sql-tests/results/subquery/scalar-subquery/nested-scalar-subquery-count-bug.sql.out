@@ -167,6 +167,16 @@ struct<a1:int,a:bigint>
 
 
 -- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t2.b1 < t1.a1) group by m ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
 select a1, ( select count(*) from (select max(m) m2 from (select max(b2) m from t2
   where t1.a1 = t2.b1)) ) a
 from t1 order by a1
@@ -305,7 +315,8 @@ struct<a1:int,a:bigint>
 
 
 -- !query
-select a1, ( select nullif(count(*), 1) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+select a1, ( select if(count(*) = 1, null, count(*))
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1
 -- !query schema
 struct<a1:int,a:bigint>

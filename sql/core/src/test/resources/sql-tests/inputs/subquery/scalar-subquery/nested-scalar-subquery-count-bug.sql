@@ -57,8 +57,13 @@ from t1 order by a1;
 
 -- with a non-equality correlated predicate, for which decorrelation adds a domain join, under
 -- which the computed result is used only where it is the result of every outer row, so this one
--- keeps the result of before
+-- keeps the wrong result of before
 select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t2.b1 < t1.a1) ) a
+from t1 order by a1;
+
+-- with a grouped top aggregate over a non-equality correlated predicate: the top sees the one
+-- group of the row of the lower aggregate, so its result is that of every outer row
+select a1, ( select count(*) from (select max(b2) m from t2 where t2.b1 < t1.a1) group by m ) a
 from t1 order by a1;
 
 -- with three levels of aggregates
@@ -117,8 +122,9 @@ select a1, ( select count(*) from (select count(*) c from t2) where c > t1.a2 ) 
 from t1 order by a1;
 
 -- where the result for an outer row without matching rows is NULL: no count-bug branch is added,
--- unlike before, where the result over no rows was not NULL (here NULLIF(0, 1) = 0)
-select a1, ( select nullif(count(*), 1) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+-- unlike before, where the result over no rows was not NULL (here 0)
+select a1, ( select if(count(*) = 1, null, count(*))
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
 -- with top aggregates such as SUM, COLLECT_LIST and COUNT(*) over the one row of a lower aggregate
@@ -258,9 +264,9 @@ from t1 order by a1;
 select a1, ( select coalesce(c, 10) from (select count(*) c from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
--- with an expression that fails on the value of a lower aggregate over no rows: the result is
--- not computed for an outer row without matching rows, which keeps the result of before, unlike
--- the uncorrelated form of the query, which fails
+-- with an expression that fails on the value of a lower aggregate over no rows: it does not fail
+-- a row with matching rows (a1 = 0), and SUM over it keeps the result of before for a row without
+-- matching rows, unlike the uncorrelated form of the query, which fails
 select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
   where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1;

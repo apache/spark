@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, DeclarativeAggregate, ListAgg, Percentile, StddevSamp, V2Aggregator}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, DeclarativeAggregate, ListAgg, PandasProduct, Percentile, PivotFirst, StddevSamp, V2Aggregator}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -30,6 +33,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType}
+import org.apache.spark.util.ThreadUtils
 
 // A DeclarativeAggregate whose evaluate expression does not have its data type.
 private case class MistypedAggregate(child: Expression)
@@ -43,6 +47,21 @@ private case class MistypedAggregate(child: Expression)
   override lazy val mergeExpressions: Seq[Expression] = Seq(buffer.left)
   override lazy val evaluateExpression: Expression = buffer
   override protected def withNewChildInternal(newChild: Expression): MistypedAggregate =
+    copy(child = newChild)
+}
+
+// A DeclarativeAggregate that is declared not nullable but returns NULL on empty input.
+private case class NullOnEmptyAggregate(child: Expression)
+  extends DeclarativeAggregate with UnaryLike[Expression] {
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = false
+  private lazy val buffer = AttributeReference("buffer", LongType)()
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = buffer :: Nil
+  override lazy val initialValues: Seq[Expression] = Seq(Literal(null, LongType))
+  override lazy val updateExpressions: Seq[Expression] = Seq(buffer)
+  override lazy val mergeExpressions: Seq[Expression] = Seq(buffer.left)
+  override lazy val evaluateExpression: Expression = buffer
+  override protected def withNewChildInternal(newChild: Expression): NullOnEmptyAggregate =
     copy(child = newChild)
 }
 
@@ -209,12 +228,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(deeper) == Some("1"))
     // When the computed result is NULL, constructLeftJoins adds no count-bug branch (it maps a
     // NULL countBugResult to the plan without the branch), which is correct and unlike before,
-    // where the result over no rows was not NULL. E.g. NULLIF(COUNT(*), 1) over a MAX is NULL for
-    // an outer row without matching rows (COUNT over the one row of the lower MAX is 1), where the
-    // result over no rows was NULLIF(0, 1) = 0. The golden file checks the result.
-    val nullif =
+    // where the result over no rows was not NULL. E.g. IF(COUNT(*) = 1, NULL, COUNT(*)) over a MAX
+    // is NULL for an outer row without matching rows (COUNT over the one row of the lower MAX is
+    // 1), where the result over no rows was 0. The golden file checks the result.
+    val nullIfOne =
       If(EqualTo(count(Literal(1)), Literal(1L)), Literal(null, LongType), count(Literal(1)))
-    assert(countBugResult(correlated(max($"d")), Seq(nullif)) == Some("null"))
+    assert(countBugResult(correlated(max($"d")), Seq(nullIfOne)) == Some("null"))
     // Where it cannot be computed, e.g. with a filter between the aggregates, the subquery keeps
     // the handling of before, as does one over a lower COUNT, which DecorrelateInnerQuery
     // handles, a grouped lower aggregate, which returns no row on empty input, and an
@@ -244,7 +263,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val overMap = testRelation2.where($"c" === Size($"m")).groupBy()(max($"d").as("s"))
     assert(countBugResult(overMap, outer = mapOuter) == Some("1"))
     // For a non-equality correlation or one below a UNION ALL, decorrelation adds the domain
-    // join that it adds on master, also in a single aggregate. It computes the outer input
+    // join, as before SPARK-60501, also in a single aggregate. It computes the outer input
     // again, and may miss outer rows with matching rows where that gives other rows, and it
     // keeps one of the outer values that compare equal, e.g. 0.0 for -0.0 and 0.0. That does
     // not matter for a result of every outer row, such as COUNT(*) over the row of the MAX, but
@@ -259,6 +278,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     Seq(nonEquality, belowUnion, overDouble).foreach { lower =>
       assert(countBugResult(lower) == Some("1"), lower)
       assert(countBugResult(lower, outer = nonDeterministicOuter) == Some("1"), lower)
+      // Also for a grouped top aggregate, which sees the one group of the row of the MAX.
+      assert(countBugResult(lower, grouping = Seq($"s")) == Some("1"), lower)
+      assert(countBugResult(lower, Seq(max($"s")), Seq($"s")).isEmpty, lower)
       assert(countBugResult(lower, Seq(coalescedSum)).isEmpty, lower)
       assert(countBugResult(lower, Seq(isNullCount)).isEmpty, lower)
       assert(countBugHandling(lower, Seq(isNullCount)) ==
@@ -267,9 +289,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(subqueryWithOutputR(testRelation.select(ScalarSubquery(countOver(nonEquality))
       .as("sq"))).plan.exists(_.isInstanceOf[DomainJoin]))
     // A user-defined aggregate function in a lower aggregate without GROUP BY can return a value
-    // other than NULL on empty input, so the subquery keeps the handling of before: a Python
-    // UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite. One in a grouped
-    // aggregate below returns no row on empty input, which does not matter.
+    // other than NULL on empty input, which cannot be computed without running user code: a
+    // Python UDAF and a DSv2 function here, a Scala Aggregator in SubquerySuite. The aggregate
+    // still returns one row, so a top aggregate that does not need the value, such as COUNT(*),
+    // gets its result, and one that needs it keeps the handling of before. One that is not
+    // correlated, in the input below the correlated aggregate, is not evaluated, and one in a
+    // grouped aggregate below returns no row on empty input, which does not matter either.
     val v2Sum = new V2AggregateFunction[java.lang.Long, java.lang.Long] {
       override def newAggregationState(): java.lang.Long = 0L
       override def update(state: java.lang.Long, input: InternalRow): java.lang.Long =
@@ -283,9 +308,13 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     Seq(PythonUDAF("udaf", null, LongType, Seq($"c"), udfDeterministic = true),
         V2Aggregator(v2Sum, Seq(Cast($"c", LongType)))).foreach { f =>
       val udaf = f.toAggregateExpression()
-      assert(countBugResult(correlated(udaf)).isEmpty, f)
-      assert(countBugHandling(correlated(udaf)) == asBefore(countBugHandling(correlated(udaf))),
-        f)
+      assert(countBugResult(correlated(udaf)) == Some("1"), f)
+      assert(countBugResult(correlated(udaf), Seq(isNullCount)).isEmpty, f)
+      assert(countBugHandling(correlated(udaf), Seq(isNullCount)) ==
+        asBefore(countBugHandling(correlated(udaf), Seq(isNullCount))), f)
+      val inInput = testRelation2.where($"a" === $"c")
+        .join(LocalRelation($"c".int).groupBy()(udaf.as("u"))).groupBy()(max($"d").as("s"))
+      assert(countBugResult(inInput) == Some("1"), f)
       val overGrouped = testRelation2.where($"a" === $"c").groupBy($"c")(udaf.as("u"))
         .groupBy()(max($"u").as("s"))
       assert(countBugResult(overGrouped) == Some("1"), f)
@@ -344,8 +373,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(groupedBelow, Seq(count($"s"))) == Some("0"))
     assert(countBugHandling(lowerMax, grouping = Seq($"s")) == inConstructLeftJoins)
     assert(countBugResult(lowerMax, grouping = Seq($"s")) == Some("1"))
-    // A NULL result of a grouped top aggregate is not used: master gives NULL too, as the
-    // subquery returns no row there.
+    // A NULL result of a grouped top aggregate is not used: the handling without it gives NULL
+    // too, as the subquery returns no row there.
     assert(countBugResult(lowerMax, Seq(max($"s")), Seq($"s")).isEmpty)
     assert(countBugHandling(lowerMax, Seq(max($"s")), Seq($"s")) ==
       asBefore(countBugHandling(lowerMax, Seq(max($"s")), Seq($"s"))))
@@ -353,6 +382,13 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugResult(lowerMax,
       Seq(CollectList($"s", ignoreNulls = false).toAggregateExpression(false, Some($"s" > 1))))
       == Some("[]"))
+    // And with a FILTER that holds, which keeps the value: the NULL of the row of the MAX, and a
+    // literal of the lower aggregate.
+    assert(countBugResult(lowerMax,
+      Seq(CollectList($"s", ignoreNulls = false).toAggregateExpression(false, Some($"s".isNull))))
+      == Some("[null]"))
+    assert(countBugResult(lowerWithLiteral,
+      Seq(collectList($"s", Some($"s" > 1)))) == Some("[10]"))
     // And over arguments computed over the row, which skip the NULL or collect a struct of it.
     assert(countBugResult(lowerMax, Seq(collectList($"s" + 1))) == Some("[]"))
     assert(countBugResult(lowerMax, Seq(collectList(CreateStruct(Seq($"s"))))) ==
@@ -374,6 +410,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugResult(failing, Seq(sum($"t"))).isEmpty)
       assert(countBugResult(failing, grouping = Seq($"t")).isEmpty)
       assert(countBugResult(failing, Seq(collectList($"t"))).isEmpty)
+      // Nor for one that evaluation could get without the failing value, e.g. COALESCE(1, t).
+      assert(countBugResult(failing, Seq(sum(coalesce(Literal(1.0), $"t")))).isEmpty)
       assert(countBugHandling(failing, Seq(sum($"t"))) ==
         asBefore(countBugHandling(failing, Seq(sum($"t")))))
     }
@@ -415,6 +453,53 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         countBelowProject -> sum($"s")).foreach { case (lower, top) =>
       assert(countBugResult(lower, Seq(top)).isEmpty, (lower, top))
       assert(countBugHandling(lower, Seq(top)) == (Some(false), true), (lower, top))
+    }
+    // A lower function without a default result is taken with its own result over no rows, which
+    // is not NULL for some: pandas_product gives 1, also where it is nullable, and PivotFirst an
+    // array of NULLs. So the NULL-sensitive top over them counts no NULL, as on empty input.
+    val isNullCount = count(Literal(1), Some($"s".isNull))
+    val pivot = PivotFirst(testRelation2.output(0), testRelation2.output(1), Seq(1, 2))
+    Seq(PandasProduct($"d", ignoreNA = true), PandasProduct($"d", ignoreNA = false), pivot)
+        .foreach { f =>
+      val lower = correlated(f.toAggregateExpression())
+      assert(countBugResult(lower, Seq(isNullCount)) == Some("0"), f)
+      assert(countBugResult(lower) == Some("1"), f)
+    }
+    // PERCENTILE, through a fresh buffer, gives NULL over no rows.
+    val lowerPercentile = correlated(new Percentile($"d", Literal(0.5)).toAggregateExpression())
+    assert(countBugResult(lowerPercentile, Seq(isNullCount)) == Some("1"))
+    // Where the result of a lower function over no rows cannot be computed, here because its
+    // evaluate expression does not have its data type, or it is NULL for a function that is
+    // declared not nullable, a top aggregate that needs it keeps the handling of before, and
+    // COUNT(*) still gets its result.
+    Seq(MistypedAggregate($"d"), NullOnEmptyAggregate($"d")).foreach { f =>
+      val lower = correlated(f.toAggregateExpression())
+      assert(countBugResult(lower, Seq(isNullCount)).isEmpty, f)
+      assert(countBugHandling(lower, Seq(isNullCount)) ==
+        asBefore(countBugHandling(lower, Seq(isNullCount))), f)
+      assert(countBugResult(lower) == Some("1"), f)
+    }
+  }
+
+  test("SPARK-60501: the work to compute the result before decorrelation is linear in the levels") {
+    // A value that is not a literal, here one that fails in ANSI mode or one over an outer
+    // reference, is used twice at each level. Copying it into each use would double the work with
+    // each level, so that 22 levels would take more than 30 seconds.
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("spark-60501-levels")
+    try {
+      val done = Future {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          Seq(Literal(10.0) / coalesce($"s", Literal(0.0)), $"s" + $"a").foreach { value =>
+            var lower = correlated(max($"d")).select(value.as("t"))
+            (1 to 22).foreach { _ => lower = lower.select(($"t" + $"t").as("t")) }
+            assert(countBugResult(lower) == Some("1"), value)
+            assert(countBugResult(lower, Seq(sum($"t"))).isEmpty, value)
+          }
+        }
+      }(ExecutionContext.fromExecutor(executor))
+      ThreadUtils.awaitResult(done, 30.seconds)
+    } finally {
+      executor.shutdownNow()
     }
   }
 
