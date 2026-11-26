@@ -26,10 +26,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A test class to simplify the creation of pipelines and datasets for unit testing.
+ *
+ * @param defaultFormat the format of a table registered without one. `None` leaves the choice to
+ *                      the catalog, as a definition without a `USING` clause does.
  */
 class TestGraphRegistrationContext(
     val spark: SparkSession,
-    val sqlConf: Map[String, String] = Map.empty)
+    val sqlConf: Map[String, String] = Map.empty,
+    val defaultFormat: Option[String] = Some("parquet"))
     extends GraphRegistrationContext(
       defaultCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG,
       defaultDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE,
@@ -166,7 +170,7 @@ class TestGraphRegistrationContext(
             objectType = Option(QueryOriginType.Table.toString)
           )
         ),
-        format = format.orElse(Some("parquet")),
+        format = format.orElse(defaultFormat),
         normalizedPath = None,
         isStreamingTable = isStreamingTable
       )

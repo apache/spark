@@ -17,11 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.control.NonFatal
-
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods.{compact, parse}
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -71,13 +66,14 @@ object AutoCdcAuxiliaryTable {
     s"${PipelinesTableProperties.pipelinesPrefix}autocdc.trackHistoryColumnNames"
 
   /**
-   * A JSON string-array codec for column-name lists persisted as auxiliary-table properties (used
-   * for both [[keyColumnNamesProperty]] and [[trackHistoryColumnNamesProperty]]). Round-trips an
-   * empty list as `[]` -- both an empty key set and an empty track-history set are meaningful to
-   * some caller, so no non-empty invariant is assumed here.
+   * Serializes a column-name list persisted as an auxiliary-table property (used for both
+   * [[keyColumnNamesProperty]] and [[trackHistoryColumnNamesProperty]]) with
+   * [[JsonStringArrayCodec]]. Round-trips an empty list as `[]` -- both an empty key set and an
+   * empty track-history set are meaningful to some caller, so no non-empty invariant is assumed
+   * here.
    */
   private[graph] def serializeColumnNames(names: Seq[String]): String = {
-    compact(JArray(names.map(JString(_)).toList))
+    JsonStringArrayCodec.serialize(names)
   }
 
   /**
@@ -85,13 +81,7 @@ object AutoCdcAuxiliaryTable {
    * Round-trips an empty list as `[]` (see [[serializeColumnNames]]).
    */
   private[graph] def parseColumnNames(raw: String): Option[Seq[String]] = {
-    val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
-    parsed.flatMap {
-      case JArray(elems) =>
-        val names = elems.collect { case JString(s) => s }
-        if (names.size == elems.size) Some(names) else None
-      case _ => None
-    }
+    JsonStringArrayCodec.parse(raw)
   }
 
   /**

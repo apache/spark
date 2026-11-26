@@ -37,6 +37,32 @@ object PipelinesTableProperties {
   val resetAllowed: PipelineTableProperty[Boolean] =
     buildProp("pipelines.reset.allowed", default = true)
 
+  // Internal table properties: written by the pipeline and not user-settable.
+  // `validateAndCanonicalize` drops a user declaration of them.
+
+  /**
+   * Internal table property recording, as a sorted JSON string array (see
+   * [[JsonStringArrayCodec]]), the keys of the table properties declared in the dataset definition
+   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization.
+   *
+   * What is recorded: the declared keys, except the reserved catalog properties other than
+   * `comment` (`provider`, `location`, `owner`, ...; the SQL parser rejects them in
+   * `TBLPROPERTIES`, and they describe the table itself), and not the `comment` and `provider`
+   * entries derived from the dataset's comment and format. The record is written only when that
+   * list is non-empty, and never for a table in a JDBC catalog. Auxiliary tables never carry it.
+   *
+   * What is removed: on the next materialization, a recorded key is removed when the resolved table
+   * properties of the definition no longer contain it and it is still on the table. The resolved
+   * properties include the `comment` and `provider` derived from the definition, so a comment moved
+   * from the table properties to the dataset's comment field stays. Ownership follows declaration:
+   * a key is removable once a definition declared it, even if the catalog had already set it to the
+   * same value. A key the record does not list, e.g. a catalog-managed one or one set outside the
+   * pipeline, is never removed. A table without the record, or with one that is not a JSON string
+   * array, has nothing removed; that run writes a new record. The record itself is removed once the
+   * definition declares no recorded key, whether or not the keys it listed are removed with it.
+   */
+  val declaredPropertyKeys: String = s"${pipelinesPrefix}declaredPropertyKeys"
+
   /**
    * Validates that all known pipeline properties are valid and can be parsed.
    * Also warn the user if they try to set an unknown pipelines property, or any
